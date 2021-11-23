@@ -1,1 +1,6 @@
 *.swp
+saved_models/*
+from_state_save/*
+from_screen_save/*
+*.pyc
+__pycache__/*

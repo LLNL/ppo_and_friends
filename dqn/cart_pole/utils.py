@@ -1,4 +1,5 @@
 from collections import namedtuple
+import os
 import torch
 import torchvision.transforms as t_transforms
 import numpy as np
@@ -36,25 +37,41 @@ def plot(values, moving_avg_period, episode, epsilon):
     #plt.plot(moving_avg)
     #plt.show()
     #plt.pause(0.001)
-    print("Epsiode, epsilon: {}, {}".format(episode, epsilon))
+    print("\nEpsiode, epsilon: {}, {}".format(episode, epsilon))
     print("    Moving average: {}".format(moving_avg[-1]))
 
 
-def extract_tensors(experiences):
+def extract_screen_tensors(experiences, device):
 
-    batch = Experience(*zip(*experiences))
+    batch = ScreenExperience(*zip(*experiences))
 
-    state_t      = torch.cat(batch.state)
-    action_t     = torch.cat(batch.action)
-    reward_t     = torch.cat(batch.reward)
-    next_state_t = torch.cat(batch.next_state)
+    state_t      = torch.cat(batch.state).to(device)
+    action_t     = torch.cat(batch.action).to(device)
+    reward_t     = torch.cat(batch.reward).to(device)
+    next_state_t = torch.cat(batch.next_state).to(device)
 
     return (state_t, action_t, reward_t, next_state_t)
 
+def extract_state_tensors(experiences, device):
 
-Experience = namedtuple(
-    'Experience',
+    batch = StateExperience(*zip(*experiences))
+
+    state_t      = torch.cat(batch.state).to(device)
+    action_t     = torch.cat(batch.action).to(device)
+    reward_t     = torch.cat(batch.reward).to(device)
+    next_state_t = torch.cat(batch.next_state).to(device)
+    done_t       = torch.cat(batch.done).to(device)
+
+    return (state_t, action_t, reward_t, next_state_t, done_t)
+
+
+ScreenExperience = namedtuple(
+    'ScreenExperience',
     ('state', 'action', 'next_state', 'reward'))
+
+StateExperience = namedtuple(
+    'StateExperience',
+    ('state', 'action', 'next_state', 'reward', 'done'))
 
 
 class ReplayMemory(object):
@@ -71,17 +88,26 @@ class ReplayMemory(object):
         self.push_count += 1
 
     def sample(self, batch_size):
-        return np.random.choice(self.memory[0 : self.push_count], batch_size)
+        limit = min(self.push_count, self.capacity)
+        idxs = np.arange(0, limit)
+        idxs = np.random.choice(idxs, batch_size)
+        return self.memory[idxs]
 
     def can_provide_sample(self, batch_size):
         return self.push_count >= batch_size
+
+    def save(self, path):
+        np.save(os.path.join(path, "replay_mem.npy"), self.memory, allow_pickle=True)
+
+    def load(self, path):
+        self.memory = np.load(os.path.join(path, "replay_mem.npy"), allow_pickle=True)
 
 
 class EpsilonGreedyStrategy(object):
 
     def __init__(self, start, stop, decay):
-        self.start = start# max
-        self.stop  = stop # min
+        self.start = start
+        self.stop  = stop
         self.decay = decay
 
     def get_exploration_rate(self, current_step):
@@ -120,7 +146,7 @@ class CartPoleEnvManager(object):
     def just_starting(self):
         return self.current_screen is None
 
-    def get_state(self):
+    def get_screen_state(self):
         if self.just_starting() or self.done:
             self.current_screen = self.get_processed_screen()
             black_screen = torch.zeros_like(self.current_screen)
@@ -147,7 +173,13 @@ class CartPoleEnvManager(object):
         screen_height = screen.shape[1]
         top           = int(screen_height * 0.4)
         bottom        = int(screen_height * 0.8)
-        screen        = screen[:, top : bottom, :]
+
+        screen_width  = screen.shape[2]
+        left          = int(screen_width * 0.1)
+        right         = int(screen_width * 0.9)
+
+        screen        = screen[:, top : bottom, left : right]
+        #screen        = screen[:, top : bottom, :]
 
         return screen
 
@@ -174,7 +206,7 @@ class QValues(object):
         return policy_net(states).gather(dim=1, index=actions.unsqueeze(-1))
 
     @staticmethod
-    def get_next(target_net, next_states, next_actions):
+    def get_next_from_screen(target_net, next_states, next_actions):
 
         #
         # We need to figure out which states have not terminated, i.e. which
@@ -197,3 +229,13 @@ class QValues(object):
             target_net(active_states)[indices, next_actions].detach()
 
         return values
+
+    @staticmethod
+    def get_next_from_state(target_net, next_states, next_actions, dones):
+
+        indices = torch.arange(next_states.shape[0]).long().to(QValues.device)
+        next_q_values = target_net(next_states)[indices, next_actions]
+
+        next_q_values[dones] = 0.0
+
+        return next_q_values
