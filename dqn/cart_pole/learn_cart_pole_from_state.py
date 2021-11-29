@@ -11,13 +11,15 @@ from utils import StateExperience
 from networks import LinearDQN, Conv1dDQN, Linear2DQN, SimpleDQN, LinearDQN3
 from networks import ConvDQN
 from utils import CartPoleEnvManager
-from utils import plot
+from utils import get_moving_average
 from utils import EpsilonGreedyStrategy
 from utils import ReplayMemory
 from utils import extract_state_tensors
 from utils import QValues
 import torch.nn.functional as t_functional
 import torch.nn as nn
+
+
 
 
 if __name__ == "__main__":
@@ -31,15 +33,19 @@ if __name__ == "__main__":
     model_type = args.model_type
 
     save_path     = "from_state_save"
-    batch_size    = 64
+    batch_size    = 128
     gamma         = 0.95
     eps_max       = 1.
     eps_min       = 0.01
     eps_decay     = 0.001
-    target_update = 20
+    target_update = 30
     memory_size   = 100000
     lr            = 0.001
-    num_episodes  = 500
+    num_episodes  = 2000
+    top_score     = 199
+    max_avg_drop  = -20
+    grace_period  = 50
+    grace_dist    = 50
     
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -48,7 +54,6 @@ if __name__ == "__main__":
     
     env          = gym.make("CartPole-v0")
     memory       = ReplayMemory(memory_size)
-    save_every   = num_episodes
     episode_durations = []
 
     if model_type == "linear":
@@ -100,9 +105,11 @@ if __name__ == "__main__":
     target_net.eval()
     
     episode_info = {}
-    episode_info["current_episode"]   = 0
-    episode_info["epsilon"]           = eps_max
-    episode_info["episode_durations"] =  episode_durations
+    episode_info["current_episode"]     = 0
+    episode_info["epsilon"]             = eps_max
+    episode_info["episode_durations"]   = episode_durations
+    episode_info["top_average"]         = 0.0
+    episode_info["top_average_episode"] = 0.0
     info_file = os.path.join(save_path, "episode_info.json")
     
     if os.path.exists(os.path.join(save_path, target_net.name + ".model")):
@@ -124,11 +131,16 @@ if __name__ == "__main__":
     stopping_episode   = starting_episode + num_episodes
     episode_durations  = episode_info["episode_durations"]
     epsilon            = episode_info["epsilon"]
+    top_average        = episode_info["top_average"]
+    top_avg_episode    = episode_info["top_average_episode"]
 
     loss_func = nn.SmoothL1Loss()
-    epsilon   = eps_max
     
-    print("Starting from episode: {}".format(starting_episode))
+    msg  = "Starting from episode {}, "
+    msg += "using epsilon {}".format(starting_episode, epsilon)
+    print(msg)
+
+    bail = False
     
     for episode_idx in range(starting_episode, stopping_episode):
 
@@ -141,12 +153,6 @@ if __name__ == "__main__":
                 action = torch.argmax(action, dim=1).long()
             else:
                 action = torch.Tensor([np.random.choice(2)]).long()
-
-            ## Hits score of 199
-            #if state[2] + state[3] < 0:
-            #    action = 0
-            #else:
-            #    action = 1
 
             next_state, reward, done, _ = env.step(action.item())
 
@@ -166,11 +172,15 @@ if __name__ == "__main__":
                     extract_state_tensors(experiences, device)
 
                 indices = torch.arange(batch_size).long().to(device)
-                current_q_values = policy_net.forward(states)[indices, actions]
-                next_pred        = policy_net.forward(next_states)
-                next_actions     = torch.argmax(next_pred, dim=1)
-                next_q_values    = target_net.forward(next_states)[indices, next_actions]
+                current_q_values     = policy_net.forward(states)
+                current_q_values     = current_q_values[indices, actions]
+
+                next_pred            = policy_net.forward(next_states)
+                next_actions         = torch.argmax(next_pred, dim=1)
+                next_q_values        = target_net.forward(next_states)
+                next_q_values        = next_q_values[indices, next_actions]
                 next_q_values[dones] = 0.
+
                 q_target = rewards + (gamma * next_q_values)
 
                 loss = loss_func(current_q_values, q_target)
@@ -183,24 +193,63 @@ if __name__ == "__main__":
     
             if done:
                 episode_durations.append(ts)
-                plot(episode_durations, 100, episode_idx,
-                    epsilon)
-                break
-    
-        last_episode = episode_idx == stopping_episode - 1
+                avg = float(get_moving_average(100, episode_durations)[-1])
+                print("\nEpisode, epsilon: {}, {}".format(episode_idx, epsilon))
+                print("    Moving average: {}".format(avg))
 
-        if episode_idx % save_every == 0 or last_episode:
-            target_net.save(save_path)
-            policy_net.save(save_path)
-            memory.save(save_path)
-    
-        episode_info["current_episode"] = episode_idx
-        episode_info["epsilon"] = epsilon
-    
-        with open(info_file, "w") as out_f:
-            json.dump(episode_info, out_f)
+                top_reached = avg >= top_score
+                avg_diff    = avg - top_average
+
+                #
+                # If our average is dropping too much, we're probably
+                # forgetting too much. Let's bail.
+                #
+                if avg_diff <= max_avg_drop:
+                    if grace_dist > 0:
+                        grace_dist -= 1
+                    else:
+                        print("    Max average drop reached.")
+                        print("    Re-loading top performing weights.")
+                        policy_net.load(save_path)
+                        target_net.load(save_path)
+                        grace_dist = grace_period
+
+                elif avg_diff >= 5.0 or top_reached:
+                    print("    Saving model and memory.")
+                    target_net.save(save_path)
+                    policy_net.save(save_path)
+                    memory.save(save_path)
+                    top_average = avg
+                    top_avg_episode = episode_idx
+
+                   with open(info_file, "w") as out_f:
+                       json.dump(episode_info, out_f)
+
+                if top_reached:
+                    print("Top average reached!!")
+                    bail = True
+
+                break
+
+        if bail:
+            break
     
         if episode_idx % target_update == 0:
             target_net.load_state_dict(policy_net.state_dict())
+
+    print("---------------------------------------------")
+    msg  = "Top moving average: {}, reached at ".format(top_average)
+    msg += "episode {}.".format(top_avg_episode)
+    print(msg)
+    top_count = episode_durations.count(top_score)
+    print("Top score reached {} times.".format(top_count))
+
+    episode_info["current_episode"] = episode_idx
+    episode_info["epsilon"]         = epsilon
+    episode_info["top_average"]     = top_average
+    episode_info["top_average_episode"] = top_avg_episode
+    
+    with open(info_file, "w") as out_f:
+        json.dump(episode_info, out_f)
     
     env.close()

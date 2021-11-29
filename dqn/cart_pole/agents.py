@@ -10,12 +10,12 @@ class DQNAgent(object):
         self.num_actions  = num_actions
         self.device       = device
 
-    def select_action(self, state, policy_net):
+    def select_action(self, state, policy_net, epsilon):
 
         rate = self.eps_strategy.get_exploration_rate(self.current_step)
         self.current_step += 1
 
-        if rate > np.random.random():
+        if epsilon > np.random.random():
             action =  np.random.randint(self.num_actions)
             return torch.tensor([action]).long()
         else:
