@@ -1,5 +1,7 @@
 from network import LinearNN
+import sys
 import numpy as np
+import os
 from torch.distributions import MultivariateNormal
 import torch
 from torch.optim import Adam
@@ -8,22 +10,35 @@ from torch import nn
 
 class PPO(object):
 
-    def __init__(self, env, device):
+    def __init__(self,
+                 env,
+                 device,
+                 load_weights = False,
+                 model_path   = "./"):
         #FIXME: this is currently setup for a continuous action
         # space. Let's have an option for a discrete action space.
         # We would use a softmax in the network output, and we
         # would sample from that output based on the probabilities.
 
-        self.env     = env
-        self.obs_dim = env.observation_space.shape[0]
-        self.act_dim = env.action_space.shape[0]
-        self.device  = device
+        self.env        = env
+        self.obs_dim    = env.observation_space.shape[0]
+        self.act_dim    = env.action_space.shape[0]
+        self.device     = device
+        self.model_path = model_path
 
-        self.actor  = LinearNN(self.obs_dim, self.act_dim)
-        self.critic = LinearNN(self.obs_dim, 1)
+        self.actor  = LinearNN("actor", self.obs_dim, self.act_dim)
+        self.critic = LinearNN("critic", self.obs_dim, 1)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
+
+        if load_weights:
+            if not os.path.exists(model_path):
+                msg  = "ERROR: model_path does not exist. Unable "
+                msg += "to load weights!"
+                sys.exit(1)
+
+            self.load()
 
         self._init_hyperparameters()
 
@@ -33,13 +48,16 @@ class PPO(object):
         self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr)
         self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
 
+        if not os.path.exists(model_path):
+            os.makedirs(model_path)
+
     def _init_hyperparameters(self):
-        self.timesteps_per_batch = 4800
-        self.max_timesteps_per_episode = 1600
-        self.gamma = 0.95
-        self.epochs_per_iteration = 5
+        self.timesteps_per_batch = 2048
+        self.max_timesteps_per_episode = 200
+        self.gamma = 0.99
+        self.epochs_per_iteration = 10
         self.clip = 0.2
-        self.lr = 0.001
+        self.lr = 0.0001
 
     def get_action(self, obs):
         mean_action = self.actor(torch.tensor(obs).to(self.device)).to("cpu")
@@ -152,3 +170,14 @@ class PPO(object):
                 self.critic_optim.zero_grad()
                 critic_loss.backward()
                 self.critic_optim.step()
+
+        self.save()
+
+
+    def save(self):
+        self.actor.save(self.model_path)
+        self.critic.save(self.model_path)
+
+    def load(self):
+        self.actor.load(self.model_path)
+        self.critic.load(self.model_path)
