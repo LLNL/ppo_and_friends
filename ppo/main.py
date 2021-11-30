@@ -2,24 +2,26 @@ from ppo import PPO
 import gym
 import torch
 import argparse
-from test import test_policy
+from testing import test_policy
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", default="train",
-        choices=["train", "test"])
+    parser.add_argument("--test", action="store_true")
     parser.add_argument("--model_path", default="./saved_models")
     parser.add_argument("--load_state", action="store_true")
-    parser.add_argument("--render_test", action="store_true")
+    parser.add_argument("--render", action="store_true")
+    parser.add_argument("--action_type", default="continuous",
+        choices=["continuous", "discrete"])
 
     args        = parser.parse_args()
-    mode        = args.mode
+    test        = args.test
     model_path  = args.model_path
-    load_state  = args.load_state or mode == "test"
-    render_test = args.render_test
+    load_state  = args.load_state or test
+    render      = args.render
+    action_type = args.action_type
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and not test:
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
@@ -28,11 +30,12 @@ if __name__ == "__main__":
 
     ppo = PPO(env          = env,
               device       = device,
+              render       = render,
               load_weights = load_state,
               model_path   = model_path)
 
-    if mode == "train":
-        ppo.learn(100000)
+    if test:
+        test_policy(ppo.actor, env, render, device, action_type)
+    else: 
+        ppo.learn(200000)
 
-    elif mode == "test":
-        test_policy(ppo.actor, env, render_test, device)

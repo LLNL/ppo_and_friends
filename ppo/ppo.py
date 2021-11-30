@@ -13,6 +13,7 @@ class PPO(object):
     def __init__(self,
                  env,
                  device,
+                 render       = False,
                  load_weights = False,
                  model_path   = "./"):
         #FIXME: this is currently setup for a continuous action
@@ -25,6 +26,8 @@ class PPO(object):
         self.act_dim    = env.action_space.shape[0]
         self.device     = device
         self.model_path = model_path
+        self.render     = render
+        self.i_so_far   = 0
 
         self.actor  = LinearNN("actor", self.obs_dim, self.act_dim)
         self.critic = LinearNN("critic", self.obs_dim, 1)
@@ -60,7 +63,7 @@ class PPO(object):
         self.lr = 0.0001
 
     def get_action(self, obs):
-        mean_action = self.actor(torch.tensor(obs).to(self.device)).to("cpu")
+        mean_action = self.actor(torch.tensor(obs).to(self.device)).to("cpu").detach()
 
         dist     = MultivariateNormal(mean_action, self.cov_mat)
         action   = dist.sample()
@@ -76,7 +79,7 @@ class PPO(object):
 
             for reward in reversed(ep_rewards):
 
-                discounted_reward += reward + discounted_reward * self.gamma
+                discounted_reward = reward + discounted_reward * self.gamma
 
                 #FIXME: we can be a lot more effecient here.
                 batch_rewards_tg.insert(0, discounted_reward)
@@ -109,6 +112,9 @@ class PPO(object):
             done = False
 
             for ts in range(self.max_timesteps_per_episode):
+                if self.render:
+                    self.env.render()
+
                 total_ts += 1
 
                 batch_obs.append(obs)
@@ -137,12 +143,14 @@ class PPO(object):
 
     def learn(self, total_timesteps):
 
+        self.i_so_far = 0
         t_so_far = 0
         while t_so_far < total_timesteps:
             batch_obs, batch_actions, batch_log_probs, \
                 batch_rewards_tg, batch_ep_lens = self.rollout()
 
             t_so_far += np.sum(batch_ep_lens)
+            self.i_so_far += 1
 
             value, _  = self.evaluate(batch_obs, batch_actions)
             advantage = batch_rewards_tg - value.detach()
@@ -160,13 +168,13 @@ class PPO(object):
                 # the clip?
                 surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantage
 
-                actor_loss = (-torch.min(surr1, surr2)).mean()
+                actor_loss  = (-torch.min(surr1, surr2)).mean()
+                critic_loss = nn.MSELoss()(value, batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
                 actor_loss.backward(retain_graph=True)
                 self.actor_optim.step()
 
-                critic_loss = nn.MSELoss()(value, batch_rewards_tg)
                 self.critic_optim.zero_grad()
                 critic_loss.backward()
                 self.critic_optim.step()
