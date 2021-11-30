@@ -3,6 +3,7 @@ import numpy as np
 from torch.distributions import MultivariateNormal
 import torch
 from torch.optim import Adam
+from torch import nn
 
 
 class PPO(object):
