@@ -13,23 +13,27 @@ if __name__ == "__main__":
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--action_type", default="continuous",
         choices=["continuous", "discrete"])
+    parser.add_argument("--num_timesteps", default=500000, type=int)
 
-    args        = parser.parse_args()
-    test        = args.test
-    model_path  = args.model_path
-    load_state  = args.load_state or test
-    render      = args.render
-    action_type = args.action_type
+    args          = parser.parse_args()
+    test          = args.test
+    model_path    = args.model_path
+    load_state    = args.load_state or test
+    render        = args.render
+    action_type   = args.action_type
+    num_timesteps = args.num_timesteps
 
     if torch.cuda.is_available() and not test:
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
-    env = gym.make('Pendulum-v1')
+    #env = gym.make('Pendulum-v1')
+    env = gym.make('CartPole-v0')
 
     ppo = PPO(env          = env,
               device       = device,
+              action_type  = action_type,
               render       = render,
               load_weights = load_state,
               model_path   = model_path)
@@ -37,5 +41,5 @@ if __name__ == "__main__":
     if test:
         test_policy(ppo.actor, env, render, device, action_type)
     else: 
-        ppo.learn(200000)
+        ppo.learn(num_timesteps)
 

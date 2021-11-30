@@ -21,9 +21,19 @@ class PPONetwork(nn.Module):
 
 class LinearNN(PPONetwork):
 
-    def __init__(self, name, in_dim, out_dim):
+    def __init__(self,
+                 name,
+                 in_dim,
+                 out_dim,
+                 action_type):
+
         super(LinearNN, self).__init__()
-        self.name = name
+        self.name = name + "_" + action_type
+
+        if action_type == "discrete":
+            self.need_softmax = True
+        else:
+            self.need_softmax = False
 
         self.l1 = nn.Linear(in_dim, 64)
         self.l2 = nn.Linear(64, 64)
@@ -39,5 +49,8 @@ class LinearNN(PPONetwork):
         out = F.relu(out)
 
         out = self.l3(out)
+
+        if self.need_softmax:
+            out = F.softmax(out)
 
         return out

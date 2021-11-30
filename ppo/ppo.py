@@ -3,6 +3,7 @@ import sys
 import numpy as np
 import os
 from torch.distributions import MultivariateNormal
+from torch.distributions import Categorical
 import torch
 from torch.optim import Adam
 from torch import nn
@@ -13,6 +14,7 @@ class PPO(object):
     def __init__(self,
                  env,
                  device,
+                 action_type,
                  render       = False,
                  load_weights = False,
                  model_path   = "./"):
@@ -21,16 +23,28 @@ class PPO(object):
         # We would use a softmax in the network output, and we
         # would sample from that output based on the probabilities.
 
-        self.env        = env
-        self.obs_dim    = env.observation_space.shape[0]
-        self.act_dim    = env.action_space.shape[0]
-        self.device     = device
-        self.model_path = model_path
-        self.render     = render
-        self.i_so_far   = 0
+        if np.issubdtype(env.action_space.dtype, np.floating):
+            self.act_dim = env.action_space.shape[0]
+        elif np.issubdtype(env.action_space.dtype, np.integer):
+            self.act_dim = env.action_space.n
 
-        self.actor  = LinearNN("actor", self.obs_dim, self.act_dim)
-        self.critic = LinearNN("critic", self.obs_dim, 1)
+        self.obs_dim     = env.observation_space.shape[0]
+        self.env         = env
+        self.device      = device
+        self.model_path  = model_path
+        self.render      = render
+        self.action_type = action_type
+
+        self.actor  = LinearNN(
+            "actor", 
+            self.obs_dim, 
+            self.act_dim, 
+            action_type)
+        self.critic = LinearNN(
+            "critic", 
+            self.obs_dim, 
+            1,
+            action_type)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
@@ -63,11 +77,23 @@ class PPO(object):
         self.lr = 0.0001
 
     def get_action(self, obs):
-        mean_action = self.actor(torch.tensor(obs).to(self.device)).to("cpu").detach()
 
-        dist     = MultivariateNormal(mean_action, self.cov_mat)
-        action   = dist.sample()
-        log_prob = dist.log_prob(action)
+        if self.action_type == "continuous":
+            t_obs = torch.tensor(obs).to(self.device)
+            mean_action = self.actor(t_obs).cpu().detach()
+
+            dist     = MultivariateNormal(mean_action, self.cov_mat)
+            action   = dist.sample()
+            log_prob = dist.log_prob(action)
+
+        elif self.action_type == "discrete":
+            t_obs = torch.tensor(obs).to(self.device)
+            probs = self.actor(t_obs).cpu().detach()
+
+            dist     = Categorical(probs)
+            action   = dist.sample()
+            log_prob = dist.log_prob(action)
+            action   = action.int().unsqueeze(0)
 
         return action.detach().numpy(), log_prob.detach().to(self.device)
 
@@ -90,9 +116,16 @@ class PPO(object):
     def evaluate(self, batch_obs, batch_actions):
         value = self.critic(batch_obs).squeeze()
 
-        mean = self.actor(batch_obs).to("cpu")
-        dist = MultivariateNormal(mean, self.cov_mat)
-        log_probs = dist.log_prob(batch_actions.to("cpu"))
+        if self.action_type == "continuous":
+            mean = self.actor(batch_obs).cpu()
+            dist = MultivariateNormal(mean, self.cov_mat)
+            log_probs = dist.log_prob(batch_actions.cpu())
+
+        elif self.action_type == "discrete":
+            probs = self.actor(batch_obs).cpu().detach()
+            dist      = Categorical(probs)
+            action    = dist.sample()
+            log_probs = dist.log_prob(action)
 
         return value, log_probs.to(self.device)
 
@@ -120,7 +153,11 @@ class PPO(object):
                 batch_obs.append(obs)
                 action, log_prob = self.get_action(obs)
 
-                obs, reward, done, _ = self.env.step(action)
+                #FIXME: can we make this cleaner?
+                if self.action_type == "discrete":
+                    obs, reward, done, _ = self.env.step(action[0])
+                else:
+                    obs, reward, done, _ = self.env.step(action)
 
                 ep_rewards.append(reward)
                 batch_actions.append(action)
@@ -133,8 +170,12 @@ class PPO(object):
             batch_rewards.append(ep_rewards)
 
         batch_obs       = torch.tensor(batch_obs, dtype=torch.float).to(self.device)
-        batch_actions   = torch.tensor(batch_actions, dtype=torch.float).to(self.device)
         batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float).to(self.device)
+
+        if self.action_type == "continuous":
+            batch_actions = torch.tensor(batch_actions, dtype=torch.float).to(self.device)
+        elif self.action_type == "discrete":
+            batch_actions = torch.tensor(batch_actions, dtype=torch.int32).to(self.device)
 
         batch_rewards_tg = self.compute_rewards_tg(batch_rewards).to(self.device)
 
@@ -143,14 +184,12 @@ class PPO(object):
 
     def learn(self, total_timesteps):
 
-        self.i_so_far = 0
         t_so_far = 0
         while t_so_far < total_timesteps:
             batch_obs, batch_actions, batch_log_probs, \
                 batch_rewards_tg, batch_ep_lens = self.rollout()
 
             t_so_far += np.sum(batch_ep_lens)
-            self.i_so_far += 1
 
             value, _  = self.evaluate(batch_obs, batch_actions)
             advantage = batch_rewards_tg - value.detach()
