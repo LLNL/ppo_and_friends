@@ -23,7 +23,7 @@ def test_policy(policy,
         action = policy(obs).detach().cpu()
 
         if action_type == "discrete":
-            action = np.argmax(action)
+            action = torch.argmax(action).numpy()
 
         obs, reward, done, _ = env.step(action)
         score += reward

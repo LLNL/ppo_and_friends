@@ -28,8 +28,8 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    #env = gym.make('Pendulum-v1')
-    env = gym.make('CartPole-v0')
+    env = gym.make('Pendulum-v1')
+    #env = gym.make('CartPole-v0')
 
     ppo = PPO(env          = env,
               device       = device,

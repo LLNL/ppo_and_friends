@@ -1,4 +1,4 @@
-from network import LinearNN
+from network import LinearNN, LinearNN2
 import sys
 import numpy as np
 import os
@@ -18,10 +18,6 @@ class PPO(object):
                  render       = False,
                  load_weights = False,
                  model_path   = "./"):
-        #FIXME: this is currently setup for a continuous action
-        # space. Let's have an option for a discrete action space.
-        # We would use a softmax in the network output, and we
-        # would sample from that output based on the probabilities.
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
@@ -35,16 +31,24 @@ class PPO(object):
         self.render      = render
         self.action_type = action_type
 
+        #FIXME: testing
+        self.i_so_far = 0
+
+        need_softmax = False
+        if action_type == "discrete":
+            need_softmax = True
+
         self.actor  = LinearNN(
             "actor", 
             self.obs_dim, 
             self.act_dim, 
-            action_type)
+            need_softmax)
+
         self.critic = LinearNN(
             "critic", 
             self.obs_dim, 
             1,
-            action_type)
+            False)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
@@ -74,12 +78,12 @@ class PPO(object):
         self.gamma = 0.99
         self.epochs_per_iteration = 10
         self.clip = 0.2
-        self.lr = 0.0001
+        self.lr = 3e-4
 
     def get_action(self, obs):
 
         if self.action_type == "continuous":
-            t_obs = torch.tensor(obs).to(self.device)
+            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
             mean_action = self.actor(t_obs).cpu().detach()
 
             dist     = MultivariateNormal(mean_action, self.cov_mat)
@@ -87,7 +91,7 @@ class PPO(object):
             log_prob = dist.log_prob(action)
 
         elif self.action_type == "discrete":
-            t_obs = torch.tensor(obs).to(self.device)
+            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
             probs = self.actor(t_obs).cpu().detach()
 
             dist     = Categorical(probs)
@@ -113,8 +117,24 @@ class PPO(object):
         batch_rewards_tg = torch.tensor(batch_rewards_tg, dtype=torch.float).to(self.device)
         return batch_rewards_tg
 
+    #def discounted_cumulative_sum(self, in_list):
+    #    cumulative_sums = []
+
+    #    for ep_rewards in reversed(in_list):
+    #        discounted_reward = 0
+
+    #        for reward in reversed(ep_rewards):
+
+    #            discounted_reward = reward + discounted_reward * self.gamma
+
+    #            #FIXME: we can be a lot more effecient here.
+    #            cumulative_sums.insert(0, discounted_reward)
+
+    #    cumulative_sums = torch.tensor(cumulative_sums, dtype=torch.float).to(self.device)
+    #    return cumulative_sums
+
     def evaluate(self, batch_obs, batch_actions):
-        value = self.critic(batch_obs).squeeze()
+        values = self.critic(batch_obs).squeeze()
 
         if self.action_type == "continuous":
             mean = self.actor(batch_obs).cpu()
@@ -122,12 +142,12 @@ class PPO(object):
             log_probs = dist.log_prob(batch_actions.cpu())
 
         elif self.action_type == "discrete":
-            probs = self.actor(batch_obs).cpu().detach()
+            probs = self.actor(batch_obs).cpu()
             dist      = Categorical(probs)
             action    = dist.sample()
             log_probs = dist.log_prob(action)
 
-        return value, log_probs.to(self.device)
+        return values, log_probs.to(self.device), dist.entropy().to(self.device)
 
     def rollout(self):
         batch_obs        = [] # observations.
@@ -137,7 +157,7 @@ class PPO(object):
         batch_rewards_tg = [] # rewards to go.
         batch_ep_lens    = [] # episode lengths.
 
-        total_ts = 0
+        total_ts  = 0
         while total_ts < self.timesteps_per_batch:
 
             ep_rewards = []
@@ -155,7 +175,7 @@ class PPO(object):
 
                 #FIXME: can we make this cleaner?
                 if self.action_type == "discrete":
-                    obs, reward, done, _ = self.env.step(action[0])
+                    obs, reward, done, _ = self.env.step(action.squeeze())
                 else:
                     obs, reward, done, _ = self.env.step(action)
 
@@ -169,6 +189,26 @@ class PPO(object):
             batch_ep_lens.append(ts + 1)
             batch_rewards.append(ep_rewards)
 
+        print("\n--------------------------------------------------------")
+        print("Rollout Stats:")
+
+        print("Iteration {}".format(self.i_so_far))
+
+        reward_sums = []
+        for ep_rewards in batch_rewards:
+            reward_sums.append(sum(ep_rewards))
+        reward_sums = np.array(reward_sums)
+
+        print("\nEpisode reward mean:")
+        for i in range(0, reward_sums.size, 100):
+            print("    {} -> {}: {}".format(i, i+100, reward_sums[i:i+100].mean()))
+
+        print("\nEpisode length mean:")
+        np_ep_lens = np.array(batch_ep_lens)
+        for i in range(0, np_ep_lens.size, 100):
+            print("    {} -> {}: {}".format(i, i+100, np_ep_lens[i:i+100].mean()))
+        print("--------------------------------------------------------")
+
         batch_obs       = torch.tensor(batch_obs, dtype=torch.float).to(self.device)
         batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float).to(self.device)
 
@@ -177,10 +217,18 @@ class PPO(object):
         elif self.action_type == "discrete":
             batch_actions = torch.tensor(batch_actions, dtype=torch.int32).to(self.device)
 
+        #FIXME: testing reward scale.
+        #scaled_rewards = []
+        #for reward_list in batch_rewards:
+        #    scaled_rewards.append(list(np.array(reward_list) / 20.0))
+        #batch_rewards = scaled_rewards
         batch_rewards_tg = self.compute_rewards_tg(batch_rewards).to(self.device)
 
         return batch_obs, batch_actions, batch_log_probs, batch_rewards_tg,\
             batch_ep_lens
+
+    def get_advantages(self):
+        pass
 
     def learn(self, total_timesteps):
 
@@ -190,27 +238,29 @@ class PPO(object):
                 batch_rewards_tg, batch_ep_lens = self.rollout()
 
             t_so_far += np.sum(batch_ep_lens)
+            self.i_so_far += 1
 
-            value, _  = self.evaluate(batch_obs, batch_actions)
-            advantage = batch_rewards_tg - value.detach()
+            values, _, _  = self.evaluate(batch_obs, batch_actions)
+            advantages = batch_rewards_tg - values.detach()
 
-            advantage = (advantage - advantage.mean()) / \
-                (advantage.std() + 1e-10)
+            advantages = (advantages - advantages.mean()) / \
+                (advantages.std() + 1e-10)
 
             for _ in range(self.epochs_per_iteration):
-                value, curr_log_probs = self.evaluate(batch_obs, batch_actions)
+                values, curr_log_probs, entropy = self.evaluate(batch_obs, batch_actions)
 
                 # new p / old p
                 ratios = torch.exp(curr_log_probs - batch_log_probs)
-                surr1  = ratios * advantage
-                # TODO: hmm... I thought the advantage was supposed to be inside
-                # the clip?
-                surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantage
+                surr1  = ratios * advantages
+                surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
+                #FIXME: people seem to be using entropy here. Does it make a difference?
+                #actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
                 actor_loss  = (-torch.min(surr1, surr2)).mean()
-                critic_loss = nn.MSELoss()(value, batch_rewards_tg)
+                critic_loss = nn.MSELoss()(values, batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
+                #FIXME: is retaining graph really needed? Doesn't complain...
                 actor_loss.backward(retain_graph=True)
                 self.actor_optim.step()
 
@@ -218,7 +268,7 @@ class PPO(object):
                 critic_loss.backward()
                 self.critic_optim.step()
 
-        self.save()
+            self.save()
 
 
     def save(self):
