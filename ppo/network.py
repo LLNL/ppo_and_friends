@@ -30,7 +30,6 @@ class LinearNN(PPONetwork):
         super(LinearNN, self).__init__()
         self.name = name
         self.need_softmax = need_softmax
-        self.in_dim = in_dim
 
         self.l1 = nn.Linear(in_dim, 64)
         self.l2 = nn.Linear(64, 64)
@@ -38,8 +37,6 @@ class LinearNN(PPONetwork):
 
 
     def forward(self, _input):
-
-        #_input = _input.reshape((-1, self.in_dim))
 
         out = self.l1(_input)
         out = F.relu(out)
@@ -50,7 +47,7 @@ class LinearNN(PPONetwork):
         out = self.l3(out)
 
         if self.need_softmax:
-            out = F.softmax(out, dim=1)
+            out = F.softmax(out, dim=-1)
 
         return out
 
@@ -67,7 +64,6 @@ class LinearNN2(PPONetwork):
         super(LinearNN2, self).__init__()
         self.name = name
         self.need_softmax = need_softmax
-        self.in_dim = in_dim
 
         self.l1 = nn.Linear(in_dim, 128)
         self.l2 = nn.Linear(128, 128)
@@ -77,8 +73,6 @@ class LinearNN2(PPONetwork):
         self.l_relu = torch.nn.LeakyReLU(0.1)
 
     def forward(self, _input):
-
-        #_input = _input.reshape((-1, self.in_dim))
 
         out = self.l1(_input)
         out = self.l_relu(out)
@@ -92,6 +86,6 @@ class LinearNN2(PPONetwork):
         out = self.l4(out)
 
         if self.need_softmax:
-            out = F.softmax(out, dim=1)
+            out = F.softmax(out, dim=-1)
 
         return out

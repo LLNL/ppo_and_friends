@@ -142,10 +142,10 @@ class PPO(object):
             log_probs = dist.log_prob(batch_actions.cpu())
 
         elif self.action_type == "discrete":
-            probs = self.actor(batch_obs).cpu()
-            dist      = Categorical(probs)
-            action    = dist.sample()
-            log_probs = dist.log_prob(action)
+            batch_actions = batch_actions.flatten()
+            probs         = self.actor(batch_obs).cpu()
+            dist          = Categorical(probs)
+            log_probs     = dist.log_prob(batch_actions.cpu())
 
         return values, log_probs.to(self.device), dist.entropy().to(self.device)
 
