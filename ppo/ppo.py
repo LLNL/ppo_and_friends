@@ -26,14 +26,14 @@ class PPO(object):
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
 
-        self.obs_dim     = env.observation_space.shape[0]
-        self.env         = env
-        self.device      = device
-        self.model_path  = model_path
-        self.render      = render
-        self.action_type = action_type
-        self.reward_scae = reward_scale
-        self.obs_scale   = obs_scale
+        self.obs_dim      = env.observation_space.shape[0]
+        self.env          = env
+        self.device       = device
+        self.model_path   = model_path
+        self.render       = render
+        self.action_type  = action_type
+        self.reward_scale = reward_scale
+        self.obs_scale    = obs_scale
 
         #FIXME: testing
         self.i_so_far = 0
