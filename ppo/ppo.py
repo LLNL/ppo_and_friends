@@ -15,6 +15,8 @@ class PPO(object):
                  env,
                  device,
                  action_type,
+                 reward_scale = 1.0,
+                 obs_scale    = 1.0,
                  render       = False,
                  load_weights = False,
                  model_path   = "./"):
@@ -30,6 +32,8 @@ class PPO(object):
         self.model_path  = model_path
         self.render      = render
         self.action_type = action_type
+        self.reward_scae = reward_scale
+        self.obs_scale   = obs_scale
 
         #FIXME: testing
         self.i_so_far = 0
@@ -117,22 +121,6 @@ class PPO(object):
         batch_rewards_tg = torch.tensor(batch_rewards_tg, dtype=torch.float).to(self.device)
         return batch_rewards_tg
 
-    #def discounted_cumulative_sum(self, in_list):
-    #    cumulative_sums = []
-
-    #    for ep_rewards in reversed(in_list):
-    #        discounted_reward = 0
-
-    #        for reward in reversed(ep_rewards):
-
-    #            discounted_reward = reward + discounted_reward * self.gamma
-
-    #            #FIXME: we can be a lot more effecient here.
-    #            cumulative_sums.insert(0, discounted_reward)
-
-    #    cumulative_sums = torch.tensor(cumulative_sums, dtype=torch.float).to(self.device)
-    #    return cumulative_sums
-
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
 
@@ -169,6 +157,9 @@ class PPO(object):
                     self.env.render()
 
                 total_ts += 1
+
+                if self.obs_scale != 1.0:
+                    obs /= self.obs_scale
 
                 batch_obs.append(obs)
                 action, log_prob = self.get_action(obs)
@@ -217,11 +208,14 @@ class PPO(object):
         elif self.action_type == "discrete":
             batch_actions = torch.tensor(batch_actions, dtype=torch.int32).to(self.device)
 
-        #FIXME: testing reward scale.
-        #scaled_rewards = []
-        #for reward_list in batch_rewards:
-        #    scaled_rewards.append(list(np.array(reward_list) / 20.0))
-        #batch_rewards = scaled_rewards
+        if self.reward_scale != 1.0:
+            scaled_rewards = []
+            for reward_list in batch_rewards:
+                scaled_rewards.append(list(np.array(reward_list) /
+                    self.reward_scale))
+
+            batch_rewards = scaled_rewards
+
         batch_rewards_tg = self.compute_rewards_tg(batch_rewards).to(self.device)
 
         return batch_obs, batch_actions, batch_log_probs, batch_rewards_tg,\
@@ -255,8 +249,8 @@ class PPO(object):
                 surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
                 #FIXME: people seem to be using entropy here. Does it make a difference?
-                #actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
-                actor_loss  = (-torch.min(surr1, surr2)).mean()
+                actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+                #actor_loss  = (-torch.min(surr1, surr2)).mean()
                 critic_loss = nn.MSELoss()(values, batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
