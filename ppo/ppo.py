@@ -1,5 +1,6 @@
 from network import LinearNN, LinearNN2
 import sys
+import pickle
 import numpy as np
 import os
 from torch.distributions import MultivariateNormal
@@ -18,8 +19,8 @@ class PPO(object):
                  reward_scale = 1.0,
                  obs_scale    = 1.0,
                  render       = False,
-                 load_weights = False,
-                 model_path   = "./"):
+                 load_state   = False,
+                 state_path   = "./"):
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
@@ -29,26 +30,28 @@ class PPO(object):
         self.obs_dim      = env.observation_space.shape[0]
         self.env          = env
         self.device       = device
-        self.model_path   = model_path
+        self.state_path   = state_path
         self.render       = render
         self.action_type  = action_type
         self.reward_scale = reward_scale
         self.obs_scale    = obs_scale
 
-        #FIXME: testing
-        self.i_so_far = 0
+        self.status_dict  = {}
+        self.status_dict["iteration"] = 0
+        self.status_dict["running score mean"] = 0
+        self.status_dict["total episodes"] = 0
 
         need_softmax = False
         if action_type == "discrete":
             need_softmax = True
 
-        self.actor  = LinearNN(
+        self.actor  = LinearNN2(
             "actor", 
             self.obs_dim, 
             self.act_dim, 
             need_softmax)
 
-        self.critic = LinearNN(
+        self.critic = LinearNN2(
             "critic", 
             self.obs_dim, 
             1,
@@ -57,10 +60,10 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
-        if load_weights:
-            if not os.path.exists(model_path):
-                msg  = "ERROR: model_path does not exist. Unable "
-                msg += "to load weights!"
+        if load_state:
+            if not os.path.exists(state_path):
+                msg  = "ERROR: state_path does not exist. Unable "
+                msg += "to load state!"
                 sys.exit(1)
 
             self.load()
@@ -73,8 +76,8 @@ class PPO(object):
         self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr)
         self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
 
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
+        if not os.path.exists(state_path):
+            os.makedirs(state_path)
 
     def _init_hyperparameters(self):
         self.timesteps_per_batch = 2048
@@ -137,6 +140,14 @@ class PPO(object):
 
         return values, log_probs.to(self.device), dist.entropy().to(self.device)
 
+    def print_status(self):
+
+        print("\n--------------------------------------------------------")
+        print("Status Report:")
+        for key in self.status_dict:
+            print("    {}: {}".format(key, self.status_dict[key]))
+        print("--------------------------------------------------------")
+
     def rollout(self):
         batch_obs        = [] # observations.
         batch_actions    = [] # actions.
@@ -145,12 +156,16 @@ class PPO(object):
         batch_rewards_tg = [] # rewards to go.
         batch_ep_lens    = [] # episode lengths.
 
-        total_ts  = 0
+        total_episodes = 0  
+        total_ts       = 0
+        total_rewards  = 0
+
         while total_ts < self.timesteps_per_batch:
 
-            ep_rewards = []
-            obs  = self.env.reset()
-            done = False
+            total_episodes  += 1
+            ep_rewards       = []
+            done             = False
+            obs              = self.env.reset()
 
             for ts in range(self.max_timesteps_per_episode):
                 if self.render:
@@ -170,6 +185,7 @@ class PPO(object):
                 else:
                     obs, reward, done, _ = self.env.step(action)
 
+                total_rewards += reward
                 ep_rewards.append(reward)
                 batch_actions.append(action)
                 batch_log_probs.append(log_prob)
@@ -180,25 +196,8 @@ class PPO(object):
             batch_ep_lens.append(ts + 1)
             batch_rewards.append(ep_rewards)
 
-        print("\n--------------------------------------------------------")
-        print("Rollout Stats:")
-
-        print("Iteration {}".format(self.i_so_far))
-
-        reward_sums = []
-        for ep_rewards in batch_rewards:
-            reward_sums.append(sum(ep_rewards))
-        reward_sums = np.array(reward_sums)
-
-        print("\nEpisode reward mean:")
-        for i in range(0, reward_sums.size, 100):
-            print("    {} -> {}: {}".format(i, i+100, reward_sums[i:i+100].mean()))
-
-        print("\nEpisode length mean:")
-        np_ep_lens = np.array(batch_ep_lens)
-        for i in range(0, np_ep_lens.size, 100):
-            print("    {} -> {}: {}".format(i, i+100, np_ep_lens[i:i+100].mean()))
-        print("--------------------------------------------------------")
+        self.status_dict["running score mean"] = total_rewards / total_episodes
+        self.status_dict["total episodes"]     = total_episodes
 
         batch_obs       = torch.tensor(batch_obs, dtype=torch.float).to(self.device)
         batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float).to(self.device)
@@ -232,7 +231,7 @@ class PPO(object):
                 batch_rewards_tg, batch_ep_lens = self.rollout()
 
             t_so_far += np.sum(batch_ep_lens)
-            self.i_so_far += 1
+            self.status_dict["iteration"] += 1
 
             values, _, _  = self.evaluate(batch_obs, batch_actions)
             advantages = batch_rewards_tg - values.detach()
@@ -249,8 +248,8 @@ class PPO(object):
                 surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
                 #FIXME: people seem to be using entropy here. Does it make a difference?
-                actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
-                #actor_loss  = (-torch.min(surr1, surr2)).mean()
+                #actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+                actor_loss  = (-torch.min(surr1, surr2)).mean()
                 critic_loss = nn.MSELoss()(values, batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
@@ -262,13 +261,23 @@ class PPO(object):
                 critic_loss.backward()
                 self.critic_optim.step()
 
+            self.print_status()
             self.save()
 
 
     def save(self):
-        self.actor.save(self.model_path)
-        self.critic.save(self.model_path)
+        self.actor.save(self.state_path)
+        self.critic.save(self.state_path)
+
+        state_file = os.path.join(self.state_path, "state.pickle")
+        with open(state_file, "wb") as out_f:
+            pickle.dump(self.status_dict, out_f,
+                protocol=pickle.HIGHEST_PROTOCOL)
 
     def load(self):
-        self.actor.load(self.model_path)
-        self.critic.load(self.model_path)
+        self.actor.load(self.state_path)
+        self.critic.load(self.state_path)
+
+        state_file = os.path.join(self.state_path, "state.pickle")
+        with open(state_file, "rb") as in_f:
+            self.status_dict = pickle.load(in_f)

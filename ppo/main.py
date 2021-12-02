@@ -2,25 +2,30 @@ from ppo import PPO
 import gym
 import torch
 import argparse
-from testing import test_policy
+from environments import *
+import os
+
+env_info = {"CartPole" : {"action_type" : "discrete"},
+            "Pendulum" : {"action_type" : "continuous"}}
+
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", action="store_true")
-    parser.add_argument("--model_path", default="./saved_models")
+    parser.add_argument("--state_path", default="")
     parser.add_argument("--load_state", action="store_true")
     parser.add_argument("--render", action="store_true")
-    parser.add_argument("--action_type", default="continuous",
-        choices=["continuous", "discrete"])
     parser.add_argument("--num_timesteps", default=500000, type=int)
+    parser.add_argument("--environment", type=str, required=True,
+        choices=["CartPole", "Pendulum"])
 
     args          = parser.parse_args()
     test          = args.test
-    model_path    = args.model_path
+    env_name      = args.environment
+    state_path    = os.path.join(args.state_path, env_name)
     load_state    = args.load_state or test
     render        = args.render
-    action_type   = args.action_type
     num_timesteps = args.num_timesteps
 
     if torch.cuda.is_available() and not test:
@@ -28,20 +33,20 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    if action_type == "continuous":
-        env = gym.make('Pendulum-v1')
-    else:
-        env = gym.make('CartPole-v0')
+    if env_name == "CartPole":
+        cartpole_ppo(state_path,
+                     env_info[env_name]["action_type"],
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test)
 
-    ppo = PPO(env          = env,
-              device       = device,
-              action_type  = action_type,
-              render       = render,
-              load_weights = load_state,
-              model_path   = model_path)
-
-    if test:
-        test_policy(ppo.actor, env, render, device, action_type)
-    else: 
-        ppo.learn(num_timesteps)
-
+    elif env_name == "Pendulum":
+        pendulum_ppo(state_path,
+                     env_info[env_name]["action_type"],
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test)
