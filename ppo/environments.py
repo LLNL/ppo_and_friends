@@ -191,3 +191,22 @@ def lunar_lander_ppo(state_path,
             num_timesteps,
             device,
             test)
+
+
+def mountain_car_ppo(state_path,
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test = False):
+
+    env = gym.make('MountainCar-v0')
+
+    run_ppo(env,
+            "discrete",
+            state_path,
+            load_state,
+            render,
+            num_timesteps,
+            device,
+            test)
