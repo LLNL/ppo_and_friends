@@ -9,6 +9,147 @@ import torch
 from torch.optim import Adam
 from torch import nn
 
+class EpisodeInfo(object):
+
+    def __init__(self,
+                 gamma        = 0.99,
+                 lambd        = 0.95,
+                 reward_scale = 1.0,
+                 obs_scale    = 1.0):
+
+        self.reward_scale  = reward_scale
+        self.obs_scale     = obs_scale
+        self.gamma         = gamma
+        self.lambd         = lambd
+        self.observations  = []
+        self.actions       = []
+        self.log_probs     = []
+        self.rewards       = []
+        self.values        = []
+        self.rewards_to_go = None
+        self.advantages    = None
+        self.length        = 0
+        self.is_finished   = False
+
+    def compute_discounted_sum(self, array, gamma):
+        cumulative_array = np.zeros(len(array))
+        last_idx         = len(array) - 1
+        d_sum = 0
+
+        for idx, val in enumerate(array[::-1]):
+            d_sum = val + gamma * d_sum
+            cumulative_array[last_idx - idx] = d_sum
+
+        return cumulative_array
+
+    def compute_advantages(self, padded_rewards, padded_values):
+
+        # GAE algorithm.
+        deltas  = padded_rewards[:-1] + (self.gamma * padded_values[1:]) - padded_values[:-1]
+
+        sum_gamma = self.gamma * self.lambd
+        return self.compute_discounted_sum(deltas.tolist(), sum_gamma)
+
+    def add_info(self,
+                 observation,
+                 action,
+                 value,
+                 log_prob,
+                 reward):
+
+        self.observations.append(observation / self.obs_scale)
+        self.actions.append(action)
+        self.values.append(value)
+        self.log_probs.append(log_prob)
+        self.rewards.append(reward / self.reward_scale)
+
+    def end_episode(self,
+                    ending_value,
+                    episode_length):
+
+        self.length = episode_length
+        self.is_finished = True
+        padded_rewards = np.array(self.rewards + [ending_value],
+            dtype=np.float32)
+        padded_values  = np.array(self.values + [ending_value],
+            dtype=np.float32)
+
+        self.advantages = self.compute_advantages(padded_rewards, padded_values)
+        self.rewards_to_go = self.compute_discounted_sum(self.rewards,
+            self.gamma)
+
+class BatchData(object):
+
+    def __init__(self,
+                 device,
+                 action_type):
+
+        self.action_type = action_type
+        self.device      = device
+        self.episodes    = []
+        self.is_built    = False
+
+        self.batch_actions    = None
+        self.batch_obs        = None
+        self.batch_rewards_tg = None
+        self.batch_log_probs  = None
+        self.batch_ep_lens    = None
+        self.batch_advantages = None
+
+    def add_episode(self, episode):
+        self.episodes.append(episode)
+
+    def build_batch(self):
+
+        if self.is_built:
+            msg  = "ERROR: attempting to build a batch, but it's "
+            msg += "already been built! Bailing..."
+            print(msg)
+            sys.exit(1)
+
+        self.batch_actions    = []
+        self.batch_obs        = []
+        self.batch_rewards_tg = []
+        self.batch_log_probs  = []
+        self.batch_ep_lens    = []
+        self.batch_advantages = []
+
+        for ep in self.episodes:
+
+            if not ep.is_finished:
+                msg  = "ERROR: attempting to build a batch using "
+                msg += "an incomplete episode! Bailing..."
+                print(msg)
+                sys.exit(1)
+
+            self.batch_actions.extend(ep.actions)
+            self.batch_obs.extend(ep.observations)
+            self.batch_rewards_tg.extend(ep.rewards_to_go)
+            self.batch_log_probs.extend(ep.log_probs)
+            self.batch_ep_lens.append(ep.length)
+            self.batch_advantages.extend(ep.advantages)
+
+        self.batch_advantages = torch.tensor(self.batch_advantages,
+            dtype=torch.float).to(self.device)
+        self.batch_advantages = (self.batch_advantages - self.batch_advantages.mean()) / \
+            (self.batch_advantages.std() + 1e-10)
+
+        self.batch_obs = torch.tensor(self.batch_obs,
+            dtype=torch.float).to(self.device)
+        self.batch_log_probs = torch.tensor(self.batch_log_probs,
+            dtype=torch.float).to(self.device)
+        self.batch_rewards_tg = torch.tensor(self.batch_rewards_tg,
+            dtype=torch.float).to(self.device)
+
+        if self.action_type == "continuous":
+            self.batch_actions = torch.tensor(self.batch_actions,
+                dtype=torch.float).to(self.device)
+        elif self.action_type == "discrete":
+            self.batch_actions = torch.tensor(self.batch_actions,
+                dtype=torch.int32).to(self.device)
+
+        self.is_built = True
+
 
 class PPO(object):
 
@@ -108,29 +249,13 @@ class PPO(object):
 
         return action.detach().numpy(), log_prob.detach().to(self.device)
 
-    def compute_rewards_tg(self, batch_rewards):
-        batch_rewards_tg = []
-
-        for ep_rewards in reversed(batch_rewards):
-            discounted_reward = 0
-
-            for reward in reversed(ep_rewards):
-
-                discounted_reward = reward + discounted_reward * self.gamma
-
-                #FIXME: we can be a lot more effecient here.
-                batch_rewards_tg.insert(0, discounted_reward)
-
-        batch_rewards_tg = torch.tensor(batch_rewards_tg, dtype=torch.float).to(self.device)
-        return batch_rewards_tg
-
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
 
         if self.action_type == "continuous":
             mean = self.actor(batch_obs).cpu()
             dist = MultivariateNormal(mean, self.cov_mat)
-            log_probs = dist.log_prob(batch_actions.cpu())
+            log_probs = dist.log_prob(batch_actions.unsqueeze(1).cpu())
 
         elif self.action_type == "discrete":
             batch_actions = batch_actions.flatten()
@@ -149,21 +274,15 @@ class PPO(object):
         print("--------------------------------------------------------")
 
     def rollout(self):
-        batch_obs        = [] # observations.
-        batch_actions    = [] # actions.
-        batch_log_probs  = [] # log probs of each action.
-        batch_rewards    = [] # rewards.
-        batch_rewards_tg = [] # rewards to go.
-        batch_ep_lens    = [] # episode lengths.
-
+        batch_data     = BatchData(self.device, self.action_type)
         total_episodes = 0  
         total_ts       = 0
         total_rewards  = 0
 
         while total_ts < self.timesteps_per_batch:
+            episode_info = EpisodeInfo()
 
             total_episodes  += 1
-            ep_rewards       = []
             done             = False
             obs              = self.env.reset()
 
@@ -176,8 +295,11 @@ class PPO(object):
                 if self.obs_scale != 1.0:
                     obs /= self.obs_scale
 
-                batch_obs.append(obs)
                 action, log_prob = self.get_action(obs)
+
+                t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+                value = self.critic(t_obs)
+                prev_obs = obs.copy()
 
                 #FIXME: can we make this cleaner?
                 if self.action_type == "discrete":
@@ -185,72 +307,57 @@ class PPO(object):
                 else:
                     obs, reward, done, _ = self.env.step(action)
 
+                episode_info.add_info(
+                    prev_obs,
+                    action.item(),
+                    value,
+                    log_prob,
+                    reward)
+
                 total_rewards += reward
-                ep_rewards.append(reward)
-                batch_actions.append(action)
-                batch_log_probs.append(log_prob)
 
                 if done:
+                    episode_info.end_episode(0.0, ts + 1)
                     break
 
-            batch_ep_lens.append(ts + 1)
-            batch_rewards.append(ep_rewards)
+                elif ts == (self.max_timesteps_per_episode - 1):
+                    episode_info.end_episode(value, ts + 1)
+
+            batch_data.add_episode(episode_info)
 
         self.status_dict["running score mean"] = total_rewards / total_episodes
         self.status_dict["total episodes"]     = total_episodes
 
-        batch_obs       = torch.tensor(batch_obs, dtype=torch.float).to(self.device)
-        batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float).to(self.device)
+        batch_data.build_batch()
 
-        if self.action_type == "continuous":
-            batch_actions = torch.tensor(batch_actions, dtype=torch.float).to(self.device)
-        elif self.action_type == "discrete":
-            batch_actions = torch.tensor(batch_actions, dtype=torch.int32).to(self.device)
-
-        if self.reward_scale != 1.0:
-            scaled_rewards = []
-            for reward_list in batch_rewards:
-                scaled_rewards.append(list(np.array(reward_list) /
-                    self.reward_scale))
-
-            batch_rewards = scaled_rewards
-
-        batch_rewards_tg = self.compute_rewards_tg(batch_rewards).to(self.device)
-
-        return batch_obs, batch_actions, batch_log_probs, batch_rewards_tg,\
-            batch_ep_lens
-
-    def get_advantages(self):
-        pass
+        return batch_data
 
     def learn(self, total_timesteps):
 
         t_so_far = 0
         while t_so_far < total_timesteps:
-            batch_obs, batch_actions, batch_log_probs, \
-                batch_rewards_tg, batch_ep_lens = self.rollout()
+            batch_data = self.rollout()
 
-            t_so_far += np.sum(batch_ep_lens)
+            t_so_far += np.sum(batch_data.batch_ep_lens)
             self.status_dict["iteration"] += 1
 
-            values, _, _  = self.evaluate(batch_obs, batch_actions)
-            advantages = batch_rewards_tg - values.detach()
+            values, _, _  = self.evaluate(batch_data.batch_obs,
+                batch_data.batch_actions)
 
-            advantages = (advantages - advantages.mean()) / \
-                (advantages.std() + 1e-10)
+            advantages = batch_data.batch_advantages
 
             for _ in range(self.epochs_per_iteration):
-                values, curr_log_probs, entropy = self.evaluate(batch_obs, batch_actions)
+                values, curr_log_probs, entropy = self.evaluate(batch_data.batch_obs, batch_data.batch_actions)
 
                 # new p / old p
-                ratios = torch.exp(curr_log_probs - batch_log_probs)
+                ratios = torch.exp(curr_log_probs - batch_data.batch_log_probs)
+                #surr1  = ratios * batch_data.batch_advantages
                 surr1  = ratios * advantages
+                #surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * batch_data.batch_advantages
                 surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
-                #FIXME: people seem to be using entropy here. Does it make a difference?
                 actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
-                #actor_loss  = (-torch.min(surr1, surr2)).mean()
-                critic_loss = nn.MSELoss()(values, batch_rewards_tg)
+                critic_loss = nn.MSELoss()(values, batch_data.batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
                 actor_loss.backward(retain_graph=True)
@@ -262,7 +369,6 @@ class PPO(object):
 
             self.print_status()
             self.save()
-
 
     def save(self):
         self.actor.save(self.state_path)
