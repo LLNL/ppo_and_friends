@@ -310,7 +310,7 @@ class PPO(object):
                 episode_info.add_info(
                     prev_obs,
                     action.item(),
-                    value,
+                    value.item(),
                     log_prob,
                     reward)
 
@@ -321,7 +321,7 @@ class PPO(object):
                     break
 
                 elif ts == (self.max_timesteps_per_episode - 1):
-                    episode_info.end_episode(value, ts + 1)
+                    episode_info.end_episode(value.item(), ts + 1)
 
             batch_data.add_episode(episode_info)
 
