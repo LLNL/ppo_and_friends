@@ -8,6 +8,9 @@ from torch.distributions import Categorical
 import torch
 from torch.optim import Adam
 from torch import nn
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+
 
 class EpisodeInfo(object):
 
@@ -78,7 +81,7 @@ class EpisodeInfo(object):
         self.rewards_to_go = self.compute_discounted_sum(self.rewards,
             self.gamma)
 
-class BatchData(object):
+class PPODataset(Dataset):
 
     def __init__(self,
                  device,
@@ -89,17 +92,17 @@ class BatchData(object):
         self.episodes    = []
         self.is_built    = False
 
-        self.batch_actions    = None
-        self.batch_obs        = None
-        self.batch_rewards_tg = None
-        self.batch_log_probs  = None
-        self.batch_ep_lens    = None
-        self.batch_advantages = None
+        self.actions       = None
+        self.observations  = None
+        self.rewards_to_go = None
+        self.log_probs     = None
+        self.ep_lens       = None
+        self.advantages    = None
 
     def add_episode(self, episode):
         self.episodes.append(episode)
 
-    def build_batch(self):
+    def build(self):
 
         if self.is_built:
             msg  = "ERROR: attempting to build a batch, but it's "
@@ -107,12 +110,12 @@ class BatchData(object):
             print(msg)
             sys.exit(1)
 
-        self.batch_actions    = []
-        self.batch_obs        = []
-        self.batch_rewards_tg = []
-        self.batch_log_probs  = []
-        self.batch_ep_lens    = []
-        self.batch_advantages = []
+        self.actions       = []
+        self.observations  = []
+        self.rewards_to_go = []
+        self.log_probs     = []
+        self.ep_lens       = []
+        self.advantages    = []
 
         for ep in self.episodes:
 
@@ -122,33 +125,44 @@ class BatchData(object):
                 print(msg)
                 sys.exit(1)
 
-            self.batch_actions.extend(ep.actions)
-            self.batch_obs.extend(ep.observations)
-            self.batch_rewards_tg.extend(ep.rewards_to_go)
-            self.batch_log_probs.extend(ep.log_probs)
-            self.batch_ep_lens.append(ep.length)
-            self.batch_advantages.extend(ep.advantages)
+            self.actions.extend(ep.actions)
+            self.observations.extend(ep.observations)
+            self.rewards_to_go.extend(ep.rewards_to_go)
+            self.log_probs.extend(ep.log_probs)
+            self.ep_lens.append(ep.length)
+            self.advantages.extend(ep.advantages)
 
-        self.batch_advantages = torch.tensor(self.batch_advantages,
+        self.advantages = torch.tensor(self.advantages,
             dtype=torch.float).to(self.device)
-        self.batch_advantages = (self.batch_advantages - self.batch_advantages.mean()) / \
-            (self.batch_advantages.std() + 1e-10)
+        self.advantages = (self.advantages - self.advantages.mean()) / \
+            (self.advantages.std() + 1e-10)
 
-        self.batch_obs = torch.tensor(self.batch_obs,
+        self.observations = torch.tensor(self.observations,
             dtype=torch.float).to(self.device)
-        self.batch_log_probs = torch.tensor(self.batch_log_probs,
+        self.log_probs = torch.tensor(self.log_probs,
             dtype=torch.float).to(self.device)
-        self.batch_rewards_tg = torch.tensor(self.batch_rewards_tg,
+        self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
         if self.action_type == "continuous":
-            self.batch_actions = torch.tensor(self.batch_actions,
+            self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
         elif self.action_type == "discrete":
-            self.batch_actions = torch.tensor(self.batch_actions,
+            self.actions = torch.tensor(self.actions,
                 dtype=torch.int32).to(self.device)
 
         self.is_built = True
+
+    def __len__(self):
+        return len(self.observations)
+
+    def __getitem__(self, idx):
+        return (self.observations[idx],
+                self.actions[idx],
+                self.advantages[idx],
+                self.log_probs[idx],
+                self.rewards_to_go[idx])
+
 
 
 class PPO(object):
@@ -221,6 +235,7 @@ class PPO(object):
             os.makedirs(state_path)
 
     def _init_hyperparameters(self):
+        self.batch_size = 128
         self.timesteps_per_batch = 2048
         self.max_timesteps_per_episode = 200
         self.gamma = 0.99
@@ -274,7 +289,7 @@ class PPO(object):
         print("--------------------------------------------------------")
 
     def rollout(self):
-        batch_data     = BatchData(self.device, self.action_type)
+        dataset        = PPODataset(self.device, self.action_type)
         total_episodes = 0  
         total_ts       = 0
         total_rewards  = 0
@@ -323,52 +338,58 @@ class PPO(object):
                 elif ts == (self.max_timesteps_per_episode - 1):
                     episode_info.end_episode(value.item(), ts + 1)
 
-            batch_data.add_episode(episode_info)
+            dataset.add_episode(episode_info)
 
         self.status_dict["running score mean"] = total_rewards / total_episodes
         self.status_dict["total episodes"]     = total_episodes
 
-        batch_data.build_batch()
+        dataset.build()
 
-        return batch_data
+        return dataset
 
     def learn(self, total_timesteps):
 
         t_so_far = 0
         while t_so_far < total_timesteps:
-            batch_data = self.rollout()
+            dataset = self.rollout()
 
-            t_so_far += np.sum(batch_data.batch_ep_lens)
+            t_so_far += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
 
-            values, _, _  = self.evaluate(batch_data.batch_obs,
-                batch_data.batch_actions)
+            values, _, _  = self.evaluate(dataset.observations,
+                dataset.actions)
 
-            advantages = batch_data.batch_advantages
+            data_loader = DataLoader(
+                dataset,
+                batch_size = self.batch_size,
+                shuffle    = True)
 
             for _ in range(self.epochs_per_iteration):
-                values, curr_log_probs, entropy = self.evaluate(batch_data.batch_obs, batch_data.batch_actions)
-
-                # new p / old p
-                ratios = torch.exp(curr_log_probs - batch_data.batch_log_probs)
-                #surr1  = ratios * batch_data.batch_advantages
-                surr1  = ratios * advantages
-                #surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * batch_data.batch_advantages
-                surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
-
-                actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
-                critic_loss = nn.MSELoss()(values, batch_data.batch_rewards_tg)
-
-                self.actor_optim.zero_grad()
-                actor_loss.backward(retain_graph=True)
-                self.actor_optim.step()
-
-                self.critic_optim.zero_grad()
-                critic_loss.backward()
-                self.critic_optim.step()
+                self._batch_train(data_loader, values)
 
             self.print_status()
             self.save()
+
+    def _batch_train(self, data_loader, values):
+        for obs, actions, advantages, log_probs, rewards_tg in data_loader:
+            values, curr_log_probs, entropy = self.evaluate(obs, actions)
+
+            # new p / old p
+            ratios = torch.exp(curr_log_probs - log_probs)
+            surr1  = ratios * advantages
+            surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * \
+                advantages
+
+            actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+            critic_loss = nn.MSELoss()(values, rewards_tg)
+
+            self.actor_optim.zero_grad()
+            actor_loss.backward(retain_graph=True)
+            self.actor_optim.step()
+
+            self.critic_optim.zero_grad()
+            critic_loss.backward()
+            self.critic_optim.step()
 
     def save(self):
         self.actor.save(self.state_path)
