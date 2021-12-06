@@ -62,11 +62,11 @@ class PPO(object):
 
         if load_state:
             if not os.path.exists(state_path):
-                msg  = "ERROR: state_path does not exist. Unable "
-                msg += "to load state!"
-                sys.exit(1)
-
-            self.load()
+                msg  = "WARNING: state_path does not exist. Unable "
+                msg += "to load state."
+                print(msg)
+            else:
+                self.load()
 
         self._init_hyperparameters()
 
@@ -248,12 +248,11 @@ class PPO(object):
                 surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * advantages
 
                 #FIXME: people seem to be using entropy here. Does it make a difference?
-                #actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
-                actor_loss  = (-torch.min(surr1, surr2)).mean()
+                actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+                #actor_loss  = (-torch.min(surr1, surr2)).mean()
                 critic_loss = nn.MSELoss()(values, batch_rewards_tg)
 
                 self.actor_optim.zero_grad()
-                #FIXME: is retaining graph really needed? Doesn't complain...
                 actor_loss.backward(retain_graph=True)
                 self.actor_optim.step()
 

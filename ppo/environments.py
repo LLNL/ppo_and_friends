@@ -2,16 +2,11 @@ from ppo import PPO
 import gym
 from testing import test_policy
 import numpy as np
+import math
 
 #FIXME: let's try to remove torch
 import torch
 import torchvision.transforms as t_transforms
-
-class CustomObservationSpace(object):
-
-    def __init__(self,
-                 shape):
-        self.shape = shape
 
 
 class CartPoleEnvManager(object):
