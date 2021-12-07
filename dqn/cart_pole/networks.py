@@ -56,10 +56,10 @@ class LinearDQN3(DQN):
         super(LinearDQN3, self).__init__()
         self.name = name
 
-        self.fc1 = nn.Linear(in_features  = in_length, out_features = 16)
-        self.fc2 = nn.Linear(in_features = 16, out_features = 32)
-        self.fc3 = nn.Linear(in_features = 32, out_features = 16)
-        self.fc4 = nn.Linear(in_features = 16, out_features = 2)
+        self.fc1 = nn.Linear(in_features  = in_length, out_features = 128)
+        self.fc2 = nn.Linear(in_features = 128, out_features = 128)
+        self.fc3 = nn.Linear(in_features = 128, out_features = 128)
+        self.fc4 = nn.Linear(in_features = 128, out_features = 2)
 
     def forward(self, _input):
 

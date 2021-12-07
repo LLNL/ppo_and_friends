@@ -40,7 +40,7 @@ if __name__ == "__main__":
     eps_decay     = 0.001
     target_update = 30
     memory_size   = 100000
-    lr            = 0.001
+    lr            = 0.0003
     num_episodes  = 2000
     top_score     = 199
     max_avg_drop  = -20
@@ -222,8 +222,8 @@ if __name__ == "__main__":
                     top_average = avg
                     top_avg_episode = episode_idx
 
-                   with open(info_file, "w") as out_f:
-                       json.dump(episode_info, out_f)
+                    with open(info_file, "w") as out_f:
+                        json.dump(episode_info, out_f)
 
                 if top_reached:
                     print("Top average reached!!")
