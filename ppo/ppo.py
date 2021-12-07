@@ -344,8 +344,6 @@ class PPO(object):
                 else:
                     obs, reward, done, _ = self.env.step(action)
 
-                    #FIXME: pendulum started working after this update,
-                    # but is it still going well?
                     episode_info.add_info(
                         prev_obs,
                         action.item(),
@@ -382,15 +380,8 @@ class PPO(object):
 
             data_loader = DataLoader(
                 dataset,
-                batch_size = self.batch_size, #batch size doesn't seem to be important either... Is the data being normalized or something?
-                shuffle    = False)#FIXME: does shuffling impact pendulum?? Doesn't seem to...
-
-            #FIXME: pendulum not working anymore...
-            #obs = dataset.observations
-            #actions = dataset.actions
-            #log_probs = dataset.log_probs
-            #rewards_tg = dataset.rewards_to_go
-            #advantages = dataset.advantages
+                batch_size = self.batch_size,
+                shuffle    = False)#FIXME: turn on shuffling?
 
             for _ in range(self.epochs_per_iteration):
                 self._batch_train(data_loader)

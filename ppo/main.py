@@ -33,7 +33,7 @@ if __name__ == "__main__":
         device = torch.device("cpu")
 
     if env_name == "CartPole":
-        cartpole_ppo(True,
+        cartpole_ppo(False,
                      state_path,
                      load_state,
                      render,
@@ -42,7 +42,7 @@ if __name__ == "__main__":
                      test)
 
     elif env_name == "CartPolePixels":
-        cartpole_pixels_ppo(True,
+        cartpole_pixels_ppo(False,
                             state_path,
                             load_state,
                             render,

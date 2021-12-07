@@ -8,6 +8,12 @@ import math
 import torch
 import torchvision.transforms as t_transforms
 
+class CustomObservationSpace(object):
+
+    def __init__(self,
+                 shape):
+        self.shape = shape
+
 
 class CartPoleEnvManager(object):
 
