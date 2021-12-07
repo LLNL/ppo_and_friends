@@ -75,17 +75,16 @@ class EpisodeInfo(object):
                     ending_value,
                     episode_length):
 
-        self.length = episode_length
+        self.length      = episode_length
         self.is_finished = True
-        padded_rewards = np.array(self.rewards + [ending_value],
-            dtype=np.float32)
-        padded_values  = np.array(self.values + [ending_value],
-            dtype=np.float32)
 
         self.rewards_to_go = self.compute_discounted_sum(self.rewards,
             self.gamma)
 
         if self.use_gae:
+            padded_values  = np.array(self.values + [ending_value],
+                dtype=np.float32)
+
             self.advantages = self._compute_gae_advantages(padded_values)
         else:
             self.advantages = self._compute_standard_advantages()
@@ -310,7 +309,9 @@ class PPO(object):
         total_rewards  = 0
 
         while total_ts < self.timesteps_per_batch:
-            episode_info = EpisodeInfo(use_gae = self.use_gae)
+            episode_info = EpisodeInfo(
+                use_gae      = self.use_gae,
+                reward_scale = self.reward_scale)
 
             total_episodes  += 1
             done             = False
