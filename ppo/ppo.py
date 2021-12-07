@@ -382,7 +382,7 @@ class PPO(object):
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
-                shuffle    = False)#FIXME: turn on shuffling?
+                shuffle    = True)
 
             for _ in range(self.epochs_per_iteration):
                 self._batch_train(data_loader)
