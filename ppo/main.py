@@ -1,4 +1,3 @@
-from ppo import PPO
 import gym
 import torch
 import argparse
@@ -13,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--state_path", default="")
     parser.add_argument("--clobber", action="store_true")
     parser.add_argument("--render", action="store_true")
-    parser.add_argument("--num_timesteps", default=500000, type=int)
+    parser.add_argument("--num_timesteps", default=1000000, type=int)
     parser.add_argument("--environment", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
                  "MountainCar"])
@@ -34,7 +33,8 @@ if __name__ == "__main__":
         device = torch.device("cpu")
 
     if env_name == "CartPole":
-        cartpole_ppo(state_path,
+        cartpole_ppo(True,
+                     state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -42,7 +42,8 @@ if __name__ == "__main__":
                      test)
 
     elif env_name == "CartPolePixels":
-        cartpole_pixels_ppo(state_path,
+        cartpole_pixels_ppo(True,
+                            state_path,
                             load_state,
                             render,
                             num_timesteps,
@@ -50,7 +51,8 @@ if __name__ == "__main__":
                             test)
 
     elif env_name == "Pendulum":
-        pendulum_ppo(state_path,
+        pendulum_ppo(False,
+                     state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -58,7 +60,8 @@ if __name__ == "__main__":
                      test)
 
     elif env_name == "LunarLander":
-        lunar_lander_ppo(state_path,
+        lunar_lander_ppo(False,
+                         state_path,
                          load_state,
                          render,
                          num_timesteps,
@@ -66,7 +69,8 @@ if __name__ == "__main__":
                          test)
 
     elif env_name == "MountainCar":
-        mountain_car_ppo(state_path,
+        mountain_car_ppo(False,
+                         state_path,
                          load_state,
                          render,
                          num_timesteps,

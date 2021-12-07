@@ -93,6 +93,7 @@ class CartPoleEnvManager(object):
 
 def run_ppo(env,
             action_type,
+            use_gae,
             state_path,
             load_state,
             render,
@@ -103,6 +104,7 @@ def run_ppo(env,
     ppo = PPO(env         = env,
               device      = device,
               action_type = action_type,
+              use_gae     = use_gae,
               render      = render,
               load_state  = load_state,
               state_path  = state_path)
@@ -112,7 +114,8 @@ def run_ppo(env,
     else: 
         ppo.learn(num_timesteps)
 
-def cartpole_pixels_ppo(state_path,
+def cartpole_pixels_ppo(use_gae,
+                        state_path,
                         load_state,
                         render,
                         num_timesteps,
@@ -123,6 +126,7 @@ def cartpole_pixels_ppo(state_path,
 
     run_ppo(env,
             "discrete",
+            use_gae,
             state_path,
             load_state,
             render,
@@ -131,7 +135,8 @@ def cartpole_pixels_ppo(state_path,
             test)
 
 
-def cartpole_ppo(state_path,
+def cartpole_ppo(use_gae,
+                 state_path,
                  load_state,
                  render,
                  num_timesteps,
@@ -142,6 +147,7 @@ def cartpole_ppo(state_path,
 
     run_ppo(env,
             "discrete",
+            use_gae,
             state_path,
             load_state,
             render,
@@ -150,7 +156,8 @@ def cartpole_ppo(state_path,
             test)
 
 
-def pendulum_ppo(state_path,
+def pendulum_ppo(use_gae,
+                 state_path,
                  load_state,
                  render,
                  num_timesteps,
@@ -161,6 +168,7 @@ def pendulum_ppo(state_path,
 
     run_ppo(env,
             "continuous",
+            use_gae,
             state_path,
             load_state,
             render,
@@ -169,7 +177,8 @@ def pendulum_ppo(state_path,
             test)
 
 
-def lunar_lander_ppo(state_path,
+def lunar_lander_ppo(use_gae,
+                     state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -180,6 +189,7 @@ def lunar_lander_ppo(state_path,
 
     run_ppo(env,
             "discrete",
+            use_gae,
             state_path,
             load_state,
             render,
@@ -188,7 +198,8 @@ def lunar_lander_ppo(state_path,
             test)
 
 
-def mountain_car_ppo(state_path,
+def mountain_car_ppo(use_gae,
+                     state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -199,6 +210,7 @@ def mountain_car_ppo(state_path,
 
     run_ppo(env,
             "discrete",
+            use_gae,
             state_path,
             load_state,
             render,

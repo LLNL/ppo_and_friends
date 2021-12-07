@@ -15,11 +15,13 @@ from torch.utils.data import DataLoader
 class EpisodeInfo(object):
 
     def __init__(self,
+                 use_gae      = False,
                  gamma        = 0.99,
                  lambd        = 0.95,
                  reward_scale = 1.0,
                  obs_scale    = 1.0):
 
+        self.use_gae       = use_gae
         self.reward_scale  = reward_scale
         self.obs_scale     = obs_scale
         self.gamma         = gamma
@@ -45,13 +47,16 @@ class EpisodeInfo(object):
 
         return cumulative_array
 
-    def compute_advantages(self, padded_rewards, padded_values):
+    def _compute_gae_advantages(self, padded_values):
 
-        # GAE algorithm.
-        deltas  = padded_rewards[:-1] + (self.gamma * padded_values[1:]) - padded_values[:-1]
+        deltas  = self.rewards + (self.gamma * padded_values[1:]) - padded_values[:-1]
 
         sum_gamma = self.gamma * self.lambd
         return self.compute_discounted_sum(deltas.tolist(), sum_gamma)
+
+    def _compute_standard_advantages(self):
+        advantages = self.rewards_to_go - self.values
+        return advantages
 
     def add_info(self,
                  observation,
@@ -77,9 +82,13 @@ class EpisodeInfo(object):
         padded_values  = np.array(self.values + [ending_value],
             dtype=np.float32)
 
-        self.advantages = self.compute_advantages(padded_rewards, padded_values)
         self.rewards_to_go = self.compute_discounted_sum(self.rewards,
             self.gamma)
+
+        if self.use_gae:
+            self.advantages = self._compute_gae_advantages(padded_values)
+        else:
+            self.advantages = self._compute_standard_advantages()
 
 class PPODataset(Dataset):
 
@@ -164,13 +173,13 @@ class PPODataset(Dataset):
                 self.rewards_to_go[idx])
 
 
-
 class PPO(object):
 
     def __init__(self,
                  env,
                  device,
                  action_type,
+                 use_gae,
                  reward_scale = 1.0,
                  obs_scale    = 1.0,
                  render       = False,
@@ -188,6 +197,7 @@ class PPO(object):
         self.state_path   = state_path
         self.render       = render
         self.action_type  = action_type
+        self.use_gae      = use_gae
         self.reward_scale = reward_scale
         self.obs_scale    = obs_scale
 
@@ -235,13 +245,18 @@ class PPO(object):
             os.makedirs(state_path)
 
     def _init_hyperparameters(self):
-        self.batch_size = 128
+        self.batch_size = 512
         self.timesteps_per_batch = 2048
         self.max_timesteps_per_episode = 200
         self.gamma = 0.99
         self.epochs_per_iteration = 10
         self.clip = 0.2
+        self.action_std = 0.6
+        self.action_std_decay_rate = 0.05
+        self.min_action_std = 0.1
+        self.action_decay_freq = 250000
         self.lr = 3e-4
+        #self.lr = 0.00095
 
     def get_action(self, obs):
 
@@ -295,7 +310,7 @@ class PPO(object):
         total_rewards  = 0
 
         while total_ts < self.timesteps_per_batch:
-            episode_info = EpisodeInfo()
+            episode_info = EpisodeInfo(use_gae = self.use_gae)
 
             total_episodes  += 1
             done             = False
@@ -312,22 +327,31 @@ class PPO(object):
 
                 action, log_prob = self.get_action(obs)
 
-                t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-                value = self.critic(t_obs)
+                t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
+                value    = self.critic(t_obs)
                 prev_obs = obs.copy()
 
-                #FIXME: can we make this cleaner?
                 if self.action_type == "discrete":
                     obs, reward, done, _ = self.env.step(action.squeeze())
+
+                    episode_info.add_info(
+                        prev_obs,
+                        action.item(),
+                        value.item(),
+                        log_prob,
+                        reward)
+
                 else:
                     obs, reward, done, _ = self.env.step(action)
 
-                episode_info.add_info(
-                    prev_obs,
-                    action.item(),
-                    value.item(),
-                    log_prob,
-                    reward)
+                    #FIXME: pendulum started working after this update,
+                    # but is it still going well?
+                    episode_info.add_info(
+                        prev_obs,
+                        action.item(),
+                        value,
+                        log_prob,
+                        reward)
 
                 total_rewards += reward
 
@@ -336,7 +360,7 @@ class PPO(object):
                     break
 
                 elif ts == (self.max_timesteps_per_episode - 1):
-                    episode_info.end_episode(value.item(), ts + 1)
+                    episode_info.end_episode(value, ts + 1)
 
             dataset.add_episode(episode_info)
 
@@ -349,28 +373,32 @@ class PPO(object):
 
     def learn(self, total_timesteps):
 
-        t_so_far = 0
-        while t_so_far < total_timesteps:
+        ts = 0
+        while ts < total_timesteps:
             dataset = self.rollout()
 
-            t_so_far += np.sum(dataset.ep_lens)
+            ts += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
-
-            values, _, _  = self.evaluate(dataset.observations,
-                dataset.actions)
 
             data_loader = DataLoader(
                 dataset,
-                batch_size = self.batch_size,
-                shuffle    = True)
+                batch_size = self.batch_size, #batch size doesn't seem to be important either... Is the data being normalized or something?
+                shuffle    = False)#FIXME: does shuffling impact pendulum?? Doesn't seem to...
+
+            #FIXME: pendulum not working anymore...
+            #obs = dataset.observations
+            #actions = dataset.actions
+            #log_probs = dataset.log_probs
+            #rewards_tg = dataset.rewards_to_go
+            #advantages = dataset.advantages
 
             for _ in range(self.epochs_per_iteration):
-                self._batch_train(data_loader, values)
+                self._batch_train(data_loader)
 
             self.print_status()
             self.save()
 
-    def _batch_train(self, data_loader, values):
+    def _batch_train(self, data_loader):
         for obs, actions, advantages, log_probs, rewards_tg in data_loader:
             values, curr_log_probs, entropy = self.evaluate(obs, actions)
 
