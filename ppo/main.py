@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument("--clobber", action="store_true")
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--num_timesteps", default=1000000, type=int)
-    parser.add_argument("--environment", type=str, required=True,
+    parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
                  "MountainCar"])
 
