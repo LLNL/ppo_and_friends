@@ -1,4 +1,4 @@
-from network import LinearNN, LinearNN2
+from networks import LinearNN, LinearNN2
 import sys
 import pickle
 import numpy as np
