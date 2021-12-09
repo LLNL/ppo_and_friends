@@ -104,15 +104,18 @@ class StateActionPredictor(PPONetwork):
     def __init__(self,
                  obs_dim,
                  act_dim,
+                 action_type,
                  reward_scale = 0.01):
 
         super(StateActionPredictor, self).__init__()
 
         self.act_dim      = act_dim
         self.reward_scale = reward_scale
+        self.action_type  = action_type
 
         self.l_relu       = nn.LeakyReLU()
         self.ce_loss      = nn.CrossEntropyLoss(reduction="none")
+        self.mse_loss     = nn.MSELoss(reduction="none")
 
         encoded_obs_dim   = 128
 
@@ -157,20 +160,19 @@ class StateActionPredictor(PPONetwork):
         #
         action_pred = self.predict_actions(enc_obs_1, enc_obs_2)
 
-        inv_loss = self.ce_loss(action_pred, actions.flatten())
-        inv_loss = inv_loss.mean(dim=-1)
+        if self.action_type == "discrete":
+            #FIXME: why not just allow mean reduction in loss?
+            inv_loss = self.ce_loss(action_pred, actions.flatten())
+            inv_loss = inv_loss.mean(dim=-1)
+        else:
+            inv_loss = self.mse_loss(action_pred, actions).mean()
 
         #
         # Forward model prediction.
         #
         obs_2_pred = self.predict_observation(enc_obs_1, actions)
 
-        f_loss = nn.MSELoss(reduction="none")(obs_2_pred, enc_obs_2)
-
-        #FIXME: testing
-        #intrinsic_reward = self.reward_scale * f_loss
-        #intrinsic_reward = intrinsic_reward.mean(dim=1)
-        #f_loss           = intrinsic_reward.mean()
+        f_loss = self.mse_loss(obs_2_pred, enc_obs_2)
 
         intrinsic_reward = (self.reward_scale / 2.0) * f_loss.sum(dim=-1)
         f_loss           = 0.5 * f_loss.mean()
@@ -215,13 +217,15 @@ class StateActionPredictor(PPONetwork):
                             actions):
 
         actions = actions.flatten(start_dim = 1)
-        actions = torch.nn.functional.one_hot(actions,
-            num_classes=self.act_dim).float()
 
-        #
-        # One-hot adds an extra dimension. Let's get rid of that bit.
-        #
-        actions = actions.squeeze(-2)
+        if self.action_type == "discrete":
+            actions = torch.nn.functional.one_hot(actions,
+                num_classes=self.act_dim).float()
+
+            #
+            # One-hot adds an extra dimension. Let's get rid of that bit.
+            #
+            actions = actions.squeeze(-2)
 
         _input = torch.cat((enc_obs_1, actions), dim=1)
 

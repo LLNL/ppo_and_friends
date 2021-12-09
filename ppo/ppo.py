@@ -71,7 +71,9 @@ class PPO(object):
         if self.use_icm:
             self.icm_model = StateActionPredictor(
                 self.obs_dim,
-                self.act_dim)
+                self.act_dim,
+                self.action_type)
+
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
 
@@ -203,8 +205,12 @@ class PPO(object):
                     obs_2 = torch.tensor(obs,
                         dtype=torch.float).to(self.device).unsqueeze(0)
 
-                    action = torch.tensor(action,
-                        dtype=torch.long).to(self.device).unsqueeze(0)
+                    if self.action_type == "discrete":
+                        action = torch.tensor(action,
+                            dtype=torch.long).to(self.device).unsqueeze(0)
+                    else:
+                        action = torch.tensor(action,
+                            dtype=torch.float).to(self.device).unsqueeze(0)
 
                     with torch.no_grad():
                         intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
