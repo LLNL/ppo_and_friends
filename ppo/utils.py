@@ -10,6 +10,19 @@ class EpisodeInfo(object):
                  lambd        = 0.95,
                  reward_scale = 1.0,
                  obs_scale    = 1.0):
+        """
+            A container for storing episode information.
+
+            Arguments:
+                use_gae       Should we use the Generalized Advantage
+                              Estimation algorithm when calculating advantages?
+                gamma         The discount factor to apply when calculating
+                              discounted sums. This is used for advantages and
+                              "rewards-to-go" (expected discounted returns).
+                labmd         A "smoothing" factor used in GAE.
+                reward_scale  A factor to scale rewards by.
+                obs_scale     A factor to scale observations by.
+        """
 
         self.use_gae           = use_gae
         self.reward_scale      = reward_scale
@@ -27,7 +40,34 @@ class EpisodeInfo(object):
         self.length            = 0
         self.is_finished       = False
 
-    def compute_discounted_sum(self, array, gamma):
+    def compute_discounted_sums(self, array, gamma):
+        """
+            Compute the discounted sums from a given array,
+            which is assumed to be in temmporal order,
+            [t0, t1, t2, ..., tn], where t0 is a 'value' at
+            time 0, and tn is a 'value' at time n. Note that value
+            here is not to be confused with the value from a value
+            function; it's just some number. It could be a reward,
+            a value from a value function, or whatever else you'd like.
+
+            The discounted value at time t, DVt, follows the recursive formula
+                DVt = DVt + (gamma * DVt+1)
+            Such that all future values are considered in the current DV but
+            at a discount.
+
+            That is,
+                DSn     = tn
+                DS(n-1) = t(n-1) + (gamma * tn)
+                ...
+                DS0     = t0 + (gamma * t1) + (gamma^2 * t2) + ...
+                          + (gamma^n + tn)
+
+            Arguments:
+                array    The array to calculate a discounted sum for.
+
+            Returns:
+                A numpy array containing the discounted sums.
+        """
         cumulative_array = np.zeros(len(array))
         last_idx         = len(array) - 1
         d_sum = 0
@@ -39,12 +79,25 @@ class EpisodeInfo(object):
         return cumulative_array
 
     def _compute_gae_advantages(self, padded_values):
+        """
+            Compute the General Advantage Estimates. This follows the
+            general GAE equation.
+
+            Arguments:
+                padded_values    A list of values from this epsiode with one
+                                 extra value added to the end. This will either
+                                 be a 0 (if the episode finished) or a repeat
+                                 of the last value.
+
+            Returns:
+                An array containing the GAEs.
+        """
 
         deltas = self.rewards + (self.gamma * padded_values[1:]) - \
             padded_values[:-1]
 
         sum_gamma = self.gamma * self.lambd
-        return self.compute_discounted_sum(deltas.tolist(), sum_gamma)
+        return self.compute_discounted_sums(deltas.tolist(), sum_gamma)
 
     def _compute_standard_advantages(self):
         advantages = self.rewards_to_go - self.values
@@ -72,7 +125,7 @@ class EpisodeInfo(object):
         self.length      = episode_length
         self.is_finished = True
 
-        self.rewards_to_go = self.compute_discounted_sum(self.rewards,
+        self.rewards_to_go = self.compute_discounted_sums(self.rewards,
             self.gamma)
 
         if self.use_gae:
@@ -80,8 +133,10 @@ class EpisodeInfo(object):
                 dtype=np.float32)
 
             self.advantages = self._compute_gae_advantages(padded_values)
+
         else:
             self.advantages = self._compute_standard_advantages()
+
 
 class PPODataset(Dataset):
 
