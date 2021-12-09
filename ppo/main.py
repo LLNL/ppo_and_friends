@@ -87,7 +87,6 @@ if __name__ == "__main__":
             device        = device,
             test          = test)
 
-    #FIXME: need to enhance ICM protocol for continuous actions.
     elif env_name == "MountainCarContinuous":
         mountain_car_continuous_ppo(
             use_gae       = True,
