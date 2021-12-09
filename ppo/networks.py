@@ -103,38 +103,79 @@ class LinearNN2(PPONetwork):
 class StateActionPredictor(PPONetwork):
     def __init__(self,
                  obs_dim,
-                 act_dim):
+                 act_dim,
+                 reward_scale = 0.01):
 
-        self.act_dim    = act_dim
-        self.l_relu     = torch.nn.LeakyReLU()
-        encoded_obs_dim = 128
+        super(StateActionPredictor, self).__init__()
+
+        self.act_dim      = act_dim
+        self.reward_scale = reward_scale
+
+        self.l_relu       = nn.LeakyReLU()
+        self.ce_loss      = nn.CrossEntropyLoss(reduction="none")
+
+        encoded_obs_dim   = 128
 
         #
         # Observation encoder.
         #
-        self.enc_1 = nn.Linear(obs_dim, 64)
-        self.enc_2 = nn.Linear(64, 64)
-        self.enc_3 = nn.Linear(64, 64)
-        self.enc_4 = nn.Linear(64, encoded_obs_dim)
+        self.enc_1 = nn.Linear(obs_dim, 128)
+        self.enc_2 = nn.Linear(128, 128)
+        self.enc_3 = nn.Linear(128, 128)
+        self.enc_4 = nn.Linear(128, encoded_obs_dim)
 
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
         #
-        self.inv_1 = nn.Linear(encoded_obs_dim * 2, 256)
-        self.inv_2 = nn.Linear(256, act_dim)
+        self.inv_1 = nn.Linear(encoded_obs_dim * 2, 128)
+        self.inv_2 = nn.Linear(128, 128)
+        self.inv_3 = nn.Linear(128, act_dim)
 
         #
         # Forward model; Predict s_2 given s_1 and a_1.
         #
-        self.f_1 = nn.Linear(encoded_obs_dim + act_dim, 256)
-        self.f_2 = nn.Linear(256, encoded_obs_dim)
+        self.f_1 = nn.Linear(encoded_obs_dim + act_dim, 128)
+        self.f_2 = nn.Linear(128, 128)
+        self.f_3 = nn.Linear(128, encoded_obs_dim)
 
     def forward(self,
                 obs_1,
                 obs_2,
                 actions):
 
-        action_pred = self.predict_actions(obs_1, obs_2)
+        obs_1 = obs_1.flatten(start_dim = 1)
+        obs_2 = obs_2.flatten(start_dim = 1)
+
+        #
+        # First, encode the observations.
+        #
+        enc_obs_1 = self.encode_observation(obs_1)
+        enc_obs_2 = self.encode_observation(obs_2)
+
+        #
+        # Inverse model prediction.
+        #
+        action_pred = self.predict_actions(enc_obs_1, enc_obs_2)
+
+        inv_loss = self.ce_loss(action_pred, actions.flatten())
+        inv_loss = inv_loss.mean(dim=-1)
+
+        #
+        # Forward model prediction.
+        #
+        obs_2_pred = self.predict_observation(enc_obs_1, actions)
+
+        f_loss = nn.MSELoss(reduction="none")(obs_2_pred, enc_obs_2)
+
+        #FIXME: testing
+        #intrinsic_reward = self.reward_scale * f_loss
+        #intrinsic_reward = intrinsic_reward.mean(dim=1)
+        #f_loss           = intrinsic_reward.mean()
+
+        intrinsic_reward = (self.reward_scale / 2.0) * f_loss.sum(dim=-1)
+        f_loss           = 0.5 * f_loss.mean()
+
+        return intrinsic_reward, inv_loss, f_loss
 
 
     def encode_observation(self,
@@ -153,57 +194,48 @@ class StateActionPredictor(PPONetwork):
         return enc_obs
 
     def predict_actions(self,
-                        obs_1,
-                        obs_2):
-
-        obs_1 = obs_1.flatten(start_dim = 1)
-        obs_2 = obs_2.flatten(start_dim = 1)
-
-        #
-        # First, encode the observations.
-        #
-        enc_obs_1 = self.encode_observation(obs_1)
-        enc_obs_2 = self.encode_observation(obs_2)
+                        enc_obs_1,
+                        enc_obs_2):
 
         obs_input = torch.cat((enc_obs_1, enc_obs_2), dim=1)
 
-        #
-        # Last, feed the encoded observations into the
-        # inverse model for predicting the actions.
-        #
         out = self.inv_1(obs_input)
         out = self.l_relu(out)
 
-        out = self.inv_2(obs_input)
-        out = self.softmax(out, dim=-1)
+        out = self.inv_2(out)
+        out = self.l_relu(out)
+
+        out = self.inv_3(out)
+        out = F.softmax(out, dim=-1)
 
         return out
 
     def predict_observation(self,
-                            obs_1,
+                            enc_obs_1,
                             actions):
 
-        obs_1   = obs_1.flatten(start_dim = 1)
         actions = actions.flatten(start_dim = 1)
-        actions = torch.nn.functional.one_hot(actions, nun_classes=self.act_dim)
+        actions = torch.nn.functional.one_hot(actions,
+            num_classes=self.act_dim).float()
+
+        #FIXME: is this needed?
+        actions.requires_grad_(True)
 
         #
         # One-hot adds an extra dimension. Let's get rid of that bit.
         #
         actions = actions.squeeze(-2)
 
-        #
-        # First, encode the observation.
-        #
-        enc_obs_1 = self.encode_observation(obs_1)
-
         _input = torch.cat((enc_obs_1, actions), dim=1)
 
         #
-        # Next, predict obs_2 given obs_1 and actions.
+        # Predict obs_2 given obs_1 and actions.
         #
         out = self.f_1(_input)
         out = self.l_relu(out)
 
-        out = self.f_1(out)
+        out = self.f_2(out)
+        out = self.l_relu(out)
+
+        out = self.f_3(out)
         return out

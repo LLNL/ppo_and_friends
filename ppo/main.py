@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_timesteps", default=1000000, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
-                 "MountainCar"])
+                 "MountainCar", "MountainCarContinuous"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -33,46 +33,68 @@ if __name__ == "__main__":
         device = torch.device("cpu")
 
     if env_name == "CartPole":
-        cartpole_ppo(False,
-                     state_path,
-                     load_state,
-                     render,
-                     num_timesteps,
-                     device,
-                     test)
+        cartpole_ppo(
+            use_gae       = False,
+            use_icm       = False,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
 
     elif env_name == "CartPolePixels":
-        cartpole_pixels_ppo(False,
-                            state_path,
-                            load_state,
-                            render,
-                            num_timesteps,
-                            device,
-                            test)
+        cartpole_pixels_ppo(
+            use_gae       = False,
+            use_icm       = False,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
 
     elif env_name == "Pendulum":
-        pendulum_ppo(False,
-                     state_path,
-                     load_state,
-                     render,
-                     num_timesteps,
-                     device,
-                     test)
+        pendulum_ppo(
+            use_gae       = False,
+            use_icm       = False,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
 
     elif env_name == "LunarLander":
-        lunar_lander_ppo(False,
-                         state_path,
-                         load_state,
-                         render,
-                         num_timesteps,
-                         device,
-                         test)
+        lunar_lander_ppo(
+            use_gae       = False,
+            use_icm       = False,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
 
     elif env_name == "MountainCar":
-        mountain_car_ppo(False,
-                         state_path,
-                         load_state,
-                         render,
-                         num_timesteps,
-                         device,
-                         test)
+        mountain_car_ppo(
+            use_gae       = True,
+            use_icm       = True,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    #FIXME: need to enhance ICM protocol for continuous actions.
+    elif env_name == "MountainCarContinuous":
+        mountain_car_continuous_ppo(
+            use_gae       = True,
+            use_icm       = True,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)

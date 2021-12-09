@@ -1,4 +1,4 @@
-from networks import LinearNN, LinearNN2
+from networks import LinearNN, LinearNN2, StateActionPredictor
 import sys
 import pickle
 import numpy as np
@@ -19,6 +19,8 @@ class PPO(object):
                  device,
                  action_type,
                  use_gae,
+                 use_icm      = False,
+                 icm_beta     = 0.8,
                  reward_scale = 1.0,
                  obs_scale    = 1.0,
                  render       = False,
@@ -37,6 +39,8 @@ class PPO(object):
         self.render       = render
         self.action_type  = action_type
         self.use_gae      = use_gae
+        self.use_icm      = use_icm
+        self.icm_beta     = icm_beta
         self.reward_scale = reward_scale
         self.obs_scale    = obs_scale
 
@@ -64,6 +68,13 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
+        if self.use_icm:
+            self.icm_model = StateActionPredictor(
+                self.obs_dim,
+                self.act_dim)
+            self.icm_model.to(device)
+            self.status_dict["icm loss"] = 0
+
         if load_state:
             if not os.path.exists(state_path):
                 msg  = "WARNING: state_path does not exist. Unable "
@@ -79,6 +90,9 @@ class PPO(object):
 
         self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr)
         self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
+
+        if self.use_icm:
+            self.icm_optim = Adam(self.icm_model.parameters(), lr=self.lr)
 
         if not os.path.exists(state_path):
             os.makedirs(state_path)
@@ -99,17 +113,20 @@ class PPO(object):
 
     def get_action(self, obs):
 
-        if self.action_type == "continuous":
-            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-            mean_action = self.actor(t_obs).cpu().detach()
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
-            dist     = MultivariateNormal(mean_action, self.cov_mat)
+        with torch.no_grad():
+            action_pred = self.actor(t_obs)
+
+        if self.action_type == "continuous":
+            action_mean = action_pred.cpu().detach()
+
+            dist     = MultivariateNormal(action_mean, self.cov_mat)
             action   = dist.sample()
             log_prob = dist.log_prob(action)
 
         elif self.action_type == "discrete":
-            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-            probs = self.actor(t_obs).cpu().detach()
+            probs = action_pred.cpu().detach()
 
             dist     = Categorical(probs)
             action   = dist.sample()
@@ -174,23 +191,35 @@ class PPO(object):
 
                 if self.action_type == "discrete":
                     obs, reward, done, _ = self.env.step(action.squeeze())
-
-                    episode_info.add_info(
-                        prev_obs,
-                        action.item(),
-                        value.item(),
-                        log_prob,
-                        reward)
+                    ep_action = action.item()
+                    ep_value  = value.item()
 
                 else:
                     obs, reward, done, _ = self.env.step(action)
+                    ep_action = action.item()
+                    ep_value  = value
 
-                    episode_info.add_info(
-                        prev_obs,
-                        action.item(),
-                        value,
-                        log_prob,
-                        reward)
+                if self.use_icm:
+                    obs_1 = torch.tensor(prev_obs,
+                        dtype=torch.float).to(self.device).unsqueeze(0)
+                    obs_2 = torch.tensor(obs,
+                        dtype=torch.float).to(self.device).unsqueeze(0)
+
+                    action = torch.tensor(action,
+                        dtype=torch.long).to(self.device).unsqueeze(0)
+
+                    with torch.no_grad():
+                        intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+
+                    reward += intrinsic_reward.cpu().item()
+
+                episode_info.add_info(
+                    prev_obs,
+                    obs,
+                    ep_action,
+                    ep_value,
+                    log_prob,
+                    reward)
 
                 total_rewards += reward
 
@@ -225,13 +254,17 @@ class PPO(object):
                 shuffle    = True)
 
             for _ in range(self.epochs_per_iteration):
-                self._batch_train(data_loader)
+                self._ppo_batch_train(data_loader)
+
+            if self.use_icm:
+                for _ in range(self.epochs_per_iteration):
+                    self._icm_batch_train(data_loader)
 
             self.print_status()
             self.save()
 
-    def _batch_train(self, data_loader):
-        for obs, actions, advantages, log_probs, rewards_tg in data_loader:
+    def _ppo_batch_train(self, data_loader):
+        for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
             values, curr_log_probs, entropy = self.evaluate(obs, actions)
 
             # new p / old p
@@ -251,9 +284,41 @@ class PPO(object):
             critic_loss.backward()
             self.critic_optim.step()
 
+    def _icm_batch_train(self, data_loader):
+        total_icm_loss = 0
+        counter = 0
+        for obs, next_obs, actions, _, _, _ in data_loader:
+
+            obs.requires_grad_(True)
+            next_obs.requires_grad_(True)
+
+            actions = actions.unsqueeze(1)
+
+            _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
+
+            icm_loss = (((1.0 - self.icm_beta) * f_loss) +
+                (self.icm_beta * inv_loss))
+
+            #FIXME: testing
+            #icm_loss *= 10.0
+
+            total_icm_loss += icm_loss.item()
+
+            self.icm_optim.zero_grad()
+            icm_loss.backward()
+            self.icm_optim.step()
+
+            counter += 1
+
+        self.status_dict["icm loss"] = total_icm_loss / counter
+
+
     def save(self):
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
+
+        if self.use_icm:
+            self.icm_model.save(self.state_path)
 
         state_file = os.path.join(self.state_path, "state.pickle")
         with open(state_file, "wb") as out_f:
@@ -263,6 +328,9 @@ class PPO(object):
     def load(self):
         self.actor.load(self.state_path)
         self.critic.load(self.state_path)
+
+        if self.use_icm:
+            self.icm_model.load(self.state_path)
 
         state_file = os.path.join(self.state_path, "state.pickle")
         with open(state_file, "rb") as in_f:

@@ -11,20 +11,21 @@ class EpisodeInfo(object):
                  reward_scale = 1.0,
                  obs_scale    = 1.0):
 
-        self.use_gae       = use_gae
-        self.reward_scale  = reward_scale
-        self.obs_scale     = obs_scale
-        self.gamma         = gamma
-        self.lambd         = lambd
-        self.observations  = []
-        self.actions       = []
-        self.log_probs     = []
-        self.rewards       = []
-        self.values        = []
-        self.rewards_to_go = None
-        self.advantages    = None
-        self.length        = 0
-        self.is_finished   = False
+        self.use_gae           = use_gae
+        self.reward_scale      = reward_scale
+        self.obs_scale         = obs_scale
+        self.gamma             = gamma
+        self.lambd             = lambd
+        self.observations      = []
+        self.next_observations = []
+        self.actions           = []
+        self.log_probs         = []
+        self.rewards           = []
+        self.values            = []
+        self.rewards_to_go     = None
+        self.advantages        = None
+        self.length            = 0
+        self.is_finished       = False
 
     def compute_discounted_sum(self, array, gamma):
         cumulative_array = np.zeros(len(array))
@@ -39,7 +40,8 @@ class EpisodeInfo(object):
 
     def _compute_gae_advantages(self, padded_values):
 
-        deltas  = self.rewards + (self.gamma * padded_values[1:]) - padded_values[:-1]
+        deltas = self.rewards + (self.gamma * padded_values[1:]) - \
+            padded_values[:-1]
 
         sum_gamma = self.gamma * self.lambd
         return self.compute_discounted_sum(deltas.tolist(), sum_gamma)
@@ -50,12 +52,14 @@ class EpisodeInfo(object):
 
     def add_info(self,
                  observation,
+                 next_observation,
                  action,
                  value,
                  log_prob,
                  reward):
 
         self.observations.append(observation / self.obs_scale)
+        self.next_observations.append(next_observation / self.obs_scale)
         self.actions.append(action)
         self.values.append(value)
         self.log_probs.append(log_prob)
@@ -90,12 +94,13 @@ class PPODataset(Dataset):
         self.episodes    = []
         self.is_built    = False
 
-        self.actions       = None
-        self.observations  = None
-        self.rewards_to_go = None
-        self.log_probs     = None
-        self.ep_lens       = None
-        self.advantages    = None
+        self.actions           = None
+        self.observations      = None
+        self.next_observations = None
+        self.rewards_to_go     = None
+        self.log_probs         = None
+        self.ep_lens           = None
+        self.advantages        = None
 
     def add_episode(self, episode):
         self.episodes.append(episode)
@@ -108,12 +113,13 @@ class PPODataset(Dataset):
             print(msg)
             sys.exit(1)
 
-        self.actions       = []
-        self.observations  = []
-        self.rewards_to_go = []
-        self.log_probs     = []
-        self.ep_lens       = []
-        self.advantages    = []
+        self.actions           = []
+        self.observations      = []
+        self.next_observations = []
+        self.rewards_to_go     = []
+        self.log_probs         = []
+        self.ep_lens           = []
+        self.advantages        = []
 
         for ep in self.episodes:
 
@@ -125,6 +131,7 @@ class PPODataset(Dataset):
 
             self.actions.extend(ep.actions)
             self.observations.extend(ep.observations)
+            self.next_observations.extend(ep.next_observations)
             self.rewards_to_go.extend(ep.rewards_to_go)
             self.log_probs.extend(ep.log_probs)
             self.ep_lens.append(ep.length)
@@ -137,17 +144,23 @@ class PPODataset(Dataset):
 
         self.observations = torch.tensor(self.observations,
             dtype=torch.float).to(self.device)
+
+        self.next_observations = torch.tensor(self.next_observations,
+            dtype=torch.float).to(self.device)
+
         self.log_probs = torch.tensor(self.log_probs,
             dtype=torch.float).to(self.device)
+
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
         if self.action_type == "continuous":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
+
         elif self.action_type == "discrete":
             self.actions = torch.tensor(self.actions,
-                dtype=torch.int32).to(self.device)
+                dtype=torch.long).to(self.device)
 
         self.is_built = True
 
@@ -156,6 +169,7 @@ class PPODataset(Dataset):
 
     def __getitem__(self, idx):
         return (self.observations[idx],
+                self.next_observations[idx],
                 self.actions[idx],
                 self.advantages[idx],
                 self.log_probs[idx],
