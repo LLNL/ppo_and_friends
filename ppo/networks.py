@@ -218,9 +218,6 @@ class StateActionPredictor(PPONetwork):
         actions = torch.nn.functional.one_hot(actions,
             num_classes=self.act_dim).float()
 
-        #FIXME: is this needed?
-        actions.requires_grad_(True)
-
         #
         # One-hot adds an extra dimension. Let's get rid of that bit.
         #

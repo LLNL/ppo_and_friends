@@ -120,14 +120,12 @@ class PPO(object):
 
         if self.action_type == "continuous":
             action_mean = action_pred.cpu().detach()
-
-            dist     = MultivariateNormal(action_mean, self.cov_mat)
-            action   = dist.sample()
-            log_prob = dist.log_prob(action)
+            dist        = MultivariateNormal(action_mean, self.cov_mat)
+            action      = dist.sample()
+            log_prob    = dist.log_prob(action)
 
         elif self.action_type == "discrete":
-            probs = action_pred.cpu().detach()
-
+            probs    = action_pred.cpu().detach()
             dist     = Categorical(probs)
             action   = dist.sample()
             log_prob = dist.log_prob(action)
@@ -139,9 +137,9 @@ class PPO(object):
         values = self.critic(batch_obs).squeeze()
 
         if self.action_type == "continuous":
-            mean = self.actor(batch_obs).cpu()
-            dist = MultivariateNormal(mean, self.cov_mat)
-            log_probs = dist.log_prob(batch_actions.unsqueeze(1).cpu())
+            action_mean = self.actor(batch_obs).cpu()
+            dist        = MultivariateNormal(action_mean, self.cov_mat)
+            log_probs   = dist.log_prob(batch_actions.unsqueeze(1).cpu())
 
         elif self.action_type == "discrete":
             batch_actions = batch_actions.flatten()
@@ -264,10 +262,11 @@ class PPO(object):
             self.save()
 
     def _ppo_batch_train(self, data_loader):
+
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
+
             values, curr_log_probs, entropy = self.evaluate(obs, actions)
 
-            # new p / old p
             ratios = torch.exp(curr_log_probs - log_probs)
             surr1  = ratios * advantages
             surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * \
@@ -285,12 +284,11 @@ class PPO(object):
             self.critic_optim.step()
 
     def _icm_batch_train(self, data_loader):
+
         total_icm_loss = 0
         counter = 0
-        for obs, next_obs, actions, _, _, _ in data_loader:
 
-            obs.requires_grad_(True)
-            next_obs.requires_grad_(True)
+        for obs, next_obs, actions, _, _, _ in data_loader:
 
             actions = actions.unsqueeze(1)
 
