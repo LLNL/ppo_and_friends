@@ -100,88 +100,34 @@ class LinearNN2(PPONetwork):
 ########################################################################
 
 
-class StateActionPredictor(PPONetwork):
+class LinearObservationEncoder(nn.Module):
+
     def __init__(self,
                  obs_dim,
-                 act_dim,
-                 action_type,
-                 reward_scale = 0.01):
+                 encoded_dim,
+                 hidden_size):
+        """
+            A simple encoder for encoding observations into
+            forms that only contain information needed by the
+            actor. In other words, we want to teach this model
+            to get rid of any noise that may exist in the observation.
+            By noise, we mean anything that does not pertain to
+            the actions being taken.
 
-        super(StateActionPredictor, self).__init__()
+            This implementation uses a simple feed-forward network.
+        """
 
-        self.act_dim      = act_dim
-        self.reward_scale = reward_scale
-        self.action_type  = action_type
+        super(LinearObservationEncoder, self).__init__()
 
-        self.l_relu       = nn.LeakyReLU()
-        self.ce_loss      = nn.CrossEntropyLoss(reduction="none")
-        self.mse_loss     = nn.MSELoss(reduction="none")
+        self.l_relu = nn.LeakyReLU()
 
-        encoded_obs_dim   = 128
-
-        #
-        # Observation encoder.
-        #
-        self.enc_1 = nn.Linear(obs_dim, 128)
-        self.enc_2 = nn.Linear(128, 128)
-        self.enc_3 = nn.Linear(128, 128)
-        self.enc_4 = nn.Linear(128, encoded_obs_dim)
-
-        #
-        # Inverse model; Predict the a_1 given s_1 and s_2.
-        #
-        self.inv_1 = nn.Linear(encoded_obs_dim * 2, 128)
-        self.inv_2 = nn.Linear(128, 128)
-        self.inv_3 = nn.Linear(128, act_dim)
-
-        #
-        # Forward model; Predict s_2 given s_1 and a_1.
-        #
-        self.f_1 = nn.Linear(encoded_obs_dim + act_dim, 128)
-        self.f_2 = nn.Linear(128, 128)
-        self.f_3 = nn.Linear(128, encoded_obs_dim)
+        self.enc_1  = nn.Linear(obs_dim, hidden_size)
+        self.enc_2  = nn.Linear(hidden_size, hidden_size)
+        self.enc_3  = nn.Linear(hidden_size, hidden_size)
+        self.enc_4  = nn.Linear(hidden_size, encoded_dim)
 
     def forward(self,
-                obs_1,
-                obs_2,
-                actions):
-
-        obs_1 = obs_1.flatten(start_dim = 1)
-        obs_2 = obs_2.flatten(start_dim = 1)
-
-        #
-        # First, encode the observations.
-        #
-        enc_obs_1 = self.encode_observation(obs_1)
-        enc_obs_2 = self.encode_observation(obs_2)
-
-        #
-        # Inverse model prediction.
-        #
-        action_pred = self.predict_actions(enc_obs_1, enc_obs_2)
-
-        if self.action_type == "discrete":
-            #FIXME: why not just allow mean reduction in loss?
-            inv_loss = self.ce_loss(action_pred, actions.flatten())
-            inv_loss = inv_loss.mean(dim=-1)
-        else:
-            inv_loss = self.mse_loss(action_pred, actions).mean()
-
-        #
-        # Forward model prediction.
-        #
-        obs_2_pred = self.predict_observation(enc_obs_1, actions)
-
-        f_loss = self.mse_loss(obs_2_pred, enc_obs_2)
-
-        intrinsic_reward = (self.reward_scale / 2.0) * f_loss.sum(dim=-1)
-        f_loss           = 0.5 * f_loss.mean()
-
-        return intrinsic_reward, inv_loss, f_loss
-
-
-    def encode_observation(self,
-                           obs):
+                obs):
 
         enc_obs = self.enc_1(obs)
         enc_obs = self.l_relu(enc_obs)
@@ -195,9 +141,38 @@ class StateActionPredictor(PPONetwork):
         enc_obs = self.enc_4(enc_obs)
         return enc_obs
 
-    def predict_actions(self,
-                        enc_obs_1,
-                        enc_obs_2):
+
+class LinearInverseModel(nn.Module):
+
+    def __init__(self,
+                 in_dim,
+                 out_dim,
+                 hidden_size):
+        """
+            An implementation of the inverse model for the ICM method. The
+            inverse model learns to predict the action that was performed
+            when given the current and next states. States may also be
+            observations, and the observations are typically encoded into
+            a form that only contains information that the actor needs to
+            make choices.
+
+            This implementation uses a simple feed-forward network.
+        """
+
+        super(LinearInverseModel, self).__init__()
+
+        self.l_relu = nn.LeakyReLU()
+
+        #
+        # Inverse model; Predict the a_1 given s_1 and s_2.
+        #
+        self.inv_1 = nn.Linear(in_dim, hidden_size)
+        self.inv_2 = nn.Linear(hidden_size, hidden_size)
+        self.inv_3 = nn.Linear(hidden_size, out_dim)
+
+    def forward(self,
+                enc_obs_1,
+                enc_obs_2):
 
         obs_input = torch.cat((enc_obs_1, enc_obs_2), dim=1)
 
@@ -212,9 +187,41 @@ class StateActionPredictor(PPONetwork):
 
         return out
 
-    def predict_observation(self,
-                            enc_obs_1,
-                            actions):
+
+class LinearForwardModel(nn.Module):
+
+    def __init__(self,
+                 in_dim,
+                 out_dim,
+                 act_dim,
+                 hidden_size,
+                 action_type):
+        """
+            The forward model of the ICM method. In short, this learns to
+            predict the changes in state given a current state and action.
+            In reality, our states can be observations, and our observations
+            are typically encoded into a form that only contains information
+            that an actor needs to make decisions.
+
+            This implementation uses a simple feed-forward network.
+        """
+
+        super(LinearForwardModel, self).__init__()
+
+        self.l_relu      = nn.LeakyReLU()
+        self.action_type = action_type
+        self.act_dim     = act_dim
+
+        #
+        # Forward model; Predict s_2 given s_1 and a_1.
+        #
+        self.f_1 = nn.Linear(in_dim, hidden_size)
+        self.f_2 = nn.Linear(hidden_size, hidden_size)
+        self.f_3 = nn.Linear(hidden_size, out_dim)
+
+    def forward(self,
+                enc_obs_1,
+                actions):
 
         actions = actions.flatten(start_dim = 1)
 
@@ -240,3 +247,89 @@ class StateActionPredictor(PPONetwork):
 
         out = self.f_3(out)
         return out
+
+
+class StateActionPredictor(PPONetwork):
+
+    def __init__(self,
+                 obs_dim,
+                 act_dim,
+                 action_type,
+                 reward_scale = 0.01):
+        """
+            The Intrinsic Curiosit Model (ICM).
+        """
+
+        super(StateActionPredictor, self).__init__()
+
+        self.act_dim      = act_dim
+        self.reward_scale = reward_scale
+        self.action_type  = action_type
+
+        self.l_relu       = nn.LeakyReLU()
+        self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
+        self.mse_loss     = nn.MSELoss(reduction="none")
+
+        encoded_obs_dim   = 256
+
+        #
+        # Observation encoder.
+        #
+        self.obs_encoder = LinearObservationEncoder(
+            obs_dim,
+            encoded_obs_dim,
+            256)
+
+        #
+        # Inverse model; Predict the a_1 given s_1 and s_2.
+        #
+        self.inv_model = LinearInverseModel(
+            encoded_obs_dim * 2, 
+            act_dim,
+            256)
+
+        #
+        # Forward model; Predict s_2 given s_1 and a_1.
+        #
+        self.forward_model = LinearForwardModel(
+            encoded_obs_dim + act_dim,
+            encoded_obs_dim,
+            act_dim,
+            256,
+            action_type)
+
+    def forward(self,
+                obs_1,
+                obs_2,
+                actions):
+
+        obs_1 = obs_1.flatten(start_dim = 1)
+        obs_2 = obs_2.flatten(start_dim = 1)
+
+        #
+        # First, encode the observations.
+        #
+        enc_obs_1 = self.obs_encoder(obs_1)
+        enc_obs_2 = self.obs_encoder(obs_2)
+
+        #
+        # Inverse model prediction.
+        #
+        action_pred = self.inv_model(enc_obs_1, enc_obs_2)
+
+        if self.action_type == "discrete":
+            inv_loss = self.ce_loss(action_pred, actions.flatten())
+        elif self.action_type == "continuous":
+            inv_loss = self.mse_loss(action_pred, actions).mean()
+
+        #
+        # Forward model prediction.
+        #
+        obs_2_pred = self.forward_model(enc_obs_1, actions)
+
+        f_loss = self.mse_loss(obs_2_pred, enc_obs_2)
+
+        intrinsic_reward = (self.reward_scale / 2.0) * f_loss.sum(dim=-1)
+        f_loss           = 0.5 * f_loss.mean()
+
+        return intrinsic_reward, inv_loss, f_loss
