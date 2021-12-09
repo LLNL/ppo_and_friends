@@ -194,7 +194,7 @@ class PPO(object):
                     ep_action = action.item()
                     ep_value  = value.item()
 
-                else:
+                elif self.action_type == "continuous":
                     obs, reward, done, _ = self.env.step(action)
                     ep_action = action.item()
                     ep_value  = value
@@ -208,14 +208,14 @@ class PPO(object):
                     if self.action_type == "discrete":
                         action = torch.tensor(action,
                             dtype=torch.long).to(self.device).unsqueeze(0)
-                    else:
+                    elif self.action_type == "continuous":
                         action = torch.tensor(action,
                             dtype=torch.float).to(self.device).unsqueeze(0)
 
                     with torch.no_grad():
                         intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-                    reward += intrinsic_reward.cpu().item()
+                reward += intrinsic_reward.cpu().item()
 
                 episode_info.add_info(
                     prev_obs,
@@ -302,9 +302,6 @@ class PPO(object):
 
             icm_loss = (((1.0 - self.icm_beta) * f_loss) +
                 (self.icm_beta * inv_loss))
-
-            #FIXME: testing
-            #icm_loss *= 10.0
 
             total_icm_loss += icm_loss.item()
 
