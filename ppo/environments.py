@@ -258,3 +258,27 @@ def mountain_car_continuous_ppo(use_gae,
             num_timesteps,
             device,
             test)
+
+
+def acrobot_ppo(use_gae,
+                use_icm,
+                state_path,
+                load_state,
+                render,
+                num_timesteps,
+                device,
+                test = False):
+
+    env = gym.make('Acrobot-v1')
+
+    run_ppo(env,
+            "discrete",
+            use_gae,
+            use_icm,
+            state_path,
+            load_state,
+            render,
+            num_timesteps,
+            device,
+            test)
+

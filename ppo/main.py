@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_timesteps", default=1000000, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
-                 "MountainCar", "MountainCarContinuous"])
+                 "MountainCar", "MountainCarContinuous", "Acrobot"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -89,6 +89,17 @@ if __name__ == "__main__":
 
     elif env_name == "MountainCarContinuous":
         mountain_car_continuous_ppo(
+            use_gae       = True,
+            use_icm       = True,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    elif env_name == "Acrobot":
+        acrobot_ppo(
             use_gae       = True,
             use_icm       = True,
             state_path    = state_path,
