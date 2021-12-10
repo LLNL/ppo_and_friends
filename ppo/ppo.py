@@ -215,7 +215,7 @@ class PPO(object):
                     with torch.no_grad():
                         intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-                reward += intrinsic_reward.cpu().item()
+                    reward += intrinsic_reward.cpu().item()
 
                 episode_info.add_info(
                     prev_obs,
