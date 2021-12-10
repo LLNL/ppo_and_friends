@@ -270,7 +270,8 @@ class StateActionPredictor(PPONetwork):
         self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
         self.mse_loss     = nn.MSELoss(reduction="none")
 
-        encoded_obs_dim   = 256
+        encoded_obs_dim   = 128
+        hidden_dims       = 128
 
         #
         # Observation encoder.
@@ -278,7 +279,7 @@ class StateActionPredictor(PPONetwork):
         self.obs_encoder = LinearObservationEncoder(
             obs_dim,
             encoded_obs_dim,
-            256)
+            hidden_dims)
 
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
@@ -286,7 +287,7 @@ class StateActionPredictor(PPONetwork):
         self.inv_model = LinearInverseModel(
             encoded_obs_dim * 2, 
             act_dim,
-            256)
+            hidden_dims)
 
         #
         # Forward model; Predict s_2 given s_1 and a_1.
@@ -295,7 +296,7 @@ class StateActionPredictor(PPONetwork):
             encoded_obs_dim + act_dim,
             encoded_obs_dim,
             act_dim,
-            256,
+            hidden_dims,
             action_type)
 
     def forward(self,
