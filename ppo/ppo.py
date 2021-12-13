@@ -20,6 +20,8 @@ class PPO(object):
                  device,
                  action_type,
                  lr                = 3e-4,
+                 lr_dec            = 1e-4,
+                 lr_dec_freq       = 500,
                  max_ts_per_ep     = 200,
                  use_gae           = False,
                  use_icm           = False,
@@ -47,14 +49,17 @@ class PPO(object):
         self.ext_reward_scale   = ext_reward_scale
         self.intr_reward_scale  = intr_reward_scale
         self.lr                 = lr
+        self.lr_dec             = lr_dec
+        self.lr_dec_freq        = lr_dec_freq
         self.max_ts_per_ep      = max_ts_per_ep
 
         self.status_dict  = {}
-        self.status_dict["iteration"] = 0
-        self.status_dict["running score mean"] = 0
+        self.status_dict["iteration"]            = 0
+        self.status_dict["running score mean"]   = 0
         self.status_dict["extrinsic score mean"] = 0
-        self.status_dict["top score"] = 0
-        self.status_dict["total episodes"] = 0
+        self.status_dict["top score"]            = 0
+        self.status_dict["total episodes"]       = 0
+        self.status_dict["lr"]                   = self.lr
 
         need_softmax = False
         if action_type == "discrete":
@@ -92,6 +97,7 @@ class PPO(object):
                 print(msg)
             else:
                 self.load()
+                self.lr = self.status_dict["lr"]
 
         self._init_hyperparameters()
 
@@ -277,6 +283,19 @@ class PPO(object):
 
         return dataset
 
+    def check_learning_rate(self):
+        iteration = self.status_dict["iteration"]
+
+        if iteration != 0 and iteration % self.lr_dec_freq == 0:
+            new_lr = self.lr - self.lr_dec
+
+            msg  = "\n***Decreasing learning rate from "
+            msg += "{} to {}***\n".format(self.lr, new_lr)
+            print(msg)
+
+            self.lr = new_lr
+            self.status_dict["lr"] = self.lr
+
     def learn(self, total_timesteps):
 
         ts = 0
@@ -285,6 +304,8 @@ class PPO(object):
 
             ts += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
+
+            self.check_learning_rate()
 
             data_loader = DataLoader(
                 dataset,
