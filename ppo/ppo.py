@@ -9,7 +9,7 @@ from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
 from utils import EpisodeInfo, PPODataset
-from networks import StateActionPredictor
+from networks import LinearICM
 
 
 class PPO(object):
@@ -19,6 +19,7 @@ class PPO(object):
                  network,
                  device,
                  action_type,
+                 icm_network       = LinearICM,
                  lr                = 3e-4,
                  lr_dec            = 1e-4,
                  lr_dec_freq       = 500,
@@ -81,7 +82,7 @@ class PPO(object):
         self.critic = self.critic.to(device)
 
         if self.use_icm:
-            self.icm_model = StateActionPredictor(
+            self.icm_model = icm_network(
                 self.obs_dim,
                 self.act_dim,
                 self.action_type)

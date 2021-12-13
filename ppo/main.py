@@ -38,8 +38,6 @@ if __name__ == "__main__":
     if env_name == "CartPole":
         cartpole_ppo(
             lr            = lr,
-            use_gae       = False,
-            use_icm       = False,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -50,8 +48,6 @@ if __name__ == "__main__":
     elif env_name == "CartPolePixels":
         cartpole_pixels_ppo(
             lr            = lr,
-            use_gae       = False,
-            use_icm       = False,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -62,8 +58,6 @@ if __name__ == "__main__":
     elif env_name == "Pendulum":
         pendulum_ppo(
             lr            = lr,
-            use_gae       = False,
-            use_icm       = False,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -74,8 +68,6 @@ if __name__ == "__main__":
     elif env_name == "LunarLander":
         lunar_lander_ppo(
             lr            = lr,
-            use_gae       = False,
-            use_icm       = False,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -86,8 +78,6 @@ if __name__ == "__main__":
     elif env_name == "MountainCar":
         mountain_car_ppo(
             lr            = lr,
-            use_gae       = True,
-            use_icm       = True,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -98,8 +88,6 @@ if __name__ == "__main__":
     elif env_name == "MountainCarContinuous":
         mountain_car_continuous_ppo(
             lr            = lr,
-            use_gae       = True,
-            use_icm       = True,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -110,8 +98,6 @@ if __name__ == "__main__":
     elif env_name == "Acrobot":
         acrobot_ppo(
             lr            = lr,
-            use_gae       = True,
-            use_icm       = True,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -125,8 +111,6 @@ if __name__ == "__main__":
         #
         assault_ppo(
             lr            = lr,
-            use_gae       = True,
-            use_icm       = True,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

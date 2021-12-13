@@ -71,19 +71,47 @@ class AtariROMNetwork(PPONetwork):
                  need_softmax = False):
 
         super(AtariROMNetwork, self).__init__()
-        self.name = name
+        self.name   = name
+        self.in_dim = in_dim
         self.need_softmax = need_softmax
         self.a_f = torch.nn.ReLU()
 
-        self.l1 = nn.Linear(in_dim, 128)
-        self.l2 = nn.Linear(128, 256)
-        self.l3 = nn.Linear(256, 512)
-        self.l4 = nn.Linear(512, 1024)
-        self.l5 = nn.Linear(1024, out_dim)
+        l_out_f = lambda l_in, pad, ks, stride : \
+            int(((l_in + 2 * pad - (ks - 1) - 1) / stride) + 1)
+
+        self.conv1 = nn.Conv1d(1, 32, kernel_size=5, stride=2)
+        l_out = l_out_f(in_dim, 0, 5, 2)
+
+        self.conv2 = nn.Conv1d(32, 32, kernel_size=5, stride=2)
+        l_out = l_out_f(l_out, 0, 5, 2)
+
+        self.conv3 = nn.Conv1d(32, 32, kernel_size=5, stride=2)
+        l_out = l_out_f(l_out, 0, 5, 2)
+
+        self.l1    = nn.Linear(l_out * 32, 128)
+        self.l2    = nn.Linear(128, 256)
+        self.l3    = nn.Linear(256, 512)
+        self.l4    = nn.Linear(512, 1024)
+        self.l5    = nn.Linear(1024, out_dim)
 
 
     def forward(self, _input):
-        out = self.l1(_input)
+
+        out = _input.reshape((-1, 1, self.in_dim))
+
+        out = self.conv1(out)
+        out = self.a_f(out)
+
+        out = self.conv2(out)
+        out = self.a_f(out)
+
+        out = self.conv3(out)
+        out = self.a_f(out)
+
+        #print(out.shape)
+        out = out.flatten(start_dim = 1)
+
+        out = self.l1(out)
         out = self.a_f(out)
 
         out = self.l2(out)
@@ -260,7 +288,7 @@ class LinearForwardModel(nn.Module):
         return out
 
 
-class StateActionPredictor(PPONetwork):
+class LinearICM(PPONetwork):
 
     def __init__(self,
                  obs_dim,
@@ -271,7 +299,7 @@ class StateActionPredictor(PPONetwork):
             The Intrinsic Curiosit Model (ICM).
         """
 
-        super(StateActionPredictor, self).__init__()
+        super(LinearICM, self).__init__()
 
         self.act_dim      = act_dim
         self.reward_scale = reward_scale
