@@ -24,7 +24,7 @@ class PPONetwork(nn.Module):
 ########################################################################
 
 
-class LinearNN(PPONetwork):
+class SimpleFeedForward(PPONetwork):
 
     def __init__(self,
                  name,
@@ -32,40 +32,7 @@ class LinearNN(PPONetwork):
                  out_dim,
                  need_softmax = False):
 
-        super(LinearNN, self).__init__()
-        self.name = name
-        self.need_softmax = need_softmax
-
-        self.l1 = nn.Linear(in_dim, 64)
-        self.l2 = nn.Linear(64, 64)
-        self.l3 = nn.Linear(64, out_dim)
-
-
-    def forward(self, _input):
-
-        out = self.l1(_input)
-        out = F.relu(out)
-
-        out = self.l2(out)
-        out = F.relu(out)
-
-        out = self.l3(out)
-
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
-
-        return out
-
-
-class LinearNN2(PPONetwork):
-
-    def __init__(self,
-                 name,
-                 in_dim,
-                 out_dim,
-                 need_softmax = False):
-
-        super(LinearNN2, self).__init__()
+        super(SimpleFeedForward, self).__init__()
         self.name = name
         self.need_softmax = need_softmax
 
@@ -93,6 +60,50 @@ class LinearNN2(PPONetwork):
             out = F.softmax(out, dim=-1)
 
         return out
+
+
+class AtariROMNetwork(PPONetwork):
+
+    def __init__(self,
+                 name,
+                 in_dim,
+                 out_dim,
+                 need_softmax = False):
+
+        super(AtariROMNetwork, self).__init__()
+        self.name = name
+        self.need_softmax = need_softmax
+        self.a_f = torch.nn.ReLU()
+
+        self.l1 = nn.Linear(in_dim, 128)
+        self.l2 = nn.Linear(128, 256)
+        self.l3 = nn.Linear(256, 512)
+        self.l4 = nn.Linear(512, 1024)
+        self.l5 = nn.Linear(1024, out_dim)
+
+
+    def forward(self, _input):
+        out = self.l1(_input)
+        out = self.a_f(out)
+
+        out = self.l2(out)
+        out = self.a_f(out)
+
+        out = self.l3(out)
+        out = self.a_f(out)
+
+        out = self.l4(out)
+        out = self.a_f(out)
+
+        out = self.l5(out)
+        out = self.a_f(out)
+
+        if self.need_softmax:
+            out = F.softmax(out, dim=-1)
+
+        return out
+
+
 
 
 ########################################################################

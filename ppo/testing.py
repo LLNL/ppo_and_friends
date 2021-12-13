@@ -19,8 +19,10 @@ def test_policy(policy,
         if render:
             env.render()
 
-        obs    = torch.tensor(obs).to(device)
-        action = policy(obs).detach().cpu()
+        obs = torch.tensor(obs, dtype=torch.float).to(device).unsqueeze(0)
+
+        with torch.no_grad():
+            action = policy(obs).detach().cpu()
 
         if action_type == "discrete":
             action = torch.argmax(action).numpy()

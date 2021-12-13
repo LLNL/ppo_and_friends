@@ -7,9 +7,7 @@ class EpisodeInfo(object):
     def __init__(self,
                  use_gae      = False,
                  gamma        = 0.99,
-                 lambd        = 0.95,
-                 reward_scale = 1.0,
-                 obs_scale    = 1.0):
+                 lambd        = 0.95):
         """
             A container for storing episode information.
 
@@ -20,13 +18,9 @@ class EpisodeInfo(object):
                               discounted sums. This is used for advantages and
                               "rewards-to-go" (expected discounted returns).
                 labmd         A "smoothing" factor used in GAE.
-                reward_scale  A factor to scale rewards by.
-                obs_scale     A factor to scale observations by.
         """
 
         self.use_gae           = use_gae
-        self.reward_scale      = reward_scale
-        self.obs_scale         = obs_scale
         self.gamma             = gamma
         self.lambd             = lambd
         self.observations      = []
@@ -119,12 +113,12 @@ class EpisodeInfo(object):
                  log_prob,
                  reward):
 
-        self.observations.append(observation / self.obs_scale)
-        self.next_observations.append(next_observation / self.obs_scale)
+        self.observations.append(observation)
+        self.next_observations.append(next_observation)
         self.actions.append(action)
         self.values.append(value)
         self.log_probs.append(log_prob)
-        self.rewards.append(reward / self.reward_scale)
+        self.rewards.append(reward)
 
     def end_episode(self,
                     ending_value,

@@ -3,10 +3,9 @@ import gym
 from testing import test_policy
 import numpy as np
 import math
-
-#FIXME: let's try to remove torch
 import torch
 import torchvision.transforms as t_transforms
+from networks import SimpleFeedForward, AtariROMNetwork
 
 class CustomObservationSpace(object):
 
@@ -98,7 +97,10 @@ class CartPoleEnvManager(object):
         return resize(screen).unsqueeze(0).numpy()
 
 def run_ppo(env,
+            network,
             action_type,
+            lr,
+            max_ts_per_ep,
             use_gae,
             use_icm,
             state_path,
@@ -106,23 +108,31 @@ def run_ppo(env,
             render,
             num_timesteps,
             device,
-            test):
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = False):
 
-    ppo = PPO(env         = env,
-              device      = device,
-              action_type = action_type,
-              use_gae     = use_gae,
-              use_icm     = use_icm,
-              render      = render,
-              load_state  = load_state,
-              state_path  = state_path)
+    ppo = PPO(env               = env,
+              network           = network,
+              device            = device,
+              action_type       = action_type,
+              lr                = lr,
+              max_ts_per_ep     = max_ts_per_ep,
+              use_gae           = use_gae,
+              use_icm           = use_icm,
+              ext_reward_scale  = ext_reward_scale,
+              intr_reward_scale = intr_reward_scale,
+              render            = render,
+              load_state        = load_state,
+              state_path        = state_path)
 
     if test:
         test_policy(ppo.actor, env, render, device, action_type)
     else: 
         ppo.learn(num_timesteps)
 
-def cartpole_pixels_ppo(use_gae,
+def cartpole_pixels_ppo(lr,
+                        use_gae,
                         use_icm,
                         state_path,
                         load_state,
@@ -133,19 +143,25 @@ def cartpole_pixels_ppo(use_gae,
 
     env = CartPoleEnvManager()
 
-    run_ppo(env,
-            "discrete",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def cartpole_ppo(use_gae,
+def cartpole_ppo(lr,
+                 use_gae,
                  use_icm,
                  state_path,
                  load_state,
@@ -156,19 +172,25 @@ def cartpole_ppo(use_gae,
 
     env = gym.make('CartPole-v0')
 
-    run_ppo(env,
-            "discrete",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def pendulum_ppo(use_gae,
+def pendulum_ppo(lr,
+                 use_gae,
                  use_icm,
                  state_path,
                  load_state,
@@ -179,19 +201,25 @@ def pendulum_ppo(use_gae,
 
     env = gym.make('Pendulum-v1')
 
-    run_ppo(env,
-            "continuous",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "continuous",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def lunar_lander_ppo(use_gae,
+def lunar_lander_ppo(lr,
+                     use_gae,
                      use_icm,
                      state_path,
                      load_state,
@@ -202,19 +230,25 @@ def lunar_lander_ppo(use_gae,
 
     env = gym.make('LunarLander-v2')
 
-    run_ppo(env,
-            "discrete",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def mountain_car_ppo(use_gae,
+def mountain_car_ppo(lr,
+                     use_gae,
                      use_icm,
                      state_path,
                      load_state,
@@ -225,19 +259,25 @@ def mountain_car_ppo(use_gae,
 
     env = gym.make('MountainCar-v0')
 
-    run_ppo(env,
-            "discrete",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def mountain_car_continuous_ppo(use_gae,
+def mountain_car_continuous_ppo(lr,
+                                use_gae,
                                 use_icm,
                                 state_path,
                                 load_state,
@@ -248,19 +288,25 @@ def mountain_car_continuous_ppo(use_gae,
 
     env = gym.make('MountainCarContinuous-v0')
 
-    run_ppo(env,
-            "continuous",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "continuous",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
 
 
-def acrobot_ppo(use_gae,
+def acrobot_ppo(lr,
+                use_gae,
                 use_icm,
                 state_path,
                 load_state,
@@ -271,14 +317,60 @@ def acrobot_ppo(use_gae,
 
     env = gym.make('Acrobot-v1')
 
-    run_ppo(env,
-            "discrete",
-            use_gae,
-            use_icm,
-            state_path,
-            load_state,
-            render,
-            num_timesteps,
-            device,
-            test)
+    run_ppo(env               = env,
+            network           = SimpleFeedForward,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 1.0,
+            test              = test)
+
+
+def assault_ppo(lr,
+                use_gae,
+                use_icm,
+                state_path,
+                load_state,
+                render,
+                num_timesteps,
+                device,
+                test = False):
+
+    if test and render:
+        #
+        # NOTE: we don't want to explicitly call render for atari games.
+        # They have more advanced ways of rendering.
+        #
+        render = False
+
+        env = gym.make(
+            'Assault-ram-v0',
+            render_mode='human')
+    else:
+        env = gym.make(
+            'Assault-ram-v0')
+
+    run_ppo(env               = env,
+            network           = AtariROMNetwork,
+            action_type       = "discrete",
+            lr                = lr,
+            max_ts_per_ep     = 200000,
+            use_gae           = use_gae,
+            use_icm           = use_icm,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 0.001,
+            test              = test)
 

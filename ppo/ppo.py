@@ -1,4 +1,3 @@
-from networks import LinearNN, LinearNN2, StateActionPredictor
 import sys
 import pickle
 import numpy as np
@@ -10,56 +9,64 @@ from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
 from utils import EpisodeInfo, PPODataset
+from networks import StateActionPredictor
 
 
 class PPO(object):
 
     def __init__(self,
                  env,
+                 network,
                  device,
                  action_type,
-                 use_gae,
-                 use_icm      = False,
-                 icm_beta     = 0.8,
-                 reward_scale = 1.0,
-                 obs_scale    = 1.0,
-                 render       = False,
-                 load_state   = False,
-                 state_path   = "./"):
+                 lr                = 3e-4,
+                 max_ts_per_ep     = 200,
+                 use_gae           = False,
+                 use_icm           = False,
+                 icm_beta          = 0.8,
+                 ext_reward_scale  = 1.0,
+                 intr_reward_scale = 1.0,
+                 render            = False,
+                 load_state        = False,
+                 state_path        = "./"):
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
 
-        self.obs_dim      = env.observation_space.shape[0]
-        self.env          = env
-        self.device       = device
-        self.state_path   = state_path
-        self.render       = render
-        self.action_type  = action_type
-        self.use_gae      = use_gae
-        self.use_icm      = use_icm
-        self.icm_beta     = icm_beta
-        self.reward_scale = reward_scale
-        self.obs_scale    = obs_scale
+        self.obs_dim            = env.observation_space.shape[0]
+        self.env                = env
+        self.device             = device
+        self.state_path         = state_path
+        self.render             = render
+        self.action_type        = action_type
+        self.use_gae            = use_gae
+        self.use_icm            = use_icm
+        self.icm_beta           = icm_beta
+        self.ext_reward_scale   = ext_reward_scale
+        self.intr_reward_scale  = intr_reward_scale
+        self.lr                 = lr
+        self.max_ts_per_ep      = max_ts_per_ep
 
         self.status_dict  = {}
         self.status_dict["iteration"] = 0
         self.status_dict["running score mean"] = 0
+        self.status_dict["extrinsic score mean"] = 0
+        self.status_dict["top score"] = 0
         self.status_dict["total episodes"] = 0
 
         need_softmax = False
         if action_type == "discrete":
             need_softmax = True
 
-        self.actor  = LinearNN2(
+        self.actor  = network(
             "actor", 
             self.obs_dim, 
             self.act_dim, 
             need_softmax)
 
-        self.critic = LinearNN2(
+        self.critic = network(
             "critic", 
             self.obs_dim, 
             1,
@@ -76,6 +83,7 @@ class PPO(object):
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
+            self.status_dict["intrinsic score mean"] = 0
 
         if load_state:
             if not os.path.exists(state_path):
@@ -100,22 +108,17 @@ class PPO(object):
             os.makedirs(state_path)
 
     def _init_hyperparameters(self):
+        #FIXME: move all of these to init
         self.batch_size = 512
         self.timesteps_per_batch = 2048
-        self.max_timesteps_per_episode = 200
         self.gamma = 0.99
         self.epochs_per_iteration = 10
         self.clip = 0.2
-        self.action_std = 0.6
-        self.action_std_decay_rate = 0.05
-        self.min_action_std = 0.1
-        self.action_decay_freq = 250000
-        self.lr = 3e-4
-        #self.lr = 0.00095
 
     def get_action(self, obs):
 
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        t_obs = t_obs.unsqueeze(0)
 
         with torch.no_grad():
             action_pred = self.actor(t_obs)
@@ -160,44 +163,50 @@ class PPO(object):
         print("--------------------------------------------------------")
 
     def rollout(self):
-        dataset        = PPODataset(self.device, self.action_type)
-        total_episodes = 0  
-        total_ts       = 0
-        total_rewards  = 0
+        dataset            = PPODataset(self.device, self.action_type)
+        total_episodes     = 0  
+        total_ts           = 0
+        total_ext_rewards  = 0
+        total_intr_rewards = 0
+        top_ep_score       = 0
+        total_score        = 0
+
+        self.actor.eval()
+        self.critic.eval()
 
         while total_ts < self.timesteps_per_batch:
             episode_info = EpisodeInfo(
-                use_gae      = self.use_gae,
-                reward_scale = self.reward_scale)
+                use_gae      = self.use_gae)
 
             total_episodes  += 1
             done             = False
             obs              = self.env.reset()
+            ep_score         = 0
 
-            for ts in range(self.max_timesteps_per_episode):
+            for ts in range(self.max_ts_per_ep):
                 if self.render:
                     self.env.render()
 
                 total_ts += 1
-
-                if self.obs_scale != 1.0:
-                    obs /= self.obs_scale
-
                 action, log_prob = self.get_action(obs)
 
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
+                t_obs    = t_obs.unsqueeze(0)
                 value    = self.critic(t_obs)
                 prev_obs = obs.copy()
 
                 if self.action_type == "discrete":
-                    obs, reward, done, _ = self.env.step(action.squeeze())
+                    obs, ext_reward, done, _ = self.env.step(action.squeeze())
                     ep_action = action.item()
                     ep_value  = value.item()
 
                 elif self.action_type == "continuous":
-                    obs, reward, done, _ = self.env.step(action)
+                    obs, ext_reward, done, _ = self.env.step(action)
                     ep_action = action.item()
                     ep_value  = value
+
+                natural_reward = ext_reward
+                ext_reward    *= self.ext_reward_scale
 
                 if self.use_icm:
                     obs_1 = torch.tensor(prev_obs,
@@ -215,7 +224,15 @@ class PPO(object):
                     with torch.no_grad():
                         intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-                    reward += intrinsic_reward.cpu().item()
+                    intrinsic_reward  = intrinsic_reward.item()
+                    intrinsic_reward *= self.intr_reward_scale
+
+                    total_intr_rewards += intrinsic_reward
+
+                    reward = ext_reward + intrinsic_reward
+
+                else:
+                    reward = ext_reward
 
                 episode_info.add_info(
                     prev_obs,
@@ -225,19 +242,36 @@ class PPO(object):
                     log_prob,
                     reward)
 
-                total_rewards += reward
+                total_score       += reward
+                ep_score          += natural_reward
+                total_ext_rewards += natural_reward
 
                 if done:
                     episode_info.end_episode(0.0, ts + 1)
                     break
 
-                elif ts == (self.max_timesteps_per_episode - 1):
+                elif ts == (self.max_ts_per_ep - 1):
                     episode_info.end_episode(value, ts + 1)
 
             dataset.add_episode(episode_info)
+            top_ep_score = max(top_ep_score, ep_score)
 
-        self.status_dict["running score mean"] = total_rewards / total_episodes
-        self.status_dict["total episodes"]     = total_episodes
+
+        self.actor.train()
+        self.critic.train()
+
+        top_score         = max(top_ep_score, self.status_dict["top score"])
+        running_ext_score = total_ext_rewards / total_episodes
+        running_score     = total_score / total_episodes
+
+        self.status_dict["running score mean"]   = running_score
+        self.status_dict["extrinsic score mean"] = running_ext_score
+        self.status_dict["top score"]            = top_score
+        self.status_dict["total episodes"]       = total_episodes
+
+        if self.use_icm:
+            ism = total_intr_rewards / total_episodes
+            self.status_dict["intrinsic score mean"] = ism
 
         dataset.build()
 
@@ -279,6 +313,10 @@ class PPO(object):
                 advantages
 
             actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+
+            if values.size() == torch.Size([]):
+                values = values.unsqueeze(0)
+
             critic_loss = nn.MSELoss()(values, rewards_tg)
 
             self.actor_optim.zero_grad()
