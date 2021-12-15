@@ -12,12 +12,11 @@ if __name__ == "__main__":
     parser.add_argument("--state_path", default="")
     parser.add_argument("--clobber", action="store_true")
     parser.add_argument("--render", action="store_true")
-    parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--num_timesteps", default=1000000, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
                  "MountainCar", "MountainCarContinuous", "Acrobot",
-                 "AssaultRAM"])
+                 "AssaultRAM", "AssaultPixels"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -25,7 +24,6 @@ if __name__ == "__main__":
     state_path    = os.path.join(args.state_path, "saved_states", env_name)
     clobber       = args.clobber
     render        = args.render
-    lr            = args.lr
     num_timesteps = args.num_timesteps
 
     load_state    = not clobber or test
@@ -37,7 +35,6 @@ if __name__ == "__main__":
 
     if env_name == "CartPole":
         cartpole_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -47,7 +44,6 @@ if __name__ == "__main__":
 
     elif env_name == "CartPolePixels":
         cartpole_pixels_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -57,7 +53,6 @@ if __name__ == "__main__":
 
     elif env_name == "Pendulum":
         pendulum_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -67,7 +62,6 @@ if __name__ == "__main__":
 
     elif env_name == "LunarLander":
         lunar_lander_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -77,7 +71,6 @@ if __name__ == "__main__":
 
     elif env_name == "MountainCar":
         mountain_car_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -87,7 +80,6 @@ if __name__ == "__main__":
 
     elif env_name == "MountainCarContinuous":
         mountain_car_continuous_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -97,7 +89,6 @@ if __name__ == "__main__":
 
     elif env_name == "Acrobot":
         acrobot_ppo(
-            lr            = lr,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
@@ -109,8 +100,19 @@ if __name__ == "__main__":
         #
         # NOTE: GAE is needed for good performance here.
         #
-        assault_ppo(
-            lr            = lr,
+        assault_ram_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    elif env_name == "AssaultPixels":
+        #
+        # NOTE: GAE is needed for good performance here.
+        #
+        assault_pixels_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

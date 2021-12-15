@@ -5,7 +5,7 @@ import numpy as np
 import math
 import torch
 import torchvision.transforms as t_transforms
-from networks import SimpleFeedForward, AtariROMNetwork
+from networks import SimpleFeedForward, AtariRAMNetwork, AtariPixelNetwork
 
 class CustomObservationSpace(object):
 
@@ -101,7 +101,7 @@ def run_ppo(env,
             device,
             action_type,
             lr                = 3e-4,
-            lr_dec            = 1e-4,
+            lr_dec            = 0.99,
             lr_dec_freq       = 500,
             max_ts_per_ep     = 200,
             use_gae           = False,
@@ -136,8 +136,7 @@ def run_ppo(env,
     else: 
         ppo.learn(num_timesteps)
 
-def cartpole_pixels_ppo(lr,
-                        state_path,
+def cartpole_pixels_ppo(state_path,
                         load_state,
                         render,
                         num_timesteps,
@@ -149,7 +148,6 @@ def cartpole_pixels_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "discrete",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = False,
             use_icm           = False,
@@ -163,8 +161,7 @@ def cartpole_pixels_ppo(lr,
             test              = test)
 
 
-def cartpole_ppo(lr,
-                 state_path,
+def cartpole_ppo(state_path,
                  load_state,
                  render,
                  num_timesteps,
@@ -176,7 +173,6 @@ def cartpole_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "discrete",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = False,
             use_icm           = False,
@@ -190,8 +186,7 @@ def cartpole_ppo(lr,
             test              = test)
 
 
-def pendulum_ppo(lr,
-                 state_path,
+def pendulum_ppo(state_path,
                  load_state,
                  render,
                  num_timesteps,
@@ -203,7 +198,6 @@ def pendulum_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "continuous",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = False,
             use_icm           = False,
@@ -217,8 +211,7 @@ def pendulum_ppo(lr,
             test              = test)
 
 
-def lunar_lander_ppo(lr,
-                     state_path,
+def lunar_lander_ppo(state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -230,7 +223,6 @@ def lunar_lander_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "discrete",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = False,
             use_icm           = False,
@@ -244,8 +236,7 @@ def lunar_lander_ppo(lr,
             test              = test)
 
 
-def mountain_car_ppo(lr,
-                     state_path,
+def mountain_car_ppo(state_path,
                      load_state,
                      render,
                      num_timesteps,
@@ -257,7 +248,6 @@ def mountain_car_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "discrete",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = True,
             use_icm           = True,
@@ -271,8 +261,7 @@ def mountain_car_ppo(lr,
             test              = test)
 
 
-def mountain_car_continuous_ppo(lr,
-                                state_path,
+def mountain_car_continuous_ppo(state_path,
                                 load_state,
                                 render,
                                 num_timesteps,
@@ -284,7 +273,6 @@ def mountain_car_continuous_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "continuous",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = True,
             use_icm           = True,
@@ -298,8 +286,7 @@ def mountain_car_continuous_ppo(lr,
             test              = test)
 
 
-def acrobot_ppo(lr,
-                state_path,
+def acrobot_ppo(state_path,
                 load_state,
                 render,
                 num_timesteps,
@@ -311,7 +298,6 @@ def acrobot_ppo(lr,
     run_ppo(env               = env,
             network           = SimpleFeedForward,
             action_type       = "discrete",
-            lr                = lr,
             max_ts_per_ep     = 200,
             use_gae           = True,
             use_icm           = True,
@@ -325,13 +311,12 @@ def acrobot_ppo(lr,
             test              = test)
 
 
-def assault_ppo(lr,
-                state_path,
-                load_state,
-                render,
-                num_timesteps,
-                device,
-                test = False):
+def assault_ram_ppo(state_path,
+                    load_state,
+                    render,
+                    num_timesteps,
+                    device,
+                    test = False):
 
     if test and render:
         #
@@ -348,11 +333,53 @@ def assault_ppo(lr,
             'Assault-ram-v0')
 
     run_ppo(env               = env,
-            network           = AtariROMNetwork,
+            network           = AtariRAMNetwork,
             action_type       = "discrete",
-            lr                = lr,
-            lr_dec_freq       = 35,
-            max_ts_per_ep     = 200000,
+            lr                = 0.0001,
+            lr_dec_freq       = 30,
+            lr_dec            = 0.95,
+            #max_ts_per_ep     = 200000,
+            max_ts_per_ep     = 1000,
+            use_gae           = True,
+            use_icm           = True,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 0.01,
+            test              = test)
+
+
+def assault_pixels_ppo(state_path,
+                       load_state,
+                       render,
+                       num_timesteps,
+                       device,
+                       test = False):
+
+    if test and render:
+        #
+        # NOTE: we don't want to explicitly call render for atari games.
+        # They have more advanced ways of rendering.
+        #
+        render = False
+
+        env = gym.make(
+            'Assault-v0',
+            render_mode='human')
+    else:
+        env = gym.make(
+            'Assault-v0')
+
+    run_ppo(env               = env,
+            network           = AtariPixelNetwork,
+            action_type       = "discrete",
+            lr                = 0.0001,
+            lr_dec_freq       = 30,
+            lr_dec            = 0.95,
+            max_ts_per_ep     = 1000,
             use_gae           = True,
             use_icm           = False,
             state_path        = state_path,
@@ -361,6 +388,6 @@ def assault_ppo(lr,
             num_timesteps     = num_timesteps,
             device            = device,
             ext_reward_scale  = 1.0,
-            intr_reward_scale = 0.001,
+            intr_reward_scale = 0.01,
             test              = test)
 

@@ -21,7 +21,7 @@ class PPO(object):
                  action_type,
                  icm_network       = LinearICM,
                  lr                = 3e-4,
-                 lr_dec            = 1e-4,
+                 lr_dec            = 0.99,
                  lr_dec_freq       = 500,
                  max_ts_per_ep     = 200,
                  use_gae           = False,
@@ -38,7 +38,6 @@ class PPO(object):
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
 
-        self.obs_dim            = env.observation_space.shape[0]
         self.env                = env
         self.device             = device
         self.state_path         = state_path
@@ -66,24 +65,47 @@ class PPO(object):
         if action_type == "discrete":
             need_softmax = True
 
-        self.actor  = network(
-            "actor", 
-            self.obs_dim, 
-            self.act_dim, 
-            need_softmax)
+        use_conv2d_setup = False
+        for base in network.__bases__:
+            if base.__name__ == "PPOConv2dNetwork":
+                use_conv2d_setup = True
+                break
 
-        self.critic = network(
-            "critic", 
-            self.obs_dim, 
-            1,
-            False)
+        if use_conv2d_setup:
+            obs_dim = env.observation_space.shape
+
+            self.actor = network(
+                "actor", 
+                obs_dim, 
+                self.act_dim, 
+                need_softmax)
+
+            self.critic = network(
+                "critic", 
+                obs_dim, 
+                1,
+                False)
+
+        else:
+            obs_dim = env.observation_space.shape[0]
+            self.actor = network(
+                "actor", 
+                obs_dim, 
+                self.act_dim, 
+                need_softmax)
+
+            self.critic = network(
+                "critic", 
+                obs_dim, 
+                1,
+                False)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
         if self.use_icm:
             self.icm_model = icm_network(
-                self.obs_dim,
+                obs_dim,
                 self.act_dim,
                 self.action_type)
 
@@ -98,7 +120,8 @@ class PPO(object):
                 print(msg)
             else:
                 self.load()
-                self.lr = self.status_dict["lr"]
+                self.lr = min(self.status_dict["lr"], self.lr)
+                self.status_dict["lr"] = self.lr
 
         self._init_hyperparameters()
 
@@ -116,7 +139,7 @@ class PPO(object):
 
     def _init_hyperparameters(self):
         #FIXME: move all of these to init
-        self.batch_size = 512
+        self.batch_size = 128
         self.timesteps_per_batch = 2048
         self.gamma = 0.99
         self.epochs_per_iteration = 10
@@ -288,7 +311,7 @@ class PPO(object):
         iteration = self.status_dict["iteration"]
 
         if iteration != 0 and iteration % self.lr_dec_freq == 0:
-            new_lr = self.lr - self.lr_dec
+            new_lr = self.lr * self.lr_dec
 
             msg  = "\n***Decreasing learning rate from "
             msg += "{} to {}***\n".format(self.lr, new_lr)
