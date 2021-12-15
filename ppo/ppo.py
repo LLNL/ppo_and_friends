@@ -19,40 +19,53 @@ class PPO(object):
                  network,
                  device,
                  action_type,
-                 icm_network       = LinearICM,
-                 lr                = 3e-4,
-                 lr_dec            = 0.99,
-                 lr_dec_freq       = 500,
-                 max_ts_per_ep     = 200,
-                 use_gae           = False,
-                 use_icm           = False,
-                 icm_beta          = 0.8,
-                 ext_reward_scale  = 1.0,
-                 intr_reward_scale = 1.0,
-                 render            = False,
-                 load_state        = False,
-                 state_path        = "./"):
+                 icm_network         = LinearICM,
+                 lr                  = 3e-4,
+                 lr_dec              = 0.99,
+                 lr_dec_freq         = 500,
+                 max_ts_per_ep       = 200,
+                 batch_size          = 128,
+                 timesteps_per_batch = 2048,
+                 gamma               = 0.99,
+                 epochs_per_iter     = 10,
+                 clip                = 0.2,
+                 use_gae             = False,
+                 use_icm             = False,
+                 icm_beta            = 0.8,
+                 ext_reward_scale    = 1.0,
+                 intr_reward_scale   = 1.0,
+                 render              = False,
+                 load_state          = False,
+                 state_path          = "./"):
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
 
-        self.env                = env
-        self.device             = device
-        self.state_path         = state_path
-        self.render             = render
-        self.action_type        = action_type
-        self.use_gae            = use_gae
-        self.use_icm            = use_icm
-        self.icm_beta           = icm_beta
-        self.ext_reward_scale   = ext_reward_scale
-        self.intr_reward_scale  = intr_reward_scale
-        self.lr                 = lr
-        self.lr_dec             = lr_dec
-        self.lr_dec_freq        = lr_dec_freq
-        self.max_ts_per_ep      = max_ts_per_ep
+        self.env                 = env
+        self.device              = device
+        self.state_path          = state_path
+        self.render              = render
+        self.action_type         = action_type
+        self.use_gae             = use_gae
+        self.use_icm             = use_icm
+        self.icm_beta            = icm_beta
+        self.ext_reward_scale    = ext_reward_scale
+        self.intr_reward_scale   = intr_reward_scale
+        self.lr                  = lr
+        self.lr_dec              = lr_dec
+        self.lr_dec_freq         = lr_dec_freq
+        self.max_ts_per_ep       = max_ts_per_ep
+        self.batch_size          = batch_size
+        self.timesteps_per_batch = timesteps_per_batch
+        self.gamma               = gamma
+        self.epochs_per_iter     = epochs_per_iter
+        self.clip                = clip
 
+        #
+        # Create a dictionary to track the status of training.
+        #
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["running score mean"]   = 0
@@ -123,8 +136,6 @@ class PPO(object):
                 self.lr = min(self.status_dict["lr"], self.lr)
                 self.status_dict["lr"] = self.lr
 
-        self._init_hyperparameters()
-
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
         self.cov_mat = torch.diag(self.cov_var)
 
@@ -136,14 +147,6 @@ class PPO(object):
 
         if not os.path.exists(state_path):
             os.makedirs(state_path)
-
-    def _init_hyperparameters(self):
-        #FIXME: move all of these to init
-        self.batch_size = 128
-        self.timesteps_per_batch = 2048
-        self.gamma = 0.99
-        self.epochs_per_iteration = 10
-        self.clip = 0.2
 
     def get_action(self, obs):
 
@@ -336,11 +339,11 @@ class PPO(object):
                 batch_size = self.batch_size,
                 shuffle    = True)
 
-            for _ in range(self.epochs_per_iteration):
+            for _ in range(self.epochs_per_iter):
                 self._ppo_batch_train(data_loader)
 
             if self.use_icm:
-                for _ in range(self.epochs_per_iteration):
+                for _ in range(self.epochs_per_iter):
                     self._icm_batch_train(data_loader)
 
             self.print_status()
