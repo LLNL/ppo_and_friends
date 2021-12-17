@@ -70,6 +70,7 @@ class PPO(object):
         #
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
+        self.status_dict["longest run"]          = 0
         self.status_dict["running score mean"]   = 0
         self.status_dict["extrinsic score mean"] = 0
         self.status_dict["top score"]            = 0
@@ -205,6 +206,7 @@ class PPO(object):
         total_intr_rewards = 0
         top_ep_score       = 0
         total_score        = 0
+        longest_run        = 0
 
         self.actor.eval()
         self.critic.eval()
@@ -290,6 +292,7 @@ class PPO(object):
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
+            longest_run  = max(longest_run, ts)
 
 
         self.actor.train()
@@ -303,6 +306,7 @@ class PPO(object):
         self.status_dict["extrinsic score mean"] = running_ext_score
         self.status_dict["top score"]            = top_score
         self.status_dict["total episodes"]       = total_episodes
+        self.status_dict["longest run"]          = longest_run
 
         if self.use_icm:
             ism = total_intr_rewards / total_episodes
@@ -329,6 +333,8 @@ class PPO(object):
 
         ts = 0
         while ts < total_timesteps:
+            torch.cuda.empty_cache()
+
             dataset = self.rollout()
 
             ts += np.sum(dataset.ep_lens)
