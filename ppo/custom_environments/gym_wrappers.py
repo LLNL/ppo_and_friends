@@ -94,14 +94,14 @@ class AtariEnvWrapper(object):
 
     def __init__(self,
                  env,
-                 min_lives = -1):
+                 min_lives = -1,
+                 **kwargs):
 
         super(AtariEnvWrapper, self).__init__()
 
         self.min_lives          = min_lives
         self.env                = env
         self.action_space       = env.action_space
-        self.single_state_shape = env.observation_space.shape
 
     def _end_game(self, done):
         return done or self.env.ale.lives() < self.min_lives
@@ -131,8 +131,8 @@ class PixelDifferenceEnvWrapper(AtariGrayScale):
                  min_lives = -1):
 
         super(PixelDifferenceEnvWrapper, self).__init__(
-            env,
-            min_lives)
+            env       = env,
+            min_lives = min_lives)
 
         self.prev_frame   = None
         self.action_space = env.action_space
@@ -172,8 +172,8 @@ class PixelHistEnvWrapper(AtariGrayScale):
                  min_lives = -1):
 
         super(PixelHistEnvWrapper, self).__init__(
-            env,
-            min_lives)
+            env       = env,
+            min_lives = min_lives)
 
         self.frame_cache  = None
         self.action_space = env.action_space
@@ -208,78 +208,17 @@ class PixelHistEnvWrapper(AtariGrayScale):
         self.env.render()
 
 
-class BreakoutEnvWrapper(PixelHistEnvWrapper):
-
-    def __init__(self,
-                 env,
-                 hist_size = 2,
-                 min_lives = -1):
-
-
-        super(BreakoutEnvWrapper, self).__init__(
-            env,
-            hist_size,
-            min_lives)
-
-        if "Breakout" not in env.spec._env_name:
-            msg  = "ERROR: expected env to be a variation of Breakout "
-            msg += "but received {}".format(env.spec._env_name)
-            sys.stderr.write(msg)
-            sys.exit(1)
-
-        #
-        # Breakout doesn't auto-launch the ball, which is a bit of a pain.
-        # I don't care to teach the model that it needs to launch the ball
-        # itself, so let's launch it autmatically when we reset. Also, let's
-        # change the action space to only be (no-op, left, right) since we're
-        # removing the ball launch action.
-        #
-        self.action_space = CustomActionSpace(
-            env.action_space.dtype,
-            3)
-
-        self.action_map = [0, 2, 3]
-
-    def step(self, action):
-        action = self.action_map[action]
-        return PixelHistEnvWrapper.step(self, action)
-
-    def reset(self):
-        self.env.reset()
-
-        #
-        # First, we need to randomly place the paddle somewhere. This
-        # will change where the ball is launched from. 20 steps in either
-        # direction from the default start is enough to get to the wall.
-        #
-        rand_step   = np.random.randint(2, 4)
-        rand_repeat = np.random.randint(1, 20)
-
-        for _ in range(rand_repeat):
-            self.env.step(rand_step)
-
-        #
-        # Next, launch the ball.
-        #
-        cur_frame, _, _, _ = self.env.step(1)
-
-
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
-        self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
-
-        return self.frame_cache.copy()
-
-
 class RAMHistEnvWrapper(AtariEnvWrapper):
 
     def __init__(self,
                  env,
                  hist_size = 2,
-                 min_lives = -1):
+                 min_lives = -1,
+                 **kwargs):
 
         super(RAMHistEnvWrapper, self).__init__(
-            env,
-            min_lives)
+            env       = env,
+            min_lives =  min_lives)
 
         ram_shape   = env.observation_space.shape
         cache_shape = (ram_shape[0] * hist_size,)
@@ -294,9 +233,6 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.env                = env
         self.ram_cache          = None
         self.action_space       = env.action_space
-        self.single_state_shape = env.observation_space.shape
-
-        self.reset()
 
     def _reset_ram_cache(self,
                          cur_ram):
@@ -325,3 +261,119 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
     def render(self):
         self.env.render()
 
+
+class BreakoutEnvWrapper():
+
+    def __init__(self,
+                 env,
+                 **kwargs):
+
+        super(BreakoutEnvWrapper, self).__init__(env, **kwargs)
+
+        if "Breakout" not in env.spec._env_name:
+            msg  = "ERROR: expected env to be a variation of Breakout "
+            msg += "but received {}".format(env.spec._env_name)
+            sys.stderr.write(msg)
+            sys.exit(1)
+
+        #
+        # Breakout doesn't auto-launch the ball, which is a bit of a pain.
+        # I don't care to teach the model that it needs to launch the ball
+        # itself, so let's launch it autmatically when we reset. Also, let's
+        # change the action space to only be (no-op, left, right) since we're
+        # removing the ball launch action.
+        #
+        self.action_space = CustomActionSpace(
+            env.action_space.dtype,
+            3)
+
+        self.action_map = [0, 2, 3]
+
+    def _set_random_start_pos(self):
+        #
+        # 20 steps in either direction should be enough to
+        # reach either wall.
+        #
+        rand_step   = np.random.randint(2, 4)
+        rand_repeat = np.random.randint(1, 20)
+
+        for _ in range(rand_repeat):
+            self.env.step(rand_step)
+
+
+class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 hist_size = 2,
+                 min_lives = -1):
+
+        super(BreakoutRAMEnvWrapper, self).__init__(
+            env       = env,
+            hist_size = hist_size,
+            min_lives = min_lives)
+
+    def step(self, action):
+        action = self.action_map[action]
+        return RAMHistEnvWrapper.step(self, action)
+
+    def reset(self):
+        self.env.reset()
+
+        #
+        # First, we need to randomly place the paddle somewhere. This
+        # will change where the ball is launched from.
+        #
+        self._set_random_start_pos()
+
+        #
+        # Next, launch the ball.
+        #
+        cur_frame, _, _, _ = self.env.step(1)
+
+        cur_ram  = cur_ram.astype(np.float32) / 255.
+        self._reset_ram_cache(cur_ram)
+
+        return self.ram_cache.copy()
+
+
+class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 hist_size = 2,
+                 min_lives = -1):
+
+
+        super(BreakoutPixelsEnvWrapper, self).__init__(
+            env       = env,
+            hist_size = hist_size,
+            min_lives = min_lives)
+
+    def step(self, action):
+        action = self.action_map[action]
+        return PixelHistEnvWrapper.step(self, action)
+
+    def reset(self):
+        self.env.reset()
+
+        #
+        # First, we need to randomly place the paddle somewhere. This
+        # will change where the ball is launched from. 20 steps in either
+        # direction from the default start is enough to get to the wall.
+        #
+        self._set_random_start_pos()
+
+        for _ in range(rand_repeat):
+            self.env.step(rand_step)
+
+        #
+        # Next, launch the ball.
+        #
+        cur_frame, _, _, _ = self.env.step(1)
+
+
+        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+
+        return self.frame_cache.copy()

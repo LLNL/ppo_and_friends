@@ -333,17 +333,18 @@ def breakout_pixels_ppo(state_path,
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = BreakoutEnvWrapper(
+    wrapped_env = BreakoutPixelsEnvWrapper(
         env       = env,
         hist_size = 2,
         min_lives = 5)
 
     run_ppo(env               = wrapped_env,
             network           = AtariPixelNetwork,
+            batch_size        = 256,
             action_type       = "discrete",
-            lr                = 0.0001,
-            lr_dec_freq       = 50,
-            lr_dec            = 0.9999,
+            lr                = 0.00018,
+            lr_dec_freq       = 5,
+            lr_dec            = 0.99,
             max_ts_per_ep     = 10000,
             use_gae           = True,
             use_icm           = False,
@@ -382,18 +383,18 @@ def breakout_ram_ppo(state_path,
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = BreakoutEnvWrapper(
+    wrapped_env = BreakoutRAMEnvWrapper(
         env       = env,
         hist_size = 3,
         min_lives = 5)
 
     run_ppo(env               = wrapped_env,
             network           = AtariRAMNetwork,
-            batch_size        = 256,
+            batch_size        = 512,
             action_type       = "discrete",
-            lr                = 0.0001,
-            lr_dec_freq       = 20,
-            lr_dec            = 0.999,
+            lr                = 0.00018,
+            lr_dec_freq       = 5,
+            lr_dec            = 0.99,
             max_ts_per_ep     = 1000,
             use_gae           = False,
             use_icm           = False,

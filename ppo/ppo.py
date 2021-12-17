@@ -172,7 +172,7 @@ class PPO(object):
             log_prob = dist.log_prob(action)
             action   = action.int().unsqueeze(0)
 
-        return action.detach().numpy(), log_prob.detach().to(self.device)
+        return action.detach().numpy(), log_prob.detach()
 
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
