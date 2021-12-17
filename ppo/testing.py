@@ -8,8 +8,8 @@ def test_policy(policy,
 
     num_steps = 0
     score     = 0
-    obs  = env.reset()
-    done = False
+    obs       = env.reset()
+    done      = False
     policy.eval()
 
     while not done:

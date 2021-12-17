@@ -16,7 +16,8 @@ if __name__ == "__main__":
     parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
                  "MountainCar", "MountainCarContinuous", "Acrobot",
-                 "AssaultRAM", "AssaultPixels"])
+                 "AssaultRAM", "AssaultPixels",
+                 "BreakoutPixels", "BreakoutRAM"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -97,9 +98,6 @@ if __name__ == "__main__":
             test          = test)
 
     elif env_name == "AssaultRAM":
-        #
-        # NOTE: GAE is needed for good performance here.
-        #
         assault_ram_ppo(
             state_path    = state_path,
             load_state    = load_state,
@@ -109,10 +107,25 @@ if __name__ == "__main__":
             test          = test)
 
     elif env_name == "AssaultPixels":
-        #
-        # NOTE: GAE is needed for good performance here.
-        #
         assault_pixels_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    elif env_name == "BreakoutPixels":
+        breakout_pixels_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    elif env_name == "BreakoutRAM":
+        breakout_ram_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

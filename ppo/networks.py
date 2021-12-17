@@ -34,6 +34,12 @@ def get_conv2d_out_size(in_size,
             / stride) + 1)
         return out_size
 
+def get_maxpool2d_out_size(in_size,
+                           padding,
+                           kernel_size,
+                           stride):
+    return get_conv2d_out_size(in_size, padding, kernel_size, stride)
+
 
 ########################################################################
 #                        Actor Critic Networks                         #
@@ -91,186 +97,73 @@ class AtariRAMNetwork(PPONetwork):
         self.need_softmax = need_softmax
         self.a_f = torch.nn.ReLU()
 
-        self.l1 = nn.Linear(in_dim, 128)
-        self.d1 = nn.Dropout(0.2)
+        self.l1 = nn.Linear(in_dim, 1024)
+        self.bn1 = nn.BatchNorm1d(1024)
 
-        self.l2 = nn.Linear(128, 256)
-        self.d2 = nn.Dropout(0.2)
+        self.l2 = nn.Linear(1024, 512)
+        self.bn2 = nn.BatchNorm1d(512)
 
-        self.l3 = nn.Linear(256, 512)
-        self.d3 = nn.Dropout(0.2)
+        self.l3 = nn.Linear(512, 256)
+        self.bn3 = nn.BatchNorm1d(256)
 
-        self.l4 = nn.Linear(512, 1024)
-        self.d4 = nn.Dropout(0.2)
+        self.l4 = nn.Linear(256, 128)
+        self.bn4 = nn.BatchNorm1d(128)
 
-        self.l5 = nn.Linear(1024, 1024)
-        self.d5 = nn.Dropout(0.2)
+        self.l5 = nn.Linear(128, 64)
+        self.bn5 = nn.BatchNorm1d(64)
 
-        self.l6 = nn.Linear(1024, out_dim)
+        self.l6 = nn.Linear(64, 32)
+        self.bn6 = nn.BatchNorm1d(32)
+
+        self.l7 = nn.Linear(32, 16)
+        self.bn7 = nn.BatchNorm1d(16)
+
+        self.l8 = nn.Linear(16, 8)
+        self.bn8 = nn.BatchNorm1d(8)
+
+        self.l9 = nn.Linear(8, out_dim)
 
 
     def forward(self, _input):
 
         out = self.l1(_input)
-        out = self.d1(out)
+        out = self.bn1(out)
         out = self.a_f(out)
 
         out = self.l2(out)
-        out = self.d2(out)
+        out = self.bn2(out)
         out = self.a_f(out)
 
         out = self.l3(out)
-        out = self.d3(out)
+        out = self.bn3(out)
         out = self.a_f(out)
 
         out = self.l4(out)
-        out = self.d4(out)
+        out = self.bn4(out)
         out = self.a_f(out)
 
         out = self.l5(out)
-        out = self.d5(out)
+        out = self.bn5(out)
         out = self.a_f(out)
 
         out = self.l6(out)
+        out = self.bn6(out)
+        out = self.a_f(out)
+
+        out = self.l7(out)
+        out = self.bn7(out)
+        out = self.a_f(out)
+
+        out = self.l8(out)
+        out = self.bn8(out)
+        out = self.a_f(out)
+
+        out = self.l9(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
 
         return out
-
-
-#class AtariPixelNetwork(PPOConv2dNetwork):
-#
-#    def __init__(self,
-#                 name,
-#                 in_shape,
-#                 out_dim,
-#                 need_softmax = False):
-#
-#        super(AtariPixelNetwork, self).__init__()
-#
-#        self.name         = name
-#        self.need_softmax = need_softmax
-#        self.a_f          = torch.nn.ReLU()
-#
-#        height     = in_shape[0]
-#        width      = in_shape[1]
-#        channels   = in_shape[2]
-#
-#        k_s  = 4
-#        strd = 2
-#        pad  = 1
-#        self.conv1 = nn.Conv2d(channels, 32,
-#            kernel_size=k_s, stride=strd, padding=pad)
-#        self.bn1   = nn.BatchNorm2d(32)
-#        height     = get_conv2d_out_size(height, pad, k_s, strd)
-#        width      = get_conv2d_out_size(width, pad, k_s, strd)
-#
-#        k_s  = 4
-#        strd = 2
-#        pad  = 1
-#        self.conv2 = nn.Conv2d(32, 32,
-#            kernel_size=k_s, stride=strd, padding=pad)
-#        self.bn2   = nn.BatchNorm2d(32)
-#        height     = get_conv2d_out_size(height, pad, k_s, strd)
-#        width      = get_conv2d_out_size(width, pad, k_s, strd)
-#
-#        self.l1 = nn.Linear(height * width * 32, 1024)
-#        self.l2 = nn.Linear(1024, 512)
-#        self.l3 = nn.Linear(512, 128)
-#        self.l4 = nn.Linear(128, 128)
-#        self.l5 = nn.Linear(128, out_dim)
-#
-#
-#    def forward(self, _input):
-#
-#        out = _input.transpose(2, 3).transpose(1, 2)
-#
-#        out = self.conv1(out)
-#        out = self.bn1(out)
-#        out = self.a_f(out)
-#
-#        out = self.conv2(out)
-#        out = self.bn2(out)
-#        out = self.a_f(out)
-#
-#        #print(out.shape)
-#        out = out.flatten(start_dim=1)
-#        #print(out.shape)
-#
-#        out = self.l1(out)
-#        out = self.a_f(out)
-#
-#        out = self.l2(out)
-#        out = self.a_f(out)
-#
-#        out = self.l3(out)
-#        out = self.a_f(out)
-#
-#        out = self.l4(out)
-#        out = self.a_f(out)
-#
-#        out = self.l5(out)
-#
-#        if self.need_softmax:
-#            out = F.softmax(out, dim=-1)
-#
-#        return out
-
-
-class AtariPixelNetwork(PPOConv2dNetwork):
-
-    def __init__(self,
-                 name,
-                 in_shape,
-                 out_dim,
-                 need_softmax = False):
-
-        super(AtariPixelNetwork, self).__init__()
-
-        self.name         = name
-        self.need_softmax = need_softmax
-        self.a_f          = torch.nn.ReLU()
-
-        height     = in_shape[0]
-        width      = in_shape[1]
-        channels   = in_shape[2]
-
-        self.l1 = nn.Linear(height * width * channels, 128)
-        self.l2 = nn.Linear(128, 512)
-        self.l3 = nn.Linear(512, 1024)
-        self.l4 = nn.Linear(1024, 1024)
-        self.l5 = nn.Linear(1024, 256)
-        self.l6 = nn.Linear(256, out_dim)
-
-
-    def forward(self, _input):
-
-        #out = _input.transpose(2, 3).transpose(1, 2)
-        out = _input.flatten(start_dim=1)
-
-        out = self.l1(out)
-        out = self.a_f(out)
-
-        out = self.l2(out)
-        out = self.a_f(out)
-
-        out = self.l3(out)
-        out = self.a_f(out)
-
-        out = self.l4(out)
-        out = self.a_f(out)
-
-        out = self.l5(out)
-        out = self.a_f(out)
-
-        out = self.l6(out)
-
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
-
-        return out
-
 
 
 #class AtariPixelNetwork(PPOConv2dNetwork):
@@ -296,45 +189,65 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 #        pad  = 1
 #        self.conv1 = nn.Conv2d(channels, 32,
 #            kernel_size=k_s, stride=strd, padding=pad)
+#        self.mp1   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
 #        self.bn1   = nn.BatchNorm2d(32)
+#
 #        height     = get_conv2d_out_size(height, pad, k_s, strd)
 #        width      = get_conv2d_out_size(width, pad, k_s, strd)
+#        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+#        width      = get_maxpool2d_out_size(width, 1, 3, 1)
 #
 #        k_s  = 5
 #        strd = 3
 #        pad  = 2
 #        self.conv2 = nn.Conv2d(32, 32,
 #            kernel_size=k_s, stride=strd, padding=pad)
+#        self.mp2   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
 #        self.bn2   = nn.BatchNorm2d(32)
+#
 #        height     = get_conv2d_out_size(height, pad, k_s, strd)
 #        width      = get_conv2d_out_size(width, pad, k_s, strd)
+#        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+#        width      = get_maxpool2d_out_size(width, 1, 3, 1)
 #
 #        k_s  = 4
 #        strd = 2
 #        pad  = 2
 #        self.conv3 = nn.Conv2d(32, 32,
 #            kernel_size=k_s, stride=strd, padding=pad)
+#        self.mp3   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
 #        self.bn3   = nn.BatchNorm2d(32)
-#        height     = get_conv2d_out_size(height, pad, k_s, strd)
-#        width      = get_conv2d_out_size(width, pad, k_s, strd)
 #
-#        k_s  = 3
-#        strd = 2
-#        pad  = 2
-#        self.conv4 = nn.Conv2d(32, 32,
-#            kernel_size=k_s, stride=strd, padding=pad)
-#        self.bn4   = nn.BatchNorm2d(32)
 #        height     = get_conv2d_out_size(height, pad, k_s, strd)
 #        width      = get_conv2d_out_size(width, pad, k_s, strd)
+#        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+#        width      = get_maxpool2d_out_size(width, 1, 3, 1)
+#
+#        #k_s  = 3
+#        #strd = 2
+#        #pad  = 2
+#        #self.conv4 = nn.Conv2d(32, 32,
+#        #    kernel_size=k_s, stride=strd, padding=pad)
+#        #self.mp4   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+#        #self.bn4   = nn.BatchNorm2d(32)
+#
+#        #height     = get_conv2d_out_size(height, pad, k_s, strd)
+#        #width      = get_conv2d_out_size(width, pad, k_s, strd)
+#        #height     = get_maxpool2d_out_size(height, 1, 3, 1)
+#        #width      = get_maxpool2d_out_size(width, 1, 3, 1)
 #
 #        #k_s  = 3
 #        #strd = 2
 #        #pad  = 2
 #        #self.conv5 = nn.Conv2d(32, 32, kernel_size=k_s,
 #        #    stride=strd, padding=pad)
+#        #self.mp5   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
 #        #self.bn5   = nn.BatchNorm2d(32)
+#
 #        #height     = get_conv2d_out_size(height, pad, k_s, strd)
 #        #width      = get_conv2d_out_size(width, pad, k_s, strd)
+#        #height     = get_maxpool2d_out_size(height, 1, 3, 1)
+#        #width      = get_maxpool2d_out_size(width, 1, 3, 1)
 #
 #        self.l1 = nn.Linear(height * width * 32, 1024)
 #        self.l2 = nn.Linear(1024, 256)
@@ -342,26 +255,28 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 #
 #
 #    def forward(self, _input):
-#
-#        out = _input.transpose(2, 3).transpose(1, 2)
-#
-#        out = self.conv1(out)
+#        out = self.conv1(_input)
+#        out = self.mp1(out)
 #        out = self.bn1(out)
 #        out = self.a_f(out)
 #
 #        out = self.conv2(out)
+#        out = self.mp2(out)
 #        out = self.bn2(out)
 #        out = self.a_f(out)
 #
 #        out = self.conv3(out)
+#        out = self.mp3(out)
 #        out = self.bn3(out)
 #        out = self.a_f(out)
 #
-#        out = self.conv4(out)
-#        out = self.bn4(out)
-#        out = self.a_f(out)
+#        #out = self.conv4(out)
+#        #out = self.mp4(out)
+#        #out = self.bn4(out)
+#        #out = self.a_f(out)
 #
 #        #out = self.conv5(out)
+#        #out = self.mp5(out)
 #        #out = self.bn5(out)
 #        #out = self.a_f(out)
 #
@@ -379,6 +294,94 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 #            out = F.softmax(out, dim=-1)
 #
 #        return out
+
+
+class AtariPixelNetwork(PPOConv2dNetwork):
+
+    def __init__(self,
+                 name,
+                 in_shape,
+                 out_dim,
+                 need_softmax = False):
+
+        super(AtariPixelNetwork, self).__init__()
+
+        self.name         = name
+        self.need_softmax = need_softmax
+        self.a_f          = torch.nn.ReLU()
+
+        height     = in_shape[0]
+        width      = in_shape[1]
+        channels   = in_shape[2]
+
+        k_s  = 5
+        strd = 2
+        pad  = 1
+        self.conv1 = nn.Conv2d(channels, 32,
+            kernel_size=k_s, stride=strd, padding=pad)
+        self.mp1   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+
+        height     = get_conv2d_out_size(height, pad, k_s, strd)
+        width      = get_conv2d_out_size(width, pad, k_s, strd)
+        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+        width      = get_maxpool2d_out_size(width, 1, 3, 1)
+
+        k_s  = 5
+        strd = 2
+        pad  = 1
+        self.conv2 = nn.Conv2d(32, 32,
+            kernel_size=k_s, stride=strd, padding=pad)
+        self.mp2   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+
+        height     = get_conv2d_out_size(height, pad, k_s, strd)
+        width      = get_conv2d_out_size(width, pad, k_s, strd)
+        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+        width      = get_maxpool2d_out_size(width, 1, 3, 1)
+
+        k_s  = 5
+        strd = 2
+        pad  = 1
+        self.conv3 = nn.Conv2d(32, 32,
+            kernel_size=k_s, stride=strd, padding=pad)
+        self.mp3   = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
+
+        height     = get_conv2d_out_size(height, pad, k_s, strd)
+        width      = get_conv2d_out_size(width, pad, k_s, strd)
+        height     = get_maxpool2d_out_size(height, 1, 3, 1)
+        width      = get_maxpool2d_out_size(width, 1, 3, 1)
+
+        self.l1 = nn.Linear(height * width * 32, 1024)
+        self.l2 = nn.Linear(1024, 256)
+        self.l3 = nn.Linear(256, out_dim)
+
+
+    def forward(self, _input):
+        out = self.conv1(_input)
+        out = self.mp1(out)
+        out = self.a_f(out)
+
+        out = self.conv2(out)
+        out = self.mp2(out)
+        out = self.a_f(out)
+
+        out = self.conv3(out)
+        out = self.mp3(out)
+        out = self.a_f(out)
+
+        out = out.flatten(start_dim=1)
+
+        out = self.l1(out)
+        out = self.a_f(out)
+
+        out = self.l2(out)
+        out = self.a_f(out)
+
+        out = self.l3(out)
+
+        if self.need_softmax:
+            out = F.softmax(out, dim=-1)
+
+        return out
 
 
 ########################################################################

@@ -96,10 +96,195 @@ class CartPoleEnvManager(object):
 
         return resize(screen).unsqueeze(0).numpy()
 
+
+#FIXME: change to inherit from gym.Wrapper
+#TODO: create a pixel wrapper that stacks frames rather than uses diff.
+class AtariEnvWrapper(object):
+
+    def __init__(self,
+                 env,
+                 min_lives = -1):
+
+        super(AtariEnvWrapper, self).__init__()
+
+        self.min_lives          = min_lives
+        self.env                = env
+        self.action_space       = env.action_space
+        self.single_state_shape = env.observation_space.shape
+
+    def _end_game(self, done):
+        return done or self.env.ale.lives() < self.min_lives
+
+
+class AtariGrayScale(AtariEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 min_lives = -1):
+
+        super(AtariGrayScale, self).__init__(
+            env,
+            min_lives)
+
+    def rgb_to_gray_fp(self, rgb_frame):
+        rgb_frame  = rgb_frame.astype(np.float32) / 255.
+        gray_dot   = np.array([0.2989, 0.587 , 0.114 ], dtype=np.float32)
+        gray_frame = np.expand_dims(np.dot(rgb_frame, gray_dot), axis=0)
+        return gray_frame
+
+
+class PixelDifferenceEnvWrapper(AtariGrayScale):
+
+    def __init__(self,
+                 env,
+                 min_lives = -1):
+
+        super(PixelDifferenceEnvWrapper, self).__init__(
+            env,
+            min_lives)
+
+        self.prev_frame   = None
+        self.action_space = env.action_space
+
+        prev_shape = env.observation_space.shape
+        new_shape  = (prev_shape[0], prev_shape[1], 1)
+        self.observation_space = CustomObservationSpace(new_shape)
+
+        self.reset()
+
+    def reset(self):
+        cur_frame = self.env.reset()
+        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        self.prev_frame = cur_frame
+
+        return self.prev_frame.copy()
+
+    def step(self, action):
+        cur_frame, reward, done, info = self.env.step(action)
+
+        cur_frame = self.rgb_to_gray_fp(cur_frame)
+
+        diff_frame      = cur_frame - self.prev_frame
+        self.prev_frame = cur_frame.copy()
+
+        done = self._end_game(done)
+
+        return diff_frame, reward, done, info
+
+    def render(self):
+        self.env.render()
+
+
+class PixelHistEnvWrapper(AtariGrayScale):
+
+    def __init__(self,
+                 env,
+                 hist_size = 2,
+                 min_lives = -1):
+
+        super(PixelHistEnvWrapper, self).__init__(
+            env,
+            min_lives)
+
+        self.frame_cache  = None
+        self.action_space = env.action_space
+        self.hist_size    = hist_size
+
+        prev_shape = env.observation_space.shape
+        #TODO: since we've changed the shape, we should update this
+        # to be accurate and update the networks.
+        new_shape  = (prev_shape[0], prev_shape[1], hist_size)
+        self.observation_space = CustomObservationSpace(new_shape)
+
+        self.reset()
+
+    def reset(self):
+        cur_frame = self.env.reset()
+        #FIXME: the ball doesn't always launch... it seems like
+        # we need a left or right movement to trigger a launch.
+        #cur_frame, _, _, _ = self.env.step(1)
+        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+
+        return self.frame_cache.copy()
+
+    def step(self, action):
+        cur_frame, reward, done, info = self.env.step(action)
+
+        cur_frame = self.rgb_to_gray_fp(cur_frame)
+
+        self.frame_cache = np.roll(self.frame_cache, 1, axis=0)
+        self.frame_cache[-1] = cur_frame.copy()
+
+        done = self._end_game(done)
+
+        return self.frame_cache, reward, done, info
+
+    def render(self):
+        self.env.render()
+
+
+class RAMHistEnvWrapper(AtariEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 hist_size = 2,
+                 min_lives = -1):
+
+        super(RAMHistEnvWrapper, self).__init__(
+            env,
+            min_lives)
+
+        ram_shape   = env.observation_space.shape
+        cache_shape = (ram_shape[0] * hist_size,)
+
+        self.observation_space = CustomObservationSpace(
+            cache_shape)
+
+        self.min_lives          = min_lives
+        self.ram_size           = ram_shape[0]
+        self.cache_size         = cache_shape[0]
+        self.hist_size          = hist_size
+        self.env                = env
+        self.ram_cache          = None
+        self.action_space       = env.action_space
+        self.single_state_shape = env.observation_space.shape
+
+        self.reset()
+
+    def _reset_ram_cache(self,
+                         cur_ram):
+        self.ram_cache = np.tile(cur_ram, self.hist_size)
+
+    def reset(self):
+        cur_ram  = self.env.reset()
+        cur_ram  = cur_ram.astype(np.float32) / 255.
+        self._reset_ram_cache(cur_ram)
+
+        return self.ram_cache.copy()
+
+    def step(self, action):
+        cur_ram, reward, done, info = self.env.step(action)
+        cur_ram  = cur_ram.astype(np.float32) / 255.
+
+        self.ram_cache = np.roll(self.ram_cache, -self.ram_size)
+
+        offset = self.cache_size - self.ram_size
+        self.ram_cache[offset :] = cur_ram.copy()
+
+        done = self._end_game(done)
+
+        return self.ram_cache.copy(), reward, done, info
+
+    def render(self):
+        self.env.render()
+
+
 def run_ppo(env,
             network,
             device,
             action_type,
+            batch_size        = 256,
             lr                = 3e-4,
             lr_dec            = 0.99,
             lr_dec_freq       = 500,
@@ -118,6 +303,7 @@ def run_ppo(env,
     ppo = PPO(env               = env,
               network           = network,
               device            = device,
+              batch_size        = batch_size,
               action_type       = action_type,
               lr                = lr,
               lr_dec            = lr_dec,
@@ -373,13 +559,18 @@ def assault_pixels_ppo(state_path,
         env = gym.make(
             'Assault-v0')
 
-    run_ppo(env               = env,
+    wrapped_env = PixelHistEnvWrapper(
+        env       = env,
+        hist_size = 2,
+        min_lives = 5)
+
+    run_ppo(env               = wrapped_env,
             network           = AtariPixelNetwork,
             action_type       = "discrete",
             lr                = 0.0001,
             lr_dec_freq       = 30,
-            lr_dec            = 0.95,
-            max_ts_per_ep     = 1000,
+            lr_dec            = 0.99,
+            max_ts_per_ep     = 10000,
             use_gae           = True,
             use_icm           = False,
             state_path        = state_path,
@@ -391,3 +582,101 @@ def assault_pixels_ppo(state_path,
             intr_reward_scale = 0.01,
             test              = test)
 
+
+def breakout_pixels_ppo(state_path,
+                        load_state,
+                        render,
+                        num_timesteps,
+                        device,
+                        test = False):
+
+    if render:
+        #
+        # NOTE: we don't want to explicitly call render for atari games.
+        # They have more advanced ways of rendering.
+        #
+        render = False
+
+        env = gym.make(
+            'Breakout-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1,
+            render_mode = 'human')
+    else:
+        env = gym.make(
+            'Breakout-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1)
+
+    wrapped_env = PixelHistEnvWrapper(
+        env       = env,
+        hist_size = 2,
+        min_lives = 5)
+
+    run_ppo(env               = wrapped_env,
+            network           = AtariPixelNetwork,
+            action_type       = "discrete",
+            lr                = 0.0001,
+            lr_dec_freq       = 50,
+            lr_dec            = 0.9999,
+            max_ts_per_ep     = 10000,
+            use_gae           = True,
+            use_icm           = False,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 0.01,
+            test              = test)
+
+
+def breakout_ram_ppo(state_path,
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test = False):
+
+    if render:
+        #
+        # NOTE: we don't want to explicitly call render for atari games.
+        # They have more advanced ways of rendering.
+        #
+        render = False
+
+        env = gym.make(
+            'Breakout-ram-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1,
+            render_mode = 'human')
+    else:
+        env = gym.make(
+            'Breakout-ram-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1)
+
+    wrapped_env = RAMHistEnvWrapper(
+        env       = env,
+        hist_size = 3,
+        min_lives = 5)
+
+    run_ppo(env               = wrapped_env,
+            network           = AtariRAMNetwork,
+            batch_size        = 256,
+            action_type       = "discrete",
+            lr                = 0.0001,
+            lr_dec_freq       = 20,
+            lr_dec            = 0.999,
+            max_ts_per_ep     = 1000,
+            use_gae           = False,
+            use_icm           = False,
+            state_path        = state_path,
+            load_state        = load_state,
+            render            = render,
+            num_timesteps     = num_timesteps,
+            device            = device,
+            ext_reward_scale  = 1.0,
+            intr_reward_scale = 0.1,
+            test              = test)

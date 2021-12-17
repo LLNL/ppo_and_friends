@@ -24,7 +24,7 @@ class PPO(object):
                  lr_dec              = 0.99,
                  lr_dec_freq         = 500,
                  max_ts_per_ep       = 200,
-                 batch_size          = 128,
+                 batch_size          = 256,
                  timesteps_per_batch = 2048,
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
@@ -34,6 +34,7 @@ class PPO(object):
                  icm_beta            = 0.8,
                  ext_reward_scale    = 1.0,
                  intr_reward_scale   = 1.0,
+                 entropy_weight      = 0.01,
                  render              = False,
                  load_state          = False,
                  state_path          = "./"):
@@ -62,6 +63,7 @@ class PPO(object):
         self.gamma               = gamma
         self.epochs_per_iter     = epochs_per_iter
         self.clip                = clip
+        self.entropy_weight      = entropy_weight
 
         #
         # Create a dictionary to track the status of training.
@@ -353,14 +355,38 @@ class PPO(object):
 
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
 
+            if obs.shape[0] == 1:
+                print("Skipping batch of size 1")
+                print("    obs shape: {}".format(obs.shape))
+                continue
+
             values, curr_log_probs, entropy = self.evaluate(obs, actions)
 
+            #
+            # We udpate our policy using gradient ascent. Our advantages relay
+            # how much better or worse the outcome of various actions were than
+            # "expected" (from our value approximator). Since actions that are
+            # already very likely will be taken more often and thus updated
+            # more often, we divide the gradient of the current probabilities
+            # by the original probabilities. This helps lessen the impact of
+            # frequent updates of probable actions while giving less probable
+            # actions a chance to be considered.
+            # We take the difference between the current and previous log probs
+            # to further constrain updates and clip the output to a specified
+            # range.
+            #
+            # FIXME: what's with the exponent?
+            #
             ratios = torch.exp(curr_log_probs - log_probs)
             surr1  = ratios * advantages
-            surr2  = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * \
-                advantages
+            surr2  = torch.clamp(
+                ratios, 1 - self.clip, 1 + self.clip) * advantages
 
-            actor_loss  = (-torch.min(surr1, surr2)).mean() - 0.01 * entropy.mean()
+            #
+            # We negate here to perform gradient ascent rather than descent.
+            #
+            actor_loss  = (-torch.min(surr1, surr2)).mean()
+            actor_loss -= self.entropy_weight * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
