@@ -635,65 +635,6 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         return out
 
 
-class ObsEncodedActorCrtic(PPONetwork):
-
-    def __init__(self,
-                 name,
-                 in_dim,
-                 policy_out_dim,
-                 encoded_dim = 256):
-
-        super(ObsEncodedActorCritic, self).__init__()
-
-        self.name = name
-
-        if type(in_dim) == tuple:
-            self.encoder = Conv2dObservationEncoder(
-                in_dim,
-                encoded_dim)
-        else:
-            self.encoder = LinearObservationEncoder(
-                 encoded_dim,
-                 encoded_dim,
-                 encoded_dim)
-
-        self.actor_head = SimpleFeedForward(
-            name + "_policy",
-            encoded_dim,
-            policy_out_dim,
-            True)
-
-        self.critic_head = SimpleFeedForward(
-            name + "_value",
-            encoded_dim,
-            1,
-            False)
-
-    def forward(self, _input):
-
-        enc_obs = self.encoder(_input)
-        a_out   = self.actor_head(enc_obs)
-        c_out   = self.critic_head(enc_obs)
-
-        return a_out, c_out
-
-
-class StandardActorCriticWrapper(object):
-
-    def __init__(self,
-                 actor,
-                 critic):
-
-        self.actor  = actor
-        self.critic = critic
-
-    def forward(self, _inputs):
-        a_out = self.actor(_inputs)
-        c_out = self.critic(_inputs)
-
-        return a_out, c_out
-
-
 ########################################################################
 #                           ICM Networks                               #
 ########################################################################
