@@ -9,7 +9,7 @@ from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
 from utils import EpisodeInfo, PPODataset
-from networks import LinearICM
+from networks import ICM, LinearObservationEncoder
 
 
 class PPO(object):
@@ -19,7 +19,8 @@ class PPO(object):
                  network,
                  device,
                  action_type,
-                 icm_network         = LinearICM,
+                 icm_network         = ICM,
+                 icm_encoder         = LinearObservationEncoder,
                  lr                  = 3e-4,
                  lr_dec              = 0.99,
                  lr_dec_freq         = 500,
@@ -121,9 +122,10 @@ class PPO(object):
 
         if self.use_icm:
             self.icm_model = icm_network(
-                obs_dim,
-                self.act_dim,
-                self.action_type)
+                obs_dim     = obs_dim,
+                act_dim     = self.act_dim,
+                action_type = self.action_type,
+                obs_encoder = icm_encoder)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -333,8 +335,6 @@ class PPO(object):
 
         ts = 0
         while ts < total_timesteps:
-            torch.cuda.empty_cache()
-
             dataset = self.rollout()
 
             ts += np.sum(dataset.ep_lens)
@@ -345,7 +345,7 @@ class PPO(object):
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
-                shuffle    = True)
+                shuffle    = False)#FIXME: does shuffling really matter?
 
             for _ in range(self.epochs_per_iter):
                 self._ppo_batch_train(data_loader)
@@ -360,6 +360,7 @@ class PPO(object):
     def _ppo_batch_train(self, data_loader):
 
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
+            torch.cuda.empty_cache()
 
             if obs.shape[0] == 1:
                 print("Skipping batch of size 1")
@@ -413,6 +414,7 @@ class PPO(object):
         counter = 0
 
         for obs, next_obs, actions, _, _, _ in data_loader:
+            torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
 

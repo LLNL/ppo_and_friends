@@ -329,7 +329,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
         #
         # Next, launch the ball.
         #
-        cur_frame, _, _, _ = self.env.step(1)
+        cur_ram, _, _, _ = self.env.step(1)
 
         cur_ram  = cur_ram.astype(np.float32) / 255.
         self._reset_ram_cache(cur_ram)
@@ -363,9 +363,6 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         # direction from the default start is enough to get to the wall.
         #
         self._set_random_start_pos()
-
-        for _ in range(rand_repeat):
-            self.env.step(rand_step)
 
         #
         # Next, launch the ball.

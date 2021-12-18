@@ -42,6 +42,249 @@ def get_maxpool2d_out_size(in_size,
 
 
 ########################################################################
+#                        Observation Encoders                          #
+########################################################################
+
+class LinearObservationEncoder(nn.Module):
+
+    def __init__(self,
+                 obs_dim,
+                 encoded_dim,
+                 hidden_size):
+        """
+            A simple encoder for encoding observations into
+            forms that only contain information needed by the
+            actor. In other words, we want to teach this model
+            to get rid of any noise that may exist in the observation.
+            By noise, we mean anything that does not pertain to
+            the actions being taken.
+
+            This implementation uses a simple feed-forward network.
+        """
+
+        super(LinearObservationEncoder, self).__init__()
+
+        self.l_relu = nn.LeakyReLU()
+
+        self.enc_1  = nn.Linear(obs_dim, hidden_size)
+        self.enc_2  = nn.Linear(hidden_size, hidden_size)
+        self.enc_3  = nn.Linear(hidden_size, hidden_size)
+        self.enc_4  = nn.Linear(hidden_size, encoded_dim)
+
+    def forward(self,
+                obs):
+
+        obs = obs.flatten(start_dim = 1)
+
+        enc_obs = self.enc_1(obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.enc_2(enc_obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.enc_3(enc_obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.enc_4(enc_obs)
+        return enc_obs
+
+
+class Conv2dObservationEncoder(nn.Module):
+
+    def __init__(self,
+                 in_shape,
+                 encoded_dim):
+        """
+            A simple encoder for encoding observations into
+            forms that only contain information needed by the
+            actor. In other words, we want to teach this model
+            to get rid of any noise that may exist in the observation.
+            By noise, we mean anything that does not pertain to
+            the actions being taken.
+
+            This implementation uses 2d convolutions followed by
+            linear layers.
+        """
+
+        super(Conv2dObservationEncoder, self).__init__()
+
+        self.l_relu = nn.LeakyReLU()
+
+        height     = in_shape[0]
+        width      = in_shape[1]
+        channels   = in_shape[2]
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.conv_1 = nn.Conv2d(channels, 8, kernel_size=5, stride=1)
+        height      = get_conv2d_out_size(height, pad, k_s, strd)
+        width       = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.mp_1 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.conv_2 = nn.Conv2d(16, 16, kernel_size=5, stride=1)
+        height      = get_conv2d_out_size(height, pad, k_s, strd)
+        width       = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.mp_2 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.conv_3 = nn.Conv2d(16, 16, kernel_size=5, stride=1)
+        height      = get_conv2d_out_size(height, pad, k_s, strd)
+        width       = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 3
+        pad  = 0
+        strd = 1
+        self.mp_3 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        self.linear_encoder = LinearObservationEncoder(
+            height * width * 16,
+            encoded_dim,
+            encoded_dim)
+
+
+    def forward(self,
+                obs):
+
+        enc_obs = self.conv_1(obs)
+        enc_obs = self.mp_1(enc_obs)
+
+        enc_obs = self.conv_2(enc_obs)
+        enc_obs = self.mp_2(enc_obs)
+
+        enc_obs = self.conv_3(enc_obs)
+        enc_obs = self.mp_3(enc_obs)
+
+        enc_obs = enc_obs.flatten(start_dim = 1)
+
+        enc_obs = self.linear_encoder(enc_obs)
+
+        return enc_obs
+
+
+class Conv2dObservationEncoder_orig(nn.Module):
+
+    def __init__(self,
+                 in_shape,
+                 encoded_dim,
+                 hidden_size):
+        """
+            A simple encoder for encoding observations into
+            forms that only contain information needed by the
+            actor. In other words, we want to teach this model
+            to get rid of any noise that may exist in the observation.
+            By noise, we mean anything that does not pertain to
+            the actions being taken.
+
+            This implementation uses 2d convolutions followed by
+            linear layers.
+        """
+
+        super(Conv2dObservationEncoder_orig, self).__init__()
+
+        self.l_relu = nn.LeakyReLU()
+
+        height     = in_shape[0]
+        width      = in_shape[1]
+        channels   = in_shape[2]
+
+        k_s  = 5
+        pad  = 0
+        strd = 1
+        self.conv_1 = nn.Conv2d(channels, 32, kernel_size=5, stride=1)
+        height      = get_conv2d_out_size(height, pad, k_s, strd)
+        width       = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 5
+        pad  = 0
+        strd = 2
+        self.mp_1 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 5
+        pad  = 0
+        strd = 1
+        self.conv_2   = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+        height       = get_conv2d_out_size(height, pad, k_s, strd)
+        width        = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 5
+        pad  = 0
+        strd = 2
+        self.mp_2 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 5
+        pad  = 0
+        strd = 1
+        self.conv_3   = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+        height       = get_conv2d_out_size(height, pad, k_s, strd)
+        width        = get_conv2d_out_size(width, pad, k_s, strd)
+
+        k_s  = 5
+        pad  = 0
+        strd = 2
+        self.mp_3 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
+
+        self.l1  = nn.Linear(height * width * 32, hidden_size)
+        self.l2  = nn.Linear(hidden_size, hidden_size)
+        self.l3  = nn.Linear(hidden_size, hidden_size)
+        self.l4  = nn.Linear(hidden_size, encoded_dim)
+
+
+    def forward(self,
+                obs):
+
+        enc_obs = self.conv_1(obs)
+        enc_obs = self.mp_1(enc_obs)
+
+        enc_obs = self.conv_2(enc_obs)
+        enc_obs = self.mp_2(enc_obs)
+
+        enc_obs = self.conv_3(enc_obs)
+        enc_obs = self.mp_3(enc_obs)
+
+        enc_obs = enc_obs.flatten(start_dim = 1)
+
+        enc_obs = self.l1(enc_obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.l2(enc_obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.l3(enc_obs)
+        enc_obs = self.l_relu(enc_obs)
+
+        enc_obs = self.l4(enc_obs)
+
+        return enc_obs
+
+
+
+########################################################################
 #                        Actor Critic Networks                         #
 ########################################################################
 
@@ -351,8 +594,10 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         width      = get_maxpool2d_out_size(width, 1, 3, 1)
 
         self.l1 = nn.Linear(height * width * 32, 1024)
-        self.l2 = nn.Linear(1024, 256)
-        self.l3 = nn.Linear(256, out_dim)
+        self.l2 = nn.Linear(1024, 512)
+        self.l3 = nn.Linear(512, 256)
+        self.l4 = nn.Linear(256, 128)
+        self.l5 = nn.Linear(128, out_dim)
 
 
     def forward(self, _input):
@@ -377,6 +622,12 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         out = self.a_f(out)
 
         out = self.l3(out)
+        out = self.a_f(out)
+
+        out = self.l4(out)
+        out = self.a_f(out)
+
+        out = self.l5(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
@@ -384,54 +635,68 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         return out
 
 
+class ObsEncodedActorCrtic(PPONetwork):
+
+    def __init__(self,
+                 name,
+                 in_dim,
+                 policy_out_dim,
+                 encoded_dim = 256):
+
+        super(ObsEncodedActorCritic, self).__init__()
+
+        self.name = name
+
+        if type(in_dim) == tuple:
+            self.encoder = Conv2dObservationEncoder(
+                in_dim,
+                encoded_dim)
+        else:
+            self.encoder = LinearObservationEncoder(
+                 encoded_dim,
+                 encoded_dim,
+                 encoded_dim)
+
+        self.actor_head = SimpleFeedForward(
+            name + "_policy",
+            encoded_dim,
+            policy_out_dim,
+            True)
+
+        self.critic_head = SimpleFeedForward(
+            name + "_value",
+            encoded_dim,
+            1,
+            False)
+
+    def forward(self, _input):
+
+        enc_obs = self.encoder(_input)
+        a_out   = self.actor_head(enc_obs)
+        c_out   = self.critic_head(enc_obs)
+
+        return a_out, c_out
+
+
+class StandardActorCriticWrapper(object):
+
+    def __init__(self,
+                 actor,
+                 critic):
+
+        self.actor  = actor
+        self.critic = critic
+
+    def forward(self, _inputs):
+        a_out = self.actor(_inputs)
+        c_out = self.critic(_inputs)
+
+        return a_out, c_out
+
+
 ########################################################################
 #                           ICM Networks                               #
 ########################################################################
-
-
-#
-# Linear setup.
-#
-class LinearObservationEncoder(nn.Module):
-
-    def __init__(self,
-                 obs_dim,
-                 encoded_dim,
-                 hidden_size):
-        """
-            A simple encoder for encoding observations into
-            forms that only contain information needed by the
-            actor. In other words, we want to teach this model
-            to get rid of any noise that may exist in the observation.
-            By noise, we mean anything that does not pertain to
-            the actions being taken.
-
-            This implementation uses a simple feed-forward network.
-        """
-
-        super(LinearObservationEncoder, self).__init__()
-
-        self.l_relu = nn.LeakyReLU()
-
-        self.enc_1  = nn.Linear(obs_dim, hidden_size)
-        self.enc_2  = nn.Linear(hidden_size, hidden_size)
-        self.enc_3  = nn.Linear(hidden_size, hidden_size)
-        self.enc_4  = nn.Linear(hidden_size, encoded_dim)
-
-    def forward(self,
-                obs):
-
-        enc_obs = self.enc_1(obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_2(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_3(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_4(enc_obs)
-        return enc_obs
 
 
 class LinearInverseModel(nn.Module):
@@ -541,18 +806,19 @@ class LinearForwardModel(nn.Module):
         return out
 
 
-class LinearICM(PPONetwork):
+class ICM(PPONetwork):
 
     def __init__(self,
                  obs_dim,
                  act_dim,
                  action_type,
+                 obs_encoder  = LinearObservationEncoder,
                  reward_scale = 0.01):
         """
             The Intrinsic Curiosit Model (ICM).
         """
 
-        super(LinearICM, self).__init__()
+        super(ICM, self).__init__()
 
         self.act_dim      = act_dim
         self.reward_scale = reward_scale
@@ -568,7 +834,7 @@ class LinearICM(PPONetwork):
         #
         # Observation encoder.
         #
-        self.obs_encoder = LinearObservationEncoder(
+        self.obs_encoder = obs_encoder(
             obs_dim,
             encoded_obs_dim,
             hidden_dims)
@@ -595,9 +861,6 @@ class LinearICM(PPONetwork):
                 obs_1,
                 obs_2,
                 actions):
-
-        obs_1 = obs_1.flatten(start_dim = 1)
-        obs_2 = obs_2.flatten(start_dim = 1)
 
         #
         # First, encode the observations.
@@ -627,62 +890,3 @@ class LinearICM(PPONetwork):
 
         return intrinsic_reward, inv_loss, f_loss
 
-
-#
-# Conv2d setup.
-#
-class Conv2dObservationEncoder(nn.Module):
-
-    def __init__(self,
-                 obs_dim,
-                 encoded_dim,
-                 hidden_size):
-        """
-            A simple encoder for encoding observations into
-            forms that only contain information needed by the
-            actor. In other words, we want to teach this model
-            to get rid of any noise that may exist in the observation.
-            By noise, we mean anything that does not pertain to
-            the actions being taken.
-
-            This implementation uses 2d convolutions followed by
-            deconvolutions.
-        """
-
-        super(Conv2dObservationEncoder, self).__init__()
-
-        self.l_relu = nn.LeakyReLU()
-
-        #FIXME: need to figure out how to get this.
-        num_channels = obs_dim
-
-        self.enc_1 = nn.Conv2d(num_channels, 64, kernel_size=5, stride=1)
-        self.enc_2 = nn.Conv2d(64, 64, kernel_size=5, stride=1)
-        self.enc_3 = nn.Conv2d(64, 64, kernel_size=5, stride=1)
-
-        self.enc_4 = nn.ConvTranspose2d(64, 64, kernel_size=5, stride=1)
-        self.enc_5 = nn.ConvTranspose2d(64, 64, kernel_size=5, stride=1)
-        self.enc_6 = nn.ConvTranspose2d(64, num_channels, kernel_size=5, stride=1)
-
-
-    def forward(self,
-                obs):
-
-        enc_obs = self.enc_1(obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_2(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_3(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_4(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_5(enc_obs)
-        enc_obs = self.l_relu(enc_obs)
-
-        enc_obs = self.enc_6(enc_obs)
-
-        return enc_obs
