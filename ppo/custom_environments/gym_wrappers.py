@@ -117,11 +117,18 @@ class AtariGrayScale(AtariEnvWrapper):
             env,
             min_lives)
 
-    def rgb_to_gray_fp(self, rgb_frame):
+    def rgb_to_cropped_gray_fp(self,
+                               rgb_frame,
+                               h_start = 0,
+                               h_stop  = -1,
+                               w_start = 0,
+                               w_stop  = -1):
+
         rgb_frame  = rgb_frame.astype(np.float32) / 255.
         gray_dot   = np.array([0.2989, 0.587 , 0.114 ], dtype=np.float32)
         gray_frame = np.expand_dims(np.dot(rgb_frame, gray_dot), axis=0)
-        return gray_frame
+
+        return gray_frame[:, h_start : h_stop, w_start : w_stop]
 
 
 class PixelDifferenceEnvWrapper(AtariGrayScale):
@@ -129,6 +136,13 @@ class PixelDifferenceEnvWrapper(AtariGrayScale):
     def __init__(self,
                  env,
                  min_lives = -1):
+        #
+        # Allow these variables to be over-written by sub-classes.
+        #
+        self.h_start = 0
+        self.h_stop  = -1
+        self.w_start = 0
+        self.w_stop  = -1
 
         super(PixelDifferenceEnvWrapper, self).__init__(
             env       = env,
@@ -136,14 +150,21 @@ class PixelDifferenceEnvWrapper(AtariGrayScale):
 
         self.prev_frame   = None
         self.action_space = env.action_space
+        self.h_start      = 0
 
         prev_shape = env.observation_space.shape
-        new_shape  = (prev_shape[0], prev_shape[1], 1)
+        new_shape  = (1, prev_shape[0], prev_shape[1])
         self.observation_space = CustomObservationSpace(new_shape)
 
     def reset(self):
         cur_frame = self.env.reset()
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        cur_frame = self.rgb_to_cropped_gray_fp(
+            cur_frame,
+            h_start = self.h_start,
+            h_stop  = self.h_stop,
+            w_start = self.w_start,
+            w_stop  = self.w_stop)
+
         self.prev_frame = cur_frame
 
         return self.prev_frame.copy()
@@ -151,7 +172,12 @@ class PixelDifferenceEnvWrapper(AtariGrayScale):
     def step(self, action):
         cur_frame, reward, done, info = self.env.step(action)
 
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        cur_frame = self.rgb_to_cropped_gray_fp(
+            cur_frame,
+            h_start = self.h_start,
+            h_stop  = self.h_stop,
+            w_start = self.w_start,
+            w_stop  = self.w_stop)
 
         diff_frame      = cur_frame - self.prev_frame
         self.prev_frame = cur_frame.copy()
@@ -171,6 +197,16 @@ class PixelHistEnvWrapper(AtariGrayScale):
                  hist_size = 2,
                  min_lives = -1):
 
+        prev_shape = env.observation_space.shape
+
+        #
+        # Allow these variables to be over-written by sub-classes.
+        #
+        self.h_start = 0
+        self.h_stop  = prev_shape[0]
+        self.w_start = 0
+        self.w_stop  = prev_shape[1]
+
         super(PixelHistEnvWrapper, self).__init__(
             env       = env,
             min_lives = min_lives)
@@ -179,15 +215,18 @@ class PixelHistEnvWrapper(AtariGrayScale):
         self.action_space = env.action_space
         self.hist_size    = hist_size
 
-        prev_shape = env.observation_space.shape
-        #TODO: since we've changed the shape, we should update this
-        # to be accurate and update the networks.
-        new_shape  = (prev_shape[0], prev_shape[1], hist_size)
+        new_shape  = (hist_size, prev_shape[0], prev_shape[1])
         self.observation_space = CustomObservationSpace(new_shape)
 
     def reset(self):
         cur_frame = self.env.reset()
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        cur_frame = self.rgb_to_cropped_gray_fp(
+            cur_frame,
+            h_start = self.h_start,
+            h_stop  = self.h_stop,
+            w_start = self.w_start,
+            w_stop  = self.w_stop)
+
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
 
         return self.frame_cache.copy()
@@ -195,7 +234,20 @@ class PixelHistEnvWrapper(AtariGrayScale):
     def step(self, action):
         cur_frame, reward, done, info = self.env.step(action)
 
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        cur_frame = self.rgb_to_cropped_gray_fp(
+            cur_frame,
+            h_start = self.h_start,
+            h_stop  = self.h_stop,
+            w_start = self.w_start,
+            w_stop  = self.w_stop)
+
+        #FIXME: remove
+        #from PIL import Image
+        #import sys
+        #foo = (cur_frame.squeeze() * 255.).astype(np.uint8)
+        #img = Image.fromarray(foo, 'L')
+        #img.show()
+        #sys.exit(1)
 
         self.frame_cache = np.roll(self.frame_cache, 1, axis=0)
         self.frame_cache[-1] = cur_frame.copy()
@@ -350,6 +402,17 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             hist_size = hist_size,
             min_lives = min_lives)
 
+        #
+        # Crop the images by removing the "score" information.
+        #
+        prev_shape   = env.observation_space.shape
+        self.h_start = 20
+        self.h_stop  = prev_shape[0]
+        self.w_start = 0
+        self.w_stop  = prev_shape[1]
+        new_shape    = (hist_size, prev_shape[0] - self.h_start, prev_shape[1])
+        self.observation_space = CustomObservationSpace(new_shape)
+
     def step(self, action):
         action = self.action_map[action]
         return PixelHistEnvWrapper.step(self, action)
@@ -370,7 +433,13 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         cur_frame, _, _, _ = self.env.step(1)
 
 
-        cur_frame = self.rgb_to_gray_fp(cur_frame)
+        cur_frame = self.rgb_to_cropped_gray_fp(
+            cur_frame,
+            h_start = self.h_start,
+            h_stop  = self.h_stop,
+            w_start = self.w_start,
+            w_stop  = self.w_stop)
+
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
 
         return self.frame_cache.copy()

@@ -110,9 +110,9 @@ class Conv2dObservationEncoder(nn.Module):
 
         self.l_relu = nn.LeakyReLU()
 
-        height     = in_shape[0]
-        width      = in_shape[1]
-        channels   = in_shape[2]
+        channels   = in_shape[0]
+        height     = in_shape[1]
+        width      = in_shape[2]
 
         k_s  = 3
         pad  = 0
@@ -203,9 +203,9 @@ class Conv2dObservationEncoder_orig(nn.Module):
 
         self.l_relu = nn.LeakyReLU()
 
-        height     = in_shape[0]
-        width      = in_shape[1]
-        channels   = in_shape[2]
+        channels   = in_shape[0]
+        height     = in_shape[1]
+        width      = in_shape[2]
 
         k_s  = 5
         pad  = 0
@@ -309,8 +309,9 @@ class SimpleFeedForward(PPONetwork):
         self.l_relu = torch.nn.LeakyReLU()
 
     def forward(self, _input):
+        out = _input.flatten(start_dim = 1)
 
-        out = self.l1(_input)
+        out = self.l1(out)
         out = self.l_relu(out)
 
         out = self.l2(out)
@@ -423,9 +424,9 @@ class AtariRAMNetwork(PPONetwork):
 #        self.need_softmax = need_softmax
 #        self.a_f          = torch.nn.ReLU()
 #
-#        height     = in_shape[0]
-#        width      = in_shape[1]
-#        channels   = in_shape[2]
+#        channels   = in_shape[0]
+#        height     = in_shape[1]
+#        width      = in_shape[2]
 #
 #        k_s  = 8
 #        strd = 4
@@ -553,9 +554,9 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         self.need_softmax = need_softmax
         self.a_f          = torch.nn.ReLU()
 
-        height     = in_shape[0]
-        width      = in_shape[1]
-        channels   = in_shape[2]
+        channels   = in_shape[0]
+        height     = in_shape[1]
+        width      = in_shape[2]
 
         k_s  = 5
         strd = 2
@@ -823,7 +824,6 @@ class ICM(PPONetwork):
         # Forward model prediction.
         #
         obs_2_pred = self.forward_model(enc_obs_1, actions)
-
         f_loss = self.mse_loss(obs_2_pred, enc_obs_2)
 
         intrinsic_reward = (self.reward_scale / 2.0) * f_loss.sum(dim=-1)

@@ -72,7 +72,9 @@ class EpisodeInfo(object):
 
         return cumulative_array
 
-    def _compute_gae_advantages(self, padded_values):
+    def _compute_gae_advantages(self,
+                                padded_values,
+                                rewards):
         """
             Compute the General Advantage Estimates. This follows the
             general GAE equation.
@@ -86,8 +88,7 @@ class EpisodeInfo(object):
             Returns:
                 An array containing the GAEs.
         """
-
-        deltas = self.rewards + (self.gamma * padded_values[1:]) - \
+        deltas = rewards + (self.gamma * padded_values[1:]) - \
             padded_values[:-1]
 
         sum_gamma = self.gamma * self.lambd
@@ -127,16 +128,31 @@ class EpisodeInfo(object):
         self.length      = episode_length
         self.is_finished = True
 
-        self.rewards_to_go = self.compute_discounted_sums(self.rewards,
-            self.gamma)
-
         if self.use_gae:
-            padded_values  = np.array(self.values + [ending_value],
+            padded_values = np.array(self.values + [ending_value],
                 dtype=np.float32)
 
-            self.advantages = self._compute_gae_advantages(padded_values)
+            #FIXME: using the padded rewards appears to cause issues...
+            # investigate?
+            #padded_rewards = np.array(self.rewards + [ending_value],
+            #    dtype=np.float32)
+
+            #self.rewards_to_go = self.compute_discounted_sums(
+            #    padded_rewards,
+            #    self.gamma)[:-1]
+            self.rewards_to_go = self.compute_discounted_sums(
+                self.rewards,
+                self.gamma)
+
+            self.advantages = self._compute_gae_advantages(
+                padded_values,
+                self.rewards)
 
         else:
+            self.rewards_to_go = self.compute_discounted_sums(
+                self.rewards,
+                self.gamma)
+
             self.advantages = self._compute_standard_advantages()
 
 
@@ -196,6 +212,7 @@ class PPODataset(Dataset):
 
         self.advantages = torch.tensor(self.advantages,
             dtype=torch.float).to(self.device)
+
         self.advantages = (self.advantages - self.advantages.mean()) / \
             (self.advantages.std() + 1e-10)
 

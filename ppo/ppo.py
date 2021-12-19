@@ -65,6 +65,7 @@ class PPO(object):
         self.epochs_per_iter     = epochs_per_iter
         self.clip                = clip
         self.entropy_weight      = entropy_weight
+        self.obs_shape           = env.observation_space.shape
 
         #
         # Create a dictionary to track the status of training.
@@ -76,6 +77,10 @@ class PPO(object):
         self.status_dict["extrinsic score mean"] = 0
         self.status_dict["top score"]            = 0
         self.status_dict["total episodes"]       = 0
+        self.status_dict["entropy"]              = 0
+        self.status_dict["weighted entropy"]     = 0
+        self.status_dict["actor loss"]           = 0
+        self.status_dict["critic loss"]          = 0
         self.status_dict["lr"]                   = self.lr
 
         need_softmax = False
@@ -89,7 +94,7 @@ class PPO(object):
                 break
 
         if use_conv2d_setup:
-            obs_dim = env.observation_space.shape
+            obs_dim = self.obs_shape
 
             self.actor = network(
                 "actor", 
@@ -104,7 +109,7 @@ class PPO(object):
                 False)
 
         else:
-            obs_dim = env.observation_space.shape[0]
+            obs_dim = self.obs_shape[0]
             self.actor = network(
                 "actor", 
                 obs_dim, 
@@ -222,12 +227,20 @@ class PPO(object):
             obs              = self.env.reset()
             ep_score         = 0
 
+            #
+            # HACK: some environments are buggy and return inconsistent
+            # observation shapes. We can enforce shapes here.
+            #
+            print("{} vs {}".format(obs.shape, self.obs_shape))#FIXME:
+            obs = obs.reshape(self.obs_shape)
+
             for ts in range(self.max_ts_per_ep):
                 if self.render:
                     self.env.render()
 
                 total_ts += 1
                 action, log_prob = self.get_action(obs)
+
 
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
                 t_obs    = t_obs.unsqueeze(0)
@@ -241,8 +254,21 @@ class PPO(object):
 
                 elif self.action_type == "continuous":
                     obs, ext_reward, done, _ = self.env.step(action)
-                    ep_action = action.item()
-                    ep_value  = value
+                    ep_action  = action.item()
+                    ep_value   = value.item()
+
+                #
+                # HACK: some environments are buggy and return inconsistent
+                # observation shapes. We can enforce shapes here.
+                #
+                obs = obs.reshape(self.obs_shape)
+
+                #
+                # Some gym environments return arrays of single elements,
+                # which is very annoying...
+                #
+                if type(ext_reward) == np.ndarray:
+                    ext_reward = ext_reward[0]
 
                 natural_reward = ext_reward
                 ext_reward    *= self.ext_reward_scale
@@ -258,7 +284,10 @@ class PPO(object):
                             dtype=torch.long).to(self.device).unsqueeze(0)
                     elif self.action_type == "continuous":
                         action = torch.tensor(action,
-                            dtype=torch.float).to(self.device).unsqueeze(0)
+                            dtype=torch.float).to(self.device)
+
+                    if len(action.shape) != 2:
+                        action = action.unsqueeze(0)
 
                     with torch.no_grad():
                         intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
@@ -286,11 +315,14 @@ class PPO(object):
                 total_ext_rewards += natural_reward
 
                 if done:
-                    episode_info.end_episode(0.0, ts + 1)
+                    episode_info.end_episode(0, ts + 1)
                     break
 
                 elif ts == (self.max_ts_per_ep - 1):
-                    episode_info.end_episode(value, ts + 1)
+                    t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
+                    t_obs     = t_obs.unsqueeze(0)
+                    nxt_value = self.critic(t_obs)
+                    episode_info.end_episode(nxt_value, ts + 1)
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
@@ -345,7 +377,7 @@ class PPO(object):
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
-                shuffle    = False)#FIXME: does shuffling really matter?
+                shuffle    = True)
 
             for _ in range(self.epochs_per_iter):
                 self._ppo_batch_train(data_loader)
@@ -358,6 +390,12 @@ class PPO(object):
             self.save()
 
     def _ppo_batch_train(self, data_loader):
+
+        total_actor_loss  = 0
+        total_critic_loss = 0
+        total_entropy     = 0
+        total_w_entropy   = 0
+        counter           = 0
 
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
             torch.cuda.empty_cache()
@@ -392,13 +430,16 @@ class PPO(object):
             #
             # We negate here to perform gradient ascent rather than descent.
             #
-            actor_loss  = (-torch.min(surr1, surr2)).mean()
-            actor_loss -= self.entropy_weight * entropy.mean()
+            actor_loss        = (-torch.min(surr1, surr2)).mean()
+            total_actor_loss += actor_loss.item()
+            total_entropy    += entropy.mean().item()
+            actor_loss       -= self.entropy_weight * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            critic_loss = nn.MSELoss()(values, rewards_tg)
+            critic_loss        = nn.MSELoss()(values, rewards_tg)
+            total_critic_loss += critic_loss.item()
 
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
@@ -407,6 +448,16 @@ class PPO(object):
             self.critic_optim.zero_grad()
             critic_loss.backward()
             self.critic_optim.step()
+
+            counter += 1
+
+        w_entropy = total_entropy * self.entropy_weight
+
+        self.status_dict["entropy"]          = total_entropy / counter
+        self.status_dict["weighted entropy"] = w_entropy / counter
+        self.status_dict["actor loss"]       = total_actor_loss / counter
+        self.status_dict["critic loss"]      = total_critic_loss / counter
+
 
     def _icm_batch_train(self, data_loader):
 
