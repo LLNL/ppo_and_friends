@@ -231,7 +231,6 @@ class PPO(object):
             # HACK: some environments are buggy and return inconsistent
             # observation shapes. We can enforce shapes here.
             #
-            print("{} vs {}".format(obs.shape, self.obs_shape))#FIXME:
             obs = obs.reshape(self.obs_shape)
 
             for ts in range(self.max_ts_per_ep):
