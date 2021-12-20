@@ -36,6 +36,7 @@ class PPO(object):
                  ext_reward_scale    = 1.0,
                  intr_reward_scale   = 1.0,
                  entropy_weight      = 0.01,
+                 target_kl           = 0.05,
                  render              = False,
                  load_state          = False,
                  state_path          = "./"):
@@ -62,6 +63,7 @@ class PPO(object):
         self.batch_size          = batch_size
         self.timesteps_per_batch = timesteps_per_batch
         self.gamma               = gamma
+        self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
         self.clip                = clip
         self.entropy_weight      = entropy_weight
@@ -81,6 +83,7 @@ class PPO(object):
         self.status_dict["weighted entropy"]     = 0
         self.status_dict["actor loss"]           = 0
         self.status_dict["critic loss"]          = 0
+        self.status_dict["kl mean"]              = 0
         self.status_dict["lr"]                   = self.lr
 
         need_softmax = False
@@ -379,7 +382,12 @@ class PPO(object):
                 shuffle    = True)
 
             for _ in range(self.epochs_per_iter):
+
                 self._ppo_batch_train(data_loader)
+
+                if self.status_dict["kl mean"] > self.target_kl:
+                    print("Target KL has been reached. Ending epoch early.")
+                    break
 
             if self.use_icm:
                 for _ in range(self.epochs_per_iter):
@@ -394,6 +402,7 @@ class PPO(object):
         total_critic_loss = 0
         total_entropy     = 0
         total_w_entropy   = 0
+        total_kl          = 0
         counter           = 0
 
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
@@ -421,15 +430,16 @@ class PPO(object):
             #
             # FIXME: what's with the exponent?
             #
-            ratios = torch.exp(curr_log_probs - log_probs)
-            surr1  = ratios * advantages
-            surr2  = torch.clamp(
+            ratios    = torch.exp(curr_log_probs - log_probs)
+            surr1     = ratios * advantages
+            surr2     = torch.clamp(
                 ratios, 1 - self.clip, 1 + self.clip) * advantages
+            total_kl += (log_probs - curr_log_probs).mean().item()
 
             #
             # We negate here to perform gradient ascent rather than descent.
             #
-            actor_loss        = (-torch.min(surr1, surr2)).mean()
+            actor_loss        = -(torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
             total_entropy    += entropy.mean().item()
             actor_loss       -= self.entropy_weight * entropy.mean()
@@ -456,7 +466,7 @@ class PPO(object):
         self.status_dict["weighted entropy"] = w_entropy / counter
         self.status_dict["actor loss"]       = total_actor_loss / counter
         self.status_dict["critic loss"]      = total_critic_loss / counter
-
+        self.status_dict["kl mean"]          = total_kl / counter
 
     def _icm_batch_train(self, data_loader):
 
