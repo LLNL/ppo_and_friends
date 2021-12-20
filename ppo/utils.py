@@ -5,24 +5,27 @@ import torch
 class EpisodeInfo(object):
 
     def __init__(self,
-                 use_gae      = False,
-                 gamma        = 0.99,
-                 lambd        = 0.95):
+                 use_gae        = False,
+                 gamma          = 0.99,
+                 lambd          = 0.95,
+                 bootstrap_clip = (-1., 1.)):
         """
             A container for storing episode information.
 
             Arguments:
-                use_gae       Should we use the Generalized Advantage
-                              Estimation algorithm when calculating advantages?
-                gamma         The discount factor to apply when calculating
-                              discounted sums. This is used for advantages and
-                              "rewards-to-go" (expected discounted returns).
-                labmd         A "smoothing" factor used in GAE.
+                use_gae        Should we use the Generalized Advantage
+                               Estimation algorithm when calculating advantages?
+                gamma          The discount factor to apply when calculating
+                               discounted sums. This is used for advantages and
+                               "rewards-to-go" (expected discounted returns).
+                labmd          A "smoothing" factor used in GAE.
+                bootstrap_clip Should we bootstrap rewards?
         """
 
         self.use_gae           = use_gae
         self.gamma             = gamma
         self.lambd             = lambd
+        self.bootstrap_clip    = bootstrap_clip
         self.observations      = []
         self.next_observations = []
         self.actions           = []
@@ -128,31 +131,32 @@ class EpisodeInfo(object):
         self.length      = episode_length
         self.is_finished = True
 
+        #
+        # Clipping the ending value can have dramaticly positive
+        # effects on training. MountainCarContinuous is a great
+        # example of an environment that just can't learn at all
+        # without clipping.
+        #
+        ending_value = np.clip(
+            ending_value,
+            self.bootstrap_clip[0],
+            self.bootstrap_clip[1])
+
+        padded_rewards = np.array(self.rewards + [ending_value],
+            dtype=np.float32)
+
+        self.rewards_to_go = self.compute_discounted_sums(
+            padded_rewards,
+            self.gamma)[:-1]
+
         if self.use_gae:
             padded_values = np.array(self.values + [ending_value],
                 dtype=np.float32)
 
-            #FIXME: using the padded rewards appears to cause issues...
-            # investigate?
-            #padded_rewards = np.array(self.rewards + [ending_value],
-            #    dtype=np.float32)
-
-            #self.rewards_to_go = self.compute_discounted_sums(
-            #    padded_rewards,
-            #    self.gamma)[:-1]
-            self.rewards_to_go = self.compute_discounted_sums(
-                self.rewards,
-                self.gamma)
-
             self.advantages = self._compute_gae_advantages(
                 padded_values,
                 self.rewards)
-
         else:
-            self.rewards_to_go = self.compute_discounted_sums(
-                self.rewards,
-                self.gamma)
-
             self.advantages = self._compute_standard_advantages()
 
 
