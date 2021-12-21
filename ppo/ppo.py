@@ -22,6 +22,7 @@ class PPO(object):
                  icm_network         = ICM,
                  icm_encoder         = LinearObservationEncoder,
                  lr                  = 3e-4,
+                 min_lr              = 1e-4,
                  lr_dec              = 0.99,
                  lr_dec_freq         = 500,
                  max_ts_per_ep       = 200,
@@ -57,6 +58,7 @@ class PPO(object):
         self.ext_reward_scale    = ext_reward_scale
         self.intr_reward_scale   = intr_reward_scale
         self.lr                  = lr
+        self.min_lr              = min_lr
         self.lr_dec              = lr_dec
         self.lr_dec_freq         = lr_dec_freq
         self.max_ts_per_ep       = max_ts_per_ep
@@ -355,8 +357,10 @@ class PPO(object):
     def check_learning_rate(self):
         iteration = self.status_dict["iteration"]
 
-        if iteration != 0 and iteration % self.lr_dec_freq == 0:
-            new_lr = self.lr * self.lr_dec
+        if (iteration != 0 and iteration % self.lr_dec_freq == 0
+            and self.lr > self.min_lr):
+
+            new_lr = max(self.lr * self.lr_dec, self.min_lr)
 
             msg  = "\n***Decreasing learning rate from "
             msg += "{} to {}***\n".format(self.lr, new_lr)
@@ -408,7 +412,9 @@ class PPO(object):
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
             torch.cuda.empty_cache()
 
-            if obs.shape[0] == 1:
+            if obs.shape[0] == 1 and (self.actor.uses_batch_norm or
+                self.critic.uses_batch_norm):
+
                 print("Skipping batch of size 1")
                 print("    obs shape: {}".format(obs.shape))
                 continue
