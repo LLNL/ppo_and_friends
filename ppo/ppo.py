@@ -332,10 +332,6 @@ class PPO(object):
             top_ep_score = max(top_ep_score, ep_score)
             longest_run  = max(longest_run, ts)
 
-
-        self.actor.train()
-        self.critic.train()
-
         top_score         = max(top_ep_score, self.status_dict["top score"])
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_score / total_episodes
@@ -384,6 +380,9 @@ class PPO(object):
                 dataset,
                 batch_size = self.batch_size,
                 shuffle    = True)
+
+            self.actor.train()
+            self.critic.train()
 
             for _ in range(self.epochs_per_iter):
 
