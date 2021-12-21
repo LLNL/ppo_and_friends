@@ -216,8 +216,9 @@ class PixelHistEnvWrapper(AtariPixels):
 
     def __init__(self,
                  env,
-                 hist_size = 2,
-                 min_lives = -1,
+                 hist_size         = 2,
+                 min_lives         = -1,
+                 use_frame_pooling = True,
                  **kwargs):
 
         super(PixelHistEnvWrapper, self).__init__(
@@ -225,15 +226,18 @@ class PixelHistEnvWrapper(AtariPixels):
             min_lives = min_lives,
             **kwargs)
 
-        self.frame_cache  = None
-        self.action_space = env.action_space
-        self.hist_size    = hist_size
+        self.frame_cache       = None
+        self.prev_frame        = None
+        self.action_space      = env.action_space
+        self.hist_size         = hist_size
+        self.use_frame_pooling = use_frame_pooling
 
     def reset(self):
         cur_frame = self.env.reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+        self.prev_frame  = cur_frame.copy()
 
         return self.frame_cache.copy()
 
@@ -242,16 +246,35 @@ class PixelHistEnvWrapper(AtariPixels):
 
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
-        ##FIXME: remove
+        #
+        # If we're using frame pooling, take the max pixel value
+        # between the current and last frame. We need to keep track
+        # of the prev frame separately from the cache, otherwise we
+        # end up with pixel "streaks".
+        #
+        if self.use_frame_pooling:
+            cur_copy  = cur_frame.copy()
+            cur_frame = np.maximum(cur_frame, self.prev_frame)
+            self.prev_frame = cur_copy
+
+        self.frame_cache = np.roll(self.frame_cache, -1, axis=0)
+        self.frame_cache[-1] = cur_frame.copy()
+
+        ###FIXME: remove
         #from PIL import Image
         #import sys
-        #foo = (cur_frame.squeeze() * 255.).astype(np.uint8)
-        #img = Image.fromarray(foo, 'L')
+        #first = self.frame_cache[-1].squeeze()
+        #first = (first * 255.).astype(np.uint8)
+        #img = Image.fromarray(first, 'L')
         #img.show()
-        #sys.exit(1)
 
-        self.frame_cache = np.roll(self.frame_cache, 1, axis=0)
-        self.frame_cache[-1] = cur_frame.copy()
+        #last = self.frame_cache[0].squeeze()
+        #last = (last * 255.).astype(np.uint8)
+        #img = Image.fromarray(last, 'L')
+        #img.show()
+
+        #input("")
+        ###sys.exit(1)
 
         done = self._end_game(done)
 
@@ -359,9 +382,10 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size  = 2,
-                 min_lives  = -1,
-                 punish_end = False,
+                 hist_size     = 2,
+                 min_lives     = -1,
+                 punish_end    = False,
+                 skip_k_frames = 1,
                  **kwargs):
 
         super(BreakoutRAMEnvWrapper, self).__init__(
@@ -370,11 +394,14 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             min_lives = min_lives,
             **kwargs)
 
-        self.punish_end = punish_end
+        self.punish_end    = punish_end
+        self.skip_k_frames = skip_k_frames
 
     def step(self, action):
         action = self.action_map[action]
-        obs, reward, done, info = RAMHistEnvWrapper.step(self, action)
+
+        for k in range(self.skip_k_frames):
+            obs, reward, done, info = RAMHistEnvWrapper.step(self, action)
 
         if self.punish_end:
             #
@@ -409,9 +436,10 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size  = 2,
-                 min_lives  = -1,
-                 punish_end = False,
+                 hist_size     = 2,
+                 min_lives     = -1,
+                 punish_end    = False,
+                 skip_k_frames = 1,
                  **kwargs):
 
 
@@ -421,7 +449,8 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             min_lives = min_lives,
             **kwargs)
 
-        self.punish_end = punish_end
+        self.punish_end    = punish_end
+        self.skip_k_frames = skip_k_frames
 
         #
         # Crop the images by removing the "score" information.
@@ -437,7 +466,9 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
     def step(self, action):
         action = self.action_map[action]
-        obs, reward, done, info = PixelHistEnvWrapper.step(self, action)
+
+        for k in range(self.skip_k_frames):
+            obs, reward, done, info = PixelHistEnvWrapper.step(self, action)
 
         if self.punish_end:
             #
@@ -466,5 +497,6 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
         cur_frame = self.rgb_to_processed_frame(cur_frame)
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+        self.prev_frame  = cur_frame.copy()
 
         return self.frame_cache.copy()
