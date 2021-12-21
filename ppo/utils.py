@@ -137,12 +137,12 @@ class EpisodeInfo(object):
         # example of an environment that just can't learn at all
         # without clipping.
         #
-        ending_value = np.clip(
+        ending_reward = np.clip(
             ending_value,
             self.bootstrap_clip[0],
             self.bootstrap_clip[1])
 
-        padded_rewards = np.array(self.rewards + [ending_value],
+        padded_rewards = np.array(self.rewards + [ending_reward],
             dtype=np.float32)
 
         self.rewards_to_go = self.compute_discounted_sums(
