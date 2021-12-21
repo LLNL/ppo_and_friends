@@ -36,7 +36,7 @@ class PPO(object):
                  ext_reward_scale    = 1.0,
                  intr_reward_scale   = 1.0,
                  entropy_weight      = 0.01,
-                 target_kl           = 0.05,
+                 target_kl           = 0.02,
                  render              = False,
                  load_state          = False,
                  state_path          = "./"):
@@ -324,7 +324,7 @@ class PPO(object):
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
                     nxt_value = self.critic(t_obs)
-                    episode_info.end_episode(nxt_value, ts + 1)
+                    episode_info.end_episode(nxt_value.item(), ts + 1)
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
