@@ -359,8 +359,9 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size = 2,
-                 min_lives = -1,
+                 hist_size  = 2,
+                 min_lives  = -1,
+                 punish_end = False,
                  **kwargs):
 
         super(BreakoutRAMEnvWrapper, self).__init__(
@@ -369,9 +370,20 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             min_lives = min_lives,
             **kwargs)
 
+        self.punish_end = punish_end
+
     def step(self, action):
         action = self.action_map[action]
-        return RAMHistEnvWrapper.step(self, action)
+        obs, reward, done, info = RAMHistEnvWrapper.step(self, action)
+
+        if self.punish_end:
+            #
+            # Return a negative reward for failure.
+            #
+            if done and reward == 0:
+                reward = -1.
+
+        return obs, reward, done, info
 
     def reset(self):
         self.env.reset()
@@ -397,8 +409,9 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size = 2,
-                 min_lives = -1,
+                 hist_size  = 2,
+                 min_lives  = -1,
+                 punish_end = False,
                  **kwargs):
 
 
@@ -407,6 +420,8 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             hist_size = hist_size,
             min_lives = min_lives,
             **kwargs)
+
+        self.punish_end = punish_end
 
         #
         # Crop the images by removing the "score" information.
@@ -422,7 +437,16 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
     def step(self, action):
         action = self.action_map[action]
-        return PixelHistEnvWrapper.step(self, action)
+        obs, reward, done, info = PixelHistEnvWrapper.step(self, action)
+
+        if self.punish_end:
+            #
+            # Return a negative reward for failure.
+            #
+            if done and reward == 0:
+                reward = -1.
+
+        return obs, reward, done, info
 
     def reset(self):
         self.env.reset()
