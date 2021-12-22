@@ -8,7 +8,7 @@ import torch
 from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
-from utils import EpisodeInfo, PPODataset, get_action_type
+from utils import EpisodeInfo, PPODataset, get_action_type, need_action_squeeze
 from networks import ICM, LinearObservationEncoder
 
 
@@ -52,35 +52,12 @@ class PPO(object):
             print("ERROR: unknown action type!")
             sys.exit(1)
 
+        #FIXME
         #
         # Environments are very inconsistent! We need to check what shape
         # they expect actions to be in.
         #
-        try:
-            padded_shape = (1, self.act_dim)
-
-            if action_type == "discrete":
-                action = np.random.random(padded_shape)
-            elif action_type == "continuous":
-                action = np.random.randint(0, 1, padded_shape)
-
-            env.reset()
-            env.step(action)
-            env.reset()
-            self.need_action_squeeze = False
-            
-        except:
-            action_shape = (self.act_dim,)
-
-            if action_type == "discrete":
-                action = np.random.random(action_shape)
-            elif action_type == "continuous":
-                action = np.random.randint(0, 1, action_shape)
-
-            env.reset()
-            env.step(action)
-            env.reset()
-            self.need_action_squeeze = True
+        self.action_squeeze = need_action_squeeze(env)
 
         self.env                 = env
         self.device              = device
@@ -122,6 +99,8 @@ class PPO(object):
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl mean"]              = 0
         self.status_dict["lr"]                   = self.lr
+
+        print("Using {} action type.".format(self.action_type))
 
         need_softmax = False
         if action_type == "discrete":
@@ -227,7 +206,11 @@ class PPO(object):
         if self.action_type == "continuous":
             action_mean = self.actor(batch_obs).cpu()
             dist        = MultivariateNormal(action_mean, self.cov_mat)
-            log_probs   = dist.log_prob(batch_actions.unsqueeze(1).cpu())
+
+            if len(batch_actions.shape) < 2:
+                log_probs = dist.log_prob(batch_actions.unsqueeze(1).cpu())
+            else:
+                log_probs = dist.log_prob(batch_actions.cpu())
 
         elif self.action_type == "discrete":
             batch_actions = batch_actions.flatten()
@@ -285,10 +268,10 @@ class PPO(object):
                 value    = self.critic(t_obs)
                 prev_obs = obs.copy()
 
-                if self.need_action_squeeze:
-                    obs, ext_reward, done, _ = self.env.step(action.squeeze())
-                else:
-                    obs, ext_reward, done, _ = self.env.step(action)
+                if self.action_squeeze:
+                    action = action.squeeze()
+
+                obs, ext_reward, done, _ = self.env.step(action)
 
                 if action.size == 1:
                     ep_action = action.item()
@@ -324,12 +307,13 @@ class PPO(object):
                     obs_2 = torch.tensor(obs,
                         dtype=torch.float).to(self.device).unsqueeze(0)
 
-                    if self.need_action_squeeze:
-                        action = torch.tensor(action,
-                            dtype=torch.float).to(self.device)
-                    else:
+                    if self.action_type == "discrete":
                         action = torch.tensor(action,
                             dtype=torch.long).to(self.device).unsqueeze(0)
+
+                    elif self.action_type == "continuous":
+                        action = torch.tensor(action,
+                            dtype=torch.float).to(self.device)
 
                     if len(action.shape) != 2:
                         action = action.unsqueeze(0)
