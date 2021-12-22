@@ -436,18 +436,30 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         pad  = 0
         self.conv1 = nn.Conv2d(channels, 16,
             kernel_size=k_s, stride=strd, padding=pad)
+        height = get_conv2d_out_size(height, pad, k_s, strd)
+        width  = get_conv2d_out_size(width, pad, k_s, strd)
 
-        height     = get_conv2d_out_size(height, pad, k_s, strd)
-        width      = get_conv2d_out_size(width, pad, k_s, strd)
+        k_s  = 3
+        pad  = 1
+        strd = 1
+        self.mp1 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width  = get_maxpool2d_out_size(width, pad, k_s, strd)
 
         k_s  = 4
         strd = 2
         pad  = 0
         self.conv2 = nn.Conv2d(16, 32,
             kernel_size=k_s, stride=strd, padding=pad)
+        height = get_conv2d_out_size(height, pad, k_s, strd)
+        width  = get_conv2d_out_size(width, pad, k_s, strd)
 
-        height     = get_conv2d_out_size(height, pad, k_s, strd)
-        width      = get_conv2d_out_size(width, pad, k_s, strd)
+        k_s  = 3
+        pad  = 1
+        strd = 1
+        self.mp2 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
+        height = get_maxpool2d_out_size(height, pad, k_s, strd)
+        width  = get_maxpool2d_out_size(width, pad, k_s, strd)
 
         self.l1 = nn.Linear(height * width * 32, 256)
         self.l2 = nn.Linear(256, out_dim)
@@ -455,9 +467,11 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 
     def forward(self, _input):
         out = self.conv1(_input)
+        out = self.mp1(out)
         out = self.a_f(out)
 
         out = self.conv2(out)
+        out = self.mp2(out)
         out = self.a_f(out)
 
         out = out.flatten(start_dim=1)
