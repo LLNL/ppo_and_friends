@@ -262,7 +262,6 @@ def assault_ram_ppo(state_path,
             lr                = 0.0001,
             lr_dec_freq       = 30,
             lr_dec            = 0.95,
-            #max_ts_per_ep     = 200000,
             max_ts_per_ep     = 1000,
             use_gae           = True,
             use_icm           = True,
@@ -346,22 +345,27 @@ def breakout_pixels_ppo(state_path,
             repeat_action_probability = 0.0,
             frameskip = 1)
 
+    min_lives = -1 if test else 5
+    auto_fire = test
+
     wrapped_env = BreakoutPixelsEnvWrapper(
-        env       = env,
-        hist_size = 4,
-        min_lives = 5)
+        env           = env,
+        hist_size     = 4,
+        min_lives     = min_lives,
+        auto_fire     = auto_fire,
+        skip_k_frames = 4)
 
     run_ppo(env                 = wrapped_env,
             network             = AtariPixelNetwork,
-            batch_size          = 128,
-            timesteps_per_batch = 2048,
+            batch_size          = 256,
+            timesteps_per_batch = 1024,
             epochs_per_iter     = 10,
             action_type         = "discrete",
             lr                  = 0.0002,
             min_lr              = 0.0001,
             lr_dec_freq         = 2,
             lr_dec              = 0.99,
-            max_ts_per_ep       = 1000,
+            max_ts_per_ep       = 1024,
             use_gae             = True,
             use_icm             = False,
             state_path          = state_path,
