@@ -32,7 +32,7 @@ def test_policy(policy,
         else:
             action = action.numpy()
 
-        if need_action_squeeze:
+        if action_squeeze:
             action = action.squeeze()
 
         obs, reward, done, _ = env.step(action)
