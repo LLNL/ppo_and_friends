@@ -254,3 +254,9 @@ class PPODataset(Dataset):
                 self.rewards_to_go[idx])
 
 
+def get_action_type(env):
+    if np.issubdtype(env.action_space.dtype, np.floating):
+        return "continuous"
+    elif np.issubdtype(env.action_space.dtype, np.integer):
+        return "discrete"
+    return "unknown"

@@ -8,7 +8,7 @@ import torch
 from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
-from utils import EpisodeInfo, PPODataset
+from utils import EpisodeInfo, PPODataset, get_action_type
 from networks import ICM, LinearObservationEncoder
 
 
@@ -18,7 +18,6 @@ class PPO(object):
                  env,
                  network,
                  device,
-                 action_type,
                  icm_network         = ICM,
                  icm_encoder         = LinearObservationEncoder,
                  lr                  = 3e-4,
@@ -37,7 +36,7 @@ class PPO(object):
                  ext_reward_scale    = 1.0,
                  intr_reward_scale   = 1.0,
                  entropy_weight      = 0.01,
-                 target_kl           = 0.02,
+                 target_kl           = 0.01,
                  render              = False,
                  load_state          = False,
                  state_path          = "./"):
@@ -46,6 +45,42 @@ class PPO(object):
             self.act_dim = env.action_space.shape[0]
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
+
+        action_type = get_action_type(env)
+
+        if action_type == "unknown":
+            print("ERROR: unknown action type!")
+            sys.exit(1)
+
+        #
+        # Environments are very inconsistent! We need to check what shape
+        # they expect actions to be in.
+        #
+        try:
+            padded_shape = (1, self.act_dim)
+
+            if action_type == "discrete":
+                action = np.random.random(padded_shape)
+            elif action_type == "continuous":
+                action = np.random.randint(0, 1, padded_shape)
+
+            env.reset()
+            env.step(action)
+            env.reset()
+            self.need_action_squeeze = False
+            
+        except:
+            action_shape = (self.act_dim,)
+
+            if action_type == "discrete":
+                action = np.random.random(action_shape)
+            elif action_type == "continuous":
+                action = np.random.randint(0, 1, action_shape)
+
+            env.reset()
+            env.step(action)
+            env.reset()
+            self.need_action_squeeze = True
 
         self.env                 = env
         self.device              = device
@@ -225,7 +260,7 @@ class PPO(object):
 
         while total_ts < self.timesteps_per_batch:
             episode_info = EpisodeInfo(
-                use_gae      = self.use_gae)
+                use_gae = self.use_gae)
 
             total_episodes  += 1
             done             = False
@@ -251,15 +286,13 @@ class PPO(object):
                 value    = self.critic(t_obs)
                 prev_obs = obs.copy()
 
-                if self.action_type == "discrete":
+                if self.need_action_squeeze:
                     obs, ext_reward, done, _ = self.env.step(action.squeeze())
-                    ep_action = action.item()
-                    ep_value  = value.item()
-
-                elif self.action_type == "continuous":
+                else:
                     obs, ext_reward, done, _ = self.env.step(action)
-                    ep_action  = action.item()
-                    ep_value   = value.item()
+
+                ep_action  = action.item()
+                ep_value   = value.item()
 
                 #
                 # HACK: some environments are buggy and return inconsistent
@@ -388,7 +421,7 @@ class PPO(object):
 
                 self._ppo_batch_train(data_loader)
 
-                if self.status_dict["kl mean"] > self.target_kl:
+                if self.status_dict["kl mean"] > (1.5 * self.target_kl):
                     print("Target KL has been reached. Ending epoch early.")
                     break
 
