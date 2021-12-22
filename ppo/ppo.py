@@ -280,7 +280,6 @@ class PPO(object):
                 total_ts += 1
                 action, log_prob = self.get_action(obs)
 
-
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
                 t_obs    = t_obs.unsqueeze(0)
                 value    = self.critic(t_obs)
@@ -291,8 +290,12 @@ class PPO(object):
                 else:
                     obs, ext_reward, done, _ = self.env.step(action)
 
-                ep_action  = action.item()
-                ep_value   = value.item()
+                if action.size == 1:
+                    ep_action = action.item()
+                else:
+                    ep_action = action
+
+                ep_value = value.item()
 
                 #
                 # HACK: some environments are buggy and return inconsistent
@@ -310,31 +313,36 @@ class PPO(object):
                 natural_reward = ext_reward
                 ext_reward    *= self.ext_reward_scale
 
+                #
+                # If we're using the ICM, we need to do some extra work here.
+                # This amounts to adding "curiosity", aka intrinsic reward,
+                # to out extrinsic reward.
+                #
                 if self.use_icm:
                     obs_1 = torch.tensor(prev_obs,
                         dtype=torch.float).to(self.device).unsqueeze(0)
                     obs_2 = torch.tensor(obs,
                         dtype=torch.float).to(self.device).unsqueeze(0)
 
-                    if self.action_type == "discrete":
-                        action = torch.tensor(action,
-                            dtype=torch.long).to(self.device).unsqueeze(0)
-                    elif self.action_type == "continuous":
+                    if self.need_action_squeeze:
                         action = torch.tensor(action,
                             dtype=torch.float).to(self.device)
+                    else:
+                        action = torch.tensor(action,
+                            dtype=torch.long).to(self.device).unsqueeze(0)
 
                     if len(action.shape) != 2:
                         action = action.unsqueeze(0)
 
                     with torch.no_grad():
-                        intrinsic_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+                        intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-                    intrinsic_reward  = intrinsic_reward.item()
-                    intrinsic_reward *= self.intr_reward_scale
+                    intr_reward  = intr_reward.item()
+                    intr_reward *= self.intr_reward_scale
 
-                    total_intr_rewards += intrinsic_reward
+                    total_intr_rewards += intr_reward
 
-                    reward = ext_reward + intrinsic_reward
+                    reward = ext_reward + intr_reward
 
                 else:
                     reward = ext_reward
