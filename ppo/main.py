@@ -17,7 +17,8 @@ if __name__ == "__main__":
         choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
                  "MountainCar", "MountainCarContinuous", "Acrobot",
                  "AssaultRAM", "AssaultPixels",
-                 "BreakoutPixels", "BreakoutRAM"])
+                 "BreakoutPixels", "BreakoutRAM",
+                 "LunarLanderContinuous"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -63,6 +64,15 @@ if __name__ == "__main__":
 
     elif env_name == "LunarLander":
         lunar_lander_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test)
+
+    elif env_name == "LunarLanderContinuous":
+        lunar_lander_continuous_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
