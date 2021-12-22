@@ -6,7 +6,7 @@ import numpy as np
 
 class PPONetwork(nn.Module):
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         super(PPONetwork, self).__init__()
         self.name = "PPONetwork"
         self.uses_batch_norm = False
@@ -22,9 +22,24 @@ class PPONetwork(nn.Module):
 
 class PPOConv2dNetwork(PPONetwork):
 
-    def __init__(self):
-        super(PPOConv2dNetwork, self).__init__()
+    def __init__(self, **kwargs):
+        super(PPOConv2dNetwork, self).__init__(**kwargs)
         self.name = "PPOConv2dNetwork"
+
+
+class SplitObservationNetwork(PPONetwork):
+
+    def __init__(self, split_start, **kwargs):
+        super(SplitObservationNetwork, self).__init__(**kwargs)
+
+        if split_start <= 0:
+            msg  = "ERROR: SplitObservationNetwork requires a split start "
+            msg += "> 0."
+            print(msg)
+            sys.exit(1)
+
+        self.name = "PPOSplitObservationNetwork"
+        self.split_start = split_start
 
 
 def get_conv2d_out_size(in_size,
@@ -51,7 +66,8 @@ class LinearObservationEncoder(nn.Module):
     def __init__(self,
                  obs_dim,
                  encoded_dim,
-                 hidden_size):
+                 hidden_size,
+                 **kwargs):
         """
             A simple encoder for encoding observations into
             forms that only contain information needed by the
@@ -63,7 +79,7 @@ class LinearObservationEncoder(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearObservationEncoder, self).__init__()
+        super(LinearObservationEncoder, self).__init__(**kwargs)
 
         self.l_relu = nn.LeakyReLU()
 
@@ -94,7 +110,8 @@ class Conv2dObservationEncoder(nn.Module):
 
     def __init__(self,
                  in_shape,
-                 encoded_dim):
+                 encoded_dim,
+                 **kwargs):
         """
             A simple encoder for encoding observations into
             forms that only contain information needed by the
@@ -107,7 +124,7 @@ class Conv2dObservationEncoder(nn.Module):
             linear layers.
         """
 
-        super(Conv2dObservationEncoder, self).__init__()
+        super(Conv2dObservationEncoder, self).__init__(**kwargs)
 
         self.l_relu = nn.LeakyReLU()
 
@@ -187,7 +204,8 @@ class Conv2dObservationEncoder_orig(nn.Module):
     def __init__(self,
                  in_shape,
                  encoded_dim,
-                 hidden_size):
+                 hidden_size,
+                 **kwargs):
         """
             A simple encoder for encoding observations into
             forms that only contain information needed by the
@@ -200,7 +218,7 @@ class Conv2dObservationEncoder_orig(nn.Module):
             linear layers.
         """
 
-        super(Conv2dObservationEncoder_orig, self).__init__()
+        super(Conv2dObservationEncoder_orig, self).__init__(**kwargs)
 
         self.l_relu = nn.LeakyReLU()
 
@@ -296,32 +314,112 @@ class SimpleFeedForward(PPONetwork):
                  name,
                  in_dim,
                  out_dim,
-                 need_softmax = False):
+                 need_softmax = False,
+                 activation   = torch.nn.ReLU(),
+                 hidden_size  = 128,
+                 **kwargs):
 
-        super(SimpleFeedForward, self).__init__()
-        self.name = name
+        super(SimpleFeedForward, self).__init__(**kwargs)
+
+        self.name         = name
         self.need_softmax = need_softmax
+        self.activation   = activation
 
-        self.l1 = nn.Linear(in_dim, 128)
-        self.l2 = nn.Linear(128, 128)
-        self.l3 = nn.Linear(128, 128)
-        self.l4 = nn.Linear(128, out_dim)
-
-        self.l_relu = torch.nn.LeakyReLU()
+        self.l1 = nn.Linear(in_dim, hidden_size)
+        self.l2 = nn.Linear(hidden_size, hidden_size)
+        self.l3 = nn.Linear(hidden_size, hidden_size)
+        self.l4 = nn.Linear(hidden_size, out_dim)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
 
         out = self.l1(out)
-        out = self.l_relu(out)
+        out = self.activation(out)
 
         out = self.l2(out)
-        out = self.l_relu(out)
+        out = self.activation(out)
 
         out = self.l3(out)
-        out = self.l_relu(out)
+        out = self.activation(out)
 
         out = self.l4(out)
+
+        if self.need_softmax:
+            out = F.softmax(out, dim=-1)
+
+        return out
+
+
+class SimpleSplitObsNetwork(SplitObservationNetwork):
+
+    def __init__(self,
+                 name,
+                 in_dim,
+                 out_dim,
+                 need_softmax = False,
+                 **kwargs):
+
+        super(SimpleSplitObsNetwork, self).__init__(**kwargs)
+
+        self.name         = name
+        self.need_softmax = need_softmax
+        self.activation   = nn.ReLU()
+
+        side_1_dim = self.split_start
+        side_2_dim = in_dim - self.split_start
+
+        # TODO: in the orignal paper, there is a "low level" section and
+        # a "high level" section. The low level section handles
+        # proprioceptive information (joints, positions, etc.), and the
+        # high level section sees everything but only sends a signal every
+        # K iterations. A later paper uses a similar technique, but it's
+        # unclear if they keep the "K iteration" approach (they're very
+        # vague). At any rate, this later approach is slighty different in
+        # that it splits between proprioceptive and exteroceptive (sensory
+        # information about the environment). That's basically what we're
+        # doing here, except we are using the same architecture for both
+        # parts of the observation. Both of the previous papers use different
+        # architectures for the different sections.
+        self.s1_net = SimpleFeedForward(
+            name       = self.name + "_s1",
+            in_dim     = side_1_dim,
+            out_dim    = 128,
+            activation = self.activation)
+
+        self.s2_net = SimpleFeedForward(
+            name       = self.name + "_s2",
+            in_dim     = side_2_dim,
+            out_dim    = 128,
+            activation = self.activation)
+
+        self.full_l1 = nn.Linear(256, 256)
+        self.full_l2 = nn.Linear(256, out_dim)
+
+    def forward(self, _input):
+        out = _input.flatten(start_dim = 1)
+
+        s1_out = out[:, 0 : self.split_start]
+        s2_out = out[:, self.split_start : ]
+
+        #
+        # Side 1.
+        #
+        s1_out = self.s1_net(s1_out)
+
+        #
+        # Side 2.
+        #
+        s2_out = self.s2_net(s2_out)
+
+        #
+        # Full layers.
+        #
+        out = torch.cat((s1_out, s2_out), dim=1)
+
+        out = self.full_l1(out)
+        out = self.activation(out)
+
+        out = self.full_l2(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
@@ -335,9 +433,10 @@ class AtariRAMNetwork(PPONetwork):
                  name,
                  in_dim,
                  out_dim,
-                 need_softmax = False):
+                 need_softmax = False,
+                 **kwargs):
 
-        super(AtariRAMNetwork, self).__init__()
+        super(AtariRAMNetwork, self).__init__(**kwargs)
         self.name            = name
         self.need_softmax    = need_softmax
         self.uses_batch_norm = True
@@ -419,9 +518,10 @@ class AtariPixelNetwork(PPOConv2dNetwork):
                  name,
                  in_shape,
                  out_dim,
-                 need_softmax = False):
+                 need_softmax = False,
+                 **kwargs):
 
-        super(AtariPixelNetwork, self).__init__()
+        super(AtariPixelNetwork, self).__init__(**kwargs)
 
         self.name         = name
         self.need_softmax = need_softmax
@@ -497,7 +597,8 @@ class LinearInverseModel(nn.Module):
     def __init__(self,
                  in_dim,
                  out_dim,
-                 hidden_size):
+                 hidden_size,
+                 **kwargs):
         """
             An implementation of the inverse model for the ICM method. The
             inverse model learns to predict the action that was performed
@@ -509,7 +610,7 @@ class LinearInverseModel(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearInverseModel, self).__init__()
+        super(LinearInverseModel, self).__init__(**kwargs)
 
         self.l_relu = nn.LeakyReLU()
 
@@ -545,7 +646,8 @@ class LinearForwardModel(nn.Module):
                  out_dim,
                  act_dim,
                  hidden_size,
-                 action_type):
+                 action_type,
+                 **kwargs):
         """
             The forward model of the ICM method. In short, this learns to
             predict the changes in state given a current state and action.
@@ -556,7 +658,7 @@ class LinearForwardModel(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearForwardModel, self).__init__()
+        super(LinearForwardModel, self).__init__(**kwargs)
 
         self.l_relu      = nn.LeakyReLU()
         self.action_type = action_type
@@ -606,12 +708,13 @@ class ICM(PPONetwork):
                  act_dim,
                  action_type,
                  obs_encoder  = LinearObservationEncoder,
-                 reward_scale = 0.01):
+                 reward_scale = 0.01,
+                 **kwargs):
         """
             The Intrinsic Curiosit Model (ICM).
         """
 
-        super(ICM, self).__init__()
+        super(ICM, self).__init__(**kwargs)
 
         self.act_dim      = act_dim
         self.reward_scale = reward_scale

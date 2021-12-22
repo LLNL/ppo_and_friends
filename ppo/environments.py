@@ -2,6 +2,7 @@ from ppo import PPO
 import gym
 from testing import test_policy
 from networks import SimpleFeedForward, AtariRAMNetwork, AtariPixelNetwork
+from networks import SimpleSplitObsNetwork
 from networks import ICM, LinearObservationEncoder, Conv2dObservationEncoder_orig
 from custom_environments.gym_wrappers import *
 
@@ -25,6 +26,7 @@ def run_ppo(env,
             ext_reward_scale    = 1.0,
             intr_reward_scale   = 1.0,
             entropy_weight      = 0.01,
+            obs_split_start     = 0,
             render              = False,
             load_state          = False,
             state_path          = "./",
@@ -47,6 +49,7 @@ def run_ppo(env,
               ext_reward_scale  = ext_reward_scale,
               intr_reward_scale = intr_reward_scale,
               entropy_weight    = entropy_weight,
+              obs_split_start   = obs_split_start,
               render            = render,
               load_state        = load_state,
               state_path        = state_path)
@@ -444,3 +447,40 @@ def breakout_ram_ppo(state_path,
             intr_reward_scale = 1.0,
             entropy_weight    = 0.01,
             test              = test)
+
+
+def bipedal_walker_ppo(state_path,
+                       load_state,
+                       render,
+                       num_timesteps,
+                       device,
+                       test = False):
+
+    env = gym.make('BipedalWalker-v3')
+
+    #
+    # The lidar observations are the last 10.
+    #
+    obs_split_start = env.observation_space.shape[0] - 10
+
+    run_ppo(env                 = env,
+            network             = SimpleSplitObsNetwork,
+            obs_split_start     = obs_split_start,
+            batch_size          = 256,
+            max_ts_per_ep       = 100,
+            timesteps_per_batch = 1024,
+            use_gae             = True,
+            use_icm             = False,
+            lr                  = 0.0003,
+            min_lr              = 0.0001,
+            lr_dec              = 0.95,
+            lr_dec_freq         = 10,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            ext_reward_scale    = 1.0 / 100.,
+            intr_reward_scale   = 1.0,
+            entropy_weight      = 0.01,
+            test                = test)

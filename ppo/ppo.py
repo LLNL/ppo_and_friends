@@ -37,6 +37,7 @@ class PPO(object):
                  intr_reward_scale   = 1.0,
                  entropy_weight      = 0.01,
                  target_kl           = 0.01,
+                 obs_split_start     = 0.0,
                  render              = False,
                  load_state          = False,
                  state_path          = "./"):
@@ -106,11 +107,13 @@ class PPO(object):
         if action_type == "discrete":
             need_softmax = True
 
+        net_kw_args = {}
         use_conv2d_setup = False
         for base in network.__bases__:
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
-                break
+            if base.__name__ == "SplitObservationNetwork":
+                net_kw_args["split_start"] = obs_split_start
 
         if use_conv2d_setup:
             obs_dim = self.obs_shape
@@ -119,13 +122,15 @@ class PPO(object):
                 "actor", 
                 obs_dim, 
                 self.act_dim, 
-                need_softmax)
+                need_softmax,
+                **net_kw_args)
 
             self.critic = network(
                 "critic", 
                 obs_dim, 
                 1,
-                False)
+                False,
+                **net_kw_args)
 
         else:
             obs_dim = self.obs_shape[0]
@@ -133,13 +138,15 @@ class PPO(object):
                 "actor", 
                 obs_dim, 
                 self.act_dim, 
-                need_softmax)
+                need_softmax,
+                **net_kw_args)
 
             self.critic = network(
                 "critic", 
                 obs_dim, 
                 1,
-                False)
+                False,
+                **net_kw_args)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
