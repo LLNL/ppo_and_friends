@@ -343,6 +343,7 @@ class BreakoutEnvWrapper():
 
     def __init__(self,
                  env,
+                 auto_fire = False,
                  **kwargs):
 
         super(BreakoutEnvWrapper, self).__init__(env, **kwargs)
@@ -365,6 +366,8 @@ class BreakoutEnvWrapper():
             3)
 
         self.action_map = [0, 2, 3]
+        self.auto_fire  = auto_fire
+        self.cur_lives  = self.env.ale.lives()
 
     def _set_random_start_pos(self):
         #
@@ -377,6 +380,20 @@ class BreakoutEnvWrapper():
         for _ in range(rand_repeat):
             self.env.step(rand_step)
 
+    def fire_ball(self):
+        return self.env.step(1)
+
+    def _post_step(self,
+                   reset = False):
+
+        ret = None
+
+        if not reset and self.auto_fire and self.env.ale.lives() < self.lives:
+            ret = self.fire_ball()
+
+        self.lives = self.env.ale.lives()
+
+        return ret
 
 class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
@@ -410,6 +427,8 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
+        self._post_step()
+
         return obs, reward, done, info
 
     def reset(self):
@@ -424,10 +443,12 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
         #
         # Next, launch the ball.
         #
-        cur_ram, _, _, _ = self.env.step(1)
+        cur_ram, _, _, _ = self.fire_ball()
 
         cur_ram  = cur_ram.astype(np.float32) / 255.
         self._reset_ram_cache(cur_ram)
+
+        self._post_step(True)
 
         return self.ram_cache.copy()
 
@@ -477,6 +498,8 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
+        self._post_step()
+
         return obs, reward, done, info
 
     def reset(self):
@@ -492,11 +515,12 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         #
         # Next, launch the ball.
         #
-        cur_frame, _, _, _ = self.env.step(1)
-
+        cur_frame, _, _, _ = self.fire_ball()
 
         cur_frame = self.rgb_to_processed_frame(cur_frame)
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
         self.prev_frame  = cur_frame.copy()
+
+        self._post_step(True)
 
         return self.frame_cache.copy()
