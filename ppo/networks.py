@@ -364,6 +364,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         self.name         = name
         self.need_softmax = need_softmax
         self.activation   = nn.ReLU()
+        hidden_size       = 256
 
         side_1_dim = self.split_start
         side_2_dim = in_dim - self.split_start
@@ -383,17 +384,19 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         self.s1_net = SimpleFeedForward(
             name       = self.name + "_s1",
             in_dim     = side_1_dim,
-            out_dim    = 128,
+            out_dim    = hidden_size,
             activation = self.activation)
 
         self.s2_net = SimpleFeedForward(
             name       = self.name + "_s2",
             in_dim     = side_2_dim,
-            out_dim    = 128,
+            out_dim    = hidden_size,
             activation = self.activation)
 
-        self.full_l1 = nn.Linear(256, 256)
-        self.full_l2 = nn.Linear(256, out_dim)
+        hidden_size  = hidden_size * 2
+
+        self.full_l1 = nn.Linear(hidden_size, hidden_size)
+        self.full_l2 = nn.Linear(hidden_size, out_dim)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
