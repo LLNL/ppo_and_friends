@@ -357,6 +357,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
                  in_dim,
                  out_dim,
                  need_softmax = False,
+                 hidden_size  = 64,
                  **kwargs):
 
         super(SimpleSplitObsNetwork, self).__init__(**kwargs)
@@ -364,7 +365,6 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         self.name         = name
         self.need_softmax = need_softmax
         self.activation   = nn.ReLU()
-        hidden_size       = 256
 
         side_1_dim = self.split_start
         side_2_dim = in_dim - self.split_start
@@ -393,10 +393,11 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
             out_dim    = hidden_size,
             activation = self.activation)
 
-        hidden_size  = hidden_size * 2
+        inner_hidden_size  = hidden_size * 2
 
-        self.full_l1 = nn.Linear(hidden_size, hidden_size)
-        self.full_l2 = nn.Linear(hidden_size, out_dim)
+        self.full_l1 = nn.Linear(inner_hidden_size, inner_hidden_size)
+        self.full_l2 = nn.Linear(inner_hidden_size, inner_hidden_size)
+        self.full_l3 = nn.Linear(inner_hidden_size, out_dim)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -423,6 +424,9 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         out = self.activation(out)
 
         out = self.full_l2(out)
+        out = self.activation(out)
+
+        out = self.full_l3(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)

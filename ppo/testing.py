@@ -4,6 +4,7 @@ from utils import get_action_type, need_action_squeeze
 def test_policy(policy,
                 env,
                 render,
+                num_test_runs,
                 device):
 
     action_type    = get_action_type(env)
@@ -11,32 +12,37 @@ def test_policy(policy,
 
     num_steps = 0
     score     = 0
-    obs       = env.reset()
-    done      = False
     policy.eval()
 
-    while not done:
+    for _ in range(num_test_runs):
 
-        num_steps += 1
+        obs  = env.reset()
+        done = False
 
-        if render:
-            env.render()
+        while not done:
 
-        obs = torch.tensor(obs, dtype=torch.float).to(device).unsqueeze(0)
+            num_steps += 1
 
-        with torch.no_grad():
-            action = policy(obs).detach().cpu()
+            if render:
+                env.render()
 
-        if action_type == "discrete":
-            action = torch.argmax(action).numpy()
-        else:
-            action = action.numpy()
+            obs = torch.tensor(obs, dtype=torch.float).to(device).unsqueeze(0)
 
-        if action_squeeze:
-            action = action.squeeze()
+            with torch.no_grad():
+                action = policy(obs).detach().cpu()
 
-        obs, reward, done, _ = env.step(action)
-        score += reward
+            if action_type == "discrete":
+                action = torch.argmax(action).numpy()
+            else:
+                action = action.numpy()
 
-    print("Ran {} steps.".format(num_steps))
-    print("Score: {}".format(score))
+            if action_squeeze:
+                action = action.squeeze()
+
+            obs, reward, done, _ = env.step(action)
+            score += reward
+
+    print("Ran env {} times.".format(num_test_runs))
+    print("Ran {} total time steps.".format(num_steps))
+    print("Ran {} time steps on average.".format(num_steps / num_test_runs))
+    print("Average score: {}".format(score / num_test_runs))

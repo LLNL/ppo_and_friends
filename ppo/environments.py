@@ -15,23 +15,27 @@ def run_ppo(env,
             batch_size          = 256,
             timesteps_per_batch = 2048,
             epochs_per_iter     = 10,
+            target_kl           = 0.01,
             lr                  = 3e-4,
             min_lr              = 1e-4,
             lr_dec              = 0.99,
             lr_dec_freq         = 500,
             max_ts_per_ep       = 200,
-            use_gae             = False,
+            use_gae             = True,
             use_icm             = False,
+            save_best_only      = False,
             icm_beta            = 0.8,
             ext_reward_scale    = 1.0,
             intr_reward_scale   = 1.0,
             entropy_weight      = 0.01,
             obs_split_start     = 0,
+            clip                = 0.2,
             render              = False,
             load_state          = False,
             state_path          = "./",
             num_timesteps       = 1,
-            test                = False):
+            test                = False,
+            num_test_runs       = 1):
 
     ppo = PPO(env               = env,
               network           = network,
@@ -46,16 +50,18 @@ def run_ppo(env,
               max_ts_per_ep     = max_ts_per_ep,
               use_gae           = use_gae,
               use_icm           = use_icm,
+              save_best_only    = save_best_only,
               ext_reward_scale  = ext_reward_scale,
               intr_reward_scale = intr_reward_scale,
               entropy_weight    = entropy_weight,
               obs_split_start   = obs_split_start,
+              clip              = clip,
               render            = render,
               load_state        = load_state,
               state_path        = state_path)
 
     if test:
-        test_policy(ppo.actor, env, render, device)
+        test_policy(ppo.actor, env, render, num_test_runs, device)
     else: 
         ppo.learn(num_timesteps)
 
@@ -64,7 +70,8 @@ def cartpole_pixels_ppo(state_path,
                         render,
                         num_timesteps,
                         device,
-                        test = False):
+                        test = False,
+                        num_test_runs = 1):
 
     env = CartPoleEnvManager()
 
@@ -80,7 +87,8 @@ def cartpole_pixels_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def cartpole_ppo(state_path,
@@ -88,7 +96,8 @@ def cartpole_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
-                 test = False):
+                 test = False,
+                 num_test_runs = 1):
 
     env = gym.make('CartPole-v0')
 
@@ -104,7 +113,8 @@ def cartpole_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def pendulum_ppo(state_path,
@@ -112,7 +122,8 @@ def pendulum_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
-                 test = False):
+                 test = False,
+                 num_test_runs = 1):
 
     env = gym.make('Pendulum-v1')
 
@@ -128,7 +139,8 @@ def pendulum_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def lunar_lander_ppo(state_path,
@@ -136,7 +148,8 @@ def lunar_lander_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
-                     test = False):
+                     test = False,
+                     num_test_runs = 1):
 
     env = gym.make('LunarLander-v2')
 
@@ -152,7 +165,8 @@ def lunar_lander_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0/100.0,
             intr_reward_scale = 1.0,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def lunar_lander_continuous_ppo(state_path,
@@ -160,7 +174,8 @@ def lunar_lander_continuous_ppo(state_path,
                                 render,
                                 num_timesteps,
                                 device,
-                                test = False):
+                                test = False,
+                                num_test_runs = 1):
 
     env = gym.make('LunarLanderContinuous-v2')
 
@@ -181,7 +196,8 @@ def lunar_lander_continuous_ppo(state_path,
             ext_reward_scale  = 1.0/100.0,
             intr_reward_scale = 1.0,
             entropy_weight    = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def mountain_car_ppo(state_path,
@@ -189,7 +205,8 @@ def mountain_car_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
-                     test = False):
+                     test = False,
+                     num_test_runs = 1):
 
     env = gym.make('MountainCar-v0')
 
@@ -206,7 +223,8 @@ def mountain_car_ppo(state_path,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
             entropy_weight    = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def mountain_car_continuous_ppo(state_path,
@@ -214,7 +232,8 @@ def mountain_car_continuous_ppo(state_path,
                                 render,
                                 num_timesteps,
                                 device,
-                                test = False):
+                                test = False,
+                                num_test_runs = 1):
 
     env = gym.make('MountainCarContinuous-v0')
 
@@ -231,7 +250,8 @@ def mountain_car_continuous_ppo(state_path,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
             entropy_weight    = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def acrobot_ppo(state_path,
@@ -239,7 +259,8 @@ def acrobot_ppo(state_path,
                 render,
                 num_timesteps,
                 device,
-                test = False):
+                test = False,
+                num_test_runs = 1):
 
     env = gym.make('Acrobot-v1')
 
@@ -255,7 +276,8 @@ def acrobot_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def assault_ram_ppo(state_path,
@@ -263,7 +285,8 @@ def assault_ram_ppo(state_path,
                     render,
                     num_timesteps,
                     device,
-                    test = False):
+                    test = False,
+                    num_test_runs = 1):
 
     if test and render:
         #
@@ -294,7 +317,8 @@ def assault_ram_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def assault_pixels_ppo(state_path,
@@ -302,7 +326,8 @@ def assault_pixels_ppo(state_path,
                        render,
                        num_timesteps,
                        device,
-                       test = False):
+                       test = False,
+                       num_test_runs = 1):
 
     if test and render:
         #
@@ -338,7 +363,8 @@ def assault_pixels_ppo(state_path,
             device            = device,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def breakout_pixels_ppo(state_path,
@@ -346,7 +372,8 @@ def breakout_pixels_ppo(state_path,
                         render,
                         num_timesteps,
                         device,
-                        test = False):
+                        test = False,
+                        num_test_runs = 1):
 
     if render:
         #
@@ -396,7 +423,8 @@ def breakout_pixels_ppo(state_path,
             ext_reward_scale    = 1.0,
             intr_reward_scale   = 0.1,
             entropy_weight      = 0.01,
-            test                = test)
+            test                = test,
+            num_test_runs       = num_test_runs)
 
 
 def breakout_ram_ppo(state_path,
@@ -404,7 +432,8 @@ def breakout_ram_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
-                     test = False):
+                     test = False,
+                     num_test_runs = 1):
 
     if render:
         #
@@ -446,7 +475,8 @@ def breakout_ram_ppo(state_path,
             ext_reward_scale  = 1.0,
             intr_reward_scale = 1.0,
             entropy_weight    = 0.01,
-            test              = test)
+            test              = test,
+            num_test_runs     = num_test_runs)
 
 
 def bipedal_walker_ppo(state_path,
@@ -454,7 +484,8 @@ def bipedal_walker_ppo(state_path,
                        render,
                        num_timesteps,
                        device,
-                       test = False):
+                       test = False,
+                       num_test_runs = 1):
 
     env = gym.make('BipedalWalker-v3')
 
@@ -466,15 +497,19 @@ def bipedal_walker_ppo(state_path,
     run_ppo(env                 = env,
             network             = SimpleSplitObsNetwork,
             obs_split_start     = obs_split_start,
-            batch_size          = 256,
-            max_ts_per_ep       = 100,
+            batch_size          = 512,
+            max_ts_per_ep       = 256,
             timesteps_per_batch = 1024,
             use_gae             = True,
             use_icm             = False,
+            save_best_only      = True,
+            epochs_per_iter     = 20,
+            target_kl           = 0.01,
+            clip                = 0.2,
             lr                  = 0.0003,
             min_lr              = 0.0001,
-            lr_dec              = 0.95,
-            lr_dec_freq         = 10,
+            lr_dec              = 0.99,
+            lr_dec_freq         = 20,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -483,4 +518,5 @@ def bipedal_walker_ppo(state_path,
             ext_reward_scale    = 1.0 / 100.,
             intr_reward_scale   = 1.0,
             entropy_weight      = 0.01,
-            test                = test)
+            test                = test,
+            num_test_runs       = num_test_runs)

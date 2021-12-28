@@ -164,12 +164,14 @@ class PPODataset(Dataset):
 
     def __init__(self,
                  device,
-                 action_type):
+                 action_type,
+                 normalize_obs = True):
 
-        self.action_type = action_type
-        self.device      = device
-        self.episodes    = []
-        self.is_built    = False
+        self.action_type   = action_type
+        self.device        = device
+        self.episodes      = []
+        self.is_built      = False
+        self.normalize_obs = normalize_obs
 
         self.actions           = None
         self.observations      = None
@@ -225,6 +227,22 @@ class PPODataset(Dataset):
 
         self.next_observations = torch.tensor(self.next_observations,
             dtype=torch.float).to(self.device)
+
+        ##FIXME: testing normalizing
+        #if self.normalize_obs:
+        #    full_obs = torch.cat((self.observations.flatten(),
+        #        self.next_observations.flatten()))
+        #    obs_mean = full_obs.mean()
+        #    obs_std  = full_obs.std()
+
+        #    #TODO: is clamping really appropriate here?
+        #    self.observations = torch.clamp(
+        #        (self.observations - obs_mean) /
+        #        obs_std, -5., 5.)
+
+        #    self.next_observations = torch.clamp(
+        #        (self.next_observations - obs_mean) /
+        #        obs_std, -5., 5.)
 
         self.log_probs = torch.tensor(self.log_probs,
             dtype=torch.float).to(self.device)

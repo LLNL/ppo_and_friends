@@ -10,6 +10,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from utils import EpisodeInfo, PPODataset, get_action_type, need_action_squeeze
 from networks import ICM, LinearObservationEncoder
+import time
 
 
 class PPO(object):
@@ -30,7 +31,7 @@ class PPO(object):
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
                  clip                = 0.2,
-                 use_gae             = False,
+                 use_gae             = True,
                  use_icm             = False,
                  icm_beta            = 0.8,
                  ext_reward_scale    = 1.0,
@@ -40,6 +41,7 @@ class PPO(object):
                  obs_split_start     = 0.0,
                  render              = False,
                  load_state          = False,
+                 save_best_only      = False,
                  state_path          = "./"):
 
         if np.issubdtype(env.action_space.dtype, np.floating):
@@ -83,6 +85,8 @@ class PPO(object):
         self.clip                = clip
         self.entropy_weight      = entropy_weight
         self.obs_shape           = env.observation_space.shape
+        self.prev_top_mean       = 0
+        self.save_best_only      = save_best_only
 
         #
         # Create a dictionary to track the status of training.
@@ -93,6 +97,7 @@ class PPO(object):
         self.status_dict["running score mean"]   = 0
         self.status_dict["extrinsic score mean"] = 0
         self.status_dict["top score"]            = 0
+        self.status_dict["top mean score"]       = 0
         self.status_dict["total episodes"]       = 0
         self.status_dict["entropy"]              = 0
         self.status_dict["weighted entropy"]     = 0
@@ -364,13 +369,16 @@ class PPO(object):
             top_ep_score = max(top_ep_score, ep_score)
             longest_run  = max(longest_run, ts)
 
-        top_score         = max(top_ep_score, self.status_dict["top score"])
-        running_ext_score = total_ext_rewards / total_episodes
-        running_score     = total_score / total_episodes
+        top_score          = max(top_ep_score, self.status_dict["top score"])
+        running_ext_score  = total_ext_rewards / total_episodes
+        running_score      = total_score / total_episodes
+        self.prev_top_mean = self.status_dict["top mean score"]
+        top_mean           = max(self.prev_top_mean, running_score)
 
         self.status_dict["running score mean"]   = running_score
         self.status_dict["extrinsic score mean"] = running_ext_score
         self.status_dict["top score"]            = top_score
+        self.status_dict["top mean score"]       = top_mean
         self.status_dict["total episodes"]       = total_episodes
         self.status_dict["longest run"]          = longest_run
 
@@ -398,8 +406,9 @@ class PPO(object):
             self.status_dict["lr"] = self.lr
 
     def learn(self, total_timesteps):
-
+        start_time = time.time()
         ts = 0
+
         while ts < total_timesteps:
             dataset = self.rollout()
 
@@ -429,7 +438,15 @@ class PPO(object):
                     self._icm_batch_train(data_loader)
 
             self.print_status()
-            self.save()
+
+            if (self.save_best_only and
+                self.prev_top_mean < self.status_dict["top mean score"]):
+                self.save()
+            elif not self.save_best_only:
+                self.save()
+
+        stop_time = time.time()
+        print("Time spent training: {}".format(stop_time - start_time))
 
     def _ppo_batch_train(self, data_loader):
 
@@ -532,6 +549,8 @@ class PPO(object):
 
 
     def save(self):
+        print("\nSaving actor and critic")
+
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
