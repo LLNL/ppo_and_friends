@@ -549,8 +549,6 @@ class PPO(object):
 
 
     def save(self):
-        print("\nSaving actor and critic")
-
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
