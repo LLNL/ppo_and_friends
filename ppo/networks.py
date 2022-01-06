@@ -316,7 +316,7 @@ class SimpleFeedForward(PPONetwork):
                  in_dim,
                  out_dim,
                  need_softmax = False,
-                 activation   = torch.nn.ReLU(),
+                 activation   = torch.nn.LeakyReLU(),
                  hidden_size  = 128,
                  **kwargs):
 
@@ -366,7 +366,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
 
         self.name         = name
         self.need_softmax = need_softmax
-        self.activation   = nn.ReLU()
+        self.activation   = nn.LeakyReLU()
 
         side_1_dim = self.split_start
         side_2_dim = in_dim - self.split_start
@@ -448,7 +448,7 @@ class AtariRAMNetwork(PPONetwork):
         self.need_softmax    = need_softmax
         self.uses_batch_norm = True
 
-        self.a_f = torch.nn.ReLU()
+        self.a_f = torch.nn.LeakyReLU()
 
         self.l1 = nn.Linear(in_dim, 1024)
         self.bn1 = nn.BatchNorm1d(1024)
@@ -532,7 +532,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 
         self.name         = name
         self.need_softmax = need_softmax
-        self.a_f          = torch.nn.ReLU()
+        self.a_f          = torch.nn.LeakyReLU()
 
         channels   = in_shape[0]
         height     = in_shape[1]
