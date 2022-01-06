@@ -44,8 +44,8 @@ class PPO(object):
                  mean_window_size    = 100,
                  render              = False,
                  load_state          = False,
-                 save_best_only      = False,
-                 state_path          = "./"):
+                 state_path          = "./",
+                 save_best_only      = False):
         """
             Initialize the PPO trainer.
 
@@ -91,19 +91,28 @@ class PPO(object):
                  use_icm              Should we use an Intrinsic Curiosity
                                       Module?
                  icm_beta             The beta value used within the ICM.
-                 ext_reward_weight     
-                 intr_reward_weight
+                 ext_reward_weight    An optional weight for the extrinsic
+                                      reward.
+                 intr_reward_weight   an optional weight for the intrinsic
+                                      reward.
                  entropy_weight       An optional weight to apply to our
                                       entropy.
                  target_kl            KL divergence used for early stopping.
                                       This is typically set in the range
                                       [0.1, 0.5]. Use high values to disable.
                                       (Disabled by default).
-                 mean_window_size
-                 render
-                 load_state
-                 save_best_only
-                 state_path
+                 mean_window_size     The window size for a running mean. Note
+                                      that each "score" in the window is
+                                      actually the mean score for that rollout.
+                 render               Should we render the environment while
+                                      training?
+                 load_state           Should we load a saved state?
+                 state_path           The path to save/load our state.
+                 save_best_only       When enabled, only save the models when
+                                      the top mean window increases. Note that
+                                      this assumes that the top scores will be
+                                      the best policy, which might not always
+                                      hold up, but it's a general assumption.
         """
 
         if np.issubdtype(env.action_space.dtype, np.floating):
