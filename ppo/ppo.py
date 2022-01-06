@@ -333,6 +333,7 @@ class PPO(object):
         self.critic.eval()
 
         while total_ts < self.ts_per_rollout:
+
             episode_info = EpisodeInfo(
                 use_gae = self.use_gae,
                 gamma   = self.gamma,

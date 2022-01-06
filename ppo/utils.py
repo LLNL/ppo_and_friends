@@ -98,6 +98,7 @@ class EpisodeInfo(object):
         return self.compute_discounted_sums(deltas.tolist(), sum_gamma)
 
     def _compute_standard_advantages(self):
+        #FIXME: Is this doc really accurate (reversal)?
         """
             Use a standard method for computing advantages.
             Typically, we use Q - values, but we reverse this
@@ -116,6 +117,9 @@ class EpisodeInfo(object):
                  value,
                  log_prob,
                  reward):
+        """
+            Add info from an episode.
+        """
 
         if type(action) == np.ndarray and len(action.shape) > 1:
             action = action.squeeze()
