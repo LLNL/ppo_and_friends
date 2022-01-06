@@ -169,7 +169,7 @@ class PPO(object):
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
         self.status_dict["window grad"]          = 'N/A'
-        self.status_dict["top window avg"]       = -np.finfo(np.float32).max
+        self.status_dict["top window avg"]       = 'N/A'
         self.status_dict["score avg"]            = 0
         self.status_dict["extrinsic score avg"]  = 0
         self.status_dict["top score"]            = -np.finfo(np.float32).max
@@ -480,8 +480,11 @@ class PPO(object):
             w_grad = np.gradient(self.score_cache).mean()
             self.status_dict["window grad"] = w_grad
 
-            top_window = max(self.status_dict["window avg"],
-                self.status_dict["top window avg"])
+            if type(self.status_dict["top window avg"]) == str:
+                top_window = self.status_dict["window avg"]
+            else:
+                top_window = max(self.status_dict["window avg"],
+                    self.status_dict["top window avg"])
 
             self.status_dict["top window avg"] = top_window
             self.prev_top_window = top_window
