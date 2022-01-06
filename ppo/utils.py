@@ -117,6 +117,9 @@ class EpisodeInfo(object):
                  log_prob,
                  reward):
 
+        if type(action) == np.ndarray and len(action.shape) > 1:
+            action = action.squeeze()
+
         self.observations.append(observation)
         self.next_observations.append(next_observation)
         self.actions.append(action)

@@ -3,6 +3,7 @@ import os
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
+import sys
 
 class PPONetwork(nn.Module):
 
@@ -198,7 +199,7 @@ class Conv2dObservationEncoder(nn.Module):
 
         return enc_obs
 
-
+#FIXME: cleanup
 class Conv2dObservationEncoder_orig(nn.Module):
 
     def __init__(self,
@@ -357,7 +358,8 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
                  in_dim,
                  out_dim,
                  need_softmax = False,
-                 hidden_size  = 64,
+                 hidden_left  = 64,
+                 hidden_right = 64,
                  **kwargs):
 
         super(SimpleSplitObsNetwork, self).__init__(**kwargs)
@@ -377,23 +379,21 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         # unclear if they keep the "K iteration" approach (they're very
         # vague). At any rate, this later approach is slighty different in
         # that it splits between proprioceptive and exteroceptive (sensory
-        # information about the environment). That's basically what we're
-        # doing here, except we are using the same architecture for both
-        # parts of the observation. Both of the previous papers use different
-        # architectures for the different sections.
+        # information about the environment).
+        #
         self.s1_net = SimpleFeedForward(
             name       = self.name + "_s1",
             in_dim     = side_1_dim,
-            out_dim    = hidden_size,
+            out_dim    = hidden_left,
             activation = self.activation)
 
         self.s2_net = SimpleFeedForward(
             name       = self.name + "_s2",
             in_dim     = side_2_dim,
-            out_dim    = hidden_size,
+            out_dim    = hidden_right,
             activation = self.activation)
 
-        inner_hidden_size  = hidden_size * 2
+        inner_hidden_size  = hidden_left + hidden_right
 
         self.full_l1 = nn.Linear(inner_hidden_size, inner_hidden_size)
         self.full_l2 = nn.Linear(inner_hidden_size, inner_hidden_size)
@@ -406,12 +406,12 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         s2_out = out[:, self.split_start : ]
 
         #
-        # Side 1.
+        # Side 1 (left side).
         #
         s1_out = self.s1_net(s1_out)
 
         #
-        # Side 2.
+        # Side 2 (right side).
         #
         s2_out = self.s2_net(s2_out)
 
@@ -779,6 +779,7 @@ class ICM(PPONetwork):
         if self.action_type == "discrete":
             inv_loss = self.ce_loss(action_pred, actions.flatten())
         elif self.action_type == "continuous":
+            actions = actions.reshape(action_pred.shape)
             inv_loss = self.mse_loss(action_pred, actions).mean()
 
         #

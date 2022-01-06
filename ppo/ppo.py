@@ -15,34 +15,96 @@ import time
 
 class PPO(object):
 
+    #TODO: replace lr dec with a function to be applied.
     def __init__(self,
                  env,
-                 network,
+                 ac_network,
                  device,
                  icm_network         = ICM,
-                 icm_encoder         = LinearObservationEncoder,
+                 icm_kw_args         = {},
+                 ac_kw_args          = {},
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = 0.99,
                  lr_dec_freq         = 500,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
-                 timesteps_per_batch = 2048,
+                 ts_per_rollout      = 1024,
                  gamma               = 0.99,
+                 lambd               = 0.95,
                  epochs_per_iter     = 10,
                  clip                = 0.2,
                  use_gae             = True,
                  use_icm             = False,
                  icm_beta            = 0.8,
-                 ext_reward_scale    = 1.0,
-                 intr_reward_scale   = 1.0,
+                 ext_reward_weight   = 1.0,
+                 intr_reward_weight  = 1.0,
                  entropy_weight      = 0.01,
-                 target_kl           = 0.01,
-                 obs_split_start     = 0.0,
+                 target_kl           = 100.0,
+                 mean_window_size    = 100,
                  render              = False,
                  load_state          = False,
                  save_best_only      = False,
                  state_path          = "./"):
+        """
+            Initialize the PPO trainer.
+
+            Parameters:
+                 env                  The environment to learn from.
+                 ac_network           The actor/critic network.
+                 device               A torch device to use for training.
+                 icm_network          The network to use for ICM applications.
+                 icm_kw_args          Extra keyword args for the ICM network.
+                 ac_kw_args           Extra keyword args for the actor/critic
+                                      networks.
+                 lr                   The initial learning rate.
+                 min_lr               The minimum learning rate.
+                 lr_dec               The percentage to decrement the lr to
+                                      every lr_dec_freq iterations. For
+                                      instance, an lr_dec of .99 would
+                                      decrement lr to 99% of it's current
+                                      value every lr_dec_freq iterations.
+                 lr_dec_freq          How often to decrement lr (in
+                                      iterations).
+                 max_ts_per_ep        The maximum timesteps to allow per
+                                      episode.
+                 batch_size           The batch size to use when training/
+                                      updating the networks.
+                 ts_per_rollout       A soft limit on the number of timesteps
+                                      to allow per rollout (can span multiple
+                                      episodes). Note that our actual timestep
+                                      count can exceed this limit, but we won't
+                                      start any new episodes once it has.
+                 gamma                The 'gamma' value for calculating
+                                      advantages.
+                 lambd                The 'lambda' value for calculating GAEs.
+                 epochs_per_iter      'Epoch' is used loosely and with a variety
+                                      of meanings in RL. In this case, a single
+                                      epoch is a single update of all networks.
+                                      epochs_per_iter is the number of updates
+                                      to perform after a single rollout (which
+                                      may contain multiple episodes).
+                 clip                 The clip value to use in the PPO clip.
+                 use_gae              Should we use Generalized Advantage
+                                      Estimations? If not, fall back on the
+                                      vanilla advantage calculation.
+                 use_icm              Should we use an Intrinsic Curiosity
+                                      Module?
+                 icm_beta             The beta value used within the ICM.
+                 ext_reward_weight     
+                 intr_reward_weight
+                 entropy_weight       An optional weight to apply to our
+                                      entropy.
+                 target_kl            KL divergence used for early stopping.
+                                      This is typically set in the range
+                                      [0.1, 0.5]. Use high values to disable.
+                                      (Disabled by default).
+                 mean_window_size
+                 render
+                 load_state
+                 save_best_only
+                 state_path
+        """
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
@@ -55,7 +117,6 @@ class PPO(object):
             print("ERROR: unknown action type!")
             sys.exit(1)
 
-        #FIXME
         #
         # Environments are very inconsistent! We need to check what shape
         # they expect actions to be in.
@@ -70,23 +131,26 @@ class PPO(object):
         self.use_gae             = use_gae
         self.use_icm             = use_icm
         self.icm_beta            = icm_beta
-        self.ext_reward_scale    = ext_reward_scale
-        self.intr_reward_scale   = intr_reward_scale
+        self.ext_reward_weight   = ext_reward_weight
+        self.intr_reward_weight  = intr_reward_weight
         self.lr                  = lr
         self.min_lr              = min_lr
         self.lr_dec              = lr_dec
         self.lr_dec_freq         = lr_dec_freq
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
-        self.timesteps_per_batch = timesteps_per_batch
+        self.ts_per_rollout      = ts_per_rollout
         self.gamma               = gamma
+        self.lambd               = lambd
         self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
         self.clip                = clip
         self.entropy_weight      = entropy_weight
         self.obs_shape           = env.observation_space.shape
-        self.prev_top_mean       = 0
+        self.prev_top_window     = -np.finfo(np.float32).max
         self.save_best_only      = save_best_only
+        self.mean_window_size    = mean_window_size 
+        self.score_cache         = np.zeros(0)
 
         #
         # Create a dictionary to track the status of training.
@@ -94,16 +158,17 @@ class PPO(object):
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["longest run"]          = 0
-        self.status_dict["running score mean"]   = 0
-        self.status_dict["extrinsic score mean"] = 0
-        self.status_dict["top score"]            = 0
-        self.status_dict["top mean score"]       = 0
+        self.status_dict["window avg"]           = 'N/A'
+        self.status_dict["window grad"]          = 'N/A'
+        self.status_dict["top window avg"]       = -np.finfo(np.float32).max
+        self.status_dict["score avg"]            = 0
+        self.status_dict["extrinsic score avg"]  = 0
+        self.status_dict["top score"]            = -np.finfo(np.float32).max
         self.status_dict["total episodes"]       = 0
-        self.status_dict["entropy"]              = 0
         self.status_dict["weighted entropy"]     = 0
         self.status_dict["actor loss"]           = 0
         self.status_dict["critic loss"]          = 0
-        self.status_dict["kl mean"]              = 0
+        self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
 
         print("Using {} action type.".format(self.action_type))
@@ -112,46 +177,43 @@ class PPO(object):
         if action_type == "discrete":
             need_softmax = True
 
-        net_kw_args = {}
         use_conv2d_setup = False
-        for base in network.__bases__:
+        for base in ac_network.__bases__:
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
-            if base.__name__ == "SplitObservationNetwork":
-                net_kw_args["split_start"] = obs_split_start
 
         if use_conv2d_setup:
             obs_dim = self.obs_shape
 
-            self.actor = network(
+            self.actor = ac_network(
                 "actor", 
                 obs_dim, 
                 self.act_dim, 
                 need_softmax,
-                **net_kw_args)
+                **ac_kw_args)
 
-            self.critic = network(
+            self.critic = ac_network(
                 "critic", 
                 obs_dim, 
                 1,
                 False,
-                **net_kw_args)
+                **ac_kw_args)
 
         else:
             obs_dim = self.obs_shape[0]
-            self.actor = network(
+            self.actor = ac_network(
                 "actor", 
                 obs_dim, 
                 self.act_dim, 
                 need_softmax,
-                **net_kw_args)
+                **ac_kw_args)
 
-            self.critic = network(
+            self.critic = ac_network(
                 "critic", 
                 obs_dim, 
                 1,
                 False,
-                **net_kw_args)
+                **ac_kw_args)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
@@ -161,11 +223,11 @@ class PPO(object):
                 obs_dim     = obs_dim,
                 act_dim     = self.act_dim,
                 action_type = self.action_type,
-                obs_encoder = icm_encoder)
+                **icm_kw_args)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
-            self.status_dict["intrinsic score mean"] = 0
+            self.status_dict["intrinsic score avg"] = 0
 
         if load_state:
             if not os.path.exists(state_path):
@@ -173,7 +235,15 @@ class PPO(object):
                 msg += "to load state."
                 print(msg)
             else:
-                self.load()
+                #
+                # Let's ensure backwards compatibility with previous commits.
+                #
+                tmp_status_dict = self.load()
+
+                for key in tmp_status_dict:
+                    if key in self.status_dict:
+                        self.status_dict[key] = tmp_status_dict[key]
+
                 self.lr = min(self.status_dict["lr"], self.lr)
                 self.status_dict["lr"] = self.lr
 
@@ -253,9 +323,11 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
-        while total_ts < self.timesteps_per_batch:
+        while total_ts < self.ts_per_rollout:
             episode_info = EpisodeInfo(
-                use_gae = self.use_gae)
+                use_gae = self.use_gae,
+                gamma   = self.gamma,
+                lambd   = self.lambd)
 
             total_episodes  += 1
             done             = False
@@ -306,7 +378,7 @@ class PPO(object):
                     ext_reward = ext_reward[0]
 
                 natural_reward = ext_reward
-                ext_reward    *= self.ext_reward_scale
+                ext_reward    *= self.ext_reward_weight
 
                 #
                 # If we're using the ICM, we need to do some extra work here.
@@ -334,7 +406,7 @@ class PPO(object):
                         intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
                     intr_reward  = intr_reward.item()
-                    intr_reward *= self.intr_reward_scale
+                    intr_reward *= self.intr_reward_weight
 
                     total_intr_rewards += intr_reward
 
@@ -369,23 +441,48 @@ class PPO(object):
             top_ep_score = max(top_ep_score, ep_score)
             longest_run  = max(longest_run, ts)
 
+        #
+        # Update our status dict.
+        #
         top_score          = max(top_ep_score, self.status_dict["top score"])
         running_ext_score  = total_ext_rewards / total_episodes
         running_score      = total_score / total_episodes
-        self.prev_top_mean = self.status_dict["top mean score"]
-        top_mean           = max(self.prev_top_mean, running_score)
 
-        self.status_dict["running score mean"]   = running_score
-        self.status_dict["extrinsic score mean"] = running_ext_score
+        self.status_dict["score avg"]            = running_score
+        self.status_dict["extrinsic score avg"]  = running_ext_score
         self.status_dict["top score"]            = top_score
-        self.status_dict["top mean score"]       = top_mean
         self.status_dict["total episodes"]       = total_episodes
         self.status_dict["longest run"]          = longest_run
 
+        #
+        # Update our score cache and the window mean when appropriate.
+        #
+        if self.score_cache.size < self.mean_window_size:
+            self.score_cache = np.append(self.score_cache, running_score)
+            self.status_dict["window avg"]  = "N/A"
+            self.status_dict["window grad"] = "N/A"
+        else:
+            self.score_cache = np.roll(self.score_cache, -1)
+            self.score_cache[-1] = running_score
+
+            self.status_dict["window avg"]  = self.score_cache.mean()
+
+            w_grad = np.gradient(self.score_cache).mean()
+            self.status_dict["window grad"] = w_grad
+
+            top_window = max(self.status_dict["window avg"],
+                self.status_dict["top window avg"])
+
+            self.status_dict["top window avg"] = top_window
+            self.prev_top_window = top_window
+
         if self.use_icm:
             ism = total_intr_rewards / total_episodes
-            self.status_dict["intrinsic score mean"] = ism
+            self.status_dict["intrinsic score avg"] = ism
 
+        #
+        # Finally, bulid the dataset.
+        #
         dataset.build()
 
         return dataset
@@ -425,12 +522,14 @@ class PPO(object):
             self.actor.train()
             self.critic.train()
 
-            for _ in range(self.epochs_per_iter):
+            for i in range(self.epochs_per_iter):
 
                 self._ppo_batch_train(data_loader)
 
-                if self.status_dict["kl mean"] > (1.5 * self.target_kl):
-                    print("Target KL has been reached. Ending epoch early.")
+                if self.status_dict["kl avg"] > (1.5 * self.target_kl):
+                    msg  = "\nTarget KL has been reached. "
+                    msg += "Ending early (after {} epochs)".format(i + 1)
+                    print(msg)
                     break
 
             if self.use_icm:
@@ -440,13 +539,14 @@ class PPO(object):
             self.print_status()
 
             if (self.save_best_only and
-                self.prev_top_mean < self.status_dict["top mean score"]):
+                self.prev_top_window < self.status_dict["top window avg"]):
                 self.save()
             elif not self.save_best_only:
                 self.save()
 
         stop_time = time.time()
-        print("Time spent training: {}".format(stop_time - start_time))
+        minutes   = (stop_time - start_time) / 60.
+        print("Time spent training: {} minutes".format(minutes))
 
     def _ppo_batch_train(self, data_loader):
 
@@ -482,7 +582,7 @@ class PPO(object):
             # to further constrain updates and clip the output to a specified
             # range.
             #
-            # FIXME: what's with the exponent?
+            # TODO: what's with the exponent?
             #
             ratios    = torch.exp(curr_log_probs - log_probs)
             surr1     = ratios * advantages
@@ -516,11 +616,10 @@ class PPO(object):
 
         w_entropy = total_entropy * self.entropy_weight
 
-        self.status_dict["entropy"]          = total_entropy / counter
         self.status_dict["weighted entropy"] = w_entropy / counter
         self.status_dict["actor loss"]       = total_actor_loss / counter
         self.status_dict["critic loss"]      = total_critic_loss / counter
-        self.status_dict["kl mean"]          = total_kl / counter
+        self.status_dict["kl avg"]           = total_kl / counter
 
     def _icm_batch_train(self, data_loader):
 
@@ -569,4 +668,6 @@ class PPO(object):
 
         state_file = os.path.join(self.state_path, "state.pickle")
         with open(state_file, "rb") as in_f:
-            self.status_dict = pickle.load(in_f)
+            tmp_status_dict = pickle.load(in_f)
+
+        return tmp_status_dict

@@ -20,7 +20,8 @@ if __name__ == "__main__":
                  "AssaultRAM", "AssaultPixels",
                  "BreakoutPixels", "BreakoutRAM",
                  "LunarLanderContinuous",
-                 "BipedalWalker"])
+                 "BipedalWalker",
+                 "InvertedPendulum", "Ant"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -160,6 +161,26 @@ if __name__ == "__main__":
 
     elif env_name == "BipedalWalker":
         bipedal_walker_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "InvertedPendulum":
+        inverted_pendulum_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Ant":
+        ant_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
