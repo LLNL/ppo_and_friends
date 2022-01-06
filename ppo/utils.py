@@ -19,7 +19,7 @@ class EpisodeInfo(object):
                                discounted sums. This is used for advantages and
                                "rewards-to-go" (expected discounted returns).
                 labmd          A "smoothing" factor used in GAE.
-                bootstrap_clip Should we bootstrap rewards?
+                bootstrap_clip A value to clip our bootstrapped rewards to.
         """
 
         self.use_gae           = use_gae
@@ -171,14 +171,12 @@ class PPODataset(Dataset):
 
     def __init__(self,
                  device,
-                 action_type,
-                 normalize_obs = True):
+                 action_type):
 
         self.action_type   = action_type
         self.device        = device
         self.episodes      = []
         self.is_built      = False
-        self.normalize_obs = normalize_obs
 
         self.actions           = None
         self.observations      = None
