@@ -5,6 +5,7 @@ from networks import SimpleFeedForward, AtariRAMNetwork, AtariPixelNetwork
 from networks import SimpleSplitObsNetwork
 from networks import ICM, LinearObservationEncoder, Conv2dObservationEncoder_orig
 from custom_environments.gym_wrappers import *
+import torch.nn as nn
 
 
 def run_ppo(env,
@@ -14,7 +15,7 @@ def run_ppo(env,
             batch_size          = 256,
             ts_per_rollout      = 1024,
             epochs_per_iter     = 10,
-            target_kl           = 0.01,
+            target_kl           = 100.,
             lr                  = 3e-4,
             min_lr              = 1e-4,
             lr_dec              = 0.99,
@@ -43,6 +44,7 @@ def run_ppo(env,
               icm_network        = icm_network,
               device             = device,
               batch_size         = batch_size,
+              ts_per_rollout     = ts_per_rollout,
               lr                 = lr,
               target_kl          = target_kl,
               min_lr             = min_lr,
@@ -156,12 +158,20 @@ def lunar_lander_ppo(state_path,
 
     env = gym.make('LunarLander-v2')
 
+    #
+    # Extra args for the actor critic models.
+    # I find that leaky relu does much better with the lunar
+    # lander env.
+    #
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
+
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
             max_ts_per_ep       = 1001,
             ts_per_rollout      = 1024,
             use_gae             = True,
             use_icm             = False,
+            ac_kw_args          = ac_kw_args,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -187,14 +197,24 @@ def lunar_lander_continuous_ppo(state_path,
 
     env = gym.make('LunarLanderContinuous-v2')
 
+    #
+    # Extra args for the actor critic models.
+    # I find that leaky relu does much better with the lunar
+    # lander env.
+    #
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
+
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 1001,
+            max_ts_per_ep       = 600,
             ts_per_rollout      = 1024,
+            batch_size          = 512,
             lr                  = 0.0003,
             min_lr              = 0.0001,
             lr_dec              = 0.99,
-            lr_dec_freq         = 10,
+            entropy_weight      = 0.05,
+            lr_dec_freq         = 20,
+            ac_kw_args          = ac_kw_args,
             use_gae             = True,
             use_icm             = False,
             state_path          = state_path,
@@ -204,7 +224,6 @@ def lunar_lander_continuous_ppo(state_path,
             device              = device,
             ext_reward_weight   = 1.0/100.0,
             intr_reward_weight  = 1.0,
-            entropy_weight      = 0.01,
             test                = test,
             num_test_runs       = num_test_runs)
 
@@ -222,6 +241,9 @@ def mountain_car_ppo(state_path,
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
+            ts_per_rollout     = 2048,
+            lr                 = 0.0003,
+            min_lr             = 0.0003,
             use_gae            = True,
             use_icm            = True,
             state_path         = state_path,
@@ -246,9 +268,20 @@ def mountain_car_continuous_ppo(state_path,
 
     env = gym.make('MountainCarContinuous-v0')
 
+    #
+    # Extra args for the actor critic models.
+    # Leaky relu tends to work well here.
+    #
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
+            batch_size         = 256,
+            ts_per_rollout     = 2048,
+            lr                 = 0.0003,
+            min_lr             = 0.0003,
+            ac_kw_args         = ac_kw_args,
             use_gae            = True,
             use_icm            = True,
             state_path         = state_path,
@@ -258,7 +291,6 @@ def mountain_car_continuous_ppo(state_path,
             device             = device,
             ext_reward_weight  = 1.0,
             intr_reward_weight = 1.0,
-            entropy_weight     = 0.01,
             test               = test,
             num_test_runs      = num_test_runs)
 
@@ -275,7 +307,12 @@ def acrobot_ppo(state_path,
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 200,
+            max_ts_per_ep      = 100,
+            ts_per_rollout     = 2048,
+            lr                 = 0.0003,
+            min_lr             = 0.0001,
+            lr_dec             = 0.99,
+            lr_dec_freq        = 20,
             use_gae            = True,
             use_icm            = True,
             state_path         = state_path,
@@ -584,17 +621,17 @@ def ant_ppo(state_path,
             ac_kw_args          = ac_kw_args,
             batch_size          = 256,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 512,
+            ts_per_rollout      = 1024,
             use_gae             = True,
-            use_icm             = True,
+            use_icm             = False,
             save_best_only      = False,
             epochs_per_iter     = 20,
             mean_window_size    = 500,
-            target_kl           = 0.02,
+            target_kl           = 0.05,
             clip                = 0.2,
             lr                  = 0.0003,
             min_lr              = 0.000095,
-            lr_dec              = 0.9999,
+            lr_dec              = 0.999,
             lr_dec_freq         = 10,
             state_path          = state_path,
             load_state          = load_state,
