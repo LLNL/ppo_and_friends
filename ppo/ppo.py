@@ -606,7 +606,7 @@ class PPO(object):
             #
             # We negate here to perform gradient ascent rather than descent.
             #
-            actor_loss        = -(torch.min(surr1, surr2)).mean()
+            actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
             total_entropy    += entropy.mean().item()
             actor_loss       -= self.entropy_weight * entropy.mean()
