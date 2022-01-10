@@ -34,6 +34,8 @@ class PPO(object):
                  lambd               = 0.95,
                  epochs_per_iter     = 10,
                  clip                = 0.2,
+                 bootstrap_clip      = (-1.0, 1.0),
+                 dynamic_bs_clip     = True,
                  use_gae             = True,
                  use_icm             = False,
                  icm_beta            = 0.8,
@@ -85,6 +87,19 @@ class PPO(object):
                                       to perform after a single rollout (which
                                       may contain multiple episodes).
                  clip                 The clip value to use in the PPO clip.
+                 bootstrap_clip       When using GAE, we bootstrap the values
+                                      and rewards when an epsiode is cut off
+                                      before completion. In these cases, we
+                                      clip the bootstrapped reward to a
+                                      specific range. Why is this? Well, our
+                                      estimated reward (from our value network)
+                                      might be way outside of the expected
+                                      range.
+                 dynamic_bs_clip      If set to True, bootstrap_clip will be
+                                      used as the initial clip values, but all
+                                      values thereafter will be taken from the
+                                      global min and max rewards that have been
+                                      seen so far.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
                                       vanilla advantage calculation.
@@ -154,6 +169,8 @@ class PPO(object):
         self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
         self.clip                = clip
+        self.bootstrap_clip      = bootstrap_clip
+        self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
         self.obs_shape           = env.observation_space.shape
         self.prev_top_window     = -np.finfo(np.float32).max
@@ -164,6 +181,7 @@ class PPO(object):
         #
         # Create a dictionary to track the status of training.
         #
+        max_int           = np.iinfo(np.int32).max
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["longest run"]          = 0
@@ -172,13 +190,14 @@ class PPO(object):
         self.status_dict["top window avg"]       = 'N/A'
         self.status_dict["score avg"]            = 0
         self.status_dict["extrinsic score avg"]  = 0
-        self.status_dict["top score"]            = -np.finfo(np.float32).max
+        self.status_dict["top score"]            = -max_int
         self.status_dict["total episodes"]       = 0
         self.status_dict["weighted entropy"]     = 0
         self.status_dict["actor loss"]           = 0
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
+        self.status_dict["reward range"]         = (max_int, -max_int)
 
         print("Using {} action type.".format(self.action_type))
 
@@ -328,6 +347,8 @@ class PPO(object):
         top_ep_score       = 0
         total_score        = 0
         longest_run        = 0
+        max_reward         = -np.finfo(np.float32).max
+        min_reward         = np.finfo(np.float32).max
 
         self.actor.eval()
         self.critic.eval()
@@ -335,9 +356,10 @@ class PPO(object):
         while total_ts < self.ts_per_rollout:
 
             episode_info = EpisodeInfo(
-                use_gae = self.use_gae,
-                gamma   = self.gamma,
-                lambd   = self.lambd)
+                use_gae        = self.use_gae,
+                gamma          = self.gamma,
+                lambd          = self.lambd,
+                bootstrap_clip = self.bootstrap_clip)
 
             total_episodes  += 1
             done             = False
@@ -433,6 +455,8 @@ class PPO(object):
                     log_prob,
                     reward)
 
+                max_reward         = max(max_reward, reward)
+                min_reward         = min(min_reward, reward)
                 total_score       += reward
                 ep_score          += natural_reward
                 total_ext_rewards += natural_reward
@@ -463,6 +487,14 @@ class PPO(object):
         self.status_dict["top score"]            = top_score
         self.status_dict["total episodes"]       = total_episodes
         self.status_dict["longest run"]          = longest_run
+
+        max_reward = max(self.status_dict["reward range"][1], max_reward)
+        min_reward = min(self.status_dict["reward range"][0], min_reward)
+        rw_range   = (min_reward, max_reward)
+        self.status_dict["reward range"] = rw_range
+
+        if self.dynamic_bs_clip:
+            self.bootstrap_clip = rw_range
 
         #
         # Update our score cache and the window mean when appropriate.
@@ -540,7 +572,8 @@ class PPO(object):
                 self._ppo_batch_train(data_loader)
 
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
-                    msg  = "\nTarget KL has been reached. "
+                    msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
+                    msg += "has been reached. "
                     msg += "Ending early (after {} epochs)".format(i + 1)
                     print(msg)
                     break
@@ -551,8 +584,10 @@ class PPO(object):
 
             self.print_status()
 
-            if (self.save_best_only and
-                self.prev_top_window < self.status_dict["top window avg"]):
+            if type(self.status_dict["top window avg"]) == str:
+                self.save()
+            elif (self.save_best_only and
+                self.prev_top_window <= self.status_dict["top window avg"]):
                 self.save()
             elif not self.save_best_only:
                 self.save()
