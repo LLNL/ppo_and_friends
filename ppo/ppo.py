@@ -372,7 +372,7 @@ class PPO(object):
             #
             obs = obs.reshape(self.obs_shape)
 
-            for ts in range(self.max_ts_per_ep):
+            for ts in range(self.max_ts_per_ep + 1):
                 if self.render:
                     self.env.render()
 
@@ -465,7 +465,7 @@ class PPO(object):
                     episode_info.end_episode(0, ts + 1)
                     break
 
-                elif ts == (self.max_ts_per_ep - 1):
+                elif ts == self.max_ts_per_ep:
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
                     nxt_value = self.critic(t_obs)
