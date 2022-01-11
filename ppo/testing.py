@@ -1,5 +1,5 @@
 import torch
-from utils import get_action_type, need_action_squeeze
+from utils.misc import get_action_type, need_action_squeeze
 
 def test_policy(policy,
                 env,
@@ -20,7 +20,6 @@ def test_policy(policy,
         done = False
 
         while not done:
-
             num_steps += 1
 
             if render:

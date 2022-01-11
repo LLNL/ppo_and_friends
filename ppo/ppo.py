@@ -8,7 +8,8 @@ import torch
 from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
-from utils import EpisodeInfo, PPODataset, get_action_type, need_action_squeeze
+from utils.episode_info import EpisodeInfo, PPODataset
+from utils.misc import get_action_type, need_action_squeeze
 from networks import ICM, LinearObservationEncoder
 import time
 
@@ -344,7 +345,7 @@ class PPO(object):
         total_ts           = 0
         total_ext_rewards  = 0
         total_intr_rewards = 0
-        top_ep_score       = 0
+        top_ep_score       = -np.finfo(np.float32).max
         total_score        = 0
         longest_run        = 0
         max_reward         = -np.finfo(np.float32).max
