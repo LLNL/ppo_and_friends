@@ -166,22 +166,23 @@ def lunar_lander_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.00025
+    min_lr = 0.0001
 
     lr_dec = LogDecrementer(
-        max_iteration = 1000,
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 1000,
+            max_ts_per_ep       = 700,
             ts_per_rollout      = 1024,
+            batch_size          = 512,
             use_gae             = True,
             use_icm             = False,
             dynamic_bs_clip     = True,
             bootstrap_clip      = (-1., 1.),
-            target_kl           = 0.05,
+            target_kl           = 0.03,
             ac_kw_args          = ac_kw_args,
             state_path          = state_path,
             load_state          = load_state,
@@ -218,7 +219,7 @@ def lunar_lander_continuous_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LogDecrementer(
-        max_iteration = 8000,
+        max_iteration = 3000,
         max_value     = lr,
         min_value     = min_lr)
 
