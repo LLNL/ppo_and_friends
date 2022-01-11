@@ -486,14 +486,26 @@ def breakout_pixels_ppo(state_path,
         auto_fire     = auto_fire,
         skip_k_frames = 4)
 
+    lr     = 0.0003
+    min_lr = 0.000095
+
+    lr_dec = LogDecrementer(
+        max_iteration = 5000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+
     run_ppo(env                  = wrapped_env,
             ac_network           = AtariPixelNetwork,
             batch_size           = 256,
             ts_per_rollout       = 1024,
-            epochs_per_iter      = 10,
-            lr                   = 0.0002,
-            min_lr               = 0.0001,
             max_ts_per_ep        = 1024,
+            epochs_per_iter      = 30,
+            bootstrap_clip       = (0.0, 1.0),
+            target_kl            = 0.03,
+            lr_dec               = lr_dec,
+            lr                   = lr,
+            min_lr               = min_lr,
             use_gae              = True,
             use_icm              = False,
             state_path           = state_path,
@@ -503,7 +515,6 @@ def breakout_pixels_ppo(state_path,
             device               = device,
             ext_reward_weight    = 1.0,
             intr_reward_weight   = 0.1,
-            entropy_weight       = 0.01,
             test                 = test,
             num_test_runs        = num_test_runs)
 
@@ -546,6 +557,7 @@ def breakout_ram_ppo(state_path,
             max_ts_per_ep      = 20000,
             use_gae            = True,
             use_icm            = False,
+            save_best_only     = True,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
