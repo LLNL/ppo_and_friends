@@ -466,18 +466,29 @@ class PPO(object):
                 total_ext_rewards += natural_reward
 
                 if done:
-                    episode_info.end_episode(0, ts + 1)
+                    #
+                    # Avoid clipping the reward here in case our clip range
+                    # doesn't include 0.
+                    #
+                    episode_info.end_episode(
+                        ending_value   = 0,
+                        episode_length = ts + 1,
+                        skip_clip      = True)
                     break
 
                 elif ts == self.max_ts_per_ep:
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
                     nxt_value = self.critic(t_obs)
-                    episode_info.end_episode(nxt_value.item(), ts + 1)
+
+                    episode_info.end_episode(
+                        ending_value   = nxt_value.item(),
+                        episode_length = ts + 1,
+                        skip_clip      = False)
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
-            longest_run  = max(longest_run, ts)
+            longest_run  = max(longest_run, ts + 1)
 
         #
         # Update our status dict.
