@@ -477,7 +477,7 @@ class PPO(object):
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
-            longest_run  = max(longest_run, ts + 1)
+            longest_run  = max(longest_run, ts)
 
         #
         # Update our status dict.
