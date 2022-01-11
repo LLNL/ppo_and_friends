@@ -6,6 +6,7 @@ from networks import SimpleSplitObsNetwork
 from networks import ICM, LinearObservationEncoder, Conv2dObservationEncoder_orig
 from custom_environments.gym_wrappers import *
 import torch.nn as nn
+from utils.decrementers import *
 
 
 def run_ppo(env,
@@ -18,8 +19,7 @@ def run_ppo(env,
             target_kl           = 100.,
             lr                  = 3e-4,
             min_lr              = 1e-4,
-            lr_dec              = 0.99,
-            lr_dec_freq         = 500,
+            lr_dec              = None,
             max_ts_per_ep       = 200,
             use_gae             = True,
             use_icm             = False,
@@ -51,7 +51,6 @@ def run_ppo(env,
               target_kl          = target_kl,
               min_lr             = min_lr,
               lr_dec             = lr_dec,
-              lr_dec_freq        = lr_dec_freq,
               max_ts_per_ep      = max_ts_per_ep,
               use_gae            = use_gae,
               use_icm            = use_icm,
@@ -74,31 +73,6 @@ def run_ppo(env,
     else: 
         ppo.learn(num_timesteps)
 
-def cartpole_pixels_ppo(state_path,
-                        load_state,
-                        render,
-                        num_timesteps,
-                        device,
-                        test = False,
-                        num_test_runs = 1):
-
-    env = CartPoleEnvManager()
-
-    run_ppo(env                = env,
-            ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 200,
-            use_gae            = True,
-            use_icm            = False,
-            state_path         = state_path,
-            load_state         = load_state,
-            render             = render,
-            num_timesteps      = num_timesteps,
-            device             = device,
-            ext_reward_weight  = 1.0,
-            intr_reward_weight = 1.0,
-            test               = test,
-            num_test_runs      = num_test_runs)
-
 
 def cartpole_ppo(state_path,
                  load_state,
@@ -110,6 +84,14 @@ def cartpole_ppo(state_path,
 
     env = gym.make('CartPole-v0')
 
+    lr     = 0.0003
+    min_lr = 0.0002
+
+    lr_dec = LogDecrementer(
+        max_iteration = 2000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
@@ -120,6 +102,9 @@ def cartpole_ppo(state_path,
             render             = render,
             num_timesteps      = num_timesteps,
             device             = device,
+            lr                 = lr,
+            min_lr             = min_lr,
+            lr_dec             = lr_dec,
             ext_reward_weight  = 1.0,
             intr_reward_weight = 1.0,
             test               = test,
@@ -136,6 +121,14 @@ def pendulum_ppo(state_path,
 
     env = gym.make('Pendulum-v1')
 
+    lr     = 0.0003
+    min_lr = 0.0002
+
+    lr_dec = LogDecrementer(
+        max_iteration = 2000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
@@ -146,6 +139,9 @@ def pendulum_ppo(state_path,
             render             = render,
             num_timesteps      = num_timesteps,
             device             = device,
+            lr                 = lr,
+            min_lr             = min_lr,
+            lr_dec             = lr_dec,
             ext_reward_weight  = 1.0,
             intr_reward_weight = 1.0,
             test               = test,
@@ -169,9 +165,17 @@ def lunar_lander_ppo(state_path,
     #
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
+    lr     = 0.0003
+    min_lr = 0.0001
+
+    lr_dec = LogDecrementer(
+        max_iteration = 8000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 1001,
+            max_ts_per_ep       = 600,
             ts_per_rollout      = 1024,
             use_gae             = True,
             use_icm             = False,
@@ -181,10 +185,9 @@ def lunar_lander_ppo(state_path,
             render              = render,
             num_timesteps       = num_timesteps,
             device              = device,
-            lr                  = 0.0003,
-            min_lr              = 0.0001,
-            lr_dec              = 0.99,
-            lr_dec_freq         = 10,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
             ext_reward_weight   = 1.0/100.0,
             intr_reward_weight  = 1.0,
             test                = test,
@@ -208,16 +211,19 @@ def lunar_lander_continuous_ppo(state_path,
     #
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
+    lr     = 0.0003
+    min_lr = 0.0001
+
+    lr_dec = LogDecrementer(
+        max_iteration = 8000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
             max_ts_per_ep       = 600,
             ts_per_rollout      = 1024,
             batch_size          = 512,
-            lr                  = 0.0003,
-            min_lr              = 0.0001,
-            lr_dec              = 0.99,
-            entropy_weight      = 0.05,
-            lr_dec_freq         = 20,
             ac_kw_args          = ac_kw_args,
             use_gae             = True,
             use_icm             = False,
@@ -226,6 +232,9 @@ def lunar_lander_continuous_ppo(state_path,
             render              = render,
             num_timesteps       = num_timesteps,
             device              = device,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
             ext_reward_weight   = 1.0/100.0,
             intr_reward_weight  = 1.0,
             test                = test,
@@ -242,12 +251,21 @@ def mountain_car_ppo(state_path,
 
     env = gym.make('MountainCar-v0')
 
+    lr     = 0.0003
+    min_lr = 0.0002
+
+    lr_dec = LogDecrementer(
+        max_iteration = 8000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
             ts_per_rollout     = 2048,
-            lr                 = 0.0003,
-            min_lr             = 0.0003,
+            lr_dec             = lr_dec,
+            lr                 = lr,
+            min_lr             = min_lr,
             use_gae            = True,
             use_icm            = True,
             state_path         = state_path,
@@ -257,7 +275,6 @@ def mountain_car_ppo(state_path,
             device             = device,
             ext_reward_weight  = 1.0/100.,
             intr_reward_weight = 1.0,
-            entropy_weight     = 0.01,
             test               = test,
             num_test_runs      = num_test_runs)
 
@@ -278,13 +295,22 @@ def mountain_car_continuous_ppo(state_path,
     #
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
+    lr     = 0.0003
+    min_lr = 0.00014
+
+    lr_dec = LogDecrementer(
+        max_iteration = 8000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
             batch_size         = 256,
             ts_per_rollout     = 2048,
-            lr                 = 0.0003,
-            min_lr             = 0.0003,
+            lr_dec             = lr_dec,
+            lr                 = lr,
+            min_lr             = min_lr,
             ac_kw_args         = ac_kw_args,
             use_gae            = True,
             use_icm            = True,
@@ -309,14 +335,21 @@ def acrobot_ppo(state_path,
 
     env = gym.make('Acrobot-v1')
 
+    lr     = 0.0003
+    min_lr = 0.00015
+
+    lr_dec = LogDecrementer(
+        max_iteration = 8000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 100,
             ts_per_rollout     = 2048,
-            lr                 = 0.0003,
-            min_lr             = 0.0001,
-            lr_dec             = 0.99,
-            lr_dec_freq        = 20,
+            lr_dec             = lr_dec,
+            lr                 = lr,
+            min_lr             = min_lr,
             use_gae            = True,
             use_icm            = True,
             state_path         = state_path,
@@ -355,8 +388,6 @@ def assault_ram_ppo(state_path,
     run_ppo(env                = env,
             ac_network         = AtariRAMNetwork,
             lr                 = 0.0001,
-            lr_dec_freq        = 30,
-            lr_dec             = 0.95,
             max_ts_per_ep      = 1000,
             use_gae            = True,
             use_icm            = True,
@@ -401,8 +432,6 @@ def assault_pixels_ppo(state_path,
     run_ppo(env                = wrapped_env,
             ac_network         = AtariPixelNetwork,
             lr                 = 0.0001,
-            lr_dec_freq        = 30,
-            lr_dec             = 0.99,
             max_ts_per_ep      = 10000,
             use_gae            = True,
             use_icm            = False,
@@ -460,8 +489,6 @@ def breakout_pixels_ppo(state_path,
             epochs_per_iter      = 10,
             lr                   = 0.0002,
             min_lr               = 0.0001,
-            lr_dec_freq          = 2,
-            lr_dec               = 0.99,
             max_ts_per_ep        = 1024,
             use_gae              = True,
             use_icm              = False,
@@ -512,8 +539,6 @@ def breakout_ram_ppo(state_path,
             ac_network         = AtariRAMNetwork,
             batch_size         = 512,
             lr                 = 0.0001,
-            lr_dec_freq        = 100,
-            lr_dec             = 0.9999,
             max_ts_per_ep      = 20000,
             use_gae            = True,
             use_icm            = False,
@@ -551,7 +576,7 @@ def bipedal_walker_ppo(state_path,
             ac_network          = SimpleSplitObsNetwork,
             ac_kw_args          = ac_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 256,
+            max_ts_per_ep       = 512,
             ts_per_rollout      = 1024,
             use_gae             = True,
             use_icm             = False,
@@ -563,9 +588,8 @@ def bipedal_walker_ppo(state_path,
             bootstrap_clip      = (-1., 0.001),
             dynamic_bs_clip     = True,
             lr                  = 0.0003,
-            min_lr              = 0.0001,
-            lr_dec              = 0.99,
-            lr_dec_freq         = 70,
+            min_lr              = 0.000095,
+            #lr_dec              = 0.99,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -638,8 +662,7 @@ def ant_ppo(state_path,
             clip                = 0.2,
             lr                  = 0.0003,
             min_lr              = 0.000095,
-            lr_dec              = 0.999,
-            lr_dec_freq         = 10,
+            #lr_dec              = 0.999,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,

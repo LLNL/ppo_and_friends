@@ -10,6 +10,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from utils.episode_info import EpisodeInfo, PPODataset
 from utils.misc import get_action_type, need_action_squeeze
+from utils.decrementers import *
 from networks import ICM, LinearObservationEncoder
 import time
 
@@ -26,8 +27,7 @@ class PPO(object):
                  ac_kw_args          = {},
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
-                 lr_dec              = 0.99,
-                 lr_dec_freq         = 500,
+                 lr_dec              = None,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
                  ts_per_rollout      = 1024,
@@ -62,13 +62,10 @@ class PPO(object):
                                       networks.
                  lr                   The initial learning rate.
                  min_lr               The minimum learning rate.
-                 lr_dec               The percentage to decrement the lr to
-                                      every lr_dec_freq iterations. For
-                                      instance, an lr_dec of .99 would
-                                      decrement lr to 99% of it's current
-                                      value every lr_dec_freq iterations.
-                 lr_dec_freq          How often to decrement lr (in
-                                      iterations).
+                 lr_dec               A class that inherits from the Decrement
+                                      class located in utils/decrementers.py.
+                                      This class has a decrement function that
+                                      will be used to updated the learning rate.
                  max_ts_per_ep        The maximum timesteps to allow per
                                       episode.
                  batch_size           The batch size to use when training/
@@ -148,6 +145,14 @@ class PPO(object):
         #
         self.action_squeeze = need_action_squeeze(env)
 
+        if lr_dec == None:
+            self.lr_dec = LogDecrementer(
+                max_iteration = 2000,
+                max_value     = lr,
+                min_value     = min_lr)
+        else:
+            self.lr_dec = lr_dec
+
         self.env                 = env
         self.device              = device
         self.state_path          = state_path
@@ -160,8 +165,6 @@ class PPO(object):
         self.intr_reward_weight  = intr_reward_weight
         self.lr                  = lr
         self.min_lr              = min_lr
-        self.lr_dec              = lr_dec
-        self.lr_dec_freq         = lr_dec_freq
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
         self.ts_per_rollout      = ts_per_rollout
@@ -474,7 +477,7 @@ class PPO(object):
 
             dataset.add_episode(episode_info)
             top_ep_score = max(top_ep_score, ep_score)
-            longest_run  = max(longest_run, ts)
+            longest_run  = max(longest_run, ts + 1)
 
         #
         # Update our status dict.
@@ -533,21 +536,6 @@ class PPO(object):
 
         return dataset
 
-    def check_learning_rate(self):
-        iteration = self.status_dict["iteration"]
-
-        if (iteration != 0 and iteration % self.lr_dec_freq == 0
-            and self.lr > self.min_lr):
-
-            new_lr = max(self.lr * self.lr_dec, self.min_lr)
-
-            msg  = "\n***Decreasing learning rate from "
-            msg += "{} to {}***\n".format(self.lr, new_lr)
-            print(msg)
-
-            self.lr = new_lr
-            self.status_dict["lr"] = self.lr
-
     def learn(self, total_timesteps):
         start_time = time.time()
         ts = 0
@@ -558,7 +546,8 @@ class PPO(object):
             ts += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
 
-            self.check_learning_rate()
+            self.lr = self.lr_dec.decrement(self.status_dict["iteration"])
+            self.status_dict["lr"] = self.lr
 
             data_loader = DataLoader(
                 dataset,

@@ -15,7 +15,7 @@ if __name__ == "__main__":
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--num_timesteps", default=1000000, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
-        choices=["CartPole", "CartPolePixels", "Pendulum", "LunarLander",
+        choices=["CartPole", "Pendulum", "LunarLander",
                  "MountainCar", "MountainCarContinuous", "Acrobot",
                  "AssaultRAM", "AssaultPixels",
                  "BreakoutPixels", "BreakoutRAM",
@@ -41,16 +41,6 @@ if __name__ == "__main__":
 
     if env_name == "CartPole":
         cartpole_ppo(
-            state_path    = state_path,
-            load_state    = load_state,
-            render        = render,
-            num_timesteps = num_timesteps,
-            device        = device,
-            test          = test,
-            num_test_runs = num_test_runs)
-
-    elif env_name == "CartPolePixels":
-        cartpole_pixels_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
