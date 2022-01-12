@@ -35,7 +35,8 @@ class PPO(object):
                  gamma               = 0.99,
                  lambd               = 0.95,
                  epochs_per_iter     = 10,
-                 clip                = 0.2,
+                 surr_clip           = 0.2,
+                 gradient_clip       = 0.5,
                  bootstrap_clip      = (-1.0, 1.0),
                  dynamic_bs_clip     = True,
                  use_gae             = True,
@@ -86,7 +87,10 @@ class PPO(object):
                                       epochs_per_iter is the number of updates
                                       to perform after a single rollout (which
                                       may contain multiple episodes).
-                 clip                 The clip value to use in the PPO clip.
+                 surr_clip            The clip value applied to the surrogate
+                                      (standard PPO approach).
+                 gradient_clip        A clip value to use on the gradient
+                                      update.
                  bootstrap_clip       When using GAE, we bootstrap the values
                                       and rewards when an epsiode is cut off
                                       before completion. In these cases, we
@@ -178,7 +182,8 @@ class PPO(object):
         self.lambd               = lambd
         self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
-        self.clip                = clip
+        self.surr_clip           = surr_clip
+        self.gradient_clip       = gradient_clip
         self.bootstrap_clip      = bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
@@ -678,7 +683,7 @@ class PPO(object):
             ratios    = torch.exp(curr_log_probs - log_probs)
             surr1     = ratios * advantages
             surr2     = torch.clamp(
-                ratios, 1 - self.clip, 1 + self.clip) * advantages
+                ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
             total_kl += (log_probs - curr_log_probs).mean().item()
 
             #
@@ -697,10 +702,14 @@ class PPO(object):
 
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
+            nn.utils.clip_grad_norm(self.actor.parameters(),
+                self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
+            nn.utils.clip_grad_norm(self.critic.parameters(),
+                self.gradient_clip)
             self.critic_optim.step()
 
             counter += 1
