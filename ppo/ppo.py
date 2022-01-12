@@ -45,6 +45,7 @@ class PPO(object):
                  entropy_weight      = 0.01,
                  target_kl           = 100.0,
                  mean_window_size    = 100,
+                 normalize_adv       = True,
                  render              = False,
                  load_state          = False,
                  state_path          = "./",
@@ -117,6 +118,8 @@ class PPO(object):
                  mean_window_size     The window size for a running mean. Note
                                       that each "score" in the window is
                                       actually the mean score for that rollout.
+                 normalize_adv        Should we normalize the advantages? This
+                                      occurs at the minibatch level.
                  render               Should we render the environment while
                                       training?
                  load_state           Should we load a saved state?
@@ -180,6 +183,7 @@ class PPO(object):
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_best_only      = save_best_only
         self.mean_window_size    = mean_window_size 
+        self.normalize_adv       = normalize_adv
         self.score_cache         = np.zeros(0)
 
         #
@@ -282,11 +286,12 @@ class PPO(object):
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
         self.cov_mat = torch.diag(self.cov_var)
 
-        self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr)
-        self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
+        self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr, eps=1e-5)
+        self.critic_optim = Adam(self.critic.parameters(), lr=self.lr, eps=1e-5)
 
         if self.use_icm:
-            self.icm_optim = Adam(self.icm_model.parameters(), lr=self.lr)
+            self.icm_optim = Adam(self.icm_model.parameters(),
+                lr=self.lr, eps=1e-5)
 
         if not os.path.exists(state_path):
             os.makedirs(state_path)
@@ -615,6 +620,14 @@ class PPO(object):
                 print("Skipping batch of size 1")
                 print("    obs shape: {}".format(obs.shape))
                 continue
+
+            if self.normalize_adv:
+                # TODO: Reference paper.
+                adv_std  = advantages.std()
+                adv_mean = advantages.mean()
+                assert not torch.isnan(adv_std), "Advantage std is nan!"
+
+                advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
             values, curr_log_probs, entropy = self.evaluate(obs, actions)
 
