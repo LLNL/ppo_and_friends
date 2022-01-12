@@ -230,33 +230,37 @@ class PPO(object):
             obs_dim = self.obs_shape
 
             self.actor = ac_network(
-                "actor", 
-                obs_dim, 
-                self.act_dim, 
-                need_softmax,
+                name         = "actor", 
+                in_dim       = obs_dim, 
+                out_dim      = self.act_dim, 
+                out_init     = 0.01,
+                need_softmax = need_softmax,
                 **ac_kw_args)
 
             self.critic = ac_network(
-                "critic", 
-                obs_dim, 
-                1,
-                False,
+                name         = "critic", 
+                in_dim       = obs_dim, 
+                out_dim      = 1,
+                out_init     = 1.0,
+                need_softmax = False,
                 **ac_kw_args)
 
         else:
             obs_dim = self.obs_shape[0]
             self.actor = ac_network(
-                "actor", 
-                obs_dim, 
-                self.act_dim, 
-                need_softmax,
+                name         = "actor", 
+                in_dim       = obs_dim, 
+                out_dim      = self.act_dim, 
+                out_init     = 0.01,
+                need_softmax = need_softmax,
                 **ac_kw_args)
 
             self.critic = ac_network(
-                "critic", 
-                obs_dim, 
-                1,
-                False,
+                name         = "critic", 
+                in_dim       = obs_dim, 
+                out_dim      = 1,
+                out_init     = 1.0,
+                need_softmax = False,
                 **ac_kw_args)
 
         self.actor  = self.actor.to(device)

@@ -57,6 +57,16 @@ def get_maxpool2d_out_size(in_size,
                            stride):
     return get_conv2d_out_size(in_size, padding, kernel_size, stride)
 
+#TODO: reference sources
+def init_layer(layer,
+               weight_std = np.sqrt(2),
+               bias_const = 0.0):
+
+    torch.nn.init.orthogonal_(layer.weight, weight_std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+
+    return layer
+
 
 ########################################################################
 #                        Observation Encoders                          #
@@ -67,6 +77,7 @@ class LinearObservationEncoder(nn.Module):
     def __init__(self,
                  obs_dim,
                  encoded_dim,
+                 out_init,
                  hidden_size,
                  activation = nn.ReLU(),
                  **kw_args):
@@ -85,10 +96,11 @@ class LinearObservationEncoder(nn.Module):
 
         self.activation = activation
 
-        self.enc_1  = nn.Linear(obs_dim, hidden_size)
-        self.enc_2  = nn.Linear(hidden_size, hidden_size)
-        self.enc_3  = nn.Linear(hidden_size, hidden_size)
-        self.enc_4  = nn.Linear(hidden_size, encoded_dim)
+        self.enc_1 = init_layer(nn.Linear(obs_dim, hidden_size))
+        self.enc_2 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.enc_3 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.enc_4 = init_layer(nn.Linear(hidden_size, encoded_dim),
+            weight_std=out_init)
 
     def forward(self,
                 obs):
@@ -113,6 +125,7 @@ class Conv2dObservationEncoder(nn.Module):
     def __init__(self,
                  in_shape,
                  encoded_dim,
+                 out_init,
                  activation = nn.ReLU(),
                  **kw_args):
         """
@@ -138,7 +151,8 @@ class Conv2dObservationEncoder(nn.Module):
         k_s  = 3
         pad  = 0
         strd = 1
-        self.conv_1 = nn.Conv2d(channels, 8, kernel_size=5, stride=1)
+        self.conv_1 = init_layer(nn.Conv2d(channels, 8,
+            kernel_size=5, stride=1))
         height      = get_conv2d_out_size(height, pad, k_s, strd)
         width       = get_conv2d_out_size(width, pad, k_s, strd)
 
@@ -152,7 +166,7 @@ class Conv2dObservationEncoder(nn.Module):
         k_s  = 3
         pad  = 0
         strd = 1
-        self.conv_2 = nn.Conv2d(16, 16, kernel_size=5, stride=1)
+        self.conv_2 = init_layer(nn.Conv2d(16, 16, kernel_size=5, stride=1))
         height      = get_conv2d_out_size(height, pad, k_s, strd)
         width       = get_conv2d_out_size(width, pad, k_s, strd)
 
@@ -166,7 +180,7 @@ class Conv2dObservationEncoder(nn.Module):
         k_s  = 3
         pad  = 0
         strd = 1
-        self.conv_3 = nn.Conv2d(16, 16, kernel_size=5, stride=1)
+        self.conv_3 = init_layer(nn.Conv2d(16, 16, kernel_size=5, stride=1))
         height      = get_conv2d_out_size(height, pad, k_s, strd)
         width       = get_conv2d_out_size(width, pad, k_s, strd)
 
@@ -180,6 +194,7 @@ class Conv2dObservationEncoder(nn.Module):
         self.linear_encoder = LinearObservationEncoder(
             height * width * 16,
             encoded_dim,
+            out_init,
             encoded_dim)
 
 
@@ -210,6 +225,7 @@ class Conv2dObservationEncoder_orig(nn.Module):
     def __init__(self,
                  in_shape,
                  encoded_dim,
+                 out_init,
                  hidden_size,
                  activation = nn.ReLU(),
                  **kw_args):
@@ -236,7 +252,8 @@ class Conv2dObservationEncoder_orig(nn.Module):
         k_s  = 5
         pad  = 0
         strd = 1
-        self.conv_1 = nn.Conv2d(channels, 32, kernel_size=5, stride=1)
+        self.conv_1 = init_layer(nn.Conv2d(channels, 32,
+            kernel_size=5, stride=1))
         height      = get_conv2d_out_size(height, pad, k_s, strd)
         width       = get_conv2d_out_size(width, pad, k_s, strd)
 
@@ -250,9 +267,9 @@ class Conv2dObservationEncoder_orig(nn.Module):
         k_s  = 5
         pad  = 0
         strd = 1
-        self.conv_2   = nn.Conv2d(32, 32, kernel_size=5, stride=1)
-        height       = get_conv2d_out_size(height, pad, k_s, strd)
-        width        = get_conv2d_out_size(width, pad, k_s, strd)
+        self.conv_2 = init_layer(nn.Conv2d(32, 32, kernel_size=5, stride=1))
+        height      = get_conv2d_out_size(height, pad, k_s, strd)
+        width       = get_conv2d_out_size(width, pad, k_s, strd)
 
         k_s  = 5
         pad  = 0
@@ -264,7 +281,7 @@ class Conv2dObservationEncoder_orig(nn.Module):
         k_s  = 5
         pad  = 0
         strd = 1
-        self.conv_3   = nn.Conv2d(32, 32, kernel_size=5, stride=1)
+        self.conv_3  = init_layer(nn.Conv2d(32, 32, kernel_size=5, stride=1))
         height       = get_conv2d_out_size(height, pad, k_s, strd)
         width        = get_conv2d_out_size(width, pad, k_s, strd)
 
@@ -275,10 +292,11 @@ class Conv2dObservationEncoder_orig(nn.Module):
         height    = get_maxpool2d_out_size(height, pad, k_s, strd)
         width     = get_maxpool2d_out_size(width, pad, k_s, strd)
 
-        self.l1  = nn.Linear(height * width * 32, hidden_size)
-        self.l2  = nn.Linear(hidden_size, hidden_size)
-        self.l3  = nn.Linear(hidden_size, hidden_size)
-        self.l4  = nn.Linear(hidden_size, encoded_dim)
+        self.l1  = init_layer(nn.Linear(height * width * 32, hidden_size))
+        self.l2  = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.l3  = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.l4  = init_layer(nn.Linear(hidden_size, encoded_dim),
+            weight_std=out_init)
 
 
     def forward(self,
@@ -314,13 +332,13 @@ class Conv2dObservationEncoder_orig(nn.Module):
 #                        Actor Critic Networks                         #
 ########################################################################
 
-
 class SimpleFeedForward(PPONetwork):
 
     def __init__(self,
                  name,
                  in_dim,
                  out_dim,
+                 out_init,
                  need_softmax = False,
                  activation   = nn.ReLU(),
                  hidden_size  = 128,
@@ -332,10 +350,11 @@ class SimpleFeedForward(PPONetwork):
         self.need_softmax = need_softmax
         self.activation   = activation
 
-        self.l1 = nn.Linear(in_dim, hidden_size)
-        self.l2 = nn.Linear(hidden_size, hidden_size)
-        self.l3 = nn.Linear(hidden_size, hidden_size)
-        self.l4 = nn.Linear(hidden_size, out_dim)
+        self.l1 = init_layer(nn.Linear(in_dim, hidden_size))
+        self.l2 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.l3 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.l4 = init_layer(nn.Linear(hidden_size, out_dim),
+            weight_std=out_init)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -363,6 +382,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
                  name,
                  in_dim,
                  out_dim,
+                 out_init,
                  need_softmax = False,
                  hidden_left  = 64,
                  hidden_right = 64,
@@ -392,19 +412,26 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
             name       = self.name + "_s1",
             in_dim     = side_1_dim,
             out_dim    = hidden_left,
+            out_init   = np.sqrt(2),
             activation = self.activation)
 
         self.s2_net = SimpleFeedForward(
             name       = self.name + "_s2",
             in_dim     = side_2_dim,
             out_dim    = hidden_right,
+            out_init   = np.sqrt(2),
             activation = self.activation)
 
         inner_hidden_size  = hidden_left + hidden_right
 
-        self.full_l1 = nn.Linear(inner_hidden_size, inner_hidden_size)
-        self.full_l2 = nn.Linear(inner_hidden_size, inner_hidden_size)
-        self.full_l3 = nn.Linear(inner_hidden_size, out_dim)
+        self.full_l1 = init_layer(nn.Linear(
+            inner_hidden_size, inner_hidden_size))
+
+        self.full_l2 = init_layer(nn.Linear(inner_hidden_size,
+            inner_hidden_size))
+
+        self.full_l3 = init_layer(nn.Linear(inner_hidden_size,
+            out_dim), weight_std=out_init)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -447,6 +474,7 @@ class AtariRAMNetwork(PPONetwork):
                  name,
                  in_dim,
                  out_dim,
+                 out_init,
                  need_softmax = False,
                  activation   = nn.ReLU(),
                  **kw_args):
@@ -458,65 +486,41 @@ class AtariRAMNetwork(PPONetwork):
 
         self.a_f = activation
 
-        self.l1 = nn.Linear(in_dim, 1024)
-        self.bn1 = nn.BatchNorm1d(1024)
-
-        self.l2 = nn.Linear(1024, 512)
-        self.bn2 = nn.BatchNorm1d(512)
-
-        self.l3 = nn.Linear(512, 256)
-        self.bn3 = nn.BatchNorm1d(256)
-
-        self.l4 = nn.Linear(256, 128)
-        self.bn4 = nn.BatchNorm1d(128)
-
-        self.l5 = nn.Linear(128, 64)
-        self.bn5 = nn.BatchNorm1d(64)
-
-        self.l6 = nn.Linear(64, 32)
-        self.bn6 = nn.BatchNorm1d(32)
-
-        self.l7 = nn.Linear(32, 16)
-        self.bn7 = nn.BatchNorm1d(16)
-
-        self.l8 = nn.Linear(16, 8)
-        self.bn8 = nn.BatchNorm1d(8)
-
-        self.l9 = nn.Linear(8, out_dim)
+        self.l1 = init_layer(nn.Linear(in_dim, 1024))
+        self.l2 = init_layer(nn.Linear(1024, 512))
+        self.l3 = init_layer(nn.Linear(512, 256))
+        self.l4 = init_layer(nn.Linear(256, 128))
+        self.l5 = init_layer(nn.Linear(128, 64))
+        self.l6 = init_layer(nn.Linear(64, 32))
+        self.l7 = init_layer(nn.Linear(32, 16))
+        self.l8 = init_layer(nn.Linear(16, 8))
+        self.l9 = init_layer(nn.Linear(8, out_dim), weight_std=out_init)
 
 
     def forward(self, _input):
 
         out = self.l1(_input)
-        out = self.bn1(out)
         out = self.a_f(out)
 
         out = self.l2(out)
-        out = self.bn2(out)
         out = self.a_f(out)
 
         out = self.l3(out)
-        out = self.bn3(out)
         out = self.a_f(out)
 
         out = self.l4(out)
-        out = self.bn4(out)
         out = self.a_f(out)
 
         out = self.l5(out)
-        out = self.bn5(out)
         out = self.a_f(out)
 
         out = self.l6(out)
-        out = self.bn6(out)
         out = self.a_f(out)
 
         out = self.l7(out)
-        out = self.bn7(out)
         out = self.a_f(out)
 
         out = self.l8(out)
-        out = self.bn8(out)
         out = self.a_f(out)
 
         out = self.l9(out)
@@ -533,6 +537,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
                  name,
                  in_shape,
                  out_dim,
+                 out_init,
                  need_softmax = False,
                  activation   = nn.ReLU(),
                  **kw_args):
@@ -550,44 +555,42 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         k_s  = 8
         strd = 4
         pad  = 0
-        self.conv1 = nn.Conv2d(channels, 16,
-            kernel_size=k_s, stride=strd, padding=pad)
+        self.conv1 = init_layer(nn.Conv2d(channels, 32,
+            kernel_size=k_s, stride=strd, padding=pad))
+
         height = get_conv2d_out_size(height, pad, k_s, strd)
         width  = get_conv2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 3
-        pad  = 1
-        strd = 1
-        self.mp1 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
-        height = get_maxpool2d_out_size(height, pad, k_s, strd)
-        width  = get_maxpool2d_out_size(width, pad, k_s, strd)
 
         k_s  = 4
         strd = 2
         pad  = 0
-        self.conv2 = nn.Conv2d(16, 32,
-            kernel_size=k_s, stride=strd, padding=pad)
+        self.conv2 = init_layer(nn.Conv2d(32, 64,
+            kernel_size=k_s, stride=strd, padding=pad))
+
         height = get_conv2d_out_size(height, pad, k_s, strd)
         width  = get_conv2d_out_size(width, pad, k_s, strd)
 
         k_s  = 3
-        pad  = 1
         strd = 1
-        self.mp2 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
-        height = get_maxpool2d_out_size(height, pad, k_s, strd)
-        width  = get_maxpool2d_out_size(width, pad, k_s, strd)
+        pad  = 0
+        self.conv2 = init_layer(nn.Conv2d(64, 64,
+            kernel_size=k_s, stride=strd, padding=pad))
 
-        self.l1 = nn.Linear(height * width * 32, 256)
-        self.l2 = nn.Linear(256, out_dim)
+        height = get_conv2d_out_size(height, pad, k_s, strd)
+        width  = get_conv2d_out_size(width, pad, k_s, strd)
+
+        self.l1 = init_layer(nn.Linear(height * width * 64, 512))
+        self.l2 = init_layer(nn.Linear(512, out_dim), weight_std=out_init)
 
 
     def forward(self, _input):
         out = self.conv1(_input)
-        out = self.mp1(out)
         out = self.a_f(out)
 
         out = self.conv2(out)
-        out = self.mp2(out)
+        out = self.a_f(out)
+
+        out = self.conv3(out)
         out = self.a_f(out)
 
         out = out.flatten(start_dim=1)
@@ -607,12 +610,12 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 #                           ICM Networks                               #
 ########################################################################
 
-
 class LinearInverseModel(nn.Module):
 
     def __init__(self,
                  in_dim,
                  out_dim,
+                 out_init,
                  hidden_size,
                  activation = nn.ReLU(),
                  **kw_args):
@@ -634,9 +637,10 @@ class LinearInverseModel(nn.Module):
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
         #
-        self.inv_1 = nn.Linear(in_dim, hidden_size)
-        self.inv_2 = nn.Linear(hidden_size, hidden_size)
-        self.inv_3 = nn.Linear(hidden_size, out_dim)
+        self.inv_1 = init_layer(nn.Linear(in_dim, hidden_size))
+        self.inv_2 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.inv_3 = init_layer(nn.Linear(hidden_size, out_dim),
+            weight_std=out_init)
 
     def forward(self,
                 enc_obs_1,
@@ -661,6 +665,7 @@ class LinearForwardModel(nn.Module):
     def __init__(self,
                  in_dim,
                  out_dim,
+                 out_init,
                  act_dim,
                  hidden_size,
                  action_type,
@@ -685,9 +690,10 @@ class LinearForwardModel(nn.Module):
         #
         # Forward model; Predict s_2 given s_1 and a_1.
         #
-        self.f_1 = nn.Linear(in_dim, hidden_size)
-        self.f_2 = nn.Linear(hidden_size, hidden_size)
-        self.f_3 = nn.Linear(hidden_size, out_dim)
+        self.f_1 = init_layer(nn.Linear(in_dim, hidden_size))
+        self.f_2 = init_layer(nn.Linear(hidden_size, hidden_size))
+        self.f_3 = init_layer(nn.Linear(hidden_size, out_dim),
+            weight_std=out_init)
 
     def forward(self,
                 enc_obs_1,
@@ -725,6 +731,7 @@ class ICM(PPONetwork):
                  obs_dim,
                  act_dim,
                  action_type,
+                 out_init     = 1.0,
                  obs_encoder  = LinearObservationEncoder,
                  reward_scale = 0.01,
                  activation   = nn.ReLU(),
@@ -752,6 +759,7 @@ class ICM(PPONetwork):
         self.obs_encoder = obs_encoder(
             obs_dim,
             encoded_obs_dim,
+            out_init,
             hidden_dims,
             **kw_args)
 
@@ -761,6 +769,7 @@ class ICM(PPONetwork):
         self.inv_model = LinearInverseModel(
             encoded_obs_dim * 2, 
             act_dim,
+            out_init,
             hidden_dims,
             **kw_args)
 
@@ -770,6 +779,7 @@ class ICM(PPONetwork):
         self.forward_model = LinearForwardModel(
             encoded_obs_dim + act_dim,
             encoded_obs_dim,
+            out_init,
             act_dim,
             hidden_dims,
             action_type,
