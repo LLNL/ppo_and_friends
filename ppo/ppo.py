@@ -12,6 +12,7 @@ from utils.episode_info import EpisodeInfo, PPODataset
 from utils.misc import get_action_type, need_action_squeeze
 from utils.decrementers import *
 from networks import ICM, LinearObservationEncoder
+from environments.vectorize import VectorizedEnv
 import time
 
 
@@ -130,6 +131,8 @@ class PPO(object):
                                       the best policy, which might not always
                                       hold up, but it's a general assumption.
         """
+
+        env = VectorizedEnv(env)
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
@@ -358,9 +361,19 @@ class PPO(object):
         longest_run        = 0
         max_reward         = -np.finfo(np.float32).max
         min_reward         = np.finfo(np.float32).max
+        episode_length     = 0
+        ep_score           = 0
 
         self.actor.eval()
         self.critic.eval()
+
+        obs = self.env.reset()
+
+        #
+        # HACK: some environments are buggy and return inconsistent
+        # observation shapes. We can enforce shapes here.
+        #
+        obs = obs.reshape(self.obs_shape)
 
         while total_ts < self.ts_per_rollout:
 
@@ -370,22 +383,19 @@ class PPO(object):
                 lambd          = self.lambd,
                 bootstrap_clip = self.bootstrap_clip)
 
-            total_episodes  += 1
-            done             = False
-            obs              = self.env.reset()
-            ep_score         = 0
+            for ts in range(1, self.max_ts_per_ep + 1):
 
-            #
-            # HACK: some environments are buggy and return inconsistent
-            # observation shapes. We can enforce shapes here.
-            #
-            obs = obs.reshape(self.obs_shape)
+                #
+                # We end if we've reached our timesteps per rollout limit.
+                #
+                if ts >= self.ts_per_rollout:
+                    break
 
-            for ts in range(self.max_ts_per_ep + 1):
                 if self.render:
                     self.env.render()
 
-                total_ts += 1
+                total_ts        += 1
+                episode_length  += 1
                 action, log_prob = self.get_action(obs)
 
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
@@ -464,11 +474,10 @@ class PPO(object):
                     log_prob,
                     reward)
 
-                max_reward         = max(max_reward, reward)
-                min_reward         = min(min_reward, reward)
-                total_score       += reward
-                ep_score          += natural_reward
-                total_ext_rewards += natural_reward
+                max_reward   = max(max_reward, reward)
+                min_reward   = min(min_reward, reward)
+                total_score += reward
+                ep_score    += natural_reward
 
                 if done:
                     #
@@ -477,36 +486,55 @@ class PPO(object):
                     #
                     episode_info.end_episode(
                         ending_value   = 0,
-                        episode_length = ts + 1,
+                        episode_length = episode_length,
                         skip_clip      = True)
-                    break
 
-                elif ts == self.max_ts_per_ep:
+                    dataset.add_episode(episode_info)
+
+                    episode_info = EpisodeInfo(
+                        use_gae        = self.use_gae,
+                        gamma          = self.gamma,
+                        lambd          = self.lambd,
+                        bootstrap_clip = self.bootstrap_clip)
+
+                    total_ext_rewards += ep_score
+                    top_ep_score       = max(top_ep_score, ep_score)
+                    episode_length     = 0
+                    ep_score           = 0
+                    total_episodes    += 1
+
+                elif ts == self.max_ts_per_ep or total_ts == self.ts_per_rollout:
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
                     nxt_value = self.critic(t_obs)
 
                     episode_info.end_episode(
                         ending_value   = nxt_value.item(),
-                        episode_length = ts + 1,
+                        episode_length = episode_length,
                         skip_clip      = False)
 
-            dataset.add_episode(episode_info)
-            top_ep_score = max(top_ep_score, ep_score)
-            longest_run  = max(longest_run, ts + 1)
+                    dataset.add_episode(episode_info)
+
+                    episode_info = EpisodeInfo(
+                        use_gae        = self.use_gae,
+                        gamma          = self.gamma,
+                        lambd          = self.lambd,
+                        bootstrap_clip = self.bootstrap_clip)
+
+            longest_run  = max(longest_run, episode_length)
 
         #
         # Update our status dict.
         #
-        top_score          = max(top_ep_score, self.status_dict["top score"])
-        running_ext_score  = total_ext_rewards / total_episodes
-        running_score      = total_score / total_episodes
+        top_score         = max(top_ep_score, self.status_dict["top score"])
+        running_ext_score = total_ext_rewards / total_episodes
+        running_score     = total_score / total_episodes
 
-        self.status_dict["score avg"]            = running_score
-        self.status_dict["extrinsic score avg"]  = running_ext_score
-        self.status_dict["top score"]            = top_score
-        self.status_dict["total episodes"]       = total_episodes
-        self.status_dict["longest run"]          = longest_run
+        self.status_dict["score avg"]           = running_score
+        self.status_dict["extrinsic score avg"] = running_ext_score
+        self.status_dict["top score"]           = top_score
+        self.status_dict["total episodes"]      = total_episodes
+        self.status_dict["longest run"]         = longest_run
 
         max_reward = max(self.status_dict["reward range"][1], max_reward)
         min_reward = min(self.status_dict["reward range"][0], min_reward)
@@ -614,9 +642,7 @@ class PPO(object):
         for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
             torch.cuda.empty_cache()
 
-            if obs.shape[0] == 1 and (self.actor.uses_batch_norm or
-                self.critic.uses_batch_norm):
-
+            if obs.shape[0] == 1:
                 print("Skipping batch of size 1")
                 print("    obs shape: {}".format(obs.shape))
                 continue
@@ -625,7 +651,10 @@ class PPO(object):
                 # TODO: Reference paper.
                 adv_std  = advantages.std()
                 adv_mean = advantages.mean()
-                assert not torch.isnan(adv_std), "Advantage std is nan!"
+                if torch.isnan(adv_std):
+                    print("\nAdvantages std is nan!")
+                    print("Advantages:\n{}".format(advantages))
+                    sys.exit(1)
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
