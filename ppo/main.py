@@ -1,7 +1,7 @@
 import gym
 import torch
 import argparse
-from environments import *
+from environments.launchers import *
 import os
 
 
