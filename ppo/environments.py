@@ -166,21 +166,22 @@ def lunar_lander_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.0001
+    min_lr = 0.00023
 
     lr_dec = LogDecrementer(
-        max_iteration = 2000,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 700,
+            max_ts_per_ep       = 1000,
             ts_per_rollout      = 1024,
             batch_size          = 512,
             use_gae             = True,
             use_icm             = False,
             dynamic_bs_clip     = True,
+            save_best_only      = True,
             bootstrap_clip      = (-1., 1.),
             target_kl           = 0.03,
             ac_kw_args          = ac_kw_args,
@@ -225,12 +226,15 @@ def lunar_lander_continuous_ppo(state_path,
 
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 600,
+            max_ts_per_ep       = 1000,
             ts_per_rollout      = 1024,
             batch_size          = 512,
             ac_kw_args          = ac_kw_args,
             use_gae             = True,
             use_icm             = False,
+            save_best_only      = True,
+            bootstrap_clip      = (-1., 1.),
+            target_kl           = 0.03,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -406,6 +410,7 @@ def assault_ram_ppo(state_path,
             num_test_runs      = num_test_runs)
 
 
+#FIXME: obs space is broken
 def assault_pixels_ppo(state_path,
                        load_state,
                        render,
