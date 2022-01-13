@@ -1,11 +1,14 @@
 import torch
 from utils.misc import get_action_type, need_action_squeeze
+from environments.env_wrappers import ObservationNormalizer
 
-def test_policy(policy,
-                env,
-                render,
+def test_policy(ppo,
                 num_test_runs,
                 device):
+
+    env    = ppo.env
+    policy = ppo.actor
+    render = ppo.render
 
     action_type    = get_action_type(env)
     action_squeeze = need_action_squeeze(env)
@@ -38,8 +41,12 @@ def test_policy(policy,
             if action_squeeze:
                 action = action.squeeze()
 
-            obs, reward, done, _ = env.step(action)
-            score += reward
+            obs, reward, done, info = env.step(action)
+
+            if "natural reward" in info:
+                score += info["natural reward"]
+            else:
+                score += reward
 
     print("Ran env {} times.".format(num_test_runs))
     print("Ran {} total time steps.".format(num_steps))

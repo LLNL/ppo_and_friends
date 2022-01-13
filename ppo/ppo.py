@@ -13,6 +13,8 @@ from utils.misc import get_action_type, need_action_squeeze
 from utils.decrementers import *
 from networks import ICM, LinearObservationEncoder
 from environments.vectorize import VectorizedEnv
+from environments.env_wrappers import ObservationNormalizer, ObservationClipper
+from environments.env_wrappers import RewardNormalizer, RewardClipper
 import time
 
 
@@ -45,13 +47,18 @@ class PPO(object):
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
                  entropy_weight      = 0.01,
-                 target_kl           = 100.0,
+                 target_kl           = 0.015,
                  mean_window_size    = 100,
                  normalize_adv       = True,
+                 normalize_obs       = False,
+                 normalize_rewards   = False,
+                 obs_clip            = None,
+                 reward_clip         = None,
                  render              = False,
                  load_state          = False,
                  state_path          = "./",
-                 save_best_only      = False):
+                 save_best_only      = False,
+                 test_mode           = False):
         """
             Initialize the PPO trainer.
 
@@ -79,7 +86,8 @@ class PPO(object):
                                       count can exceed this limit, but we won't
                                       start any new episodes once it has.
                  gamma                The 'gamma' value for calculating
-                                      advantages.
+                                      advantages and discounting rewards
+                                      when normalizing them.
                  lambd                The 'lambda' value for calculating GAEs.
                  epochs_per_iter      'Epoch' is used loosely and with a variety
                                       of meanings in RL. In this case, a single
@@ -119,12 +127,19 @@ class PPO(object):
                  target_kl            KL divergence used for early stopping.
                                       This is typically set in the range
                                       [0.1, 0.5]. Use high values to disable.
-                                      (Disabled by default).
                  mean_window_size     The window size for a running mean. Note
                                       that each "score" in the window is
                                       actually the mean score for that rollout.
                  normalize_adv        Should we normalize the advantages? This
                                       occurs at the minibatch level.
+                 normalize_obs        Should we normalize the observations?
+                 normalize_rewards    Should we normalize the rewards?
+                 obs_clip             Disabled if None. Otherwise, this should
+                                      be a tuple containing a clip range for
+                                      the observation space as (min, max).
+                 reward_clip          Disabled if None. Otherwise, this should
+                                      be a tuple containing a clip range for
+                                      the reward as (min, max).
                  render               Should we render the environment while
                                       training?
                  load_state           Should we load a saved state?
@@ -134,9 +149,45 @@ class PPO(object):
                                       this assumes that the top scores will be
                                       the best policy, which might not always
                                       hold up, but it's a general assumption.
+                 test_mode            Most of this class is not used for
+                                      testing, but some of its attributes are.
         """
 
+        #
+        # Vectorize our environment and add any requested wrappers.
+        #
         env = VectorizedEnv(env)
+
+        self.save_env_info = False
+
+        #
+        # Let's wrap our environment in the requested wrappers. Note that
+        # order matters!
+        #
+        if normalize_obs:
+            env = ObservationNormalizer(
+                env          = env,
+                update_stats = not test_mode)
+
+            self.save_env_info = True
+
+        if obs_clip != None and type(obs_clip) == tuple:
+            env = ObservationClipper(
+                env        = env,
+                clip_range = obs_clip)
+
+        if normalize_rewards:
+            env = RewardNormalizer(
+                env          = env,
+                update_stats = not test_mode,
+                gamma        = gamma)
+
+            self.save_env_info = True
+
+        if reward_clip != None and type(reward_clip) == tuple:
+            env = RewardClipper(
+                env        = env,
+                clip_range = reward_clip)
 
         if np.issubdtype(env.action_space.dtype, np.floating):
             self.act_dim = env.action_space.shape[0]
@@ -192,6 +243,7 @@ class PPO(object):
         self.save_best_only      = save_best_only
         self.mean_window_size    = mean_window_size 
         self.normalize_adv       = normalize_adv
+        self.normalize_rewards   = normalize_rewards
         self.score_cache         = np.zeros(0)
 
         #
@@ -204,7 +256,7 @@ class PPO(object):
         self.status_dict["window avg"]           = 'N/A'
         self.status_dict["window grad"]          = 'N/A'
         self.status_dict["top window avg"]       = 'N/A'
-        self.status_dict["score avg"]            = 0
+        self.status_dict["reward avg"]           = 0
         self.status_dict["extrinsic score avg"]  = 0
         self.status_dict["top score"]            = -max_int
         self.status_dict["total episodes"]       = 0
@@ -214,6 +266,9 @@ class PPO(object):
         self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
         self.status_dict["reward range"]         = (max_int, -max_int)
+
+        if save_best_only:
+            self.status_dict["last save"] = -1
 
         print("Using {} action type.".format(self.action_type))
 
@@ -364,9 +419,10 @@ class PPO(object):
         total_episodes     = 0  
         total_ts           = 0
         total_ext_rewards  = 0
+        total_rewards      = 0
         total_intr_rewards = 0
         top_ep_score       = -np.finfo(np.float32).max
-        total_score        = 0
+        ep_rewards         = 0
         longest_run        = 0
         max_reward         = -np.finfo(np.float32).max
         min_reward         = np.finfo(np.float32).max
@@ -377,12 +433,6 @@ class PPO(object):
         self.critic.eval()
 
         obs = self.env.reset()
-
-        #
-        # HACK: some environments are buggy and return inconsistent
-        # observation shapes. We can enforce shapes here.
-        #
-        obs = obs.reshape(self.obs_shape)
 
         while total_ts < self.ts_per_rollout:
 
@@ -415,7 +465,7 @@ class PPO(object):
                 if self.action_squeeze:
                     action = action.squeeze()
 
-                obs, ext_reward, done, _ = self.env.step(action)
+                obs, ext_reward, done, info = self.env.step(action)
 
                 if action.size == 1:
                     ep_action = action.item()
@@ -425,20 +475,15 @@ class PPO(object):
                 ep_value = value.item()
 
                 #
-                # HACK: some environments are buggy and return inconsistent
-                # observation shapes. We can enforce shapes here.
+                # If any of our wrappers are altering the rewards, there should
+                # be an unaltered version in the info.
                 #
-                obs = obs.reshape(self.obs_shape)
+                if "natural reward" in info:
+                    natural_reward = info["natural reward"]
+                else:
+                    natural_reward = ext_reward
 
-                #
-                # Some gym environments return arrays of single elements,
-                # which is very annoying...
-                #
-                if type(ext_reward) == np.ndarray:
-                    ext_reward = ext_reward[0]
-
-                natural_reward = ext_reward
-                ext_reward    *= self.ext_reward_weight
+                ext_reward *= self.ext_reward_weight
 
                 #
                 # If we're using the ICM, we need to do some extra work here.
@@ -485,7 +530,7 @@ class PPO(object):
 
                 max_reward   = max(max_reward, reward)
                 min_reward   = min(min_reward, reward)
-                total_score += reward
+                ep_rewards  += reward
                 ep_score    += natural_reward
 
                 if done:
@@ -507,9 +552,11 @@ class PPO(object):
                         bootstrap_clip = self.bootstrap_clip)
 
                     total_ext_rewards += ep_score
+                    total_rewards     += ep_rewards
                     top_ep_score       = max(top_ep_score, ep_score)
                     episode_length     = 0
                     ep_score           = 0
+                    ep_rewards         = 0
                     total_episodes    += 1
 
                 elif ts == self.max_ts_per_ep or total_ts == self.ts_per_rollout:
@@ -535,20 +582,23 @@ class PPO(object):
         #
         # Update our status dict.
         #
-        top_score         = max(top_ep_score, self.status_dict["top score"])
-        running_ext_score = total_ext_rewards / total_episodes
-        running_score     = total_score / total_episodes
+        if self.normalize_rewards:
+            top_score = top_ep_score
+        else:
+            top_score  = max(top_ep_score, self.status_dict["top score"])
+            max_reward = max(self.status_dict["reward range"][1], max_reward)
+            min_reward = min(self.status_dict["reward range"][0], min_reward)
 
-        self.status_dict["score avg"]           = running_score
+        running_ext_score = total_ext_rewards / total_episodes
+        running_score     = total_rewards / total_episodes
+        rw_range          = (min_reward, max_reward)
+
+        self.status_dict["reward avg"]           = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
         self.status_dict["total episodes"]      = total_episodes
         self.status_dict["longest run"]         = longest_run
-
-        max_reward = max(self.status_dict["reward range"][1], max_reward)
-        min_reward = min(self.status_dict["reward range"][0], min_reward)
-        rw_range   = (min_reward, max_reward)
-        self.status_dict["reward range"] = rw_range
+        self.status_dict["reward range"]        = rw_range
 
         if self.dynamic_bs_clip:
             self.bootstrap_clip = rw_range
@@ -570,13 +620,14 @@ class PPO(object):
             self.status_dict["window grad"] = w_grad
 
             if type(self.status_dict["top window avg"]) == str:
-                top_window = self.status_dict["window avg"]
-            else:
-                top_window = max(self.status_dict["window avg"],
-                    self.status_dict["top window avg"])
+                self.status_dict["top window avg"] = \
+                    self.status_dict["window avg"]
 
-            self.status_dict["top window avg"] = top_window
-            self.prev_top_window = top_window
+            elif (self.status_dict["window avg"] >
+                self.status_dict["top window avg"]):
+
+                self.status_dict["top window avg"] = \
+                    self.status_dict["window avg"]
 
         if self.use_icm:
             ism = total_intr_rewards / total_episodes
@@ -627,13 +678,22 @@ class PPO(object):
 
             self.print_status()
 
+            need_save = False
             if type(self.status_dict["top window avg"]) == str:
-                self.save()
+                need_save = True
             elif (self.save_best_only and
-                self.prev_top_window <= self.status_dict["top window avg"]):
-                self.save()
+                self.status_dict["window avg"] ==
+                self.status_dict["top window avg"]):
+                need_save = True
             elif not self.save_best_only:
+                need_save = True
+
+            if need_save:
                 self.save()
+
+                if "last save" in self.status_dict:
+                    self.status_dict["last save"] = \
+                        self.status_dict["iteration"]
 
         stop_time = time.time()
         minutes   = (stop_time - start_time) / 60.
@@ -701,9 +761,15 @@ class PPO(object):
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
+            #TODO: should we add an option for value clipping? Research
+            # suggests this might not be that beneficial, but it might
+            # be nice to have it as an option...
             critic_loss        = nn.MSELoss()(values, rewards_tg)
             total_critic_loss += critic_loss.item()
 
+            #
+            # TODO: Cite references for gradient clipping.
+            #
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
             nn.utils.clip_grad_norm(self.actor.parameters(),
@@ -752,11 +818,15 @@ class PPO(object):
 
 
     def save(self):
+
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
         if self.use_icm:
             self.icm_model.save(self.state_path)
+
+        if self.save_env_info:
+            self.env.save_info(self.state_path)
 
         state_file = os.path.join(self.state_path, "state.pickle")
         with open(state_file, "wb") as out_f:
@@ -769,6 +839,9 @@ class PPO(object):
 
         if self.use_icm:
             self.icm_model.load(self.state_path)
+
+        if self.save_env_info:
+            self.env.load_info(self.state_path)
 
         state_file = os.path.join(self.state_path, "state.pickle")
         with open(state_file, "rb") as in_f:

@@ -35,6 +35,10 @@ def run_ppo(env,
             dynamic_bs_clip     = True,
             mean_window_size    = 100,
             normalize_adv       = True,
+            normalize_obs       = False,
+            normalize_rewards   = False,
+            obs_clip            = None,
+            reward_clip         = None,
             render              = False,
             load_state          = False,
             state_path          = "./",
@@ -65,13 +69,20 @@ def run_ppo(env,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
               normalize_adv      = normalize_adv,
+              normalize_obs      = normalize_obs,
+              normalize_rewards  = normalize_rewards,
+              obs_clip           = obs_clip,
+              reward_clip        = reward_clip,
               mean_window_size   = mean_window_size,
               render             = render,
               load_state         = load_state,
-              state_path         = state_path)
+              state_path         = state_path,
+              test_mode          = test)
 
     if test:
-        test_policy(ppo.actor, env, render, num_test_runs, device)
+        test_policy(ppo,
+                    num_test_runs,
+                    device)
     else: 
         ppo.learn(num_timesteps)
 
@@ -87,10 +98,10 @@ def cartpole_ppo(state_path,
     env = gym.make('CartPole-v0')
 
     lr     = 0.0003
-    min_lr = 0.0002
+    min_lr = 0.000090
 
     lr_dec = LogDecrementer(
-        max_iteration = 2000,
+        max_iteration = 200,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -99,6 +110,10 @@ def cartpole_ppo(state_path,
             max_ts_per_ep      = 200,
             use_gae            = True,
             use_icm            = False,
+            normalize_obs      = True,
+            normalize_rewards  = True,
+            obs_clip           = (-10., 10.),
+            reward_clip        = (-10., 10.),
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -124,18 +139,21 @@ def pendulum_ppo(state_path,
     env = gym.make('Pendulum-v1')
 
     lr     = 0.0003
-    min_lr = 0.0002
+    min_lr = 0.000090
 
     lr_dec = LogDecrementer(
-        max_iteration = 2000,
+        max_iteration = 300,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 200,
-            use_gae            = False,
-            use_icm            = False,
+            max_ts_per_ep      = 32,
+            use_gae            = True,
+            normalize_obs      = True,
+            normalize_rewards  = True,
+            obs_clip           = (-10., 10.),
+            reward_clip        = (-10., 10.),
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -168,7 +186,7 @@ def lunar_lander_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.00023
+    min_lr = 0.00009
 
     lr_dec = LogDecrementer(
         max_iteration = 1000,
@@ -181,9 +199,12 @@ def lunar_lander_ppo(state_path,
             ts_per_rollout      = 2048,
             batch_size          = 512,
             use_gae             = True,
-            use_icm             = False,
-            dynamic_bs_clip     = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
             save_best_only      = True,
+            dynamic_bs_clip     = True,
             bootstrap_clip      = (-1., 1.),
             target_kl           = 0.015,
             ac_kw_args          = ac_kw_args,
@@ -219,7 +240,7 @@ def lunar_lander_continuous_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.0001
+    min_lr = 0.00009
 
     lr_dec = LogDecrementer(
         max_iteration = 3000,
@@ -233,8 +254,10 @@ def lunar_lander_continuous_ppo(state_path,
             batch_size          = 512,
             ac_kw_args          = ac_kw_args,
             use_gae             = True,
-            use_icm             = False,
-            save_best_only      = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
             bootstrap_clip      = (-1., 1.),
             target_kl           = 0.015,
             state_path          = state_path,
@@ -595,22 +618,30 @@ def bipedal_walker_ppo(state_path,
     ac_kw_args["hidden_left"]  = 64
     ac_kw_args["hidden_right"] = 64
 
+    lr     = 0.0003
+    min_lr = 0.000090
+
+    lr_dec = LogDecrementer(
+        max_iteration = 5000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
             ac_kw_args          = ac_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 512,
-            ts_per_rollout      = 1024,
+            max_ts_per_ep       = 64,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             use_icm             = False,
-            save_best_only      = False,
+            save_best_only      = True,
             epochs_per_iter     = 20,
             mean_window_size    = 200,
-            target_kl           = 0.05,
+            target_kl           = 0.015,
             bootstrap_clip      = (-1., 0.001),
-            lr                  = 0.0003,
-            min_lr              = 0.000095,
-            #lr_dec              = 0.99,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -618,7 +649,6 @@ def bipedal_walker_ppo(state_path,
             device              = device,
             ext_reward_weight   = 1.0 / 100.,
             intr_reward_weight  = 1.0,
-            entropy_weight      = 0.01,
             test                = test,
             num_test_runs       = num_test_runs)
 
