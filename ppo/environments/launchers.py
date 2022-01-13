@@ -524,7 +524,6 @@ def breakout_pixels_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-
     run_ppo(env                  = wrapped_env,
             ac_network           = AtariPixelNetwork,
             batch_size           = 256,
