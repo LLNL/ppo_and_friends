@@ -573,7 +573,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         k_s  = 3
         strd = 1
         pad  = 0
-        self.conv2 = init_layer(nn.Conv2d(64, 64,
+        self.conv3 = init_layer(nn.Conv2d(64, 64,
             kernel_size=k_s, stride=strd, padding=pad))
 
         height = get_conv2d_out_size(height, pad, k_s, strd)
