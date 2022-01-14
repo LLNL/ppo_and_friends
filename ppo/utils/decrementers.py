@@ -2,7 +2,7 @@ import numpy as np
 
 class Decrementer(object):
 
-    def decrement(self, value, iteration, **kw_args):
+    def __call__(self, value, iteration, **kw_args):
         raise NotImplementedError
 
 
@@ -18,7 +18,7 @@ class LogDecrementer(Decrementer):
         self.max_value = max_value
         self.numerator = np.log(max_iteration) / (max_value - min_value)
 
-    def decrement(self,
+    def __call__(self,
                   iteration,
                   **kw_args):
 
@@ -26,3 +26,21 @@ class LogDecrementer(Decrementer):
         dec_value = min(dec_value, self.max_value) 
         return max(dec_value, self.min_value)
 
+
+class LinearDecrementer(Decrementer):
+
+    def __init__(self,
+                 max_iteration,
+                 max_value,
+                 min_value,
+                 **kw_args):
+
+        self.min_value     = min_value
+        self.max_value     = max_value
+        self.max_iteration = max_iteration
+
+    def __call__(self,
+                  iteration,
+                  **kw_args):
+
+        return 1.0 - (iteration - 1.0) / self.max_iteration

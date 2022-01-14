@@ -6,6 +6,7 @@ from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import torch
 from torch.optim import Adam
+from torch.optim.lr_scheduler import LambdaLR
 from torch import nn
 from torch.utils.data import DataLoader
 from utils.episode_info import EpisodeInfo, PPODataset
@@ -207,7 +208,7 @@ class PPO(object):
         self.action_squeeze = need_action_squeeze(env)
 
         if lr_dec == None:
-            self.lr_dec = LogDecrementer(
+            self.lr_dec = LinearDecrementer(
                 max_iteration = 2000,
                 max_value     = lr,
                 min_value     = min_lr)
@@ -224,7 +225,6 @@ class PPO(object):
         self.icm_beta            = icm_beta
         self.ext_reward_weight   = ext_reward_weight
         self.intr_reward_weight  = intr_reward_weight
-        self.lr                  = lr
         self.min_lr              = min_lr
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
@@ -265,7 +265,7 @@ class PPO(object):
         self.status_dict["actor loss"]           = 0
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl avg"]               = 0
-        self.status_dict["lr"]                   = self.lr
+        self.status_dict["lr"]                   = lr
         self.status_dict["reward range"]         = (max_int, -max_int)
 
         if save_best_only:
@@ -348,18 +348,30 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                self.lr = min(self.status_dict["lr"], self.lr)
-                self.status_dict["lr"] = self.lr
+                lr= min(self.status_dict["lr"], lr)
+                self.status_dict["lr"] = lr
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
         self.cov_mat = torch.diag(self.cov_var)
 
-        self.actor_optim  = Adam(self.actor.parameters(), lr=self.lr, eps=1e-5)
-        self.critic_optim = Adam(self.critic.parameters(), lr=self.lr, eps=1e-5)
+        self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
+        self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
+
+        self.actor_optim_scheduler = LambdaLR(
+            self.actor_optim,
+            lr_lambda = lr_dec)
+
+        self.critic_optim_scheduler = LambdaLR(
+            self.critic_optim,
+            lr_lambda = lr_dec)
 
         if self.use_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
-                lr=self.lr, eps=1e-5)
+                lr=lr, eps=1e-5)
+
+            self.icm_optim_scheduler = LambdaLR(
+                self.icm_optim,
+                lr_lambda = lr_dec)
 
         if not os.path.exists(state_path):
             os.makedirs(state_path)
@@ -415,6 +427,15 @@ class PPO(object):
             print("    {}: {}".format(key, self.status_dict[key]))
         print("--------------------------------------------------------")
 
+    def update_learning_rate(self):
+        self.actor_optim_scheduler.step()
+        self.critic_optim_scheduler.step()
+
+        if self.use_icm:
+            self.icm_optim_scheduler.step()
+
+        self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
+
     def rollout(self):
         dataset            = PPODataset(self.device, self.action_type)
         total_episodes     = 0  
@@ -422,11 +443,11 @@ class PPO(object):
         total_ext_rewards  = 0
         total_rewards      = 0
         total_intr_rewards = 0
-        top_ep_score       = -np.finfo(np.float32).max
+        top_rollout_score  = -np.finfo(np.float32).max
         ep_rewards         = 0
         longest_run        = 0
-        max_reward         = -np.finfo(np.float32).max
-        min_reward         = np.finfo(np.float32).max
+        rollout_max_reward = -np.finfo(np.float32).max
+        rollout_min_reward = np.finfo(np.float32).max
         episode_length     = 0
         ep_score           = 0
 
@@ -531,22 +552,23 @@ class PPO(object):
                     log_prob,
                     reward)
 
-                max_reward   = max(max_reward, reward)
-                min_reward   = min(min_reward, reward)
-                ep_rewards  += reward
-                ep_score    += natural_reward
+                rollout_max_reward = max(rollout_max_reward, reward)
+                rollout_min_reward = min(rollout_min_reward, reward)
+
+                ep_rewards += reward
+                ep_score   += natural_reward
 
                 if done:
-                    #
-                    # Avoid clipping the reward here in case our clip range
-                    # doesn't include 0.
-                    #
                     episode_info.end_episode(
                         ending_value   = 0,
-                        episode_length = episode_length,
-                        skip_clip      = True)
+                        episode_length = episode_length)
 
                     dataset.add_episode(episode_info)
+
+                    if self.dynamic_bs_clip:
+                        ep_min_reward       = min(episode_info.rewards)
+                        ep_max_reward       = max(episode_info.rewards)
+                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
 
                     episode_info = EpisodeInfo(
                         use_gae        = self.use_gae,
@@ -556,7 +578,7 @@ class PPO(object):
 
                     total_ext_rewards += ep_score
                     total_rewards     += ep_rewards
-                    top_ep_score       = max(top_ep_score, ep_score)
+                    top_rollout_score  = max(top_rollout_score, ep_score)
                     episode_length     = 0
                     ep_score           = 0
                     ep_rewards         = 0
@@ -571,10 +593,14 @@ class PPO(object):
 
                     episode_info.end_episode(
                         ending_value   = nxt_value.item(),
-                        episode_length = episode_length,
-                        skip_clip      = False)
+                        episode_length = episode_length)
 
                     dataset.add_episode(episode_info)
+
+                    if self.dynamic_bs_clip:
+                        ep_min_reward       = min(episode_info.rewards)
+                        ep_max_reward       = max(episode_info.rewards)
+                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
 
                     episode_info = EpisodeInfo(
                         use_gae        = self.use_gae,
@@ -588,15 +614,17 @@ class PPO(object):
         # Update our status dict.
         #
         if self.normalize_rewards:
-            top_score = top_ep_score
+            top_score = top_rollout_score
         else:
-            top_score  = max(top_ep_score, self.status_dict["top score"])
-            max_reward = max(self.status_dict["reward range"][1], max_reward)
-            min_reward = min(self.status_dict["reward range"][0], min_reward)
+            top_score = max(top_rollout_score, self.status_dict["top score"])
+            rollout_max_reward = max(self.status_dict["reward range"][1],
+                rollout_max_reward)
+            rollout_min_reward = min(self.status_dict["reward range"][0],
+                rollout_min_reward)
 
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_rewards / total_episodes
-        rw_range          = (min_reward, max_reward)
+        rw_range          = (rollout_min_reward, rollout_max_reward)
 
         self.status_dict["reward avg"]          = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
@@ -605,9 +633,6 @@ class PPO(object):
         self.status_dict["longest run"]         = longest_run
         self.status_dict["reward range"]        = rw_range
         self.status_dict["timesteps"]          += total_rollout_ts
-
-        if self.dynamic_bs_clip:
-            self.bootstrap_clip = rw_range
 
         #
         # Update our score cache and the window mean when appropriate.
@@ -656,8 +681,7 @@ class PPO(object):
 
             self.status_dict["iteration"] += 1
 
-            self.lr = self.lr_dec.decrement(self.status_dict["iteration"])
-            self.status_dict["lr"] = self.lr
+            self.update_learning_rate()
 
             data_loader = DataLoader(
                 dataset,
