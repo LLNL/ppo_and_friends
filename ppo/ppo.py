@@ -286,7 +286,7 @@ class PPO(object):
 
             self.actor = ac_network(
                 name         = "actor", 
-                in_dim       = obs_dim, 
+                in_shape     = obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 need_softmax = need_softmax,
@@ -294,7 +294,7 @@ class PPO(object):
 
             self.critic = ac_network(
                 name         = "critic", 
-                in_dim       = obs_dim, 
+                in_shape     = obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
                 need_softmax = False,
@@ -417,7 +417,7 @@ class PPO(object):
     def rollout(self):
         dataset            = PPODataset(self.device, self.action_type)
         total_episodes     = 0  
-        total_ts           = 0
+        total_ep_ts        = 0
         total_ext_rewards  = 0
         total_rewards      = 0
         total_intr_rewards = 0
@@ -434,7 +434,7 @@ class PPO(object):
 
         obs = self.env.reset()
 
-        while total_ts < self.ts_per_rollout:
+        while total_ep_ts < self.ts_per_rollout:
 
             episode_info = EpisodeInfo(
                 use_gae        = self.use_gae,
@@ -442,18 +442,18 @@ class PPO(object):
                 lambd          = self.lambd,
                 bootstrap_clip = self.bootstrap_clip)
 
-            for ts in range(1, self.max_ts_per_ep + 1):
+            for ep_ts in range(1, self.max_ts_per_ep + 1):
 
                 #
                 # We end if we've reached our timesteps per rollout limit.
                 #
-                if ts >= self.ts_per_rollout:
+                if ep_ts >= self.ts_per_rollout:
                     break
 
                 if self.render:
                     self.env.render()
 
-                total_ts        += 1
+                total_ep_ts     += 1
                 episode_length  += 1
                 action, log_prob = self.get_action(obs)
 
@@ -559,7 +559,9 @@ class PPO(object):
                     ep_rewards         = 0
                     total_episodes    += 1
 
-                elif ts == self.max_ts_per_ep or total_ts == self.ts_per_rollout:
+                elif (ep_ts == self.max_ts_per_ep or
+                    total_ep_ts == self.ts_per_rollout):
+
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
                     nxt_value = self.critic(t_obs)
@@ -642,12 +644,12 @@ class PPO(object):
 
     def learn(self, total_timesteps):
         start_time = time.time()
-        ts = 0
+        ts_total = 0
 
-        while ts < total_timesteps:
+        while ts_total < total_timesteps:
             dataset = self.rollout()
 
-            ts += np.sum(dataset.ep_lens)
+            ts_total += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
 
             self.lr = self.lr_dec.decrement(self.status_dict["iteration"])
