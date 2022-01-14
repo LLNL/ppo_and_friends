@@ -39,7 +39,7 @@ class PPO(object):
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 bootstrap_clip      = (-1.0, 1.0),
+                 bootstrap_clip      = (-10.0, 10.0),
                  dynamic_bs_clip     = True,
                  use_gae             = True,
                  use_icm             = False,
@@ -252,6 +252,7 @@ class PPO(object):
         max_int           = np.iinfo(np.int32).max
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
+        self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
         self.status_dict["window grad"]          = 'N/A'
@@ -417,7 +418,7 @@ class PPO(object):
     def rollout(self):
         dataset            = PPODataset(self.device, self.action_type)
         total_episodes     = 0  
-        total_ep_ts        = 0
+        total_rollout_ts   = 0
         total_ext_rewards  = 0
         total_rewards      = 0
         total_intr_rewards = 0
@@ -434,7 +435,7 @@ class PPO(object):
 
         obs = self.env.reset()
 
-        while total_ep_ts < self.ts_per_rollout:
+        while total_rollout_ts < self.ts_per_rollout:
 
             episode_info = EpisodeInfo(
                 use_gae        = self.use_gae,
@@ -455,9 +456,9 @@ class PPO(object):
                 if self.render:
                     self.env.render()
 
-                total_ep_ts     += 1
-                episode_length  += 1
-                action, log_prob = self.get_action(obs)
+                total_rollout_ts += 1
+                episode_length   += 1
+                action, log_prob  = self.get_action(obs)
 
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
                 t_obs    = t_obs.unsqueeze(0)
@@ -562,7 +563,7 @@ class PPO(object):
                     total_episodes    += 1
 
                 elif (ep_ts == self.max_ts_per_ep or
-                    total_ep_ts == self.ts_per_rollout):
+                    total_rollout_ts == self.ts_per_rollout):
 
                     t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs     = t_obs.unsqueeze(0)
@@ -597,12 +598,13 @@ class PPO(object):
         running_score     = total_rewards / total_episodes
         rw_range          = (min_reward, max_reward)
 
-        self.status_dict["reward avg"]           = running_score
+        self.status_dict["reward avg"]          = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
         self.status_dict["total episodes"]      = total_episodes
         self.status_dict["longest run"]         = longest_run
         self.status_dict["reward range"]        = rw_range
+        self.status_dict["timesteps"]          += total_rollout_ts
 
         if self.dynamic_bs_clip:
             self.bootstrap_clip = rw_range
@@ -644,14 +646,14 @@ class PPO(object):
 
         return dataset
 
-    def learn(self, total_timesteps):
-        start_time = time.time()
-        ts_total = 0
+    def learn(self, num_timesteps):
 
-        while ts_total < total_timesteps:
+        start_time = time.time()
+        ts_max     = self.status_dict["timesteps"] + num_timesteps
+
+        while self.status_dict["timesteps"] < ts_max:
             dataset = self.rollout()
 
-            ts_total += np.sum(dataset.ep_lens)
             self.status_dict["iteration"] += 1
 
             self.lr = self.lr_dec.decrement(self.status_dict["iteration"])
