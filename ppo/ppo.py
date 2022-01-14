@@ -39,7 +39,7 @@ class PPO(object):
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 bootstrap_clip      = (-1.0, 1.0),
+                 bootstrap_clip      = (-10.0, 10.0),
                  dynamic_bs_clip     = True,
                  use_gae             = True,
                  use_icm             = False,

@@ -31,7 +31,7 @@ def run_ppo(env,
             ac_kw_args          = {},
             icm_kw_args         = {},
             surr_clip           = 0.2,
-            bootstrap_clip      = (-1.0, 1.0),
+            bootstrap_clip      = (-10.0, 10.0),
             dynamic_bs_clip     = False,
             mean_window_size    = 100,
             normalize_adv       = True,
@@ -229,13 +229,13 @@ def lunar_lander_continuous_ppo(state_path,
     # I find that leaky relu does much better with the lunar
     # lander env.
     #
-    ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args = {"activation" : nn.Tanh()}
 
     lr     = 0.0003
     min_lr = 0.00009
 
     lr_dec = LogDecrementer(
-        max_iteration = 3000,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -250,7 +250,7 @@ def lunar_lander_continuous_ppo(state_path,
             normalize_rewards   = True,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-1., 1.),
+            bootstrap_clip      = (-10., 10.),
             target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
@@ -295,7 +295,7 @@ def mountain_car_ppo(state_path,
             normalize_rewards  = True,
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
-            bootstrap_clip     = (-1., 1.),
+            bootstrap_clip     = (-10., 10.),
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
