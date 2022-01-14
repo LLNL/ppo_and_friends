@@ -8,7 +8,7 @@ class EpisodeInfo(object):
                  use_gae        = False,
                  gamma          = 0.99,
                  lambd          = 0.95,
-                 bootstrap_clip = (-1., 1.)):
+                 bootstrap_clip = (-10., 10.)):
         """
             A container for storing episode information.
 
@@ -133,25 +133,21 @@ class EpisodeInfo(object):
 
     def end_episode(self,
                     ending_value,
-                    episode_length,
-                    skip_clip = False):
+                    episode_length):
 
         self.length      = episode_length
         self.is_finished = True
 
-        if skip_clip:
-            ending_reward = ending_value
-        else:
-            #
-            # Clipping the ending value can have dramaticly positive
-            # effects on training. MountainCarContinuous is a great
-            # example of an environment that just can't learn at all
-            # without clipping.
-            #
-            ending_reward = np.clip(
-                ending_value,
-                self.bootstrap_clip[0],
-                self.bootstrap_clip[1])
+        #
+        # Clipping the ending value can have dramaticly positive
+        # effects on training. MountainCarContinuous is a great
+        # example of an environment that just can't learn at all
+        # without clipping.
+        #
+        ending_reward = np.clip(
+            ending_value,
+            self.bootstrap_clip[0],
+            self.bootstrap_clip[1])
 
         padded_rewards = np.array(self.rewards + [ending_reward],
             dtype=np.float32)
