@@ -229,13 +229,13 @@ def lunar_lander_continuous_ppo(state_path,
     # I find that leaky relu does much better with the lunar
     # lander env.
     #
-    ac_kw_args = {"activation" : nn.Tanh()}
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
     min_lr = 0.00009
 
     lr_dec = LogDecrementer(
-        max_iteration = 1000,
+        max_iteration = 3000,
         max_value     = lr,
         min_value     = min_lr)
 
