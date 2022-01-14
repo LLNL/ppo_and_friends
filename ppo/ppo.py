@@ -448,6 +448,8 @@ class PPO(object):
                 # We end if we've reached our timesteps per rollout limit.
                 #
                 if ep_ts >= self.ts_per_rollout:
+                    print("WARNING: the episode timestep is >= timesteps ")
+                    print("per rollout. Are you sure this is intended??")
                     break
 
                 if self.render:
