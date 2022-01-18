@@ -40,7 +40,10 @@ class LinearDecrementer(Decrementer):
         self.max_iteration = max_iteration
 
     def __call__(self,
-                  iteration,
-                  **kw_args):
+                 iteration,
+                 **kw_args):
 
-        return 1.0 - (iteration - 1.0) / self.max_iteration
+        frac = 1.0 - (iteration - 1.0) / self.max_iteration
+        new_val = min(self.max_value, frac * self.max_value)
+        new_val = max(new_val, self.min_value)
+        return new_val

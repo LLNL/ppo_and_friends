@@ -40,3 +40,7 @@ def need_action_squeeze(env):
             need_action_squeeze = True
 
     return need_action_squeeze
+
+def update_optimizer_lr(optim, lr):
+    for group in optim.param_groups:
+        group['lr'] = lr

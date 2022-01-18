@@ -97,25 +97,24 @@ def cartpole_ppo(state_path,
 
     env = gym.make('CartPole-v0')
 
-    ts_per_rollout = 1024
     lr     = 0.0003
     min_lr = 0.000090
 
     lr_dec = LinearDecrementer(
-        max_iteration  = int(100000 / ts_per_rollout),
+        max_iteration  = 1000,
         max_value      = lr,
         min_value      = min_lr)
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 200,
-            ts_per_rollout     = ts_per_rollout,
             use_gae            = True,
             use_icm            = False,
             normalize_obs      = True,
             normalize_rewards  = True,
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
+            dynamic_bs_clip    = False,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -139,10 +138,10 @@ def pendulum_ppo(state_path,
     env = gym.make('Pendulum-v1')
 
     lr     = 0.0003
-    min_lr = 0.000009
+    min_lr = 0.000090
 
     lr_dec = LinearDecrementer(
-        max_iteration = 300,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -152,6 +151,7 @@ def pendulum_ppo(state_path,
             use_gae            = True,
             normalize_obs      = True,
             normalize_rewards  = True,
+            dynamic_bs_clip    = True,
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
             state_path         = state_path,
@@ -184,10 +184,10 @@ def lunar_lander_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.00009
+    min_lr = 0.000090
 
-    lr_dec = LogDecrementer(
-        max_iteration = 1000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 200,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -199,6 +199,7 @@ def lunar_lander_ppo(state_path,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
+            dynamic_bs_clip     = False,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
@@ -234,10 +235,10 @@ def lunar_lander_continuous_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.00009
+    min_lr = 0.0000009
 
-    lr_dec = LogDecrementer(
-        max_iteration = 1000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -253,7 +254,7 @@ def lunar_lander_continuous_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            dynamic_bs_clip     = True,
+            dynamic_bs_clip     = False,
             target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
