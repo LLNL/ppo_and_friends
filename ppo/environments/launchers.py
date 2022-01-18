@@ -508,9 +508,9 @@ def breakout_pixels_ppo(state_path,
         skip_k_frames = 4)
 
     lr     = 0.0003
-    min_lr = 0.000090
+    min_lr = 0.000009
 
-    lr_dec = LogDecrementer(
+    lr_dec = LinearDecrementer(
         max_iteration = 7000,
         max_value     = lr,
         min_value     = min_lr)
