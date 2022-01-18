@@ -498,18 +498,14 @@ def breakout_pixels_ppo(state_path,
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    min_lives = -1 if test else 5
-    auto_fire = test
-
     wrapped_env = BreakoutPixelsEnvWrapper(
-        env           = env,
-        hist_size     = 4,
-        min_lives     = min_lives,
-        auto_fire     = auto_fire,
-        skip_k_frames = 4)
+        env              = env,
+        allow_life_loss  = test,
+        hist_size        = 4,
+        skip_k_frames    = 4)
 
     lr     = 0.0003
-    min_lr = 0.000009
+    min_lr = 0.0
 
     lr_dec = LinearDecrementer(
         max_iteration = 7000,
@@ -522,11 +518,9 @@ def breakout_pixels_ppo(state_path,
             ts_per_rollout       = 2048,
             max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
-
             reward_clip         = (-1., 1.),
             bootstrap_clip      = (-1., 1.),
             target_kl           = 0.015,
-
             lr_dec               = lr_dec,
             lr                   = lr,
             min_lr               = min_lr,
