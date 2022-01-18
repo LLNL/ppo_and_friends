@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from utils.episode_info import EpisodeInfo, PPODataset
 from utils.misc import get_action_type, need_action_squeeze
 from utils.decrementers import *
+from utils.misc import update_optimizer_lr
 from networks import ICM, LinearObservationEncoder
 from environments.vectorize import VectorizedEnv
 from environments.env_wrappers import ObservationNormalizer, ObservationClipper
@@ -41,7 +42,7 @@ class PPO(object):
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
                  bootstrap_clip      = (-10.0, 10.0),
-                 dynamic_bs_clip     = True,
+                 dynamic_bs_clip     = False,
                  use_gae             = True,
                  use_icm             = False,
                  icm_beta            = 0.8,
@@ -245,6 +246,7 @@ class PPO(object):
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
         self.score_cache         = np.zeros(0)
+        self.lr                  = lr
 
         #
         # Create a dictionary to track the status of training.
@@ -265,7 +267,7 @@ class PPO(object):
         self.status_dict["actor loss"]           = 0
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl avg"]               = 0
-        self.status_dict["lr"]                   = lr
+        self.status_dict["lr"]                   = self.lr
         self.status_dict["reward range"]         = (max_int, -max_int)
 
         if save_best_only:
@@ -348,8 +350,8 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                lr= min(self.status_dict["lr"], lr)
-                self.status_dict["lr"] = lr
+                self.lr= min(self.status_dict["lr"], self.lr)
+                self.status_dict["lr"] = self.lr
 
         self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
         self.cov_mat = torch.diag(self.cov_var)
@@ -357,21 +359,9 @@ class PPO(object):
         self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
 
-        self.actor_optim_scheduler = LambdaLR(
-            self.actor_optim,
-            lr_lambda = lr_dec)
-
-        self.critic_optim_scheduler = LambdaLR(
-            self.critic_optim,
-            lr_lambda = lr_dec)
-
         if self.use_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
-
-            self.icm_optim_scheduler = LambdaLR(
-                self.icm_optim,
-                lr_lambda = lr_dec)
 
         if not os.path.exists(state_path):
             os.makedirs(state_path)
@@ -427,12 +417,16 @@ class PPO(object):
             print("    {}: {}".format(key, self.status_dict[key]))
         print("--------------------------------------------------------")
 
-    def update_learning_rate(self):
-        self.actor_optim_scheduler.step()
-        self.critic_optim_scheduler.step()
+    def update_learning_rate(self,
+                             iteration):
+
+        self.lr = self.lr_dec(iteration)
+
+        update_optimizer_lr(self.actor_optim, self.lr)
+        update_optimizer_lr(self.critic_optim, self.lr)
 
         if self.use_icm:
-            self.icm_optim_scheduler.step()
+            update_optimizer_lr(self.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
 
@@ -681,7 +675,7 @@ class PPO(object):
 
             self.status_dict["iteration"] += 1
 
-            self.update_learning_rate()
+            self.update_learning_rate(self.status_dict["iteration"])
 
             data_loader = DataLoader(
                 dataset,
