@@ -719,6 +719,10 @@ class PPO(object):
                     self.status_dict["last save"] = \
                         self.status_dict["iteration"]
 
+            if self.lr <= 0.0:
+                print("Learning rate has bottomed out. Terminating early")
+                break
+
         stop_time = time.time()
         minutes   = (stop_time - start_time) / 60.
         print("Time spent training: {} minutes".format(minutes))
