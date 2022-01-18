@@ -369,14 +369,19 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
     def step(self, action):
         action = self.action_map[action]
 
+        k_reward_sum = 0
+        done = False
+
         for k in range(self.skip_k_frames):
-            obs, reward, done, info = RAMHistEnvWrapper.step(self, action)
+            obs, reward, s_done, info = RAMHistEnvWrapper.step(self, action)
 
-            if done:
-                break
+            k_reward_sum += reward
+            done = done or s_done
 
-            if self.allow_life_loss and info["life lost"]:
+            if not done and self.allow_life_loss and info["life lost"]:
                 self.fire_ball()
+
+        reward = k_reward_sum
 
         if self.punish_end:
             #
@@ -447,15 +452,15 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         action = self.action_map[action]
 
         k_reward_sum = 0
+        done = False
+
         for k in range(self.skip_k_frames):
-            obs, reward, done, info = PixelHistEnvWrapper.step(self, action)
+            obs, reward, s_done, info = PixelHistEnvWrapper.step(self, action)
 
             k_reward_sum += reward
+            done = done or s_done
 
-            if done:
-                break
-
-            if self.allow_life_loss and info["life lost"]:
+            if not done and self.allow_life_loss and info["life lost"]:
                 self.fire_ball()
 
         reward = k_reward_sum
