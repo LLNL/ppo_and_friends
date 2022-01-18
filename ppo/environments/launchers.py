@@ -235,10 +235,10 @@ def lunar_lander_continuous_ppo(state_path,
     ac_kw_args = {"activation" : nn.LeakyReLU()}
 
     lr     = 0.0003
-    min_lr = 0.0000009
+    min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_iteration = 3000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -254,7 +254,7 @@ def lunar_lander_continuous_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            dynamic_bs_clip     = False,
+            dynamic_bs_clip     = True,
             target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
