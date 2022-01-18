@@ -41,7 +41,9 @@ class VectorizedEnv(object):
         return obs, reward, done, info
 
     def reset(self):
-        return self.env.reset()
+        obs = self.env.reset()
+        obs = obs.reshape(self.observation_space.shape)
+        return obs
 
     def render(self):
         self.env.render()
