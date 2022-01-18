@@ -1,8 +1,24 @@
 from .utils import *
+import sys
 import numpy as np
 import torch
 import gym
 import cv2
+
+#DEBUGGING SUPPORT
+def show_frame(frame_cache):
+    from PIL import Image
+    first = frame_cache[-1].squeeze()
+    first = (first * 255.).astype(np.uint8)
+    img = Image.fromarray(first, 'L')
+    img.show()
+
+    last = frame_cache[0].squeeze()
+    last = (last * 255.).astype(np.uint8)
+    img = Image.fromarray(last, 'L')
+    img.show()
+
+    input("")
 
 
 #FIXME: change to inherit from gym.Wrapper
@@ -10,30 +26,65 @@ class AtariEnvWrapper(object):
 
     def __init__(self,
                  env,
-                 min_lives = -1,
+                 allow_life_loss = False,
                  **kwargs):
 
         super(AtariEnvWrapper, self).__init__(**kwargs)
 
-        self.min_lives    = min_lives
-        self.env          = env
-        self.action_space = env.action_space
+        self.allow_life_loss   = allow_life_loss
+        self.life_count        = env.ale.lives()
+        self.env               = env
+        self.action_space      = env.action_space
+        self.true_done         = True
+        self.false_done_action = None
+        self.true_done_action  = None
 
-    def _end_game(self, done):
-        return done or self.env.ale.lives() < self.min_lives
+    def _check_game_end(self, done):
+        self.true_done = done
+
+        life_lost = False
+        if self.env.ale.lives() < self.life_count:
+            life_lost = True
+
+        life_loss_done = False
+        if not self.allow_life_loss and life_lost:
+            life_loss_done = True
+
+        self.life_count = self.env.ale.lives()
+
+        return (done or life_loss_done, life_lost)
+
+    def _state_dependent_reset(self):
+
+        if self.false_done_action == None:
+            sys.stderr.write("\nERROR: false_done_action must be a function.")
+            sys.exit(1)
+        elif self.true_done_action == None:
+            sys.stderr.write("\nERROR: true_done_action must be a function.")
+            sys.exit(1)
+
+        if self.true_done:
+            self.true_done = False
+            self.env.reset()
+            obs = self.true_done_action()
+        else:
+            obs = self.false_done_action()
+
+        self.lives = self.env.ale.lives()
+        return obs
 
 
 class AtariPixels(AtariEnvWrapper):
 
     def __init__(self,
                  env,
-                 min_lives  = -1,
+                 allow_life_loss = False,
                  frame_size = 84,
                  **kwargs):
 
         super(AtariPixels, self).__init__(
             env,
-            min_lives,
+            allow_life_loss,
             **kwargs)
 
         prev_shape      = env.observation_space.shape
@@ -93,12 +144,12 @@ class PixelDifferenceEnvWrapper(AtariPixels):
 
     def __init__(self,
                  env,
-                 min_lives = -1,
+                 allow_life_loss = False,
                  **kwargs):
 
         super(PixelDifferenceEnvWrapper, self).__init__(
-            env       = env,
-            min_lives = min_lives,
+            env             = env,
+            allow_life_loss = allow_life_loss,
             **kwargs)
 
         self.prev_frame   = None
@@ -106,7 +157,7 @@ class PixelDifferenceEnvWrapper(AtariPixels):
         self.h_start      = 0
 
     def reset(self):
-        cur_frame = self.env.reset()
+        cur_frame = self._state_dependent_reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
         self.prev_frame = cur_frame
@@ -121,7 +172,8 @@ class PixelDifferenceEnvWrapper(AtariPixels):
         diff_frame      = cur_frame - self.prev_frame
         self.prev_frame = cur_frame.copy()
 
-        done = self._end_game(done)
+        done, life_lost   = self._check_game_end(done)
+        info["life lost"] = life_lost
 
         return diff_frame, reward, done, info
 
@@ -134,13 +186,13 @@ class PixelHistEnvWrapper(AtariPixels):
     def __init__(self,
                  env,
                  hist_size         = 2,
-                 min_lives         = -1,
+                 allow_life_loss   = False,
                  use_frame_pooling = True,
                  **kwargs):
 
         super(PixelHistEnvWrapper, self).__init__(
-            env       = env,
-            min_lives = min_lives,
+            env             = env,
+            allow_life_loss = allow_life_loss,
             **kwargs)
 
         self.frame_cache       = None
@@ -150,7 +202,7 @@ class PixelHistEnvWrapper(AtariPixels):
         self.use_frame_pooling = use_frame_pooling
 
     def reset(self):
-        cur_frame = self.env.reset()
+        cur_frame = self._state_dependent_reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
         self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
@@ -177,23 +229,8 @@ class PixelHistEnvWrapper(AtariPixels):
         self.frame_cache = np.roll(self.frame_cache, -1, axis=0)
         self.frame_cache[-1] = cur_frame.copy()
 
-        ###FIXME: remove
-        #from PIL import Image
-        #import sys
-        #first = self.frame_cache[-1].squeeze()
-        #first = (first * 255.).astype(np.uint8)
-        #img = Image.fromarray(first, 'L')
-        #img.show()
-
-        #last = self.frame_cache[0].squeeze()
-        #last = (last * 255.).astype(np.uint8)
-        #img = Image.fromarray(last, 'L')
-        #img.show()
-
-        #input("")
-        ###sys.exit(1)
-
-        done = self._end_game(done)
+        done, life_lost   = self._check_game_end(done)
+        info["life lost"] = life_lost
 
         return self.frame_cache, reward, done, info
 
@@ -206,12 +243,12 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
     def __init__(self,
                  env,
                  hist_size = 2,
-                 min_lives = -1,
+                 allow_life_loss = False,
                  **kwargs):
 
         super(RAMHistEnvWrapper, self).__init__(
-            env       = env,
-            min_lives =  min_lives,
+            env             = env,
+            allow_life_loss = allow_life_loss,
             **kwargs)
 
         ram_shape   = env.observation_space.shape
@@ -220,7 +257,6 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.observation_space = CustomObservationSpace(
             cache_shape)
 
-        self.min_lives          = min_lives
         self.ram_size           = ram_shape[0]
         self.cache_size         = cache_shape[0]
         self.hist_size          = hist_size
@@ -233,7 +269,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.ram_cache = np.tile(cur_ram, self.hist_size)
 
     def reset(self):
-        cur_ram  = self.env.reset()
+        cur_ram  = self._state_dependent_reset()
         cur_ram  = cur_ram.astype(np.float32) / 255.
         self._reset_ram_cache(cur_ram)
 
@@ -248,7 +284,8 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         offset = self.cache_size - self.ram_size
         self.ram_cache[offset :] = cur_ram.copy()
 
-        done = self._end_game(done)
+        done, life_lost   = self._check_game_end(done)
+        info["life lost"] = life_lost
 
         return self.ram_cache.copy(), reward, done, info
 
@@ -260,7 +297,6 @@ class BreakoutEnvWrapper():
 
     def __init__(self,
                  env,
-                 auto_fire = False,
                  **kwargs):
 
         super(BreakoutEnvWrapper, self).__init__(env, **kwargs)
@@ -282,9 +318,10 @@ class BreakoutEnvWrapper():
             env.action_space.dtype,
             3)
 
-        self.action_map = [0, 2, 3]
-        self.auto_fire  = auto_fire
-        self.cur_lives  = self.env.ale.lives()
+        self.action_map        = [0, 2, 3]
+        self.cur_lives         = self.env.ale.lives()
+        self.false_done_action = self.false_done_reset
+        self.true_done_action  = self.true_done_reset
 
     def _set_random_start_pos(self):
         #
@@ -300,32 +337,30 @@ class BreakoutEnvWrapper():
     def fire_ball(self):
         return self.env.step(1)
 
-    def _post_step(self,
-                   reset = False):
+    def true_done_reset(self):
+        self._set_random_start_pos()
+        obs, _, _, _ = self.fire_ball()
+        return obs
 
-        ret = None
+    def false_done_reset(self):
+        obs, _, _, _ = self.fire_ball()
+        return obs
 
-        if not reset and self.auto_fire and self.env.ale.lives() < self.lives:
-            ret = self.fire_ball()
-
-        self.lives = self.env.ale.lives()
-
-        return ret
 
 class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size     = 2,
-                 min_lives     = -1,
-                 punish_end    = False,
-                 skip_k_frames = 1,
+                 hist_size       = 2,
+                 allow_life_loss = False,
+                 punish_end      = False,
+                 skip_k_frames   = 1,
                  **kwargs):
 
         super(BreakoutRAMEnvWrapper, self).__init__(
-            env       = env,
-            hist_size = hist_size,
-            min_lives = min_lives,
+            env             = env,
+            hist_size       = hist_size,
+            allow_life_loss = allow_life_loss,
             **kwargs)
 
         self.punish_end    = punish_end
@@ -336,6 +371,12 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
         for k in range(self.skip_k_frames):
             obs, reward, done, info = RAMHistEnvWrapper.step(self, action)
+
+            if done:
+                break
+
+            if self.allow_life_loss and info["life lost"]:
+                self.fire_ball()
 
         if self.punish_end:
             #
@@ -374,17 +415,17 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
 
     def __init__(self,
                  env,
-                 hist_size     = 2,
-                 min_lives     = -1,
-                 punish_end    = False,
-                 skip_k_frames = 1,
+                 hist_size       = 2,
+                 allow_life_loss = False,
+                 punish_end      = False,
+                 skip_k_frames   = 1,
                  **kwargs):
 
 
         super(BreakoutPixelsEnvWrapper, self).__init__(
-            env       = env,
-            hist_size = hist_size,
-            min_lives = min_lives,
+            env             = env,
+            hist_size       = hist_size,
+            allow_life_loss = allow_life_loss,
             **kwargs)
 
         self.punish_end    = punish_end
@@ -405,8 +446,19 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
     def step(self, action):
         action = self.action_map[action]
 
+        k_reward_sum = 0
         for k in range(self.skip_k_frames):
             obs, reward, done, info = PixelHistEnvWrapper.step(self, action)
+
+            k_reward_sum += reward
+
+            if done:
+                break
+
+            if self.allow_life_loss and info["life lost"]:
+                self.fire_ball()
+
+        reward = k_reward_sum
 
         if self.punish_end:
             #
@@ -415,29 +467,4 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
-        self._post_step()
-
         return obs, reward, done, info
-
-    def reset(self):
-        self.env.reset()
-
-        #
-        # First, we need to randomly place the paddle somewhere. This
-        # will change where the ball is launched from. 20 steps in either
-        # direction from the default start is enough to get to the wall.
-        #
-        self._set_random_start_pos()
-
-        #
-        # Next, launch the ball.
-        #
-        cur_frame, _, _, _ = self.fire_ball()
-
-        cur_frame = self.rgb_to_processed_frame(cur_frame)
-        self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
-        self.prev_frame  = cur_frame.copy()
-
-        self._post_step(True)
-
-        return self.frame_cache.copy()

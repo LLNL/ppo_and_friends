@@ -498,32 +498,29 @@ def breakout_pixels_ppo(state_path,
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    min_lives = -1 if test else 5
-    auto_fire = test
-
     wrapped_env = BreakoutPixelsEnvWrapper(
-        env           = env,
-        hist_size     = 4,
-        min_lives     = min_lives,
-        auto_fire     = auto_fire,
-        skip_k_frames = 4)
+        env              = env,
+        allow_life_loss  = test,
+        hist_size        = 4,
+        skip_k_frames    = 4)
 
     lr     = 0.0003
-    min_lr = 0.000095
+    min_lr = 0.0
 
-    lr_dec = LogDecrementer(
-        max_iteration = 5000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 7000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                  = wrapped_env,
             ac_network           = AtariPixelNetwork,
-            batch_size           = 256,
-            ts_per_rollout       = 1024,
-            max_ts_per_ep        = 1024,
+            batch_size           = 512,
+            ts_per_rollout       = 2048,
+            max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
-            bootstrap_clip       = (0.0, 1.0),
-            target_kl            = 0.03,
+            reward_clip         = (-1., 1.),
+            bootstrap_clip      = (-1., 1.),
+            target_kl           = 0.015,
             lr_dec               = lr_dec,
             lr                   = lr,
             min_lr               = min_lr,
