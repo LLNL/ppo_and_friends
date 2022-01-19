@@ -2,15 +2,19 @@ import torch
 import os
 from torch import nn
 import torch.nn.functional as F
+from torch.distributions import Categorical
+from torch.distributions.normal import Normal
 import numpy as np
 import sys
 
 class PPONetwork(nn.Module):
 
-    def __init__(self, **kw_args):
+    def __init__(self,
+                 name,
+                 **kw_args):
+
         super(PPONetwork, self).__init__()
-        self.name = "PPONetwork"
-        self.uses_batch_norm = False
+        self.name = name
 
     def save(self, path):
         out_f = os.path.join(path, self.name + ".model")
@@ -21,14 +25,37 @@ class PPONetwork(nn.Module):
         self.load_state_dict(torch.load(in_f))
 
 
-class PPOConv2dNetwork(PPONetwork):
+class PPOActorCriticNetwork(PPONetwork):
+
+    def __init__(self,
+                 action_type,
+                 out_dim,
+                 **kw_args):
+
+        super(PPOActorCriticNetwork, self).__init__(**kw_args)
+
+        self.action_type  = action_type
+        self.need_softmax = False
+
+        #
+        # Actors have special roles.
+        #
+        if self.name == "actor":
+
+            if action_type == "discrete":
+                self.need_softmax = True
+                self.distribution  = CategoricalDistribution()
+            elif action_type == "continuous":
+                self.distribution = GaussianDistribution(out_dim)
+
+
+class PPOConv2dNetwork(PPOActorCriticNetwork):
 
     def __init__(self, **kw_args):
         super(PPOConv2dNetwork, self).__init__(**kw_args)
-        self.name = "PPOConv2dNetwork"
 
 
-class SplitObservationNetwork(PPONetwork):
+class SplitObservationNetwork(PPOActorCriticNetwork):
 
     def __init__(self, split_start, **kw_args):
         super(SplitObservationNetwork, self).__init__(**kw_args)
@@ -39,8 +66,33 @@ class SplitObservationNetwork(PPONetwork):
             print(msg)
             sys.exit(1)
 
-        self.name = "PPOSplitObservationNetwork"
         self.split_start = split_start
+
+
+class CategoricalDistribution(object):
+
+    def get_distribution(self, probs):
+        return Categorical(probs)
+
+    def get_log_probs(self, dist, actions):
+        return dist.log_prob(actions)
+
+
+class GaussianDistribution(nn.Module):
+    def __init__(self,
+                 act_dim):
+
+        super(GaussianDistribution, self).__init__()
+
+        log_std = torch.as_tensor(-0.5 * np.ones(act_dim, dtype=np.float32))
+        self.log_std = torch.nn.Parameter(log_std)
+
+    def get_distribution(self, action_mean):
+        std = torch.exp(self.log_std)
+        return Normal(action_mean, std.cpu())
+
+    def get_log_probs(self, dist, actions):
+        return dist.log_prob(actions).sum(axis=-1)
 
 
 def get_conv2d_out_size(in_size,
@@ -332,23 +384,21 @@ class Conv2dObservationEncoder_orig(nn.Module):
 #                        Actor Critic Networks                         #
 ########################################################################
 
-class SimpleFeedForward(PPONetwork):
+class SimpleFeedForward(PPOActorCriticNetwork):
 
     def __init__(self,
-                 name,
                  in_dim,
                  out_dim,
                  out_init,
-                 need_softmax = False,
                  activation   = nn.ReLU(),
                  hidden_size  = 128,
                  **kw_args):
 
-        super(SimpleFeedForward, self).__init__(**kw_args)
+        super(SimpleFeedForward, self).__init__(
+            out_dim = out_dim,
+            **kw_args)
 
-        self.name         = name
-        self.need_softmax = need_softmax
-        self.activation   = activation
+        self.activation = activation
 
         self.l1 = init_layer(nn.Linear(in_dim, hidden_size))
         self.l2 = init_layer(nn.Linear(hidden_size, hidden_size))
@@ -379,21 +429,19 @@ class SimpleFeedForward(PPONetwork):
 class SimpleSplitObsNetwork(SplitObservationNetwork):
 
     def __init__(self,
-                 name,
                  in_dim,
                  out_dim,
                  out_init,
-                 need_softmax = False,
                  hidden_left  = 64,
                  hidden_right = 64,
                  activation   = nn.ReLU(),
                  **kw_args):
 
-        super(SimpleSplitObsNetwork, self).__init__(**kw_args)
+        super(SimpleSplitObsNetwork, self).__init__(
+            out_dim = out_dim,
+            **kw_args)
 
-        self.name         = name
-        self.need_softmax = need_softmax
-        self.activation   = activation
+        self.activation = activation
 
         side_1_dim = self.split_start
         side_2_dim = in_dim - self.split_start
@@ -468,21 +516,18 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         return out
 
 
-class AtariRAMNetwork(PPONetwork):
+class AtariRAMNetwork(PPOActorCriticNetwork):
 
     def __init__(self,
-                 name,
                  in_dim,
                  out_dim,
                  out_init,
-                 need_softmax = False,
-                 activation   = nn.ReLU(),
+                 activation = nn.ReLU(),
                  **kw_args):
 
-        super(AtariRAMNetwork, self).__init__(**kw_args)
-        self.name            = name
-        self.need_softmax    = need_softmax
-        self.uses_batch_norm = True
+        super(AtariRAMNetwork, self).__init__(
+            out_dim = out_dim,
+            **kw_args)
 
         self.a_f = activation
 
@@ -534,19 +579,17 @@ class AtariRAMNetwork(PPONetwork):
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
-                 name,
                  in_shape,
                  out_dim,
                  out_init,
-                 need_softmax = False,
-                 activation   = nn.ReLU(),
+                 activation = nn.ReLU(),
                  **kw_args):
 
-        super(AtariPixelNetwork, self).__init__(**kw_args)
+        super(AtariPixelNetwork, self).__init__(
+            out_dim = out_dim,
+            **kw_args)
 
-        self.name         = name
-        self.need_softmax = need_softmax
-        self.a_f          = activation
+        self.a_f = activation
 
         channels   = in_shape[0]
         height     = in_shape[1]
