@@ -279,13 +279,16 @@ def mountain_car_ppo(state_path,
     env = gym.make('MountainCar-v0')
 
     lr     = 0.0003
-    min_lr = 0.0002
+    min_lr = 0.0003
 
-    lr_dec = LogDecrementer(
-        max_iteration = 8000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
+    #FIXME: normalizing rewards might now work here since
+    #       we're adding intrinsic curiosity to the reward.
+    #       We might need to do something different here...
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 32,
@@ -328,7 +331,7 @@ def mountain_car_continuous_ppo(state_path,
     lr     = 0.0003
     min_lr = 0.00014
 
-    lr_dec = LogDecrementer(
+    lr_dec = LinearDecrementer(
         max_iteration = 8000,
         max_value     = lr,
         min_value     = min_lr)
@@ -371,7 +374,7 @@ def acrobot_ppo(state_path,
     lr     = 0.0003
     min_lr = 0.00015
 
-    lr_dec = LogDecrementer(
+    lr_dec = LinearDecrementer(
         max_iteration = 8000,
         max_value     = lr,
         min_value     = min_lr)
@@ -508,7 +511,7 @@ def breakout_pixels_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 7000,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -602,7 +605,7 @@ def bipedal_walker_ppo(state_path,
     lr     = 0.0003
     min_lr = 0.0000009
 
-    lr_dec = LogDecrementer(
+    lr_dec = LinearDecrementer(
         max_iteration = 12000,
         max_value     = lr,
         min_value     = min_lr)
