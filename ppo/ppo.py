@@ -370,7 +370,7 @@ class PPO(object):
 
         action_pred = action_pred.cpu().detach()
         dist        = self.actor.distribution.get_distribution(action_pred)
-        action      = dist.sample()
+        action      = self.actor.distribution.sample_distribution(dist)
         log_prob    = self.actor.distribution.get_log_probs(dist, action)
 
         if self.action_type == "discrete":
@@ -787,13 +787,13 @@ class PPO(object):
             #
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
-            nn.utils.clip_grad_norm(self.actor.parameters(),
+            nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
-            nn.utils.clip_grad_norm(self.critic.parameters(),
+            nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
             self.critic_optim.step()
 

@@ -39,6 +39,9 @@ def test_policy(ppo,
             with torch.no_grad():
                 action = policy(obs).detach().cpu()
 
+            if action_type == "continuous":
+                action = torch.tanh(action)
+
             if action_type == "discrete":
                 action = torch.argmax(action).numpy()
             else:

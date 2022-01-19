@@ -77,6 +77,9 @@ class CategoricalDistribution(object):
     def get_log_probs(self, dist, actions):
         return dist.log_prob(actions)
 
+    def sample_distribution(self, dist):
+        return dist.sample()
+
 
 class GaussianDistribution(nn.Module):
     def __init__(self,
@@ -84,15 +87,30 @@ class GaussianDistribution(nn.Module):
 
         super(GaussianDistribution, self).__init__()
 
+        #
+        # arXiv:2006.05990v1 suggests an offset of -0.5 is best for
+        # most continuous control tasks, but there are some which perform
+        # better with higher values.
+        # TODO: We might want to make this adjustable.
+        #
         log_std = torch.as_tensor(-0.5 * np.ones(act_dim, dtype=np.float32))
         self.log_std = torch.nn.Parameter(log_std)
 
     def get_distribution(self, action_mean):
-        std = torch.exp(self.log_std)
+
+        #
+        # arXiv:2006.05990v1 suggests that softplus can perform
+        # slightly better than exponentiation.
+        # TODO: add option to use softplus or exp.
+        #
+        std = nn.functional.softplus(self.log_std)
         return Normal(action_mean, std.cpu())
 
     def get_log_probs(self, dist, actions):
         return dist.log_prob(actions).sum(axis=-1)
+
+    def sample_distribution(self, dist):
+        return torch.tanh(dist.sample())
 
 
 def get_conv2d_out_size(in_size,
@@ -377,7 +395,6 @@ class Conv2dObservationEncoder_orig(nn.Module):
         enc_obs = self.l4(enc_obs)
 
         return enc_obs
-
 
 
 ########################################################################

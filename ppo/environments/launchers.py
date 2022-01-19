@@ -182,12 +182,13 @@ def lunar_lander_ppo(state_path,
     # lander env.
     #
     ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args["hidden_size"] = 64
 
     lr     = 0.0003
-    min_lr = 0.000090
+    min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 200,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -228,7 +229,7 @@ def lunar_lander_continuous_ppo(state_path,
     env = gym.make('LunarLanderContinuous-v2')
 
     #
-    # Lunar lnader observations are organized as follows:
+    # Lunar lander observations are organized as follows:
     #    Positions: 2
     #    Positional velocities: 2
     #    Angle: 1
@@ -236,9 +237,6 @@ def lunar_lander_continuous_ppo(state_path,
     #    Leg contact: 2
     #
     ac_kw_args = {}
-    #ac_kw_args["split_start"]  = env.observation_space.shape[0] - 2
-    #ac_kw_args["hidden_left"]  = 32
-    #ac_kw_args["hidden_right"] = 8
 
     #
     # Extra args for the actor critic models.
