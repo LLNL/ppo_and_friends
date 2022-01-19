@@ -1,6 +1,7 @@
 import torch
 from utils.misc import get_action_type, need_action_squeeze
 from environments.env_wrappers import ObservationNormalizer
+import numpy as np
 
 def test_policy(ppo,
                 num_test_runs,
@@ -13,14 +14,19 @@ def test_policy(ppo,
     action_type    = get_action_type(env)
     action_squeeze = need_action_squeeze(env)
 
-    num_steps = 0
-    score     = 0
+    max_int     = np.iinfo(np.int32).max
+    num_steps   = 0
+    total_score = 0
+    min_score   = max_int
+    max_score   = -max_int
+
     policy.eval()
 
     for _ in range(num_test_runs):
 
-        obs  = env.reset()
-        done = False
+        obs      = env.reset()
+        done     = False
+        ep_score = 0
 
         while not done:
             num_steps += 1
@@ -44,11 +50,19 @@ def test_policy(ppo,
             obs, reward, done, info = env.step(action)
 
             if "natural reward" in info:
-                score += info["natural reward"]
+                score = info["natural reward"]
             else:
-                score += reward
+                score = reward
+
+            ep_score += score
+            total_score += score
+
+        min_score = min(min_score, ep_score)
+        max_score = max(max_score, ep_score)
 
     print("Ran env {} times.".format(num_test_runs))
     print("Ran {} total time steps.".format(num_steps))
     print("Ran {} time steps on average.".format(num_steps / num_test_runs))
-    print("Average score: {}".format(score / num_test_runs))
+    print("Lowest score: {}".format(min_score))
+    print("Highest score: {}".format(max_score))
+    print("Average score: {}".format(total_score / num_test_runs))

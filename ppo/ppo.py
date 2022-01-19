@@ -607,14 +607,11 @@ class PPO(object):
         #
         # Update our status dict.
         #
-        if self.normalize_rewards:
-            top_score = top_rollout_score
-        else:
-            top_score = max(top_rollout_score, self.status_dict["top score"])
-            rollout_max_reward = max(self.status_dict["reward range"][1],
-                rollout_max_reward)
-            rollout_min_reward = min(self.status_dict["reward range"][0],
-                rollout_min_reward)
+        top_score = max(top_rollout_score, self.status_dict["top score"])
+        rollout_max_reward = max(self.status_dict["reward range"][1],
+            rollout_max_reward)
+        rollout_min_reward = min(self.status_dict["reward range"][0],
+            rollout_min_reward)
 
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_rewards / total_episodes

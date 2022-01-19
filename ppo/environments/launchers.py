@@ -238,13 +238,13 @@ def lunar_lander_continuous_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 3000,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 128,
+            max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             batch_size          = 512,
             ac_kw_args          = ac_kw_args,
@@ -254,7 +254,7 @@ def lunar_lander_continuous_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            dynamic_bs_clip     = True,
+            dynamic_bs_clip     = False,
             target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
