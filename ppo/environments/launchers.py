@@ -3,7 +3,7 @@ import gym
 from testing import test_policy
 from networks import SimpleFeedForward, AtariRAMNetwork, AtariPixelNetwork
 from networks import SimpleSplitObsNetwork
-from networks import ICM, LinearObservationEncoder, Conv2dObservationEncoder_orig
+from networks import ICM, LinearObservationEncoder
 from .gym_wrappers import *
 import torch.nn as nn
 from utils.decrementers import *
@@ -28,7 +28,8 @@ def run_ppo(env,
             ext_reward_weight   = 1.0,
             intr_reward_weight  = 1.0,
             entropy_weight      = 0.01,
-            ac_kw_args          = {},
+            actor_kw_args       = {},
+            critic_kw_args      = {},
             icm_kw_args         = {},
             surr_clip           = 0.2,
             bootstrap_clip      = (-10.0, 10.0),
@@ -64,7 +65,8 @@ def run_ppo(env,
               intr_reward_weight = intr_reward_weight,
               entropy_weight     = entropy_weight,
               icm_kw_args        = icm_kw_args,
-              ac_kw_args         = ac_kw_args,
+              actor_kw_args      = actor_kw_args,
+              critic_kw_args     = critic_kw_args,
               surr_clip          = surr_clip,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
@@ -181,8 +183,12 @@ def lunar_lander_ppo(state_path,
     # I find that leaky relu does much better with the lunar
     # lander env.
     #
-    ac_kw_args = {"activation" : nn.LeakyReLU()}
-    ac_kw_args["hidden_size"] = 64
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0
@@ -205,7 +211,8 @@ def lunar_lander_ppo(state_path,
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
             target_kl           = 0.015,
-            ac_kw_args          = ac_kw_args,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -236,21 +243,24 @@ def lunar_lander_continuous_ppo(state_path,
     #    Angular velocities: 1
     #    Leg contact: 2
     #
-    ac_kw_args = {}
+    actor_kw_args = {}
 
     #
     # Extra args for the actor critic models.
     # I find that leaky relu does much better with the lunar
     # lander env.
     #
-    ac_kw_args["activation"]  = nn.LeakyReLU()
-    ac_kw_args["hidden_size"] = 64
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -259,7 +269,9 @@ def lunar_lander_continuous_ppo(state_path,
             max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             batch_size          = 512,
-            ac_kw_args          = ac_kw_args,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            entropy_weight      = 0.0,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -293,7 +305,7 @@ def mountain_car_ppo(state_path,
     lr     = 0.0003
     min_lr = 0.0002
 
-    lr_dec = LogDecrementer(
+    lr_dec = LinearDecrementer(
         max_iteration = 8000,
         max_value     = lr,
         min_value     = min_lr)
@@ -333,34 +345,42 @@ def mountain_car_continuous_ppo(state_path,
 
     #
     # Extra args for the actor critic models.
-    # Leaky relu tends to work well here.
     #
-    ac_kw_args = {"activation" : nn.LeakyReLU()}
+    actor_kw_args = {}
+    actor_kw_args["activation"]  =  nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 128
 
     lr     = 0.0003
-    min_lr = 0.00014
+    min_lr = 0.0003
 
-    lr_dec = LogDecrementer(
-        max_iteration = 8000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
+    #FIXME: find settings that work
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 32,
+            max_ts_per_ep      = 200,
             batch_size         = 256,
             ts_per_rollout     = 2048,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
-            ac_kw_args         = ac_kw_args,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
+
             use_gae            = True,
             use_icm            = True,
             normalize_obs      = True,
-            normalize_rewards  = True,
+            normalize_rewards  = False,
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
             bootstrap_clip     = (-10., 10.),
+
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -380,23 +400,35 @@ def acrobot_ppo(state_path,
 
     env = gym.make('Acrobot-v1')
 
-    lr     = 0.0003
-    min_lr = 0.00015
+    actor_kw_args = {}
+    actor_kw_args["hidden_size"] = 64
 
-    lr_dec = LogDecrementer(
-        max_iteration = 8000,
+    critic_kw_args = {}
+    critic_kw_args["hidden_size"] = 128
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 100,
+            max_ts_per_ep      = 32,
             ts_per_rollout     = 2048,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
             use_gae            = True,
-            use_icm            = True,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
+            normalize_obs      = True,
+            normalize_rewards  = True,
+            obs_clip           = (-10., 10.),
+            reward_clip        = (-10., 10.),
+            bootstrap_clip     = (-10., 10.),
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -606,31 +638,34 @@ def bipedal_walker_ppo(state_path,
     #
     # The lidar observations are the last 10.
     #
-    ac_kw_args = {}
-    ac_kw_args["split_start"]  = env.observation_space.shape[0] - 10
-    ac_kw_args["hidden_left"]  = 64
-    ac_kw_args["hidden_right"] = 64
+    actor_kw_args = {}
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 10
+    actor_kw_args["hidden_left"]  = 64
+    actor_kw_args["hidden_right"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 128
 
     lr     = 0.0003
-    min_lr = 0.0000009
+    min_lr = 0.0
 
-    lr_dec = LogDecrementer(
-        max_iteration = 12000,
+    lr_dec = LinearDecrementer(
+        max_iteration = 7000,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
-            ac_kw_args          = ac_kw_args,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 64,
             ts_per_rollout      = 2048,
             use_gae             = True,
-            use_icm             = False,
-            save_best_only      = True,
-            epochs_per_iter     = 20,
-            mean_window_size    = 200,
             target_kl           = 0.015,
+
+            save_best_only      = False,
 
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -689,14 +724,17 @@ def ant_ppo(state_path,
     #    Velocities: 14
     #    Contact forces: 84
     #
-    ac_kw_args = {}
-    ac_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    ac_kw_args["hidden_left"]  = 64
-    ac_kw_args["hidden_right"] = 128
+    actor_kw_args = {}
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    actor_kw_args["hidden_left"]  = 64
+    actor_kw_args["hidden_right"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
 
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
-            ac_kw_args          = ac_kw_args,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
             batch_size          = 256,
             max_ts_per_ep       = 64,
             ts_per_rollout      = 1024,
