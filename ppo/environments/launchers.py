@@ -278,6 +278,9 @@ def mountain_car_ppo(state_path,
 
     env = gym.make('MountainCar-v0')
 
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args["hidden_size"] = 64
+
     lr     = 0.0003
     min_lr = 0.0003
 
@@ -291,18 +294,20 @@ def mountain_car_ppo(state_path,
     #       We might need to do something different here...
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 32,
+            max_ts_per_ep      = 200,
             ts_per_rollout     = 2048,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
-            use_gae            = True,
             use_icm            = True,
-            normalize_obs      = True,
-            normalize_rewards  = True,
-            obs_clip           = (-10., 10.),
-            reward_clip        = (-10., 10.),
-            bootstrap_clip     = (-10., 10.),
+
+            use_gae            = True,
+            normalize_obs      = False,
+            normalize_rewards  = False,
+            obs_clip           = (-10, 10),
+            reward_clip        = (-10, 10),
+            bootstrap_clip     = (-10, 10),
+
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
