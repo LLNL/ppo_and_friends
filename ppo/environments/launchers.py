@@ -182,12 +182,13 @@ def lunar_lander_ppo(state_path,
     # lander env.
     #
     ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args["hidden_size"] = 64
 
     lr     = 0.0003
-    min_lr = 0.000090
+    min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 200,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -228,11 +229,22 @@ def lunar_lander_continuous_ppo(state_path,
     env = gym.make('LunarLanderContinuous-v2')
 
     #
+    # Lunar lander observations are organized as follows:
+    #    Positions: 2
+    #    Positional velocities: 2
+    #    Angle: 1
+    #    Angular velocities: 1
+    #    Leg contact: 2
+    #
+    ac_kw_args = {}
+
+    #
     # Extra args for the actor critic models.
     # I find that leaky relu does much better with the lunar
     # lander env.
     #
-    ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args["activation"]  = nn.LeakyReLU()
+    ac_kw_args["hidden_size"] = 64
 
     lr     = 0.0003
     min_lr = 0.0

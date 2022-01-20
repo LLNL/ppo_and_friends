@@ -275,10 +275,6 @@ class PPO(object):
 
         print("Using {} action type.".format(self.action_type))
 
-        need_softmax = False
-        if action_type == "discrete":
-            need_softmax = True
-
         use_conv2d_setup = False
         for base in ac_network.__bases__:
             if base.__name__ == "PPOConv2dNetwork":
@@ -292,7 +288,7 @@ class PPO(object):
                 in_shape     = obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                need_softmax = need_softmax,
+                action_type  = action_type,
                 **ac_kw_args)
 
             self.critic = ac_network(
@@ -300,17 +296,18 @@ class PPO(object):
                 in_shape     = obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
-                need_softmax = False,
+                action_type  = action_type,
                 **ac_kw_args)
 
         else:
             obs_dim = self.obs_shape[0]
+
             self.actor = ac_network(
                 name         = "actor", 
                 in_dim       = obs_dim, 
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                need_softmax = need_softmax,
+                action_type  = action_type,
                 **ac_kw_args)
 
             self.critic = ac_network(
@@ -318,7 +315,7 @@ class PPO(object):
                 in_dim       = obs_dim, 
                 out_dim      = 1,
                 out_init     = 1.0,
-                need_softmax = False,
+                action_type  = action_type,
                 **ac_kw_args)
 
         self.actor  = self.actor.to(device)
@@ -353,9 +350,6 @@ class PPO(object):
                 self.lr= min(self.status_dict["lr"], self.lr)
                 self.status_dict["lr"] = self.lr
 
-        self.cov_var = torch.full(size=(self.act_dim,), fill_value=0.5)
-        self.cov_mat = torch.diag(self.cov_var)
-
         self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
 
@@ -374,38 +368,34 @@ class PPO(object):
         with torch.no_grad():
             action_pred = self.actor(t_obs)
 
-        if self.action_type == "continuous":
-            action_mean = action_pred.cpu().detach()
-            dist        = MultivariateNormal(action_mean, self.cov_mat)
-            action      = dist.sample()
-            log_prob    = dist.log_prob(action)
+        action_pred = action_pred.cpu().detach()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+        action      = self.actor.distribution.sample_distribution(dist)
+        log_prob    = self.actor.distribution.get_log_probs(dist, action)
 
-        elif self.action_type == "discrete":
-            probs    = action_pred.cpu().detach()
-            dist     = Categorical(probs)
-            action   = dist.sample()
-            log_prob = dist.log_prob(action)
-            action   = action.int().unsqueeze(0)
+        if self.action_type == "discrete":
+            action = action.int().unsqueeze(0)
 
         return action.detach().numpy(), log_prob.detach()
 
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
 
-        if self.action_type == "continuous":
-            action_mean = self.actor(batch_obs).cpu()
-            dist        = MultivariateNormal(action_mean, self.cov_mat)
 
-            if len(batch_actions.shape) < 2:
-                log_probs = dist.log_prob(batch_actions.unsqueeze(1).cpu())
-            else:
-                log_probs = dist.log_prob(batch_actions.cpu())
-
-        elif self.action_type == "discrete":
+        if self.action_type == "discrete":
             batch_actions = batch_actions.flatten()
-            probs         = self.actor(batch_obs).cpu()
-            dist          = Categorical(probs)
-            log_probs     = dist.log_prob(batch_actions.cpu())
+
+        action_pred = self.actor(batch_obs).cpu()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        if self.action_type == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
 
         return values, log_probs.to(self.device), dist.entropy().to(self.device)
 
@@ -797,13 +787,13 @@ class PPO(object):
             #
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
-            nn.utils.clip_grad_norm(self.actor.parameters(),
+            nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
-            nn.utils.clip_grad_norm(self.critic.parameters(),
+            nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
             self.critic_optim.step()
 
