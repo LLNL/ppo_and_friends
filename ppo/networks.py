@@ -80,6 +80,9 @@ class CategoricalDistribution(object):
     def sample_distribution(self, dist):
         return dist.sample()
 
+    def get_entropy(self, dist, actions):
+        return dist.entropy()
+
 
 class GaussianDistribution(nn.Module):
     def __init__(self,
@@ -111,6 +114,18 @@ class GaussianDistribution(nn.Module):
 
     def sample_distribution(self, dist):
         return torch.tanh(dist.sample())
+
+    def get_entropy(self, dist, actions):
+
+        #
+        # This is a bit odd here... arXiv:2006.05990v1 suggests using
+        # tanh to move the actions into a [-1, 1] range, but this also
+        # changes the probability densities. This is okay for most situations,
+        # but it does affect the entropy. From what I can gather, it sounds
+        # like calculating the true entropy here is difficult, so people
+        # instead use the log probabilities.
+        #
+        return -self.get_log_probs(dist, actions)
 
 
 def get_conv2d_out_size(in_size,
@@ -162,7 +177,7 @@ class LinearObservationEncoder(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearObservationEncoder, self).__init__(**kw_args)
+        super(LinearObservationEncoder, self).__init__()
 
         self.activation = activation
 
@@ -210,7 +225,7 @@ class Conv2dObservationEncoder(nn.Module):
             linear layers.
         """
 
-        super(Conv2dObservationEncoder, self).__init__(**kw_args)
+        super(Conv2dObservationEncoder, self).__init__()
 
         self.activation = activation
 
@@ -289,114 +304,6 @@ class Conv2dObservationEncoder(nn.Module):
 
         return enc_obs
 
-#FIXME: cleanup
-class Conv2dObservationEncoder_orig(nn.Module):
-
-    def __init__(self,
-                 in_shape,
-                 encoded_dim,
-                 out_init,
-                 hidden_size,
-                 activation = nn.ReLU(),
-                 **kw_args):
-        """
-            A simple encoder for encoding observations into
-            forms that only contain information needed by the
-            actor. In other words, we want to teach this model
-            to get rid of any noise that may exist in the observation.
-            By noise, we mean anything that does not pertain to
-            the actions being taken.
-
-            This implementation uses 2d convolutions followed by
-            linear layers.
-        """
-
-        super(Conv2dObservationEncoder_orig, self).__init__(**kw_args)
-
-        self.activation = activation
-
-        channels   = in_shape[0]
-        height     = in_shape[1]
-        width      = in_shape[2]
-
-        k_s  = 5
-        pad  = 0
-        strd = 1
-        self.conv_1 = init_layer(nn.Conv2d(channels, 32,
-            kernel_size=5, stride=1))
-        height      = get_conv2d_out_size(height, pad, k_s, strd)
-        width       = get_conv2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 5
-        pad  = 0
-        strd = 2
-        self.mp_1 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
-        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
-        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 5
-        pad  = 0
-        strd = 1
-        self.conv_2 = init_layer(nn.Conv2d(32, 32, kernel_size=5, stride=1))
-        height      = get_conv2d_out_size(height, pad, k_s, strd)
-        width       = get_conv2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 5
-        pad  = 0
-        strd = 2
-        self.mp_2 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
-        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
-        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 5
-        pad  = 0
-        strd = 1
-        self.conv_3  = init_layer(nn.Conv2d(32, 32, kernel_size=5, stride=1))
-        height       = get_conv2d_out_size(height, pad, k_s, strd)
-        width        = get_conv2d_out_size(width, pad, k_s, strd)
-
-        k_s  = 5
-        pad  = 0
-        strd = 2
-        self.mp_3 = nn.MaxPool2d(kernel_size=k_s, padding=pad, stride=strd)
-        height    = get_maxpool2d_out_size(height, pad, k_s, strd)
-        width     = get_maxpool2d_out_size(width, pad, k_s, strd)
-
-        self.l1  = init_layer(nn.Linear(height * width * 32, hidden_size))
-        self.l2  = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.l3  = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.l4  = init_layer(nn.Linear(hidden_size, encoded_dim),
-            weight_std=out_init)
-
-
-    def forward(self,
-                obs):
-
-        enc_obs = self.conv_1(obs)
-        enc_obs = self.mp_1(enc_obs)
-
-        enc_obs = self.conv_2(enc_obs)
-        enc_obs = self.mp_2(enc_obs)
-
-        enc_obs = self.conv_3(enc_obs)
-        enc_obs = self.mp_3(enc_obs)
-
-        enc_obs = enc_obs.flatten(start_dim = 1)
-
-        enc_obs = self.l1(enc_obs)
-        enc_obs = self.activation(enc_obs)
-
-        enc_obs = self.l2(enc_obs)
-        enc_obs = self.activation(enc_obs)
-
-        enc_obs = self.l3(enc_obs)
-        enc_obs = self.activation(enc_obs)
-
-        enc_obs = self.l4(enc_obs)
-
-        return enc_obs
-
-
 ########################################################################
 #                        Actor Critic Networks                         #
 ########################################################################
@@ -424,6 +331,7 @@ class SimpleFeedForward(PPOActorCriticNetwork):
             weight_std=out_init)
 
     def forward(self, _input):
+
         out = _input.flatten(start_dim = 1)
 
         out = self.l1(out)
@@ -473,19 +381,25 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         # that it splits between proprioceptive and exteroceptive (sensory
         # information about the environment).
         #
+        s1_kw_args = kw_args.copy()
+        s1_kw_args["name"] = self.name + "_s1"
+
         self.s1_net = SimpleFeedForward(
-            name       = self.name + "_s1",
             in_dim     = side_1_dim,
             out_dim    = hidden_left,
             out_init   = np.sqrt(2),
-            activation = self.activation)
+            activation = self.activation,
+            **s1_kw_args)
+
+        s2_kw_args = kw_args.copy()
+        s2_kw_args["name"] = self.name + "_s2"
 
         self.s2_net = SimpleFeedForward(
-            name       = self.name + "_s2",
             in_dim     = side_2_dim,
             out_dim    = hidden_right,
             out_init   = np.sqrt(2),
-            activation = self.activation)
+            activation = self.activation,
+            **s2_kw_args)
 
         inner_hidden_size  = hidden_left + hidden_right
 
@@ -690,7 +604,7 @@ class LinearInverseModel(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearInverseModel, self).__init__(**kw_args)
+        super(LinearInverseModel, self).__init__()
 
         self.activation = activation
 
@@ -741,7 +655,7 @@ class LinearForwardModel(nn.Module):
             This implementation uses a simple feed-forward network.
         """
 
-        super(LinearForwardModel, self).__init__(**kw_args)
+        super(LinearForwardModel, self).__init__()
 
         self.activation  = activation
         self.action_type = action_type
@@ -791,10 +705,12 @@ class ICM(PPONetwork):
                  obs_dim,
                  act_dim,
                  action_type,
-                 out_init     = 1.0,
-                 obs_encoder  = LinearObservationEncoder,
-                 reward_scale = 0.01,
-                 activation   = nn.ReLU(),
+                 out_init        = 1.0,
+                 obs_encoder     = LinearObservationEncoder,
+                 reward_scale    = 0.01,
+                 activation      = nn.ReLU(),
+                 encoded_obs_dim = 128,
+                 hidden_size     = 128,
                  **kw_args):
         """
             The Intrinsic Curiosit Model (ICM).
@@ -810,9 +726,6 @@ class ICM(PPONetwork):
         self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
         self.mse_loss     = nn.MSELoss(reduction="none")
 
-        encoded_obs_dim   = 128
-        hidden_dims       = 128
-
         #
         # Observation encoder.
         #
@@ -820,7 +733,7 @@ class ICM(PPONetwork):
             obs_dim,
             encoded_obs_dim,
             out_init,
-            hidden_dims,
+            hidden_size,
             **kw_args)
 
         #
@@ -830,7 +743,7 @@ class ICM(PPONetwork):
             encoded_obs_dim * 2, 
             act_dim,
             out_init,
-            hidden_dims,
+            hidden_size,
             **kw_args)
 
         #
@@ -841,7 +754,7 @@ class ICM(PPONetwork):
             encoded_obs_dim,
             out_init,
             act_dim,
-            hidden_dims,
+            hidden_size,
             action_type,
             **kw_args)
 
