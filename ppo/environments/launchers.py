@@ -302,28 +302,36 @@ def mountain_car_ppo(state_path,
 
     env = gym.make('MountainCar-v0')
 
+    ac_kw_args = {"activation" : nn.LeakyReLU()}
+    ac_kw_args["hidden_size"] = 64
+
     lr     = 0.0003
-    min_lr = 0.0002
+    min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration = 8000,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
+    #FIXME: normalizing rewards might now work here since
+    #       we're adding intrinsic curiosity to the reward.
+    #       We might need to do something different here...
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 32,
+            max_ts_per_ep      = 200,
             ts_per_rollout     = 2048,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
-            use_gae            = True,
             use_icm            = True,
-            normalize_obs      = True,
-            normalize_rewards  = True,
-            obs_clip           = (-10., 10.),
-            reward_clip        = (-10., 10.),
-            bootstrap_clip     = (-10., 10.),
+
+            use_gae            = True,
+            normalize_obs      = False,
+            normalize_rewards  = False,
+            obs_clip           = (-10, 10),
+            reward_clip        = (-10, 10),
+            bootstrap_clip     = (-10, 10),
+
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -357,7 +365,7 @@ def mountain_car_continuous_ppo(state_path,
     min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration = 2000,
+        max_iteration = 8000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -552,7 +560,7 @@ def breakout_pixels_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 7000,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
