@@ -205,6 +205,12 @@ class PPO(object):
             print("ERROR: unknown action type!")
             sys.exit(1)
 
+        elif action_type == "continuous" and entropy_weight != 0.0:
+            msg  = "WARNING: continuous action space currently does not "
+            msg += "support entropy. Setting entropy_weight to 0.0"
+            print(msg)
+            entropy_weight = 0.0
+
         #
         # Environments are very inconsistent! We need to check what shape
         # they expect actions to be in.
@@ -385,7 +391,6 @@ class PPO(object):
 
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
-
 
         if self.action_type == "discrete":
             batch_actions = batch_actions.flatten()
@@ -794,8 +799,10 @@ class PPO(object):
             #
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
-            total_entropy    += entropy.mean().item()
-            actor_loss       -= self.entropy_weight * entropy.mean()
+
+            if self.entropy_weight != 0.0:
+                total_entropy += entropy.mean().item()
+                actor_loss    -= self.entropy_weight * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)

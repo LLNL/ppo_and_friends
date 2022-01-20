@@ -116,16 +116,25 @@ class GaussianDistribution(nn.Module):
         return torch.tanh(dist.sample())
 
     def get_entropy(self, dist, actions):
-
         #
         # This is a bit odd here... arXiv:2006.05990v1 suggests using
         # tanh to move the actions into a [-1, 1] range, but this also
-        # changes the probability densities. This is okay for most situations,
-        # but it does affect the entropy. From what I can gather, it sounds
-        # like calculating the true entropy here is difficult, so people
-        # instead use the log probabilities.
+        # changes the probability densities. This is okay for most situations
+        # (the differentiation seems to fix a lot of the potential issues),
+        # but it does affect the entropy. They suggest using the equation
+        # the following equation:
+        #    Ex[-log(x) + log(tanh^prime (x))] s.t. x is the pre-tanh
+        #    computed probability distribution.
+        # I've seen some conversations online about this being problematic,
+        # though. For one, I see this value becoming negative quite easily.
+        # I've seen some suggest just using the -log probabilities, and I've
+        # seen implementations that just take the standard entropy.
+        # For the -log probs approach, I think we'd need to sample the
+        # distribution using rsample, and (I think) it would need to match
+        # the batch size. For now, let's skip entropy reg for continuous
+        # action spaces. This can become a TODO.
         #
-        return -self.get_log_probs(dist, actions)
+        return torch.tensor([])
 
 
 def get_conv2d_out_size(in_size,
