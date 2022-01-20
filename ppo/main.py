@@ -1,5 +1,7 @@
 import gym
 import torch
+import random
+import numpy as np
 import argparse
 from environments.launchers import *
 import os
@@ -14,6 +16,7 @@ if __name__ == "__main__":
     parser.add_argument("--clobber", action="store_true")
     parser.add_argument("--render", action="store_true")
     parser.add_argument("--num_timesteps", default=1000000, type=int)
+    parser.add_argument("--random_seed", default=2, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
         choices=["CartPole", "Pendulum", "LunarLander",
                  "MountainCar", "MountainCarContinuous", "Acrobot",
@@ -25,12 +28,21 @@ if __name__ == "__main__":
 
     args          = parser.parse_args()
     test          = args.test
+    random_seed   = args.random_seed
     num_test_runs = args.num_test_runs
     env_name      = args.environment
     state_path    = os.path.join(args.state_path, "saved_states", env_name)
     clobber       = args.clobber
     render        = args.render
     num_timesteps = args.num_timesteps
+
+    #
+    # Set random seeds (this doesn't guarantee reproducibility, but it should
+    # help).
+    #
+    torch.manual_seed(random_seed)
+    random.seed(random_seed)
+    np.random.seed(random_seed)
 
     load_state = not clobber or test
 
