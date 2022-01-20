@@ -22,7 +22,6 @@ import time
 
 class PPO(object):
 
-    #TODO: replace lr dec with a function to be applied.
     def __init__(self,
                  env,
                  ac_network,
