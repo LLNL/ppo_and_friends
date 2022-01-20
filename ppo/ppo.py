@@ -29,7 +29,8 @@ class PPO(object):
                  device,
                  icm_network         = ICM,
                  icm_kw_args         = {},
-                 ac_kw_args          = {},
+                 actor_kw_args       = {},
+                 critic_kw_args      = {},
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
@@ -70,8 +71,10 @@ class PPO(object):
                  device               A torch device to use for training.
                  icm_network          The network to use for ICM applications.
                  icm_kw_args          Extra keyword args for the ICM network.
-                 ac_kw_args           Extra keyword args for the actor/critic
-                                      networks.
+                 actor_kw_args        Extra keyword args for the actor
+                                      network.
+                 critic_kw_args       Extra keyword args for the critic
+                                      network.
                  lr                   The initial learning rate.
                  min_lr               The minimum learning rate.
                  lr_dec               A class that inherits from the Decrement
@@ -269,6 +272,7 @@ class PPO(object):
         self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
         self.status_dict["reward range"]         = (max_int, -max_int)
+        self.status_dict["obs range"]            = (max_int, -max_int)
 
         if save_best_only:
             self.status_dict["last save"] = -1
@@ -289,7 +293,7 @@ class PPO(object):
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_type  = action_type,
-                **ac_kw_args)
+                **actor_kw_args)
 
             self.critic = ac_network(
                 name         = "critic", 
@@ -297,7 +301,7 @@ class PPO(object):
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_type  = action_type,
-                **ac_kw_args)
+                **critic_kw_args)
 
         else:
             obs_dim = self.obs_shape[0]
@@ -308,7 +312,7 @@ class PPO(object):
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_type  = action_type,
-                **ac_kw_args)
+                **actor_kw_args)
 
             self.critic = ac_network(
                 name         = "critic", 
@@ -316,13 +320,14 @@ class PPO(object):
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_type  = action_type,
-                **ac_kw_args)
+                **critic_kw_args)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
         if self.use_icm:
             self.icm_model = icm_network(
+                name        = "icm",
                 obs_dim     = obs_dim,
                 act_dim     = self.act_dim,
                 action_type = self.action_type,
@@ -397,7 +402,9 @@ class PPO(object):
                 dist,
                 batch_actions.cpu())
 
-        return values, log_probs.to(self.device), dist.entropy().to(self.device)
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+
+        return values, log_probs.to(self.device), entropy.to(self.device)
 
     def print_status(self):
 
@@ -432,6 +439,8 @@ class PPO(object):
         longest_run        = 0
         rollout_max_reward = -np.finfo(np.float32).max
         rollout_min_reward = np.finfo(np.float32).max
+        rollout_max_obs    = -np.finfo(np.float32).max
+        rollout_min_obs    = np.finfo(np.float32).max
         episode_length     = 0
         ep_score           = 0
 
@@ -538,6 +547,8 @@ class PPO(object):
 
                 rollout_max_reward = max(rollout_max_reward, reward)
                 rollout_min_reward = min(rollout_min_reward, reward)
+                rollout_max_obs    = max(rollout_max_obs, obs.max())
+                rollout_min_obs    = min(rollout_min_obs, obs.min())
 
                 ep_rewards += reward
                 ep_score   += natural_reward
@@ -603,9 +614,15 @@ class PPO(object):
         rollout_min_reward = min(self.status_dict["reward range"][0],
             rollout_min_reward)
 
+        rollout_max_obs = max(self.status_dict["obs range"][1],
+            rollout_max_obs)
+        rollout_min_obs = min(self.status_dict["obs range"][0],
+            rollout_min_obs)
+
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_rewards / total_episodes
         rw_range          = (rollout_min_reward, rollout_max_reward)
+        obs_range         = (rollout_min_obs, rollout_max_obs)
 
         self.status_dict["reward avg"]          = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
@@ -613,6 +630,7 @@ class PPO(object):
         self.status_dict["total episodes"]      = total_episodes
         self.status_dict["longest run"]         = longest_run
         self.status_dict["reward range"]        = rw_range
+        self.status_dict["obs range"]           = obs_range
         self.status_dict["timesteps"]          += total_rollout_ts
 
         #
@@ -765,6 +783,12 @@ class PPO(object):
                 ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
             total_kl += (log_probs - curr_log_probs).mean().item()
 
+            if torch.isnan(ratios).any() or torch.isinf(ratios).any():
+                print("ERROR: ratios are nan or inf!")
+                print("curr_log_probs: {}".format(curr_log_probs))
+                print("log_probs: {}".format(log_probs))
+                sys.exit(1)
+
             #
             # We negate here to perform gradient ascent rather than descent.
             #
@@ -783,7 +807,8 @@ class PPO(object):
             total_critic_loss += critic_loss.item()
 
             #
-            # TODO: Cite references for gradient clipping.
+            # arXiv:2005.12729v1 suggests that gradient clipping can
+            # have a positive effect on training.
             #
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph=True)
