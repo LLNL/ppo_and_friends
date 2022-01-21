@@ -194,7 +194,7 @@ def lunar_lander_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_iteration = 1000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -260,7 +260,7 @@ def lunar_lander_continuous_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1000,
+        max_iteration = 500,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -649,6 +649,7 @@ def bipedal_walker_ppo(state_path,
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 10
     actor_kw_args["hidden_left"]  = 64
     actor_kw_args["hidden_right"] = 64
+    actor_kw_args["std_offset"]   = 0.1
 
     critic_kw_args = actor_kw_args.copy()
     critic_kw_args["hidden_left"]  = 128
@@ -666,11 +667,13 @@ def bipedal_walker_ppo(state_path,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
+
             batch_size          = 512,
+
             max_ts_per_ep       = 64,
             ts_per_rollout      = 2048,
             use_gae             = True,
-            target_kl           = 0.015,
+            target_kl           = 1.0,
 
             save_best_only      = False,
 
@@ -733,10 +736,20 @@ def ant_ppo(state_path,
     #
     actor_kw_args = {}
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 64
-    actor_kw_args["hidden_right"] = 128
+    actor_kw_args["hidden_left"]  = 32
+    actor_kw_args["hidden_right"] = 64
 
     critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 7000,
+        max_value     = lr,
+        min_value     = min_lr)
 
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
@@ -744,16 +757,21 @@ def ant_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 256,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = 2056,
             use_gae             = True,
-            use_icm             = False,
             save_best_only      = False,
-            epochs_per_iter     = 20,
             mean_window_size    = 500,
-            target_kl           = 0.05,
-            lr                  = 0.0003,
-            min_lr              = 0.000095,
-            #lr_dec              = 0.999,
+            target_kl           = 1.0,
+
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
