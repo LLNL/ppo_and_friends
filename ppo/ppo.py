@@ -785,12 +785,25 @@ class PPO(object):
             surr1     = ratios * advantages
             surr2     = torch.clamp(
                 ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
+
             total_kl += (log_probs - curr_log_probs).mean().item()
 
             if torch.isnan(ratios).any() or torch.isinf(ratios).any():
                 print("ERROR: ratios are nan or inf!")
-                print("curr_log_probs: {}".format(curr_log_probs))
-                print("log_probs: {}".format(log_probs))
+                print("ratios: {}".format(ratios))
+
+                clp_min = curr_log_probs.min()
+                clp_max = curr_log_probs.min()
+                print("curr_log_probs min, max: {}, {}".format(
+                    clp_min, clp_max))
+
+                lp_min = log_probs.min()
+                lp_max = log_probs.min()
+                print("log_probs min, max: {}, {}".format(lp_min, lp_max))
+
+                print("curr_log_probs, log_probs shapes: {}, {}".format(
+                    curr_log_probs.shape, log_probs.shape))
+
                 sys.exit(1)
 
             #
