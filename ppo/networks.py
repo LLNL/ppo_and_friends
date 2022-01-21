@@ -1,6 +1,8 @@
 import torch
 import os
 from torch import nn
+import math
+from numbers import Real
 import torch.nn.functional as F
 from torch.distributions import Categorical
 from torch.distributions.normal import Normal
@@ -44,9 +46,9 @@ class PPOActorCriticNetwork(PPONetwork):
 
             if action_type == "discrete":
                 self.need_softmax = True
-                self.distribution  = CategoricalDistribution()
+                self.distribution  = CategoricalDistribution(**kw_args)
             elif action_type == "continuous":
-                self.distribution = GaussianDistribution(out_dim)
+                self.distribution = GaussianDistribution(out_dim, **kw_args)
 
 
 class PPOConv2dNetwork(PPOActorCriticNetwork):
@@ -71,6 +73,10 @@ class SplitObservationNetwork(PPOActorCriticNetwork):
 
 class CategoricalDistribution(object):
 
+    def __init__(self,
+                 **kw_args):
+        pass
+
     def get_distribution(self, probs):
         return Categorical(probs)
 
@@ -85,8 +91,11 @@ class CategoricalDistribution(object):
 
 
 class GaussianDistribution(nn.Module):
+
     def __init__(self,
-                 act_dim):
+                 act_dim,
+                 std_offset = 0.5,
+                 **kw_args):
 
         super(GaussianDistribution, self).__init__()
 
@@ -96,7 +105,7 @@ class GaussianDistribution(nn.Module):
         # better with higher values.
         # TODO: We might want to make this adjustable.
         #
-        log_std = torch.as_tensor(-0.5 * np.ones(act_dim, dtype=np.float32))
+        log_std = torch.as_tensor(-std_offset * np.ones(act_dim, dtype=np.float32))
         self.log_std = torch.nn.Parameter(log_std)
 
     def get_distribution(self, action_mean):
@@ -110,6 +119,13 @@ class GaussianDistribution(nn.Module):
         return Normal(action_mean, std.cpu())
 
     def get_log_probs(self, dist, actions):
+        #
+        # NOTE: while wrapping our samples in tanh does change
+        # our distribution, arXiv:2006.05990v1 suggests that this
+        # doesn't affect calculating loss or KL divergence. If
+        # we ever need the tanh version, it doesn't seem too
+        # difficult to calculate.
+        #
         return dist.log_prob(actions).sum(axis=-1)
 
     def sample_distribution(self, dist):
