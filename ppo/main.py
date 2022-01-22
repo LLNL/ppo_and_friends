@@ -51,6 +51,8 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
+    print("Using device: {}".format(device))
+
     if env_name == "CartPole":
         cartpole_ppo(
             state_path    = state_path,
