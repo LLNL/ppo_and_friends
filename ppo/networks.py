@@ -84,7 +84,8 @@ class CategoricalDistribution(object):
         return dist.log_prob(actions)
 
     def sample_distribution(self, dist):
-        return dist.sample()
+        sample = dist.sample()
+        return sample, sample
 
     def get_entropy(self, dist, actions):
         return dist.entropy()
@@ -118,25 +119,36 @@ class GaussianDistribution(nn.Module):
         std = nn.functional.softplus(self.log_std)
         return Normal(action_mean, std.cpu())
 
-    def get_log_probs(self, dist, actions):
+    def get_log_probs(self, dist, pre_tanh_actions, epsilon=1e-6):
         #
         # NOTE: while wrapping our samples in tanh does change
         # our distribution, arXiv:2006.05990v1 suggests that this
-        # doesn't affect calculating loss or KL divergence. If
-        # we ever need the tanh version, it doesn't seem too
-        # difficult to calculate.
+        # doesn't affect calculating loss or KL divergence. However,
+        # I've found that some environments have some serious issues
+        # with just using the log_prob from the distribution.
+        # The following calculation is taken from arXiv:1801.01290v2,
+        # but I've also added clamps for safety.
         #
-        return dist.log_prob(actions).sum(axis=-1)
+        normal_log_probs = dist.log_prob(pre_tanh_actions)
+        normal_log_probs = torch.clamp(normal_log_probs, -100, 100)
+        normal_log_probs = normal_log_probs.sum(dim=-1)
+
+        squashed = 1.0 - torch.pow(torch.tanh(pre_tanh_actions), 2)
+        squashed = torch.clamp(squashed, epsilon, None)
+        s_log    = torch.log(squashed).sum(dim=-1)
+        return normal_log_probs - s_log
 
     def sample_distribution(self, dist):
-        return torch.tanh(dist.sample())
+        sample      = dist.sample()
+        tanh_sample = torch.tanh(sample)
+        return tanh_sample, sample
 
     def get_entropy(self, dist, actions):
         #
         # This is a bit odd here... arXiv:2006.05990v1 suggests using
         # tanh to move the actions into a [-1, 1] range, but this also
-        # changes the probability densities. This is okay for most situations
-        # (the differentiation seems to fix a lot of the potential issues),
+        # changes the probability densities. They suggest is okay for most
+        # situations because if the differntiation (see above comments),
         # but it does affect the entropy. They suggest using the equation
         # the following equation:
         #    Ex[-log(x) + log(tanh^prime (x))] s.t. x is the pre-tanh

@@ -29,6 +29,7 @@ class EpisodeInfo(object):
         self.observations      = []
         self.next_observations = []
         self.actions           = []
+        self.raw_actions       = []
         self.log_probs         = []
         self.rewards           = []
         self.values            = []
@@ -113,6 +114,7 @@ class EpisodeInfo(object):
     def add_info(self,
                  observation,
                  next_observation,
+                 raw_action,
                  action,
                  value,
                  log_prob,
@@ -121,12 +123,16 @@ class EpisodeInfo(object):
             Add info from an episode.
         """
 
+        if type(raw_action) == np.ndarray and len(raw_action.shape) > 1:
+            raw_action = raw_action.squeeze()
+
         if type(action) == np.ndarray and len(action.shape) > 1:
             action = action.squeeze()
 
         self.observations.append(observation)
         self.next_observations.append(next_observation)
         self.actions.append(action)
+        self.raw_actions.append(raw_action)
         self.values.append(value)
         self.log_probs.append(log_prob)
         self.rewards.append(reward)
@@ -179,6 +185,7 @@ class PPODataset(Dataset):
         self.is_built      = False
 
         self.actions           = None
+        self.raw_actions       = None
         self.observations      = None
         self.next_observations = None
         self.rewards_to_go     = None
@@ -198,6 +205,7 @@ class PPODataset(Dataset):
             sys.exit(1)
 
         self.actions           = []
+        self.raw_actions       = []
         self.observations      = []
         self.next_observations = []
         self.rewards_to_go     = []
@@ -214,6 +222,7 @@ class PPODataset(Dataset):
                 sys.exit(1)
 
             self.actions.extend(ep.actions)
+            self.raw_actions.extend(ep.raw_actions)
             self.observations.extend(ep.observations)
             self.next_observations.extend(ep.next_observations)
             self.rewards_to_go.extend(ep.rewards_to_go)
@@ -242,9 +251,13 @@ class PPODataset(Dataset):
         if self.action_type == "continuous":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
+            self.raw_actions = torch.tensor(self.raw_actions,
+                dtype=torch.float).to(self.device)
 
         elif self.action_type == "discrete":
             self.actions = torch.tensor(self.actions,
+                dtype=torch.long).to(self.device)
+            self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.long).to(self.device)
 
         self.is_built = True
@@ -255,6 +268,7 @@ class PPODataset(Dataset):
     def __getitem__(self, idx):
         return (self.observations[idx],
                 self.next_observations[idx],
+                self.raw_actions[idx],
                 self.actions[idx],
                 self.advantages[idx],
                 self.log_probs[idx],

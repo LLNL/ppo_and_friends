@@ -203,8 +203,10 @@ class PPO(object):
         if action_type == "unknown":
             print("ERROR: unknown action type!")
             sys.exit(1)
+        else:
+            print("Using {} action type.".format(action_type))
 
-        elif action_type == "continuous" and entropy_weight != 0.0:
+        if action_type == "continuous" and entropy_weight != 0.0:
             msg  = "WARNING: continuous action space currently does not "
             msg += "support entropy. Setting entropy_weight to 0.0"
             print(msg)
@@ -281,8 +283,6 @@ class PPO(object):
 
         if save_best_only:
             self.status_dict["last save"] = -1
-
-        print("Using {} action type.".format(self.action_type))
 
         use_conv2d_setup = False
         for base in ac_network.__bases__:
@@ -380,13 +380,22 @@ class PPO(object):
 
         action_pred = action_pred.cpu().detach()
         dist        = self.actor.distribution.get_distribution(action_pred)
-        action      = self.actor.distribution.sample_distribution(dist)
-        log_prob    = self.actor.distribution.get_log_probs(dist, action)
+
+        #
+        # Our distribution gives us two potentially distinct actions, one of
+        # which is guaranteed to be a raw sample from the distribution. The
+        # other might be altered in some way (usually to enforce a range).
+        #
+        action, raw_action = self.actor.distribution.sample_distribution(dist)
+        log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
         if self.action_type == "discrete":
             action = action.int().unsqueeze(0)
 
-        return action.detach().numpy(), log_prob.detach()
+        action     = action.detach().numpy()
+        raw_action = raw_action.detach().numpy()
+
+        return raw_action, action, log_prob.detach()
 
     def evaluate(self, batch_obs, batch_actions):
         values = self.critic(batch_obs).squeeze()
@@ -476,7 +485,7 @@ class PPO(object):
 
                 total_rollout_ts += 1
                 episode_length   += 1
-                action, log_prob  = self.get_action(obs)
+                raw_action, action, log_prob = self.get_action(obs)
 
                 t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
                 t_obs    = t_obs.unsqueeze(0)
@@ -544,6 +553,7 @@ class PPO(object):
                 episode_info.add_info(
                     prev_obs,
                     obs,
+                    raw_action,
                     ep_action,
                     ep_value,
                     log_prob,
@@ -745,7 +755,9 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for obs, _, actions, advantages, log_probs, rewards_tg in data_loader:
+        for obs, _, raw_actions, _, advantages, log_probs, rewards_tg \
+            in data_loader:
+
             torch.cuda.empty_cache()
 
             if obs.shape[0] == 1:
@@ -753,8 +765,11 @@ class PPO(object):
                 print("    obs shape: {}".format(obs.shape))
                 continue
 
+            #
+            # arXiv:2005.12729v1 suggests that normalizing advantages
+            # at the mini-batch level increases performance.
+            #
             if self.normalize_adv:
-                # TODO: Reference paper.
                 adv_std  = advantages.std()
                 adv_mean = advantages.mean()
                 if torch.isnan(adv_std):
@@ -764,7 +779,7 @@ class PPO(object):
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-            values, curr_log_probs, entropy = self.evaluate(obs, actions)
+            values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
 
             #
             # We udpate our policy using gradient ascent. Our advantages relay
@@ -790,7 +805,11 @@ class PPO(object):
 
             if torch.isnan(ratios).any() or torch.isinf(ratios).any():
                 print("ERROR: ratios are nan or inf!")
-                print("ratios: {}".format(ratios))
+
+                ratios_min = ratios.min()
+                ratios_max = ratios.max()
+                print("ratios min, max: {}, {}".format(
+                    ratios_min, ratios_max))
 
                 clp_min = curr_log_probs.min()
                 clp_max = curr_log_probs.min()
@@ -799,10 +818,16 @@ class PPO(object):
 
                 lp_min = log_probs.min()
                 lp_max = log_probs.min()
-                print("log_probs min, max: {}, {}".format(lp_min, lp_max))
+                print("log_probs min, max: {}, {}".format(
+                    lp_min, lp_max))
 
-                print("curr_log_probs, log_probs shapes: {}, {}".format(
-                    curr_log_probs.shape, log_probs.shape))
+                act_min = raw_actions.min()
+                act_max = raw_actions.max()
+                print("actions min, max: {}, {}".format(
+                    act_min, act_max))
+
+                std = nn.functional.softplus(self.actor.distribution.log_std)
+                print("actor std: {}".format(std))
 
                 sys.exit(1)
 
@@ -855,7 +880,7 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, actions, _, _, _ in data_loader:
+        for obs, next_obs, _, actions, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
