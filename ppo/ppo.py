@@ -2,6 +2,7 @@ import sys
 import pickle
 import numpy as np
 import os
+from copy import deepcopy
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import torch
@@ -205,12 +206,6 @@ class PPO(object):
             sys.exit(1)
         else:
             print("Using {} action type.".format(action_type))
-
-        if action_type == "continuous" and entropy_weight != 0.0:
-            msg  = "WARNING: continuous action space currently does not "
-            msg += "support entropy. Setting entropy_weight to 0.0"
-            print(msg)
-            entropy_weight = 0.0
 
         #
         # Environments are very inconsistent! We need to check what shape
@@ -440,7 +435,39 @@ class PPO(object):
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
 
+    def get_intrinsic_reward(self,
+                             prev_obs,
+                             obs,
+                             action):
+
+        obs_1 = torch.tensor(prev_obs,
+            dtype=torch.float).to(self.device).unsqueeze(0)
+        obs_2 = torch.tensor(obs,
+            dtype=torch.float).to(self.device).unsqueeze(0)
+
+        if self.action_type == "discrete":
+            action = torch.tensor(action,
+                dtype=torch.long).to(self.device).unsqueeze(0)
+
+        elif self.action_type == "continuous":
+            action = torch.tensor(action,
+                dtype=torch.float).to(self.device)
+
+        if len(action.shape) != 2:
+            action = action.unsqueeze(0)
+
+        with torch.no_grad():
+            intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+
+        intr_reward  = intr_reward.item()
+        intr_reward *= self.intr_reward_weight
+
+        return intr_reward
+
+
     def rollout(self):
+        """
+        """
         dataset            = PPODataset(self.device, self.action_type)
         total_episodes     = 0  
         total_rollout_ts   = 0
@@ -498,7 +525,8 @@ class PPO(object):
                 obs, ext_reward, done, info = self.env.step(action)
 
                 if action.size == 1:
-                    ep_action = action.item()
+                    ep_action  = action.item()
+                    raw_action = raw_action.item()
                 else:
                     ep_action = action
 
@@ -521,30 +549,13 @@ class PPO(object):
                 # to out extrinsic reward.
                 #
                 if self.use_icm:
-                    obs_1 = torch.tensor(prev_obs,
-                        dtype=torch.float).to(self.device).unsqueeze(0)
-                    obs_2 = torch.tensor(obs,
-                        dtype=torch.float).to(self.device).unsqueeze(0)
 
-                    if self.action_type == "discrete":
-                        action = torch.tensor(action,
-                            dtype=torch.long).to(self.device).unsqueeze(0)
-
-                    elif self.action_type == "continuous":
-                        action = torch.tensor(action,
-                            dtype=torch.float).to(self.device)
-
-                    if len(action.shape) != 2:
-                        action = action.unsqueeze(0)
-
-                    with torch.no_grad():
-                        intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
-
-                    intr_reward  = intr_reward.item()
-                    intr_reward *= self.intr_reward_weight
+                    intr_reward = self.get_intrinsic_reward(
+                        prev_obs,
+                        obs,
+                        action)
 
                     total_intr_rewards += intr_reward
-
                     reward = ext_reward + intr_reward
 
                 else:
@@ -570,6 +581,7 @@ class PPO(object):
                 if done:
                     episode_info.end_episode(
                         ending_value   = 0,
+                        ending_reward  = 0,
                         episode_length = episode_length)
 
                     dataset.add_episode(episode_info)
@@ -596,12 +608,32 @@ class PPO(object):
                 elif (ep_ts == self.max_ts_per_ep or
                     total_rollout_ts == self.ts_per_rollout):
 
-                    t_obs     = torch.tensor(obs, dtype=torch.float).to(self.device)
-                    t_obs     = t_obs.unsqueeze(0)
-                    nxt_value = self.critic(t_obs)
+                    t_obs      = torch.tensor(obs, dtype=torch.float).to(self.device)
+                    t_obs      = t_obs.unsqueeze(0)
+                    nxt_value  = self.critic(t_obs).item()
+                    nxt_reward = nxt_value
+
+                    if self.use_icm:
+                        _, clone_action, _ = self.get_action(obs)
+
+                        if self.action_squeeze:
+                            clone_action = clone_action.squeeze()
+
+                        clone_prev_obs = obs.copy()
+                        cloned_env = deepcopy(self.env)
+                        clone_obs, _, _, _ = cloned_env.step(clone_action)
+                        del cloned_env
+
+                        intr_reward = self.get_intrinsic_reward(
+                            clone_prev_obs,
+                            clone_obs,
+                            clone_action)
+
+                        nxt_reward += intr_reward
 
                     episode_info.end_episode(
-                        ending_value   = nxt_value.item(),
+                        ending_value   = nxt_value,
+                        ending_reward  = nxt_reward,
                         episode_length = episode_length)
 
                     dataset.add_episode(episode_info)
