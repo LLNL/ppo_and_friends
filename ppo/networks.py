@@ -87,7 +87,7 @@ class CategoricalDistribution(object):
         sample = dist.sample()
         return sample, sample
 
-    def get_entropy(self, dist, actions):
+    def get_entropy(self, dist, _):
         return dist.entropy()
 
 
@@ -133,9 +133,9 @@ class GaussianDistribution(nn.Module):
         normal_log_probs = torch.clamp(normal_log_probs, -100, 100)
         normal_log_probs = normal_log_probs.sum(dim=-1)
 
-        squashed = 1.0 - torch.pow(torch.tanh(pre_tanh_actions), 2)
-        squashed = torch.clamp(squashed, epsilon, None)
-        s_log    = torch.log(squashed).sum(dim=-1)
+        tanh_prime = 1.0 - torch.pow(torch.tanh(pre_tanh_actions), 2)
+        tanh_prime = torch.clamp(tanh_prime, epsilon, None)
+        s_log      = torch.log(tanh_prime).sum(dim=-1)
         return normal_log_probs - s_log
 
     def sample_distribution(self, dist):
@@ -143,7 +143,7 @@ class GaussianDistribution(nn.Module):
         tanh_sample = torch.tanh(sample)
         return tanh_sample, sample
 
-    def get_entropy(self, dist, actions):
+    def get_entropy(self, dist, pre_tanh_actions, epsilon=1e-6):
         #
         # This is a bit odd here... arXiv:2006.05990v1 suggests using
         # tanh to move the actions into a [-1, 1] range, but this also
@@ -153,16 +153,10 @@ class GaussianDistribution(nn.Module):
         # the following equation:
         #    Ex[-log(x) + log(tanh^prime (x))] s.t. x is the pre-tanh
         #    computed probability distribution.
-        # I've seen some conversations online about this being problematic,
-        # though. For one, I see this value becoming negative quite easily.
-        # I've seen some suggest just using the -log probabilities, and I've
-        # seen implementations that just take the standard entropy.
-        # For the -log probs approach, I think we'd need to sample the
-        # distribution using rsample, and (I think) it would need to match
-        # the batch size. For now, let's skip entropy reg for continuous
-        # action spaces. This can become a TODO.
+        # Note that this is the same as our log probs when using tanh but
+        # negated.
         #
-        return torch.tensor([])
+        return -self.get_log_probs(dist, pre_tanh_actions)
 
 
 def get_conv2d_out_size(in_size,
