@@ -139,6 +139,7 @@ class EpisodeInfo(object):
 
     def end_episode(self,
                     ending_value,
+                    ending_reward,
                     episode_length):
 
         self.length      = episode_length
@@ -151,7 +152,7 @@ class EpisodeInfo(object):
         # without clipping.
         #
         ending_reward = np.clip(
-            ending_value,
+            ending_reward,
             self.bootstrap_clip[0],
             self.bootstrap_clip[1])
 
@@ -251,6 +252,7 @@ class PPODataset(Dataset):
         if self.action_type == "continuous":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
+
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.float).to(self.device)
 
