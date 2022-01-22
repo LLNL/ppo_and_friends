@@ -659,7 +659,7 @@ def bipedal_walker_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 7000,
+        max_iteration = 3000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -670,7 +670,7 @@ def bipedal_walker_ppo(state_path,
 
             batch_size          = 512,
 
-            max_ts_per_ep       = 64,
+            max_ts_per_ep       = 128,
             ts_per_rollout      = 2048,
             use_gae             = True,
             target_kl           = 1.0,
