@@ -613,6 +613,13 @@ class PPO(object):
                     nxt_value  = self.critic(t_obs).item()
                     nxt_reward = nxt_value
 
+                    #
+                    # Tricky business: ICM needs to take another step in the
+                    # environment in order to calculate the intrinsic reward,
+                    # but we don't want to actually take another step... So,
+                    # one way around this is to clone the env and only step
+                    # with the clone.
+                    #
                     if self.use_icm:
                         _, clone_action, _ = self.get_action(obs)
 
