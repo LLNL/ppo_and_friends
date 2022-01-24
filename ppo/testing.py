@@ -6,6 +6,14 @@ import numpy as np
 def test_policy(ppo,
                 num_test_runs,
                 device):
+    """
+        Test a trained policy.
+
+        Arguments:
+            ppo            An instance of PPO from ppo.py.
+            num_test_runs  How many times should we run in the environment?
+            device         The device to infer on.
+    """
 
     env    = ppo.env
     policy = ppo.actor
