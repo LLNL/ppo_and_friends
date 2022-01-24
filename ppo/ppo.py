@@ -782,8 +782,8 @@ class PPO(object):
                 break
 
         stop_time = time.time()
-        minutes   = (stop_time - start_time) / 60.
-        print("Time spent training: {} minutes".format(minutes))
+        minutes   = (stop_time - start_time) / 120
+        print("Time spent training: {} hours".format(minutes))
 
     def _ppo_batch_train(self, data_loader):
 
