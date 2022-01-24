@@ -312,9 +312,6 @@ def mountain_car_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    #FIXME: normalizing rewards might now work here since
-    #       we're adding intrinsic curiosity to the reward.
-    #       We might need to do something different here...
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 64,
@@ -323,14 +320,12 @@ def mountain_car_ppo(state_path,
             lr                 = lr,
             min_lr             = min_lr,
             use_icm            = True,
-
             use_gae            = True,
             normalize_obs      = False,
             normalize_rewards  = False,
             obs_clip           = None,
             reward_clip        = None,
             bootstrap_clip     = (-10, 10),
-
             ext_reward_weight  = 1./100.,
             state_path         = state_path,
             load_state         = load_state,
@@ -369,7 +364,11 @@ def mountain_car_continuous_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    #FIXME: find settings that work
+    #
+    # I've noticed that normalizing rewards and observations
+    # can slow down learning at times. It's not by much (maybe
+    # 10-50 iterations).
+    #
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 64,
@@ -386,10 +385,10 @@ def mountain_car_continuous_ppo(state_path,
             normalize_rewards  = False,
             obs_clip           = None,
             reward_clip        = None,
-            normalize_adv      = False,
+            normalize_adv      = True,
             bootstrap_clip     = (-10., 10.),
             ext_reward_weight  = 1./100.,
-            intr_reward_weight = 100.,
+            intr_reward_weight = 50.,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -733,19 +732,20 @@ def ant_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
+    actor_kw_args["activation"]   = nn.Tanh()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
     actor_kw_args["hidden_left"]  = 32
-    actor_kw_args["hidden_right"] = 64
+    actor_kw_args["hidden_right"] = 84
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_left"]  = 256
     critic_kw_args["hidden_right"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0
+    min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration = 7000,
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -753,12 +753,11 @@ def ant_ppo(state_path,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
-            batch_size          = 256,
+            batch_size          = 512,
             max_ts_per_ep       = 64,
             ts_per_rollout      = 2056,
             use_gae             = True,
             save_best_only      = False,
-            mean_window_size    = 500,
             target_kl           = 1.0,
             normalize_obs       = True,
             normalize_rewards   = True,
