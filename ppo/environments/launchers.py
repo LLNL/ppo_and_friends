@@ -732,7 +732,7 @@ def ant_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["activation"]   = nn.LeakyReLU()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
     actor_kw_args["hidden_left"]  = 32
     actor_kw_args["hidden_right"] = 84
@@ -742,10 +742,10 @@ def ant_ppo(state_path,
     critic_kw_args["hidden_right"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0003
+    min_lr = 0.0000
 
     lr_dec = LinearDecrementer(
-        max_iteration = 2000,
+        max_iteration = 3000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -761,7 +761,7 @@ def ant_ppo(state_path,
             target_kl           = 1.0,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
+            obs_clip            = (-30., 30.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
             entropy_weight      = 0.0,
