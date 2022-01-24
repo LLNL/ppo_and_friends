@@ -279,6 +279,9 @@ class PPO(object):
         if save_best_only:
             self.status_dict["last save"] = -1
 
+        #
+        # Initialize our networks: actor, critic, and possible ICM.
+        #
         use_conv2d_setup = False
         for base in ac_network.__bases__:
             if base.__name__ == "PPOConv2dNetwork":
@@ -366,7 +369,20 @@ class PPO(object):
             os.makedirs(state_path)
 
     def get_action(self, obs):
+        """
+            Given an observation from our environment, determine what the
+            action should be.
 
+            Arguments:
+                obs    The environment observation.
+
+            Returns:
+                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+                is the distribution sample before any "squashing" takes place,
+                "action" is the the action value that should be fed to the
+                environment, and log_prob is the log probabilities from our
+                probability distribution.
+        """
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
         t_obs = t_obs.unsqueeze(0)
 
@@ -393,6 +409,22 @@ class PPO(object):
         return raw_action, action, log_prob.detach()
 
     def evaluate(self, batch_obs, batch_actions):
+        """
+            Given a batch of observations, use our critic to approximate
+            the expected return values. Also use a batch of corresponding
+            actions to retrieve some other useful information.
+
+            Arguments:
+                batch_obs      A batch of observations.
+                batch_actions  A batch of actions corresponding to the batch of
+                               observations.
+
+            Returns:
+                A tuple of form (values, log_probs, entropies) s.t. values are
+                the critic predicted value, log_probs are the log probabilities
+                from our probability distribution, and entropies are the
+                entropies from our distribution.
+        """
         values = self.critic(batch_obs).squeeze()
 
         if self.action_type == "discrete":
@@ -415,7 +447,9 @@ class PPO(object):
         return values, log_probs.to(self.device), entropy.to(self.device)
 
     def print_status(self):
-
+        """
+            Print out statistics from our status_dict.
+        """
         print("\n--------------------------------------------------------")
         print("Status Report:")
         for key in self.status_dict:
@@ -424,6 +458,18 @@ class PPO(object):
 
     def update_learning_rate(self,
                              iteration):
+        """
+            Update the learning rate. This relies on the rl_dec function,
+            which expects an iteration and returns an updated learning rate.
+
+            Arguments:
+                iteration    The current iteration of training.
+        """
+
+        self.lr = self.lr_dec(iteration)
+
+        update_optimizer_lr(self.actor_optim, self.lr)
+        update_optimizer_lr(self.critic_optim, self.lr)
 
         self.lr = self.lr_dec(iteration)
 
@@ -439,6 +485,15 @@ class PPO(object):
                              prev_obs,
                              obs,
                              action):
+        """
+            Query the ICM for an intrinsic reward.
+
+            Arguments:
+                prev_obs    The previous observation (before the latest
+                            action).
+                obs         The current observation.
+                action      The action taken.
+        """
 
         obs_1 = torch.tensor(prev_obs,
             dtype=torch.float).to(self.device).unsqueeze(0)
@@ -467,6 +522,21 @@ class PPO(object):
 
     def rollout(self):
         """
+            Create a "rollout" of episodes. This system uses "fixed-length
+            trajectories", which are sometimes referred to as "vectorized"
+            episodes. In short, we step through our environment for a fixed
+            number of iterations, and only allow a fixed number of steps
+            per episode. This fixed number of steps per episode becomes a
+            trajectory. In most cases, our trajectory length < max steps
+            in the environment, which results in trajectories ending before
+            the episode ends. In those cases, we bootstrap the ending value
+            by using our critic to approximate the next value. A key peice
+            of this logic is that the enviorment's state is saved after a
+            trajectory ends, meaning that a new trajectory can start in the
+            middle of an episode.
+
+            Returns:
+                A PyTorch dataset containing our rollout.
         """
         dataset            = PPODataset(self.device, self.action_type)
         total_episodes     = 0  
@@ -724,6 +794,17 @@ class PPO(object):
         return dataset
 
     def learn(self, num_timesteps):
+        """
+            Learn!
+                1. Create a rollout dataset.
+                2. Update our networks.
+                3. Repeat until we've reached our max timesteps.
+
+            Arguments:
+                num_timesteps    The maximum number of timesteps to run.
+                                 Note that this is in addtion to however
+                                 many timesteps were run during the last save.
+        """
 
         start_time = time.time()
         ts_max     = self.status_dict["timesteps"] + num_timesteps
@@ -747,6 +828,9 @@ class PPO(object):
 
                 self._ppo_batch_train(data_loader)
 
+                #
+                # Early ending using KL.
+                #
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
                     msg += "has been reached. "
@@ -786,7 +870,12 @@ class PPO(object):
         print("Time spent training: {} hours".format(minutes))
 
     def _ppo_batch_train(self, data_loader):
+        """
+            Train our PPO networks using mini batches.
 
+            Arguments:
+                data_loader    A PyTorch data loader.
+        """
         total_actor_loss  = 0
         total_critic_loss = 0
         total_entropy     = 0
@@ -832,8 +921,6 @@ class PPO(object):
             # We take the difference between the current and previous log probs
             # to further constrain updates and clip the output to a specified
             # range.
-            #
-            # TODO: what's with the exponent?
             #
             ratios    = torch.exp(curr_log_probs - log_probs)
             surr1     = ratios * advantages
@@ -883,7 +970,7 @@ class PPO(object):
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            #TODO: should we add an option for value clipping? Research
+            # TODO: should we add an option for value clipping? Research
             # suggests this might not be that beneficial, but it might
             # be nice to have it as an option...
             critic_loss        = nn.MSELoss()(values, rewards_tg)
@@ -915,6 +1002,12 @@ class PPO(object):
         self.status_dict["kl avg"]           = total_kl / counter
 
     def _icm_batch_train(self, data_loader):
+        """
+            Train our ICM networks using mini batches.
+
+            Arguments:
+                data_loader    A PyTorch data loader.
+        """
 
         total_icm_loss = 0
         counter = 0
@@ -941,6 +1034,9 @@ class PPO(object):
 
 
     def save(self):
+        """
+            Save all information required for a restart.
+        """
 
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
@@ -957,6 +1053,9 @@ class PPO(object):
                 protocol=pickle.HIGHEST_PROTOCOL)
 
     def load(self):
+        """
+            Load all information required for a restart.
+        """
         self.actor.load(self.state_path)
         self.critic.load(self.state_path)
 
