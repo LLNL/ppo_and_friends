@@ -1,40 +1,109 @@
+"""
+    A home for generic environment wrappers. The should not be
+    specific to any type of environment.
+"""
 from .utils import RunningMeanStd
 import numpy as np
 import pickle
 import os
 
 class IdentityWrapper(object):
+    """
+        A wrapper that acts exactly like the original environment but also
+        has a few extra bells and whistles.
+    """
 
     def __init__(self,
                  env,
                  **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env    The environment to wrap.
+        """
 
         self.env               = env
         self.observation_space = env.observation_space
         self.action_space      = env.action_space
 
     def step(self, action):
-        return self.env.step(action)
+        """
+            Take a single step in the environment using the given
+            action.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
+        obs, reward, done, info = self.env.step(action)
+
+        #
+        # HACK: some environments are buggy and don't follow their
+        # own rules!
+        #
+        obs = obs.reshape(self.observation_space.shape)
+
+        return obs, reward, done, info
 
     def reset(self):
-        return self.env.reset()
+        """
+            Reset the environment.
+
+            Returns:
+                The resulting observation.
+        """
+        obs = self.env.reset()
+        obs = obs.reshape(self.observation_space.shape)
+        return obs
 
     def render(self):
+        """
+            Render the environment.
+        """
         self.env.render()
 
     def save_info(self, path):
+        """
+            Save any info needed for loading the environment at a later time.
+
+            Arguments:
+                path    The path to save to.
+        """
         self._check_env_save(path)
 
     def load_info(self, path):
+        """
+            Load any info needed for reinstating a saved environment.
+
+            Arguments:
+                path    The path to load from.
+        """
         self._check_env_load(path)
 
     def _check_env_save(self, path):
+        """
+            Determine if our wrapped environment has a "save_info"
+            method. If so, call it.
+
+            Arguments:
+                path    The path to save to.
+        """
         save_info = getattr(self.env, "save_info", None)
 
         if callable(save_info):
             save_info(path)
 
     def _check_env_load(self, path):
+        """
+            Determine if our wrapped environment has a "load_info"
+            method. If so, call it.
+
+            Arguments:
+                path    The path to load from.
+        """
         load_info = getattr(self.env, "load_info", None)
 
         if callable(load_info):
@@ -42,12 +111,27 @@ class IdentityWrapper(object):
 
 
 class ObservationNormalizer(IdentityWrapper):
+    """
+        A wrapper for normalizing observations. This normalization
+        method uses running statistics.
+        NOTE: this uses implentations very similar to some of Stable
+        Baslines' VecNormalize.
+    """
 
     def __init__(self,
                  env,
                  update_stats = True,
                  epsilon      = 1e-8,
                  **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env            The environment to wrap.
+                update_stats   Should we update the statistics? We typically
+                               have this enabled until testing.
+                epsilon        A very small number to help avoid dividing by 0.
+        """
 
         super(ObservationNormalizer, self).__init__(
             env,
@@ -60,6 +144,17 @@ class ObservationNormalizer(IdentityWrapper):
         self.epsilon       = epsilon
 
     def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, update the running stats, and normalize the
+            resulting observation.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
         obs, reward, done, info = self.env.step(action)
 
         if self.update_stats:
@@ -70,6 +165,12 @@ class ObservationNormalizer(IdentityWrapper):
         return obs, reward, done, info
 
     def reset(self):
+        """
+            Reset the environment, and update the running stats.
+
+            Returns:
+                The resulting observation.
+        """
         obs = self.env.reset()
 
         if self.update_stats:
@@ -78,11 +179,27 @@ class ObservationNormalizer(IdentityWrapper):
         return obs
 
     def normalize(self, obs):
+        """
+            Normalize an observation using our running stats.
+
+            Arguments:
+                obs    The observation to normalize.
+
+            Returns:
+                The normalized observation.
+        """
         obs = (obs - self.running_stats.mean) / \
             np.sqrt(self.running_stats.variance + self.epsilon)
         return obs
 
     def save_info(self, path):
+        """
+            Save out our running stats, and check if our wrapped
+            environment needs to perform any more info saves.
+
+            Arguments:
+                path    The path to save to.
+        """
         out_file = os.path.join(path, "RunningObsStats.pkl")
 
         with open(out_file, "wb") as fh:
@@ -91,6 +208,13 @@ class ObservationNormalizer(IdentityWrapper):
         self._check_env_save(path)
 
     def load_info(self, path):
+        """
+            Load our running stats and check to see if our wrapped
+            environment needs to load anything.
+
+            Arguments:
+                path    The path to load from.
+        """
         in_file = os.path.join(path, "RunningObsStats.pkl")
 
         with open(in_file, "rb") as fh:
@@ -100,6 +224,11 @@ class ObservationNormalizer(IdentityWrapper):
 
 
 class RewardNormalizer(IdentityWrapper):
+    """
+        This wrapper uses running statistics to normalize rewards.
+        NOTE: much of this logic comes from Stable Baseline's
+        VecNormalize.
+    """
 
     def __init__(self,
                  env,
@@ -111,6 +240,16 @@ class RewardNormalizer(IdentityWrapper):
         super(RewardNormalizer, self).__init__(
             env,
             **kw_args)
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env            The environment to wrap.
+                update_stats   Whether or not to update our running stats. This
+                               is typically set to true until testing.
+                epsilon        A very small value to help avoid 0 divisions.
+                gamma          A discount factor for our running stats.
+        """
 
         self.running_stats = RunningMeanStd(shape=())
 
@@ -120,6 +259,17 @@ class RewardNormalizer(IdentityWrapper):
         self.running_reward = np.zeros(1)
 
     def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, update the running stats, and normalize the
+            resulting reward.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
 
         obs, reward, done, info = self.env.step(action)
 
@@ -139,10 +289,26 @@ class RewardNormalizer(IdentityWrapper):
         return obs, reward, done, info
 
     def normalize(self, reward):
+        """
+            Normalize our reward using Stable Baseline's approach.
+
+            Arguments:
+                reward    The reward to normalize.
+
+            Returns:
+                The normalized reward.
+        """
         reward /= np.sqrt(self.running_stats.variance + self.epsilon)
         return reward
 
     def save_info(self, path):
+        """
+            Save out our running stats, and check if our wrapped
+            environment needs to perform any more info saves.
+
+            Arguments:
+                path    The path to save to.
+        """
         out_file = os.path.join(path, "RunningRewardStats.pkl")
 
         with open(out_file, "wb") as fh:
@@ -151,6 +317,13 @@ class RewardNormalizer(IdentityWrapper):
         self._check_env_save(path)
 
     def load_info(self, path):
+        """
+            Load our running stats and check to see if our wrapped
+            environment needs to load anything.
+
+            Arguments:
+                path    The path to load from.
+        """
         in_file = os.path.join(path, "RunningRewardStats.pkl")
 
         with open(in_file, "rb") as fh:
@@ -160,11 +333,21 @@ class RewardNormalizer(IdentityWrapper):
 
 
 class ObservationClipper(IdentityWrapper):
+    """
+        An environment wrapper that clips observations.
+    """
 
     def __init__(self,
                  env,
                  clip_range = (-10., 10.),
                  **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env         The environment to wrap.
+                clip_range  The range to clip our observations into.
+        """
 
         super(ObservationClipper, self).__init__(
             env,
@@ -173,6 +356,16 @@ class ObservationClipper(IdentityWrapper):
         self.clip_range = clip_range
 
     def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, and clip the resulting observation.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
         obs, reward, done, info = self.env.step(action)
 
         obs = self._clip(obs)
@@ -180,18 +373,43 @@ class ObservationClipper(IdentityWrapper):
         return obs, reward, done, info
 
     def reset(self):
+        """
+            Reset the environment, and clip the observation.
+
+            Returns:
+                The resulting observation.
+        """
         return self._clip(self.env.reset())
 
     def _clip(self, obs):
+        """
+            Perform the observation clip.
+
+            Arguments:
+                obs    The observation to clip.
+
+            Returns:
+                The clipped observation.
+        """
         return np.clip(obs, self.clip_range[0], self.clip_range[1])
 
 
 class RewardClipper(IdentityWrapper):
+    """
+        A wrapper for clipping rewards.
+    """
 
     def __init__(self,
                  env,
                  clip_range = (-10., 10.),
                  **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env         The environment to wrap.
+                clip_range  The range to clip our rewards into.
+        """
 
         super(RewardClipper, self).__init__(
             env,
@@ -200,6 +418,16 @@ class RewardClipper(IdentityWrapper):
         self.clip_range = clip_range
 
     def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, and clip the resulting reward.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
         obs, reward, done, info = self.env.step(action)
 
         if "natural reward" not in info:
@@ -210,5 +438,14 @@ class RewardClipper(IdentityWrapper):
         return obs, reward, done, info
 
     def _clip(self, reward):
+        """
+            Perform the reward clip.
+
+            Arguments:
+                reward    The reward to clip.
+
+            Returns:
+                The clipped reward.
+        """
         return np.clip(reward, self.clip_range[0], self.clip_range[1])
 

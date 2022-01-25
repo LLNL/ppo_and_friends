@@ -11,18 +11,37 @@
     which can be used for training simulatneously.
 """
 import numpy as np
+from .env_wrappers import IdentityWrapper
 
-class VectorizedEnv(object):
+class VectorizedEnv(IdentityWrapper):
 
     def __init__(self,
                  env,
                  **kw_args):
+        """
+            Initialize our vectorized environment.
+
+            Arguments:
+                env    The environment to vectorize.
+        """
 
         self.env               = env
         self.observation_space = env.observation_space
         self.action_space      = env.action_space
 
     def step(self, action):
+        """
+            Take a step in our environment with the given action.
+            Since we're vectorized, we reset the environment when
+            we've reached a "done" state.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info
+                tuple.
+        """
         obs, reward, done, info = self.env.step(action)
 
         #
@@ -39,11 +58,3 @@ class VectorizedEnv(object):
             obs = self.env.reset()
 
         return obs, reward, done, info
-
-    def reset(self):
-        obs = self.env.reset()
-        obs = obs.reshape(self.observation_space.shape)
-        return obs
-
-    def render(self):
-        self.env.render()
