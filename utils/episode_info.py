@@ -99,13 +99,9 @@ class EpisodeInfo(object):
         return self.compute_discounted_sums(deltas.tolist(), sum_gamma)
 
     def _compute_standard_advantages(self):
-        #FIXME: Is this doc really accurate (reversal)?
         """
             Use a standard method for computing advantages.
-            Typically, we use Q - values, but we reverse this
-            in practice (probably because we're using gradient
-            ascent instead of descent, but this is not explicit;
-            we just negate the loss).
+            Typically, we use Q - values.
 
         """
         advantages = self.rewards_to_go - self.values
