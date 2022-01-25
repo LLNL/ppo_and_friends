@@ -35,10 +35,23 @@ python main.py -e <env_name> --num_timesteps <max_num_timesteps>
 You running the same command again will result in loading the previously
 saved state. You can re-run from scratch by using the `--clobber` option.
 
-# Extras
+# Documentation
+
+When specific implentation choices have been made as a result of a publication,
+the goal is to reference these publications in the relevant code. For
+implementation details that are not directly derived from publications, there
+should be appropriate comments describing why these choices were made.
+
+NOTE: documentation is still a work in progress.
+
+
+# Tips and Tricks
 
 Installing atari environments:
 ```
 pip install gym[atari]
 pip install autorom[accept-rom-license]
 ```
+
+Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
+that can help with some of these issues.
