@@ -1,2 +1,6 @@
-# ReinforcementLearningExamples
-Simple examples of reinforcement learning
+
+Installing atari environments:
+```
+pip install gym[atari]
+pip install autorom[accept-rom-license]
+```
