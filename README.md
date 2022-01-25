@@ -32,7 +32,7 @@ To train an already supported environment, use the following command:
 python main.py -e <env_name> --num_timesteps <max_num_timesteps>
 ```
 
-You running the same command again will result in loading the previously
+Running the same command again will result in loading the previously
 saved state. You can re-run from scratch by using the `--clobber` option.
 
 # Documentation
