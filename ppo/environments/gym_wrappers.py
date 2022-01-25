@@ -21,15 +21,13 @@ def show_frame(frame_cache):
     input("")
 
 
-#FIXME: change to inherit from gym.Wrapper
+#TODO: change to inherit from gym.Wrapper
 class AtariEnvWrapper(object):
 
     def __init__(self,
                  env,
                  allow_life_loss = False,
-                 **kwargs):
-
-        super(AtariEnvWrapper, self).__init__(**kwargs)
+                 **kw_args):
 
         self.allow_life_loss   = allow_life_loss
         self.life_count        = env.ale.lives()
@@ -55,6 +53,8 @@ class AtariEnvWrapper(object):
         return (done or life_loss_done, life_lost)
 
     def _state_dependent_reset(self):
+        """
+        """
 
         if self.false_done_action == None:
             sys.stderr.write("\nERROR: false_done_action must be a function.")
@@ -80,12 +80,12 @@ class AtariPixels(AtariEnvWrapper):
                  env,
                  allow_life_loss = False,
                  frame_size = 84,
-                 **kwargs):
+                 **kw_args):
 
         super(AtariPixels, self).__init__(
             env,
             allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         prev_shape      = env.observation_space.shape
         self.h_start    = 0
@@ -145,12 +145,12 @@ class PixelDifferenceEnvWrapper(AtariPixels):
     def __init__(self,
                  env,
                  allow_life_loss = False,
-                 **kwargs):
+                 **kw_args):
 
         super(PixelDifferenceEnvWrapper, self).__init__(
             env             = env,
             allow_life_loss = allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         self.prev_frame   = None
         self.action_space = env.action_space
@@ -188,12 +188,12 @@ class PixelHistEnvWrapper(AtariPixels):
                  hist_size         = 2,
                  allow_life_loss   = False,
                  use_frame_pooling = True,
-                 **kwargs):
+                 **kw_args):
 
         super(PixelHistEnvWrapper, self).__init__(
             env             = env,
             allow_life_loss = allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         self.frame_cache       = None
         self.prev_frame        = None
@@ -244,12 +244,12 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
                  env,
                  hist_size = 2,
                  allow_life_loss = False,
-                 **kwargs):
+                 **kw_args):
 
         super(RAMHistEnvWrapper, self).__init__(
             env             = env,
             allow_life_loss = allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         ram_shape   = env.observation_space.shape
         cache_shape = (ram_shape[0] * hist_size,)
@@ -297,9 +297,9 @@ class BreakoutEnvWrapper():
 
     def __init__(self,
                  env,
-                 **kwargs):
+                 **kw_args):
 
-        super(BreakoutEnvWrapper, self).__init__(env, **kwargs)
+        super(BreakoutEnvWrapper, self).__init__(env, **kw_args)
 
         if "Breakout" not in env.spec._env_name:
             msg  = "ERROR: expected env to be a variation of Breakout "
@@ -355,13 +355,13 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
                  allow_life_loss = False,
                  punish_end      = False,
                  skip_k_frames   = 1,
-                 **kwargs):
+                 **kw_args):
 
         super(BreakoutRAMEnvWrapper, self).__init__(
             env             = env,
             hist_size       = hist_size,
             allow_life_loss = allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         self.punish_end    = punish_end
         self.skip_k_frames = skip_k_frames
@@ -424,14 +424,14 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
                  allow_life_loss = False,
                  punish_end      = False,
                  skip_k_frames   = 1,
-                 **kwargs):
+                 **kw_args):
 
 
         super(BreakoutPixelsEnvWrapper, self).__init__(
             env             = env,
             hist_size       = hist_size,
             allow_life_loss = allow_life_loss,
-            **kwargs)
+            **kw_args)
 
         self.punish_end    = punish_end
         self.skip_k_frames = skip_k_frames
@@ -473,3 +473,48 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
                 reward = -1.
 
         return obs, reward, done, info
+
+
+class AssaultEnvWrapper():
+
+    def __init__(self,
+                 env,
+                 hist_size = 1,
+                 **kw_args):
+
+        super(AssaultEnvWrapper, self).__init__(
+            env,
+            hist_size = hist_size,
+            **kw_args)
+
+        if "Assault" not in env.spec._env_name:
+            msg  = "ERROR: expected env to be a variation of Assault "
+            msg += "but received {}".format(env.spec._env_name)
+            sys.stderr.write(msg)
+            sys.exit(1)
+
+        new_shape = (hist_size, self.frame_size, self.frame_size)
+        self.observation_space = CustomObservationSpace(new_shape)
+
+        self.action_space      = self.env.action_space
+        self.cur_lives         = self.env.ale.lives()
+        self.false_done_action = self.false_done_reset
+        self.true_done_action  = self.true_done_reset
+
+    def true_done_reset(self):
+        return self.env.reset()
+
+    def false_done_reset(self):
+        obs, _, _, _ = self.env.step(0)
+        return obs
+
+
+class AssaultPixelsEnvWrapper(AssaultEnvWrapper, PixelHistEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 **kw_args):
+
+        super(AssaultPixelsEnvWrapper, self).__init__(
+            env,
+            **kw_args)

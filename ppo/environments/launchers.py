@@ -454,7 +454,7 @@ def assault_ram_ppo(state_path,
                     test = False,
                     num_test_runs = 1):
 
-    if test and render:
+    if render:
         #
         # NOTE: we don't want to explicitly call render for atari games.
         # They have more advanced ways of rendering.
@@ -482,7 +482,6 @@ def assault_ram_ppo(state_path,
             num_test_runs      = num_test_runs)
 
 
-#FIXME: obs space is broken
 def assault_pixels_ppo(state_path,
                        load_state,
                        render,
@@ -491,7 +490,13 @@ def assault_pixels_ppo(state_path,
                        test = False,
                        num_test_runs = 1):
 
-    if test and render:
+    #
+    # NOTE: there appears to be something wrong with this game's controls.
+    # The "UP" action appears to be a NOOP. This limits how far you can
+    # actually get in the game.
+    #
+
+    if render:
         #
         # NOTE: we don't want to explicitly call render for atari games.
         # They have more advanced ways of rendering.
@@ -500,28 +505,49 @@ def assault_pixels_ppo(state_path,
 
         env = gym.make(
             'Assault-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1,
             render_mode='human')
     else:
         env = gym.make(
-            'Assault-v0')
+            'Assault-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1)
 
-    wrapped_env = PixelHistEnvWrapper(
-        env       = env,
-        hist_size = 2,
-        min_lives = 5)
+    wrapped_env = AssaultPixelsEnvWrapper(
+        env             = env,
+        allow_life_loss = test,
+        hist_size       = 2,
+        skip_k_frames   = 4)
 
-    run_ppo(env                = wrapped_env,
-            ac_network         = AtariPixelNetwork,
-            lr                 = 0.0001,
-            max_ts_per_ep      = 10000,
-            use_gae            = True,
-            state_path         = state_path,
-            load_state         = load_state,
-            render             = render,
-            num_timesteps      = num_timesteps,
-            device             = device,
-            test               = test,
-            num_test_runs      = num_test_runs)
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 4000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                  = wrapped_env,
+            ac_network           = AtariPixelNetwork,
+            batch_size           = 512,
+            ts_per_rollout       = 2048,
+            max_ts_per_ep        = 64,
+            epochs_per_iter      = 30,
+            reward_clip          = (-1., 1.),
+            bootstrap_clip       = (-1., 1.),
+            target_kl            = 0.015,
+            lr_dec               = lr_dec,
+            lr                   = lr,
+            min_lr               = min_lr,
+            use_gae              = True,
+            state_path           = state_path,
+            load_state           = load_state,
+            render               = render,
+            num_timesteps        = num_timesteps,
+            device               = device,
+            test                 = test,
+            num_test_runs        = num_test_runs)
 
 
 def breakout_pixels_ppo(state_path,
@@ -570,9 +596,9 @@ def breakout_pixels_ppo(state_path,
             ts_per_rollout       = 2048,
             max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
-            reward_clip         = (-1., 1.),
-            bootstrap_clip      = (-1., 1.),
-            target_kl           = 0.015,
+            reward_clip          = (-1., 1.),
+            bootstrap_clip       = (-1., 1.),
+            target_kl            = 0.015,
             lr_dec               = lr_dec,
             lr                   = lr,
             min_lr               = min_lr,
