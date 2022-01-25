@@ -45,7 +45,7 @@ should be appropriate comments describing why these choices were made.
 NOTE: documentation is still a work in progress.
 
 
-# Tips and Tricks
+# Tips And Tricks
 
 Installing atari environments:
 ```
