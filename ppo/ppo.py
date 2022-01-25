@@ -14,7 +14,8 @@ from utils.episode_info import EpisodeInfo, PPODataset
 from utils.misc import get_action_type, need_action_squeeze
 from utils.decrementers import *
 from utils.misc import update_optimizer_lr
-from networks import ICM, LinearObservationEncoder
+from networks.icm import ICM
+from networks.encoders import LinearObservationEncoder
 from environments.vectorize import VectorizedEnv
 from environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from environments.env_wrappers import RewardNormalizer, RewardClipper
