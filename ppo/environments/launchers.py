@@ -1,3 +1,7 @@
+"""
+    A home for environment "launchers", defined as simple functions
+    that initialize training for a specific environment.
+"""
 from ppo import PPO
 import gym
 from testing import test_policy

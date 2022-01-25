@@ -1,3 +1,7 @@
+"""
+    A home for OpenAI Gym wrappers. These wrappers should all be
+    specific to environments found in OpenAI Gym.
+"""
 from .utils import *
 import sys
 import numpy as np
@@ -21,7 +25,7 @@ def show_frame(frame_cache):
     input("")
 
 
-#TODO: change to inherit from gym.Wrapper
+#TODO: change to inherit from gym.Wrapper?
 class AtariEnvWrapper(object):
 
     def __init__(self,
@@ -55,7 +59,6 @@ class AtariEnvWrapper(object):
     def _state_dependent_reset(self):
         """
         """
-
         if self.false_done_action == None:
             sys.stderr.write("\nERROR: false_done_action must be a function.")
             sys.exit(1)
