@@ -825,6 +825,9 @@ class PPO(object):
             self.actor.train()
             self.critic.train()
 
+            # TODO: there is some evidence that re-computing advantages at
+            # each epoch can improve training performance. Let's try this
+            # out.
             for i in range(self.epochs_per_iter):
 
                 self._ppo_batch_train(data_loader)
