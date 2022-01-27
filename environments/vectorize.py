@@ -10,6 +10,9 @@
     wrappers that contain multiple instances of environments, each of
     which can be used for training simulatneously.
 """
+#TODO: let's support multiple environment instances for parallel training.
+# We should probably have options for both HPC clusters and cpu-only.
+
 import numpy as np
 from .env_wrappers import IdentityWrapper
 
