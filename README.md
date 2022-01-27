@@ -22,6 +22,16 @@ Some of our friends:
 * Observation, advantage, and reward normalization
 * Learning rate annealing
 
+# Installation
+
+After activating a virtuale environment, issue the following command from the
+top directory.
+```
+pip install .
+```
+
+NOTE: required packages are not yet listed.
+
 # Supported Environments
 
 Environments that are currently implemented can be found in
