@@ -103,15 +103,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
 
         inner_hidden_size  = hidden_left + hidden_right
 
-        # TODO: we might want to reduce the number of output layers here.
-        # I believe the original paper only used a single output layer.
-        self.full_l1 = init_layer(nn.Linear(
-            inner_hidden_size, inner_hidden_size))
-
-        self.full_l2 = init_layer(nn.Linear(inner_hidden_size,
-            inner_hidden_size))
-
-        self.full_l3 = init_layer(nn.Linear(inner_hidden_size,
+        self.full_l1 = init_layer(nn.Linear(inner_hidden_size,
             out_dim), weight_std=out_init)
 
     def forward(self, _input):
@@ -134,14 +126,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         # Full layers.
         #
         out = torch.cat((s1_out, s2_out), dim=1)
-
         out = self.full_l1(out)
-        out = self.activation(out)
-
-        out = self.full_l2(out)
-        out = self.activation(out)
-
-        out = self.full_l3(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
