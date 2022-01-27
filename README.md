@@ -67,3 +67,9 @@ pip install autorom[accept-rom-license]
 
 Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
 that can help with some of these issues.
+
+# Known Issues
+
+The Atari RAM environments have not been tested in quite a while. They will
+likely need to have some settings adjusted (this will be fixed soon). All
+other environments *should* train high scoring policies.
