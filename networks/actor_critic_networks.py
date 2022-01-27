@@ -103,6 +103,8 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
 
         inner_hidden_size  = hidden_left + hidden_right
 
+        # TODO: we might want to reduce the number of output layers here.
+        # I believe the original paper only used a single output layer.
         self.full_l1 = init_layer(nn.Linear(
             inner_hidden_size, inner_hidden_size))
 

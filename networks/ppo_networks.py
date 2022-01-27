@@ -3,14 +3,22 @@
 """
 import torch.nn as nn
 import torch
+import sys
 from .utils import GaussianDistribution, CategoricalDistribution
 import os
 
 class PPONetwork(nn.Module):
+    """
+        A base class for PPO networks.
+    """
 
     def __init__(self,
                  name,
                  **kw_args):
+        """
+            Arguments:
+                name    The name of the network.
+        """
 
         super(PPONetwork, self).__init__()
         self.name = name
@@ -29,8 +37,21 @@ class PPOActorCriticNetwork(PPONetwork):
                  action_type,
                  out_dim,
                  **kw_args):
+        """
+            NOTE: if this class is to behave as a PPO actor, it should be
+            given the name "actor".
+
+            Arguments:
+                action_type      Where in the observation space the split
+                out_dim          The output dimension.
+        """
 
         super(PPOActorCriticNetwork, self).__init__(**kw_args)
+
+        if action_type not in ["discrete", "continuous"]:
+            msg = "ERROR: unknown action type {}".format(action_type)
+            print(msg)
+            sys.exit(1)
 
         self.action_type  = action_type
         self.need_softmax = False
@@ -54,8 +75,22 @@ class PPOConv2dNetwork(PPOActorCriticNetwork):
 
 
 class SplitObservationNetwork(PPOActorCriticNetwork):
+    """
+        The idea here is to support splitting the observations into
+        two sub-networks before merging them back together. This is
+        usually used when wanting to split proprioceptive and
+        exteroceptive information.
+    """
 
-    def __init__(self, split_start, **kw_args):
+    def __init__(self,
+                 split_start,
+                 **kw_args):
+        """
+            Arguments:
+                split_start      Where in the observation space the split
+                                 should start.
+        """
+
         super(SplitObservationNetwork, self).__init__(**kw_args)
 
         if split_start <= 0:
