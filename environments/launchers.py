@@ -473,11 +473,33 @@ def assault_ram_ppo(state_path,
         env = gym.make(
             'Assault-ram-v0')
 
+    #FIXME: skip isn't yet implemented for RAM.
+    wrapped_env = AssaultRAMEnvWrapper(
+        env              = env,
+        allow_life_loss  = test,
+        hist_size        = 4,
+        skip_k_frames    = 4)
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 4000,
+        max_value     = lr,
+        min_value     = min_lr)
+
     run_ppo(env                = env,
-            ac_network         = AtariRAMNetwork,
-            lr                 = 0.0001,
-            max_ts_per_ep      = 1000,
+            ac_network         = SimpleFeedForward,
+            batch_size         = 512,
+            max_ts_per_ep      = 64,
             use_gae            = True,
+            epochs_per_iter    = 30,
+            reward_clip        = (-1., 1.),
+            bootstrap_clip     = (-1., 1.),
+            target_kl          = 0.015,
+            lr_dec             = lr_dec,
+            lr                 = lr,
+            min_lr             = min_lr,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -644,17 +666,31 @@ def breakout_ram_ppo(state_path,
             frameskip = 1)
 
     wrapped_env = BreakoutRAMEnvWrapper(
-        env       = env,
-        hist_size = 3,
-        min_lives = 5)
+        env              = env,
+        allow_life_loss  = test,
+        hist_size        = 4,
+        skip_k_frames    = 4)
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 4000,
+        max_value     = lr,
+        min_value     = min_lr)
 
     run_ppo(env                = wrapped_env,
-            ac_network         = AtariRAMNetwork,
+            ac_network         = SimpleFeedForward,
             batch_size         = 512,
-            lr                 = 0.0001,
-            max_ts_per_ep      = 20000,
+            max_ts_per_ep      = 64,
             use_gae            = True,
-            save_best_only     = True,
+            epochs_per_iter      = 30,
+            reward_clip          = (-1., 1.),
+            bootstrap_clip       = (-1., 1.),
+            target_kl            = 0.015,
+            lr_dec               = lr_dec,
+            lr                   = lr,
+            min_lr               = min_lr,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
