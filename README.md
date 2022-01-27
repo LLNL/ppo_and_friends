@@ -22,10 +22,14 @@ Some of our friends:
 * Observation, advantage, and reward normalization
 * Learning rate annealing
 
-# Environments
+# Supported Environments
 
 Environments that are currently implemented can be found in
-environments/launchers.py.
+environments/launchers.py. A full list can also be viewed by issuing
+the following command:
+```
+python main.py --help
+```
 
 To train an already supported environment, use the following command:
 ```
@@ -35,6 +39,14 @@ python main.py -e <env_name> --num_timesteps <max_num_timesteps>
 Running the same command again will result in loading the previously
 saved state. You can re-run from scratch by using the `--clobber` option.
 
+To test a model that has been trained on a particular environment,
+you can issue the following command:
+```
+python main.py -e <env_name> --num_test_runs <num_test_runs> --render
+```
+You can optionally omit the `--render` flag.
+
+
 # Documentation
 
 When specific implentation choices have been made as a result of a publication,
@@ -42,7 +54,7 @@ the goal is to reference these publications in the relevant code. For
 implementation details that are not directly derived from publications, there
 should be appropriate comments describing why these choices were made.
 
-NOTE: documentation is still a work in progress.
+Documentation is a work in progress.
 
 
 # Tips And Tricks
