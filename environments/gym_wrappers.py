@@ -24,6 +24,9 @@ def show_frame(frame_cache):
 
     input("")
 
+################################################################################
+#                       General Atari Wrappers                                 #
+################################################################################
 
 #TODO: change to inherit from gym.Wrapper?
 class AtariEnvWrapper(object):
@@ -31,15 +34,39 @@ class AtariEnvWrapper(object):
     def __init__(self,
                  env,
                  allow_life_loss = False,
+                 skip_k_frames   = 1,
                  **kw_args):
 
         self.allow_life_loss   = allow_life_loss
         self.life_count        = env.ale.lives()
         self.env               = env
         self.action_space      = env.action_space
+        self.skip_k_frames     = skip_k_frames
         self.true_done         = True
         self.false_done_action = None
         self.true_done_action  = None
+
+
+    def _frame_skip_step(self,
+                         action,
+                         step_func = None):
+
+        if step_func == None:
+            step_fun = self.env.step
+
+        k_reward_sum = 0
+        done = False
+
+        for k in range(self.skip_k_frames):
+            obs, reward, s_done, info = step_func(action)
+
+            k_reward_sum += reward
+            done = done or s_done
+
+            if not done and self.allow_life_loss and info["life lost"]:
+                obs = self.false_done_reset()
+
+        return obs, k_reward_sum, done, info
 
     def _check_game_end(self, done):
         self.true_done = done
@@ -367,27 +394,18 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             env             = env,
             hist_size       = hist_size,
             allow_life_loss = allow_life_loss,
+            skip_k_frames   = skip_k_frames,
             **kw_args)
 
         self.punish_end    = punish_end
-        self.skip_k_frames = skip_k_frames
 
     def step(self, action):
-        action = self.action_map[action]
+        action    = self.action_map[action]
+        step_func = lambda a : RAMHistEnvWrapper.step(self, a)
 
-        k_reward_sum = 0
-        done = False
-
-        for k in range(self.skip_k_frames):
-            obs, reward, s_done, info = RAMHistEnvWrapper.step(self, action)
-
-            k_reward_sum += reward
-            done = done or s_done
-
-            if not done and self.allow_life_loss and info["life lost"]:
-                self.fire_ball()
-
-        reward = k_reward_sum
+        obs, reward, done, info = self._frame_skip_step(
+            action    = action,
+            step_func = step_func)
 
         if self.punish_end:
             #
@@ -414,10 +432,10 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             env             = env,
             hist_size       = hist_size,
             allow_life_loss = allow_life_loss,
+            skip_k_frames   = skip_k_frames,
             **kw_args)
 
         self.punish_end    = punish_end
-        self.skip_k_frames = skip_k_frames
 
         #
         # Crop the images by removing the "score" information.
@@ -432,21 +450,13 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         self.observation_space = CustomObservationSpace(new_shape)
 
     def step(self, action):
-        action = self.action_map[action]
 
-        k_reward_sum = 0
-        done = False
+        action    = self.action_map[action]
+        step_func = lambda a : PixelHistEnvWrapper.step(self, a)
 
-        for k in range(self.skip_k_frames):
-            obs, reward, s_done, info = PixelHistEnvWrapper.step(self, action)
-
-            k_reward_sum += reward
-            done = done or s_done
-
-            if not done and self.allow_life_loss and info["life lost"]:
-                self.fire_ball()
-
-        reward = k_reward_sum
+        obs, reward, done, info = self._frame_skip_step(
+            action    = action,
+            step_func = step_func)
 
         if self.punish_end:
             #
@@ -467,12 +477,10 @@ class AssaultEnvWrapper():
 
     def __init__(self,
                  env,
-                 hist_size = 1,
                  **kw_args):
 
         super(AssaultEnvWrapper, self).__init__(
             env,
-            hist_size = hist_size,
             **kw_args)
 
         if "Assault" not in env.spec._env_name:
@@ -480,9 +488,6 @@ class AssaultEnvWrapper():
             msg += "but received {}".format(env.spec._env_name)
             sys.stderr.write(msg)
             sys.exit(1)
-
-        new_shape = (hist_size, self.frame_size, self.frame_size)
-        self.observation_space = CustomObservationSpace(new_shape)
 
         self.action_space      = self.env.action_space
         self.cur_lives         = self.env.ale.lives()
@@ -497,17 +502,33 @@ class AssaultEnvWrapper():
         return obs
 
 
-# FIXME: need to add frame skipping. Can we put this in the parent wrappers?
-# frame skipping should also be used in the RAM environment.
 class AssaultPixelsEnvWrapper(AssaultEnvWrapper, PixelHistEnvWrapper):
 
     def __init__(self,
                  env,
+                 hist_size       = 2,
+                 allow_life_loss = False,
+                 skip_k_frames   = 1,
                  **kw_args):
 
         super(AssaultPixelsEnvWrapper, self).__init__(
-            env,
+            env             = env,
+            hist_size       = hist_size,
+            allow_life_loss = allow_life_loss,
+            skip_k_frames   = skip_k_frames,
             **kw_args)
+
+        new_shape = (hist_size, self.frame_size, self.frame_size)
+        self.observation_space = CustomObservationSpace(new_shape)
+
+    def step(self, action):
+        step_func = lambda a : PixelHistEnvWrapper.step(self, a)
+
+        obs, reward, done, info = self._frame_skip_step(
+            action    = action,
+            step_func = step_func)
+
+        return obs, reward, done, info
 
 
 class AssaultRAMEnvWrapper(AssaultEnvWrapper, RAMHistEnvWrapper):
@@ -516,7 +537,6 @@ class AssaultRAMEnvWrapper(AssaultEnvWrapper, RAMHistEnvWrapper):
                  env,
                  hist_size       = 2,
                  allow_life_loss = False,
-                 punish_end      = False,
                  skip_k_frames   = 1,
                  **kw_args):
 
@@ -524,33 +544,14 @@ class AssaultRAMEnvWrapper(AssaultEnvWrapper, RAMHistEnvWrapper):
             env             = env,
             hist_size       = hist_size,
             allow_life_loss = allow_life_loss,
+            skip_k_frames   = skip_k_frames,
             **kw_args)
 
-        self.punish_end    = punish_end
-        self.skip_k_frames = skip_k_frames
-
     def step(self, action):
-        action = self.action_map[action]
+        step_func = lambda a : RAMHistEnvWrapper.step(self, a)
 
-        k_reward_sum = 0
-        done = False
-
-        for k in range(self.skip_k_frames):
-            obs, reward, s_done, info = RAMHistEnvWrapper.step(self, action)
-
-            k_reward_sum += reward
-            done = done or s_done
-
-            if not done and self.allow_life_loss and info["life lost"]:
-                self.fire_ball()
-
-        reward = k_reward_sum
-
-        if self.punish_end:
-            #
-            # Return a negative reward for failure.
-            #
-            if done and reward == 0:
-                reward = -1.
+        obs, reward, done, info = self._frame_skip_step(
+            action    = action,
+            step_func = step_func)
 
         return obs, reward, done, info
