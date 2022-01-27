@@ -5,7 +5,7 @@
 from ppo import PPO
 import gym
 from testing import test_policy
-from ppo_and_friends.networks.actor_critic_networks import SimpleFeedForward, AtariRAMNetwork, AtariPixelNetwork
+from ppo_and_friends.networks.actor_critic_networks import SimpleFeedForward, AtariPixelNetwork
 from ppo_and_friends.networks.actor_critic_networks import SimpleSplitObsNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder

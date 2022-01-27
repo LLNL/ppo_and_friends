@@ -134,60 +134,6 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         return out
 
 
-class AtariRAMNetwork(PPOActorCriticNetwork):
-
-    def __init__(self,
-                 in_dim,
-                 out_dim,
-                 out_init,
-                 activation = nn.ReLU(),
-                 **kw_args):
-
-        super(AtariRAMNetwork, self).__init__(
-            out_dim = out_dim,
-            **kw_args)
-
-        self.a_f = activation
-
-        self.l1 = init_layer(nn.Linear(in_dim, 1024))
-        self.l2 = init_layer(nn.Linear(1024, 512))
-        self.l3 = init_layer(nn.Linear(512, 256))
-        self.l4 = init_layer(nn.Linear(256, out_dim), weight_std=out_init)
-
-    def forward(self, _input):
-
-        out = self.l1(_input)
-        out = self.a_f(out)
-
-        out = self.l2(out)
-        out = self.a_f(out)
-
-        out = self.l3(out)
-        out = self.a_f(out)
-
-        out = self.l4(out)
-        out = self.a_f(out)
-
-        out = self.l5(out)
-        out = self.a_f(out)
-
-        out = self.l6(out)
-        out = self.a_f(out)
-
-        out = self.l7(out)
-        out = self.a_f(out)
-
-        out = self.l8(out)
-        out = self.a_f(out)
-
-        out = self.l9(out)
-
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
-
-        return out
-
-
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
