@@ -38,11 +38,11 @@ class AtariEnvWrapper(ABC):
                allow access to the skipped frames, which is important.
                This class re-implements frame skipping in such a way
                that allows access to these frames.
-            2. false_done_action and true_done_action are actions that
+            2. false_done_reset and true_done_reset are actions that
                are taken under the following conditions, respectively:
                    a. A life is lost, but the game is not over, i.e
-                      allow_life_loss is set to True, and you didn't
-                      lose your last life available.
+                      allow_life_loss is set to False, which results
+                      in a "done" state, but we don't end the game.
                    b. A life is lost, and the game is over.
     """
 
@@ -69,9 +69,27 @@ class AtariEnvWrapper(ABC):
         self.action_space      = env.action_space
         self.skip_k_frames     = skip_k_frames
         self.true_done         = True
-        self.false_done_action = None
-        self.true_done_action  = None
 
+    def false_done_reset(self):
+        """
+            What to do when we've acceptably lost a life, but we haven't
+            ended the game.
+        """
+        raise NotImplementedError
+
+    def reset(self):
+        """
+            Reset the environment.
+        """
+        raise NotImplementedError
+
+    def true_done_reset(self):
+        """
+            The action we should take when we are truly done, not just
+            when we've acceptable lost a life. This will be called by
+            the state_dependent_reset parent method.
+        """
+        return self.env.reset()
 
     def _frame_skip_step(self,
                          action,
@@ -99,16 +117,29 @@ class AtariEnvWrapper(ABC):
             step_fun = self.env.step
 
         k_reward_sum = 0
-        done = False
+        done         = False
+        life_lost    = False
 
         for k in range(self.skip_k_frames):
             obs, reward, s_done, info = step_func(action)
 
             k_reward_sum += reward
-            done = done or s_done
+            done      = done or s_done
+            life_lost = life_lost or info["life lost"]
 
+            #
+            # We lost a life, but we're not done. We might need to
+            # take some actions here. Tricky business: we typically
+            # set allow_life_loss to True when testing and false when
+            # training. This allows for false "done" states when
+            # training but not when testing. Calling reset() here
+            # will rely on the child class to know what it should do
+            # in either case.
+            #
             if not done and self.allow_life_loss and info["life lost"]:
-                obs = self.false_done_reset()
+                obs = self.reset()
+
+        info["life lost"] = life_lost
 
         return obs, k_reward_sum, done, info
 
@@ -152,24 +183,18 @@ class AtariEnvWrapper(ABC):
 
             Returns:
                 A resulting observation from taking a true done or false done
-                action.
+                action, and whether or not we are truly done.
         """
-        if self.false_done_action == None:
-            sys.stderr.write("\nERROR: false_done_action must be a function.")
-            sys.exit(1)
-        elif self.true_done_action == None:
-            sys.stderr.write("\nERROR: true_done_action must be a function.")
-            sys.exit(1)
+        true_done = self.true_done
 
         if self.true_done:
             self.true_done = False
-            self.env.reset()
-            obs = self.true_done_action()
+            obs = self.true_done_reset()
         else:
-            obs = self.false_done_action()
+            obs = self.false_done_reset()
 
         self.lives = self.env.ale.lives()
-        return obs
+        return obs, true_done
 
 
 class AtariPixels(AtariEnvWrapper):
@@ -240,47 +265,6 @@ class AtariPixels(AtariEnvWrapper):
         return new_frame
 
 
-class PixelDifferenceEnvWrapper(AtariPixels):
-
-    def __init__(self,
-                 env,
-                 allow_life_loss = False,
-                 **kw_args):
-
-        super(PixelDifferenceEnvWrapper, self).__init__(
-            env             = env,
-            allow_life_loss = allow_life_loss,
-            **kw_args)
-
-        self.prev_frame   = None
-        self.action_space = env.action_space
-        self.h_start      = 0
-
-    def reset(self):
-        cur_frame = self._state_dependent_reset()
-        cur_frame = self.rgb_to_processed_frame(cur_frame)
-
-        self.prev_frame = cur_frame
-
-        return self.prev_frame.copy()
-
-    def step(self, action):
-        cur_frame, reward, done, info = self.env.step(action)
-
-        cur_frame = self.rgb_to_processed_frame(cur_frame)
-
-        diff_frame      = cur_frame - self.prev_frame
-        self.prev_frame = cur_frame.copy()
-
-        done, life_lost   = self._check_if_done(done)
-        info["life lost"] = life_lost
-
-        return diff_frame, reward, done, info
-
-    def render(self):
-        self.env.render()
-
-
 class PixelHistEnvWrapper(AtariPixels):
 
     def __init__(self,
@@ -302,10 +286,13 @@ class PixelHistEnvWrapper(AtariPixels):
         self.use_frame_pooling = use_frame_pooling
 
     def reset(self):
-        cur_frame = self._state_dependent_reset()
+        cur_frame, true_done = self._state_dependent_reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
-        self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+        if true_done:
+            print('pixel cache reset')
+            self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
+
         self.prev_frame  = cur_frame.copy()
 
         return self.frame_cache.copy()
@@ -369,9 +356,11 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.ram_cache = np.tile(cur_ram, self.hist_size)
 
     def reset(self):
-        cur_ram  = self._state_dependent_reset()
-        cur_ram  = cur_ram.astype(np.float32) / 255.
-        self._reset_ram_cache(cur_ram)
+        cur_ram, true_done= self._state_dependent_reset()
+        cur_ram = cur_ram.astype(np.float32) / 255.
+
+        if true_done:
+            self._reset_ram_cache(cur_ram)
 
         return self.ram_cache.copy()
 
@@ -423,8 +412,6 @@ class BreakoutEnvWrapper():
 
         self.action_map        = [0, 2, 3]
         self.cur_lives         = self.env.ale.lives()
-        self.false_done_action = self.false_done_reset
-        self.true_done_action  = self.true_done_reset
 
     def _set_random_start_pos(self):
         #
@@ -434,6 +421,12 @@ class BreakoutEnvWrapper():
         rand_step   = np.random.randint(2, 4)
         rand_repeat = np.random.randint(1, 20)
 
+        #
+        # NOTE: this calls the environments step function, not our
+        # own. This means that we will be skipping some frames and
+        # not storing them in memory. This allows for a random
+        # starting point when entering a new game.
+        #
         for _ in range(rand_repeat):
             self.env.step(rand_step)
 
@@ -441,11 +434,23 @@ class BreakoutEnvWrapper():
         return self.env.step(1)
 
     def true_done_reset(self):
+        """
+            The action we should take when we are truly done, not just
+            when we've acceptable lost a life. This will be called by
+            the state_dependent_reset parent method.
+        """
+        self.env.reset()
         self._set_random_start_pos()
         obs, _, _, _ = self.fire_ball()
         return obs
 
     def false_done_reset(self):
+        """
+            What to do when we've acceptably lost a life, but we haven't
+            ended the game.
+
+            In this case, we need to fire the ball again.
+        """
         obs, _, _, _ = self.fire_ball()
         return obs
 
@@ -467,7 +472,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             skip_k_frames   = skip_k_frames,
             **kw_args)
 
-        self.punish_end    = punish_end
+        self.punish_end = punish_end
 
     def step(self, action):
         action    = self.action_map[action]
@@ -561,13 +566,14 @@ class AssaultEnvWrapper():
 
         self.action_space      = self.env.action_space
         self.cur_lives         = self.env.ale.lives()
-        self.false_done_action = self.false_done_reset
-        self.true_done_action  = self.true_done_reset
-
-    def true_done_reset(self):
-        return self.env.reset()
 
     def false_done_reset(self):
+        """
+            What to do when we've acceptably lost a life, but we haven't
+            ended the game.
+
+            In this case, we use a NOOP action.
+        """
         obs, _, _, _ = self.env.step(0)
         return obs
 
