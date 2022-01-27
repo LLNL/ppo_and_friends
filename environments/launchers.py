@@ -557,7 +557,7 @@ def assault_pixels_ppo(state_path,
     wrapped_env = AssaultPixelsEnvWrapper(
         env             = env,
         allow_life_loss = test,
-        hist_size       = 2,
+        hist_size       = 4,
         skip_k_frames   = 4)
 
     actor_kw_args = {}
