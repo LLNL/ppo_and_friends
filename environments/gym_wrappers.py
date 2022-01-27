@@ -290,7 +290,6 @@ class PixelHistEnvWrapper(AtariPixels):
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
         if true_done:
-            print('pixel cache reset')
             self.frame_cache = np.tile(cur_frame, (self.hist_size, 1, 1))
 
         self.prev_frame  = cur_frame.copy()
