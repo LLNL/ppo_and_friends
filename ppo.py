@@ -35,7 +35,7 @@ class PPO(object):
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
-                 max_ts_per_ep       = 200,
+                 max_ts_per_ep       = 2048,
                  batch_size          = 256,
                  ts_per_rollout      = 1024,
                  gamma               = 0.99,
@@ -206,7 +206,7 @@ class PPO(object):
             print("ERROR: unknown action type!")
             sys.exit(1)
         else:
-            print("Using {} action type.".format(action_type))
+            print("Using {} actions.".format(action_type))
 
         #
         # Environments are very inconsistent! We need to check what shape
@@ -728,6 +728,14 @@ class PPO(object):
                         bootstrap_clip = self.bootstrap_clip)
 
             longest_run  = max(longest_run, episode_length)
+
+        if total_episodes == 0:
+            msg  = "\nERROR: your rollout did not finish any episodes. "
+            msg += "This could be due to setting the max ts per episodes "
+            msg += "too small, or there could be an issue with your "
+            msg += "environment.\n"
+            sys.stderr.write(msg)
+            sys.exit(1)
 
         #
         # Update our status dict.
