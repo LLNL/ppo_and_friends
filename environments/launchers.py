@@ -483,6 +483,13 @@ def assault_ram_ppo(state_path,
         hist_size        = 4,
         skip_k_frames    = 4)
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
     lr     = 0.0003
     min_lr = 0.0
 
@@ -493,6 +500,8 @@ def assault_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             ac_network         = SimpleFeedForward,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
             batch_size         = 512,
             ts_per_rollout     = 2048,
             max_ts_per_ep      = 64,
@@ -500,7 +509,7 @@ def assault_ram_ppo(state_path,
             epochs_per_iter    = 30,
             reward_clip        = (-1., 1.),
             bootstrap_clip     = (-1., 1.),
-            target_kl          = 0.015,
+            target_kl          = 1.,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
@@ -551,6 +560,10 @@ def assault_pixels_ppo(state_path,
         hist_size       = 2,
         skip_k_frames   = 4)
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    critic_kw_args = actor_kw_args.copy()
+
     lr     = 0.0003
     min_lr = 0.0
 
@@ -561,13 +574,15 @@ def assault_pixels_ppo(state_path,
 
     run_ppo(env                  = wrapped_env,
             ac_network           = AtariPixelNetwork,
+            actor_kw_args        = actor_kw_args,
+            critic_kw_args       = critic_kw_args,
             batch_size           = 512,
             ts_per_rollout       = 2048,
             max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
             reward_clip          = (-1., 1.),
             bootstrap_clip       = (-1., 1.),
-            target_kl            = 0.015,
+            target_kl            = 1.,
             lr_dec               = lr_dec,
             lr                   = lr,
             min_lr               = min_lr,
@@ -613,6 +628,10 @@ def breakout_pixels_ppo(state_path,
         hist_size        = 4,
         skip_k_frames    = 4)
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    critic_kw_args = actor_kw_args.copy()
+
     lr     = 0.0003
     min_lr = 0.0
 
@@ -623,13 +642,15 @@ def breakout_pixels_ppo(state_path,
 
     run_ppo(env                  = wrapped_env,
             ac_network           = AtariPixelNetwork,
+            actor_kw_args        = actor_kw_args,
+            critic_kw_args       = critic_kw_args,
             batch_size           = 512,
             ts_per_rollout       = 2048,
             max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
             reward_clip          = (-1., 1.),
             bootstrap_clip       = (-1., 1.),
-            target_kl            = 0.015,
+            target_kl            = 1.,
             lr_dec               = lr_dec,
             lr                   = lr,
             min_lr               = min_lr,
@@ -675,6 +696,13 @@ def breakout_ram_ppo(state_path,
         hist_size        = 4,
         skip_k_frames    = 4)
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
     lr     = 0.0003
     min_lr = 0.0
 
@@ -685,6 +713,8 @@ def breakout_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             ac_network         = SimpleFeedForward,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
             batch_size         = 512,
             ts_per_rollout     = 2048,
             max_ts_per_ep      = 64,
@@ -692,7 +722,7 @@ def breakout_ram_ppo(state_path,
             epochs_per_iter    = 30,
             reward_clip        = (-1., 1.),
             bootstrap_clip     = (-1., 1.),
-            target_kl          = 0.015,
+            target_kl          = 1.0,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
