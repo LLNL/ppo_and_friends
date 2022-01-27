@@ -468,12 +468,15 @@ def assault_ram_ppo(state_path,
 
         env = gym.make(
             'Assault-ram-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1,
             render_mode='human')
     else:
         env = gym.make(
-            'Assault-ram-v0')
+            'Assault-ram-v0',
+            repeat_action_probability = 0.0,
+            frameskip = 1)
 
-    #FIXME: skip isn't yet implemented for RAM.
     wrapped_env = AssaultRAMEnvWrapper(
         env              = env,
         allow_life_loss  = test,
@@ -488,9 +491,10 @@ def assault_ram_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                = env,
+    run_ppo(env                = wrapped_env,
             ac_network         = SimpleFeedForward,
             batch_size         = 512,
+            ts_per_rollout     = 2048,
             max_ts_per_ep      = 64,
             use_gae            = True,
             epochs_per_iter    = 30,
@@ -682,15 +686,16 @@ def breakout_ram_ppo(state_path,
     run_ppo(env                = wrapped_env,
             ac_network         = SimpleFeedForward,
             batch_size         = 512,
+            ts_per_rollout     = 2048,
             max_ts_per_ep      = 64,
             use_gae            = True,
-            epochs_per_iter      = 30,
-            reward_clip          = (-1., 1.),
-            bootstrap_clip       = (-1., 1.),
-            target_kl            = 0.015,
-            lr_dec               = lr_dec,
-            lr                   = lr,
-            min_lr               = min_lr,
+            epochs_per_iter    = 30,
+            reward_clip        = (-1., 1.),
+            bootstrap_clip     = (-1., 1.),
+            target_kl          = 0.015,
+            lr_dec             = lr_dec,
+            lr                 = lr,
+            min_lr             = min_lr,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
