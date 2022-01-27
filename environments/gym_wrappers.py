@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import gym
 import cv2
+from abc import ABC
 
 #DEBUGGING SUPPORT
 def show_frame(frame_cache):
@@ -28,15 +29,40 @@ def show_frame(frame_cache):
 #                       General Atari Wrappers                                 #
 ################################################################################
 
-#TODO: change to inherit from gym.Wrapper?
-class AtariEnvWrapper(object):
+class AtariEnvWrapper(ABC):
+    """
+        A base class generic wrapper for atari games.
+
+        Some important concepts:
+            1. While gym environments do offer frame skip, they don't
+               allow access to the skipped frames, which is important.
+               This class re-implements frame skipping in such a way
+               that allows access to these frames.
+            2. false_done_action and true_done_action are actions that
+               are taken under the following conditions, respectively:
+                   a. A life is lost, but the game is not over, i.e
+                      allow_life_loss is set to True, and you didn't
+                      lose your last life available.
+                   b. A life is lost, and the game is over.
+    """
 
     def __init__(self,
                  env,
                  allow_life_loss = False,
                  skip_k_frames   = 1,
                  **kw_args):
-
+        """
+            Arguments:
+                env              The atari environment to wrap.
+                allow_life_loss  If True, the game will only end when you've
+                                 lost your last life. If False, the game will
+                                 end after losing any lives.
+                skip_k_frames    The number of frames to skip. In reality, this
+                                 is a misleading name. A value of 1 means no
+                                 frames are skipped. A value of 2 means 1 frame
+                                 is skipped. I'm only following this convention
+                                 because it's what's used in papers...
+        """
         self.allow_life_loss   = allow_life_loss
         self.life_count        = env.ale.lives()
         self.env               = env
@@ -50,6 +76,24 @@ class AtariEnvWrapper(object):
     def _frame_skip_step(self,
                          action,
                          step_func = None):
+        """
+            Take a step in the environment while skipping frames
+            if requested.
+
+            Arguments:
+                action     The action to take. This will be repeated for every
+                           skipped frame.
+                step_func  An optional function to perform the actual step.
+                           If none, the environment's step function will be
+                           used. NOTE: this is an important argument, as it
+                           allows you to step in a way that has access to the
+                           skipped frames.
+
+            Returns:
+                A tuple of form (observation, reward, done, inf), where reward
+                is actually the sum of all rewards from the frames that were
+                stepped through.
+        """
 
         if step_func == None:
             step_fun = self.env.step
@@ -68,7 +112,22 @@ class AtariEnvWrapper(object):
 
         return obs, k_reward_sum, done, info
 
-    def _check_game_end(self, done):
+    def _check_if_done(self, done):
+        """
+            Determine whether or not we're "done". This is a bit tricky here;
+            if we've lost a life, we say that we're done, but we don't reset
+            the environment. We considered this a "false done". This method
+            will return whether or not we're truly done or falsely done, and
+            it will set a flag that says whether or not we're truly done.
+
+            Arguments:
+                done    Whether or not the environment is actually done and
+                        requires a reset.
+
+            Returns:
+                Whether or not we're truly or falsely done. In other words,
+                did we lose any lives?
+        """
         self.true_done = done
 
         life_lost = False
@@ -85,6 +144,15 @@ class AtariEnvWrapper(object):
 
     def _state_dependent_reset(self):
         """
+            Perform any needed actions for a reset. Again, this is tricky.
+            If our environment is truly done, we need to perform a reset.
+            If we're not done, we're allowing life loss, and we've lost a life,
+            then we don't reset the environment, but we may need to take an
+            action (like firing a ball).
+
+            Returns:
+                A resulting observation from taking a true done or false done
+                action.
         """
         if self.false_done_action == None:
             sys.stderr.write("\nERROR: false_done_action must be a function.")
@@ -105,6 +173,9 @@ class AtariEnvWrapper(object):
 
 
 class AtariPixels(AtariEnvWrapper):
+    """
+        A generic wrapper for atari games with pixel observations.
+    """
 
     def __init__(self,
                  env,
@@ -122,7 +193,6 @@ class AtariPixels(AtariEnvWrapper):
         self.h_stop     = prev_shape[0]
         self.w_start    = 0
         self.w_stop     = prev_shape[1]
-
         self.frame_size = frame_size
 
         new_shape    = (1, frame_size, frame_size)
@@ -202,7 +272,7 @@ class PixelDifferenceEnvWrapper(AtariPixels):
         diff_frame      = cur_frame - self.prev_frame
         self.prev_frame = cur_frame.copy()
 
-        done, life_lost   = self._check_game_end(done)
+        done, life_lost   = self._check_if_done(done)
         info["life lost"] = life_lost
 
         return diff_frame, reward, done, info
@@ -259,7 +329,7 @@ class PixelHistEnvWrapper(AtariPixels):
         self.frame_cache = np.roll(self.frame_cache, -1, axis=0)
         self.frame_cache[-1] = cur_frame.copy()
 
-        done, life_lost   = self._check_game_end(done)
+        done, life_lost   = self._check_if_done(done)
         info["life lost"] = life_lost
 
         return self.frame_cache, reward, done, info
@@ -314,7 +384,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         offset = self.cache_size - self.ram_size
         self.ram_cache[offset :] = cur_ram.copy()
 
-        done, life_lost   = self._check_game_end(done)
+        done, life_lost   = self._check_if_done(done)
         info["life lost"] = life_lost
 
         return self.ram_cache.copy(), reward, done, info
