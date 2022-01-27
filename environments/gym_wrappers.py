@@ -295,6 +295,9 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
     def render(self):
         self.env.render()
 
+################################################################################
+#                       Atari Breakout Wrapper                                 #
+################################################################################
 
 class BreakoutEnvWrapper():
 
@@ -393,30 +396,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
-        self._post_step()
-
         return obs, reward, done, info
-
-    def reset(self):
-        self.env.reset()
-
-        #
-        # First, we need to randomly place the paddle somewhere. This
-        # will change where the ball is launched from.
-        #
-        self._set_random_start_pos()
-
-        #
-        # Next, launch the ball.
-        #
-        cur_ram, _, _, _ = self.fire_ball()
-
-        cur_ram  = cur_ram.astype(np.float32) / 255.
-        self._reset_ram_cache(cur_ram)
-
-        self._post_step(True)
-
-        return self.ram_cache.copy()
 
 
 class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
@@ -478,6 +458,11 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         return obs, reward, done, info
 
 
+################################################################################
+#                        Atari Assault Wrapper                                 #
+################################################################################
+
+
 class AssaultEnvWrapper():
 
     def __init__(self,
@@ -512,6 +497,8 @@ class AssaultEnvWrapper():
         return obs
 
 
+# FIXME: need to add frame skipping. Can we put this in the parent wrappers?
+# frame skipping should also be used in the RAM environment.
 class AssaultPixelsEnvWrapper(AssaultEnvWrapper, PixelHistEnvWrapper):
 
     def __init__(self,
@@ -521,3 +508,49 @@ class AssaultPixelsEnvWrapper(AssaultEnvWrapper, PixelHistEnvWrapper):
         super(AssaultPixelsEnvWrapper, self).__init__(
             env,
             **kw_args)
+
+
+class AssaultRAMEnvWrapper(AssaultEnvWrapper, RAMHistEnvWrapper):
+
+    def __init__(self,
+                 env,
+                 hist_size       = 2,
+                 allow_life_loss = False,
+                 punish_end      = False,
+                 skip_k_frames   = 1,
+                 **kw_args):
+
+        super(AssaultRAMEnvWrapper, self).__init__(
+            env             = env,
+            hist_size       = hist_size,
+            allow_life_loss = allow_life_loss,
+            **kw_args)
+
+        self.punish_end    = punish_end
+        self.skip_k_frames = skip_k_frames
+
+    def step(self, action):
+        action = self.action_map[action]
+
+        k_reward_sum = 0
+        done = False
+
+        for k in range(self.skip_k_frames):
+            obs, reward, s_done, info = RAMHistEnvWrapper.step(self, action)
+
+            k_reward_sum += reward
+            done = done or s_done
+
+            if not done and self.allow_life_loss and info["life lost"]:
+                self.fire_ball()
+
+        reward = k_reward_sum
+
+        if self.punish_end:
+            #
+            # Return a negative reward for failure.
+            #
+            if done and reward == 0:
+                reward = -1.
+
+        return obs, reward, done, info
