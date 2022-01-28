@@ -57,9 +57,10 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
                  in_dim,
                  out_dim,
                  out_init,
-                 hidden_left  = 64,
-                 hidden_right = 64,
-                 activation   = nn.ReLU(),
+                 hidden_left    = 64,
+                 hidden_right   = 64,
+                 num_out_layers = 1,
+                 activation     = nn.ReLU(),
                  **kw_args):
 
         super(SimpleSplitObsNetwork, self).__init__(
@@ -103,8 +104,19 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
 
         inner_hidden_size  = hidden_left + hidden_right
 
-        self.full_l1 = init_layer(nn.Linear(inner_hidden_size,
-            out_dim), weight_std=out_init)
+        out_layer_list = []
+        for _ in range(num_out_layers - 1):
+            out_layer_list.append(init_layer(
+                nn.Linear(
+                    inner_hidden_size,
+                    inner_hidden_size)))
+
+            out_layer_list.append(activation)
+
+        out_layer_list.append(init_layer(nn.Linear(inner_hidden_size,
+            out_dim), weight_std=out_init))
+
+        self.out_layers = nn.Sequential(*out_layer_list)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -126,7 +138,7 @@ class SimpleSplitObsNetwork(SplitObservationNetwork):
         # Full layers.
         #
         out = torch.cat((s1_out, s2_out), dim=1)
-        out = self.full_l1(out)
+        out = self.out_layers(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
