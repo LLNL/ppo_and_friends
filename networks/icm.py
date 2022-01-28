@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from .utils import init_layer
 from .ppo_networks import PPONetwork
+import torch.nn.functional as F
 
 class LinearInverseModel(nn.Module):
 
