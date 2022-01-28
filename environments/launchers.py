@@ -94,6 +94,10 @@ def run_ppo(env,
         ppo.learn(num_timesteps)
 
 
+###############################################################################
+#                            Classic Control                                  #
+###############################################################################
+
 def cartpole_ppo(state_path,
                  load_state,
                  render,
@@ -114,14 +118,13 @@ def cartpole_ppo(state_path,
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 200,
+            max_ts_per_ep      = 32,
             use_gae            = True,
             use_icm            = False,
             normalize_obs      = True,
             normalize_rewards  = True,
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
-            dynamic_bs_clip    = False,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -144,8 +147,15 @@ def pendulum_ppo(state_path,
 
     env = gym.make('Pendulum-v1')
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 32
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
     lr     = 0.0003
-    min_lr = 0.000090
+    min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
         max_iteration = 1000,
@@ -154,6 +164,8 @@ def pendulum_ppo(state_path,
 
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
             max_ts_per_ep      = 32,
             use_gae            = True,
             normalize_obs      = True,
@@ -171,129 +183,6 @@ def pendulum_ppo(state_path,
             lr_dec             = lr_dec,
             test               = test,
             num_test_runs      = num_test_runs)
-
-
-def lunar_lander_ppo(state_path,
-                     load_state,
-                     render,
-                     num_timesteps,
-                     device,
-                     test = False,
-                     num_test_runs = 1):
-
-    env = gym.make('LunarLander-v2')
-
-    #
-    # Extra args for the actor critic models.
-    # I find that leaky relu does much better with the lunar
-    # lander env.
-    #
-    actor_kw_args = {}
-    actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["hidden_size"] = 64
-
-    critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_size"] = 256
-
-    lr     = 0.0003
-    min_lr = 0.0
-
-    lr_dec = LinearDecrementer(
-        max_iteration = 1000,
-        max_value     = lr,
-        min_value     = min_lr)
-
-    run_ppo(env                 = env,
-            ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 128,
-            ts_per_rollout      = 2048,
-            batch_size          = 512,
-            use_gae             = True,
-            normalize_obs       = True,
-            normalize_rewards   = True,
-            dynamic_bs_clip     = False,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
-            target_kl           = 0.015,
-            actor_kw_args       = actor_kw_args,
-            critic_kw_args      = critic_kw_args,
-            state_path          = state_path,
-            load_state          = load_state,
-            render              = render,
-            num_timesteps       = num_timesteps,
-            device              = device,
-            lr_dec              = lr_dec,
-            lr                  = lr,
-            min_lr              = min_lr,
-            test                = test,
-            num_test_runs       = num_test_runs)
-
-
-def lunar_lander_continuous_ppo(state_path,
-                                load_state,
-                                render,
-                                num_timesteps,
-                                device,
-                                test = False,
-                                num_test_runs = 1):
-
-    env = gym.make('LunarLanderContinuous-v2')
-
-    #
-    # Lunar lander observations are organized as follows:
-    #    Positions: 2
-    #    Positional velocities: 2
-    #    Angle: 1
-    #    Angular velocities: 1
-    #    Leg contact: 2
-    #
-    actor_kw_args = {}
-
-    #
-    # Extra args for the actor critic models.
-    # I find that leaky relu does much better with the lunar
-    # lander env.
-    #
-    actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["hidden_size"] = 64
-
-    critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_size"] = 256
-
-    lr     = 0.0003
-    min_lr = 0.0
-
-    lr_dec = LinearDecrementer(
-        max_iteration = 500,
-        max_value     = lr,
-        min_value     = min_lr)
-
-    run_ppo(env                 = env,
-            ac_network          = SimpleFeedForward,
-            max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
-            batch_size          = 512,
-            actor_kw_args       = actor_kw_args,
-            critic_kw_args      = critic_kw_args,
-            use_gae             = True,
-            normalize_obs       = True,
-            normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
-            dynamic_bs_clip     = False,
-            target_kl           = 0.015,
-            state_path          = state_path,
-            load_state          = load_state,
-            render              = render,
-            num_timesteps       = num_timesteps,
-            device              = device,
-            lr_dec              = lr_dec,
-            lr                  = lr,
-            min_lr              = min_lr,
-            test                = test,
-            num_test_runs       = num_test_runs)
 
 
 def mountain_car_ppo(state_path,
@@ -449,6 +338,204 @@ def acrobot_ppo(state_path,
             device             = device,
             test               = test,
             num_test_runs      = num_test_runs)
+
+
+###############################################################################
+#                                Box 2D                                       #
+###############################################################################
+
+def lunar_lander_ppo(state_path,
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test = False,
+                     num_test_runs = 1):
+
+    env = gym.make('LunarLander-v2')
+
+    #
+    # Extra args for the actor critic models.
+    # I find that leaky relu does much better with the lunar
+    # lander env.
+    #
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            max_ts_per_ep       = 128,
+            ts_per_rollout      = 2048,
+            batch_size          = 512,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            dynamic_bs_clip     = False,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            target_kl           = 0.015,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def lunar_lander_continuous_ppo(state_path,
+                                load_state,
+                                render,
+                                num_timesteps,
+                                device,
+                                test = False,
+                                num_test_runs = 1):
+
+    env = gym.make('LunarLanderContinuous-v2')
+
+    #
+    # Lunar lander observations are organized as follows:
+    #    Positions: 2
+    #    Positional velocities: 2
+    #    Angle: 1
+    #    Angular velocities: 1
+    #    Leg contact: 2
+    #
+    actor_kw_args = {}
+
+    #
+    # Extra args for the actor critic models.
+    # I find that leaky relu does much better with the lunar
+    # lander env.
+    #
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 500,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            batch_size          = 512,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            dynamic_bs_clip     = False,
+            target_kl           = 0.015,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def bipedal_walker_ppo(state_path,
+                       load_state,
+                       render,
+                       num_timesteps,
+                       device,
+                       test = False,
+                       num_test_runs = 1):
+
+    env = gym.make('BipedalWalker-v3')
+
+    #
+    # The lidar observations are the last 10.
+    #
+    actor_kw_args = {}
+    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
+    actor_kw_args["hidden_left"]    = 64
+    actor_kw_args["hidden_right"]   = 64
+
+    #
+    # I've found that a lower std offset greatly improves performance
+    # in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that ReLU works better
+    # here, which is the default.
+    #
+    actor_kw_args["std_offset"] = 0.1
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 128
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 2000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 128,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            target_kl           = 1.0,
+            save_best_only      = False,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+###############################################################################
+#                                Atari                                        #
+###############################################################################
 
 
 def assault_ram_ppo(state_path,
@@ -735,70 +822,9 @@ def breakout_ram_ppo(state_path,
             num_test_runs      = num_test_runs)
 
 
-def bipedal_walker_ppo(state_path,
-                       load_state,
-                       render,
-                       num_timesteps,
-                       device,
-                       test = False,
-                       num_test_runs = 1):
-
-    env = gym.make('BipedalWalker-v3')
-
-    #
-    # The lidar observations are the last 10.
-    #
-    actor_kw_args = {}
-    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]    = 64
-    actor_kw_args["hidden_right"]   = 64
-
-    #
-    # I've found that a lower std offset greatly improves performance
-    # in this environment. Also, most papers suggest that using Tanh
-    # provides the best performance, but I find that ReLU works better
-    # here, which is the default.
-    #
-    actor_kw_args["std_offset"] = 0.1
-
-    critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
-
-    lr     = 0.0003
-    min_lr = 0.0
-
-    lr_dec = LinearDecrementer(
-        max_iteration = 2000,
-        max_value     = lr,
-        min_value     = min_lr)
-
-    run_ppo(env                 = env,
-            ac_network          = SimpleSplitObsNetwork,
-            actor_kw_args       = actor_kw_args,
-            critic_kw_args      = critic_kw_args,
-            batch_size          = 512,
-            max_ts_per_ep       = 128,
-            ts_per_rollout      = 2048,
-            use_gae             = True,
-            target_kl           = 1.0,
-            save_best_only      = False,
-            normalize_obs       = True,
-            normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
-            entropy_weight      = 0.0,
-            lr_dec              = lr_dec,
-            lr                  = lr,
-            min_lr              = min_lr,
-            state_path          = state_path,
-            load_state          = load_state,
-            render              = render,
-            num_timesteps       = num_timesteps,
-            device              = device,
-            test                = test,
-            num_test_runs       = num_test_runs)
+###############################################################################
+#                                MuJoCo                                       #
+###############################################################################
 
 
 def inverted_pendulum_ppo(state_path,
