@@ -749,10 +749,17 @@ def bipedal_walker_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]  = 64
-    actor_kw_args["hidden_right"] = 64
-    actor_kw_args["std_offset"]   = 0.1
+    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
+    actor_kw_args["hidden_left"]    = 64
+    actor_kw_args["hidden_right"]   = 64
+
+    #
+    # I've found that a lower std offset greatly improves performance
+    # in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that ReLU works better
+    # here, which is the default.
+    #
+    actor_kw_args["std_offset"] = 0.1
 
     critic_kw_args = actor_kw_args.copy()
     critic_kw_args["hidden_left"]  = 128
@@ -762,7 +769,7 @@ def bipedal_walker_ppo(state_path,
     min_lr = 0.0
 
     lr_dec = LinearDecrementer(
-        max_iteration = 3000,
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
