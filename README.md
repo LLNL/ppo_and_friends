@@ -69,6 +69,7 @@ Documentation is a work in progress.
 
 # Tips And Tricks
 
+**OpenAI Gym**
 Installing atari environments:
 ```
 pip install gym[atari]
@@ -77,3 +78,11 @@ pip install autorom[accept-rom-license]
 
 Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
 that can help with some of these issues.
+
+**Performance**
+Unless otherwise stated, all provided environments should be capable of
+training "successful" policies. When it's provided, the definition of
+success comes from the environment itself. BipedalWalker, for instance, defines
+success as reaching an average score >= 300 over 100 test iterations. For
+environments that do not provide definitions of success, I wing it.
+
