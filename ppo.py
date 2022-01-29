@@ -922,6 +922,7 @@ class PPO(object):
             values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
 
             #
+            # The heart of PPO: arXiv:1707.06347v2
             # We udpate our policy using gradient ascent. Our advantages relay
             # how much better or worse the outcome of various actions were than
             # "expected" (from our value approximator). Since actions that are
@@ -934,9 +935,9 @@ class PPO(object):
             # to further constrain updates and clip the output to a specified
             # range.
             #
-            ratios    = torch.exp(curr_log_probs - log_probs)
-            surr1     = ratios * advantages
-            surr2     = torch.clamp(
+            ratios = torch.exp(curr_log_probs - log_probs)
+            surr1  = ratios * advantages
+            surr2  = torch.clamp(
                 ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
 
             total_kl += (log_probs - curr_log_probs).mean().item()
