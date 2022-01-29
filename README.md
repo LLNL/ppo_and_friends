@@ -24,7 +24,7 @@ Some of our friends:
 
 # Installation
 
-After activating a virtuale environment, issue the following command from the
+After activating a virtual environment, issue the following command from the
 top directory.
 ```
 pip install .
