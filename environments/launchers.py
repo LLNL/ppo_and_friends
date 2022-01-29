@@ -910,3 +910,70 @@ def ant_ppo(state_path,
             device              = device,
             test                = test,
             num_test_runs       = num_test_runs)
+
+
+def humanoid_ppo(state_path,
+                 load_state,
+                 render,
+                 num_timesteps,
+                 device,
+                 test = False,
+                 num_test_runs = 1):
+
+    env = gym.make('Humanoid-v3')
+
+    #
+    # Humanoid observations are a bit mysterious. See
+    # https://github.com/openai/gym/issues/585
+    # Here's a best guess:
+    #
+    #    Positions: 22
+    #    Velocities: 23
+    #    Center of mass based on inertia (?): 140
+    #    Center of mass based on velocity (?): 84
+    #    Actuator forces (?): 23
+    #    Contact forces: 84
+    #
+    actor_kw_args = {}
+    actor_kw_args["activation"]   = nn.LeakyReLU()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    actor_kw_args["hidden_left"]  = 32
+    actor_kw_args["hidden_right"] = 84
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 256
+    critic_kw_args["hidden_right"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0000
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 3000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 64,
+            ts_per_rollout      = 2056,
+            use_gae             = True,
+            target_kl           = 1.0,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-30., 30.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
