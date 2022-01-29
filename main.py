@@ -18,13 +18,21 @@ if __name__ == "__main__":
     parser.add_argument("--num_timesteps", default=10000000, type=int)
     parser.add_argument("--random_seed", default=2, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
-        choices=["CartPole", "Pendulum", "LunarLander",
-                 "MountainCar", "MountainCarContinuous", "Acrobot",
-                 "AssaultRAM", "AssaultPixels",
-                 "BreakoutPixels", "BreakoutRAM",
+        choices=["CartPole",
+                 "Pendulum",
+                 "Acrobot",
+                 "MountainCar",
+                 "MountainCarContinuous",
+                 "LunarLander",
                  "LunarLanderContinuous",
                  "BipedalWalker",
-                 "InvertedPendulum", "Ant"])
+                 "AssaultRAM",
+                 "AssaultPixels",
+                 "BreakoutPixels",
+                 "BreakoutRAM",
+                 "InvertedPendulum",
+                 "Ant",
+                 "Humanoid"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -185,6 +193,16 @@ if __name__ == "__main__":
 
     elif env_name == "Ant":
         ant_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Humanoid":
+        humanoid_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
