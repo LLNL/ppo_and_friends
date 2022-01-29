@@ -97,7 +97,7 @@ settings. If any environment is performing poorly, I'd suggest restarting
 training from scratch. If that doesn't work, feel free to open a ticket.
 
 Of course, different systems will also result in different performance.
-For comparison's sake, here is system info:
+For comparison's sake, here is my system info:
 
 OS:
 ```
