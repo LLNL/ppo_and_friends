@@ -90,5 +90,20 @@ environments that do not provide definitions of success, I wing it.
 
 Note that, even though random seeds are set, Torch is still allowed to use
 stochastic algorithms. This results in training performance varying from
-one run to another.
+one run to another. In general, though, most supported environments will
+produce successful polices with each training instance. BipedalWalker is
+one that can be picky at times and is very sensitive to small changes in
+settings. If any environment is performing poorly, I'd suggest restarting
+training from scratch. If that doesn't work, feel free to open a ticket.
 
+Of course, different systems will also result in different performance.
+For comparison's sake, here is system info:
+
+OS:
+```
+$ Linux pop-os 5.15.5-76051505-generic
+```
+GPU:
+```
+GP104BM [GeForce GTX 1070 Mobile]
+```
