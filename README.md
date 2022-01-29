@@ -6,9 +6,9 @@ along with various extra optimizations and add-ons (freinds).
 While this project supports many of OpenAI's gym environments, the goal
 is to be fairly independent of gym. Because of this, you'll often see
 situations where utilities that gym provides have been ignored in favor of
-creating our own, often simplified, versions of these utilities. This is
-largely to support custom environments that might not follow the standard
-rules that gym enforces.
+creating our own, often simplified (or sometimes more complicated...), versions
+of these utilities. This is largely to support custom environments that might
+not follow the standard rules that gym enforces.
 
 # Our Friends
 
