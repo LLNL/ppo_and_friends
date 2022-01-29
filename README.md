@@ -86,3 +86,7 @@ success comes from the environment itself. BipedalWalker, for instance, defines
 success as reaching an average score >= 300 over 100 test iterations. For
 environments that do not provide definitions of success, I wing it.
 
+Note that, even though random seeds are set, Torch is still allowed to use
+stochastic algorithms. This results in training performance varying from
+one run to another.
+
