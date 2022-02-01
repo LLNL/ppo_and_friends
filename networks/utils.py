@@ -95,15 +95,25 @@ class GaussianDistribution(nn.Module):
 
     def __init__(self,
                  act_dim,
-                 std_offset = 0.5,
+                 std_offset       = 0.5,
+                 min_std          = 0.01,
+                 distribution_min = -1.,
+                 distribution_max = 1.,
                  **kw_args):
         """
             Arguments:
-                act_dim        The action dimension.
-                std_offset     An offset to use when initializing the log
-                               std. It will be negated.
+                act_dim           The action dimension.
+                std_offset        An offset to use when initializing the log
+                                  std. It will be negated.
+                min_std           A minimum action std to enforce.
+                distribution_min  A lower bound to enforce in the distribution.
+                distribution_max  An upper bound to enforce in the distribution.
         """
         super(GaussianDistribution, self).__init__()
+
+        self.min_std  =  torch.tensor([min_std]).float()
+        self.dist_min = distribution_min
+        self.dist_max = distribution_max
 
         #
         # arXiv:2006.05990v1 suggests an offset of -0.5 is best for
@@ -132,7 +142,8 @@ class GaussianDistribution(nn.Module):
         # TODO: add option to use softplus or exp.
         #
         std = nn.functional.softplus(self.log_std)
-        return Normal(action_mean, std.cpu())
+        std = torch.max(std.cpu(), self.min_std)
+        return Normal(action_mean, std)
 
     def get_log_probs(self,
                       dist,
@@ -171,6 +182,27 @@ class GaussianDistribution(nn.Module):
         s_log      = torch.log(tanh_prime).sum(dim=-1)
         return normal_log_probs - s_log
 
+    def _enforce_sample_range(self, sample):
+        """
+            Force a given sample into the range [dist_min, dist_max].
+
+            Arguments:
+                sample    The sample to alter into the above range.
+
+            Returns:
+                The input sample after being transformed into the
+                range [dist_min, dist_max].
+        """
+        #
+        # We can use a simple interpolation:
+        #     new_sample <-
+        #       ( (new_max - new_min) * (sample - current_min) ) /
+        #       (current_max - current_min) + new_min
+        #
+        sample = ((sample + 1.) / 2.) * \
+            (self.dist_max - self.dist_min) + self.dist_min
+        return sample
+
     def sample_distribution(self, dist):
         """
             Sample a Gaussian distribution. In this case, we
@@ -187,6 +219,10 @@ class GaussianDistribution(nn.Module):
         """
         sample      = dist.sample()
         tanh_sample = torch.tanh(sample)
+
+        if self.dist_min != -1.0 or self.dist_max != 1.0:
+            tanh_sample = self._enforce_sample_range(tanh_sample)
+
         return tanh_sample, sample
 
     def get_entropy(self,
