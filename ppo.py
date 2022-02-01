@@ -288,6 +288,15 @@ class PPO(object):
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
 
+        #
+        # arXiv:2006.05990v1 suggests initializing the output layer
+        # of the actor network with a weight that's ~100x smaller
+        # than the rest of the layers. We initialize layers with a
+        # value near 1.0 by default, so we set the last layer to
+        # 0.01. The same paper also suggests that the last layer of
+        # the value network doesn't matter so much. I can't remember
+        # where I got 1.0 from... I'll try to track that down.
+        #
         if use_conv2d_setup:
             obs_dim = self.obs_shape
 
@@ -841,7 +850,9 @@ class PPO(object):
                 self._ppo_batch_train(data_loader)
 
                 #
-                # Early ending using KL.
+                # Early ending using KL. Why multiply by 1.5, you ask? I have
+                # no idea, really. It's a magic number that the folks at
+                # OpenAI are using.
                 #
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
