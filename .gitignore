@@ -1,7 +1,7 @@
 __pycache__/*
 *.swp
 saved_states/*
-MUJOCO_LOG.txt
+MUJOCO_LOG.TXT
 *.egg-info
 build/*
 GOOD_PROGRESS/*
