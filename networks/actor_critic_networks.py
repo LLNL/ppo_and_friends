@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import numpy as np
 import sys
 from .utils import *
-from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SplitObservationNetwork
+from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SingleSplitObservationNetwork
 
 
 class SimpleFeedForward(PPOActorCriticNetwork):
@@ -51,7 +51,7 @@ class SimpleFeedForward(PPOActorCriticNetwork):
         return out
 
 
-class SimpleSplitObsNetwork(SplitObservationNetwork):
+class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
 
     def __init__(self,
                  in_dim,

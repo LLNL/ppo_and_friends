@@ -94,7 +94,7 @@ class PPOConv2dNetwork(PPOActorCriticNetwork):
         super(PPOConv2dNetwork, self).__init__(**kw_args)
 
 
-class SplitObservationNetwork(PPOActorCriticNetwork):
+class SingleSplitObservationNetwork(PPOActorCriticNetwork):
     """
         The idea here is to support splitting the observations into
         two sub-networks before merging them back together. This is
@@ -111,11 +111,11 @@ class SplitObservationNetwork(PPOActorCriticNetwork):
                                  should start.
         """
 
-        super(SplitObservationNetwork, self).__init__(**kw_args)
+        super(SingleSplitObservationNetwork, self).__init__(**kw_args)
 
         if split_start <= 0:
-            msg  = "ERROR: SplitObservationNetwork requires a split start "
-            msg += "> 0."
+            msg  = "ERROR: SingleSplitObservationNetwork requires a split "
+            msg += "start > 0."
             print(msg)
             sys.exit(1)
 
