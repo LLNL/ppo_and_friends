@@ -943,8 +943,6 @@ def humanoid_ppo(state_path,
     # that need more exploring:
     #    std offset: is the default optimal?
     #    activation: How does leaky relu do?
-    #    split obs: What happens if we split the observations
-    #               into 3 segments; (pos + vel, center of mass, forces)
     #    target_kl: we could experiment more with this.
     #    obs_clip: this seems to negatively impact results. Does that hold?
     #    entropy: we could allow entropy reg, but I'm guessing it won't help
