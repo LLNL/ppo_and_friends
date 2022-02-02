@@ -31,6 +31,7 @@ class PPONetwork(nn.Module):
         in_f = os.path.join(path, self.name + ".model")
         self.load_state_dict(torch.load(in_f))
 
+
 class PPOActorCriticNetwork(PPONetwork):
 
     def __init__(self,
@@ -66,6 +67,25 @@ class PPOActorCriticNetwork(PPONetwork):
                 self.distribution  = CategoricalDistribution(**kw_args)
             elif action_type == "continuous":
                 self.distribution = GaussianDistribution(out_dim, **kw_args)
+
+    def get_result(self, obs):
+        """
+            Given an observation, return the results of performing
+            inference + any other alterations that should be made
+            to the result before it's fed back into the world.
+
+            Arguments:
+                obs    The observation to infer from.
+
+            Returns:
+                The predicted result with any required alterations.
+        """
+        if self.name == "actor":
+            res = self.__call__(obs)
+            res = self.distribution.refine_sample(res)
+            return res
+        else:
+            return self.__call__(obs)
 
 
 class PPOConv2dNetwork(PPOActorCriticNetwork):

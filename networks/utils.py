@@ -82,6 +82,19 @@ class CategoricalDistribution(object):
         """
         return dist.entropy()
 
+    def refine_sample(self, sample):
+        """
+            Given a sample from the distribution, refine this
+            sample. In our case, we have no refinements yet.
+
+            Arguments:
+                sample    The sample to refine.
+
+            Returns:
+                The refined sample.
+        """
+        return sample
+
 
 class GaussianDistribution(nn.Module):
     """
@@ -203,6 +216,26 @@ class GaussianDistribution(nn.Module):
             (self.dist_max - self.dist_min) + self.dist_min
         return sample
 
+    def refine_sample(self, sample):
+        """
+            Given a sample from the distribution, refine this
+            sample. In our case, this means sending our sample through
+            tanh to enforce a [-1, 1] distribution, and then we enforce
+            any extra range transformations that have been requested.
+
+            Arguments:
+                sample    The sample to refine.
+
+            Returns:
+                The refined sample.
+        """
+        tanh_sample = torch.tanh(sample)
+
+        if self.dist_min != -1.0 or self.dist_max != 1.0:
+            tanh_sample = self._enforce_sample_range(tanh_sample)
+
+        return tanh_sample
+
     def sample_distribution(self, dist):
         """
             Sample a Gaussian distribution. In this case, we
@@ -217,13 +250,10 @@ class GaussianDistribution(nn.Module):
             Returns:
                 A tuple of form (tanh_sample, raw_sample).
         """
-        sample      = dist.sample()
-        tanh_sample = torch.tanh(sample)
+        sample  = dist.sample()
+        refined = self.refine_sample(sample)
 
-        if self.dist_min != -1.0 or self.dist_max != 1.0:
-            tanh_sample = self._enforce_sample_range(tanh_sample)
-
-        return tanh_sample, sample
+        return refined, sample
 
     def get_entropy(self,
                     dist,
