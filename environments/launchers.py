@@ -39,6 +39,7 @@ def run_ppo(env,
             surr_clip           = 0.2,
             bootstrap_clip      = (-10.0, 10.0),
             dynamic_bs_clip     = False,
+            gradient_clip       = 0.5,
             mean_window_size    = 100,
             normalize_adv       = True,
             normalize_obs       = False,
@@ -75,6 +76,7 @@ def run_ppo(env,
               surr_clip          = surr_clip,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
+              gradient_clip      = gradient_clip,
               normalize_adv      = normalize_adv,
               normalize_obs      = normalize_obs,
               normalize_rewards  = normalize_rewards,
@@ -935,17 +937,40 @@ def humanoid_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]   = nn.LeakyReLU()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 32
-    actor_kw_args["hidden_right"] = 84
+
+    # TODO: the current settings work pretty well, but it
+    # takes a while to train. Can we do better? Some things
+    # that need more exploring:
+    #    std offset: is the default optimal?
+    #    activation: How does leaky relu do?
+    #    split obs: What happens if we split the observations
+    #               into 3 segments; (pos + vel, center of mass, forces)
+    #    target_kl: we could experiment more with this.
+    #    obs_clip: this seems to negatively impact results. Does that hold?
+    #    entropy: we could allow entropy reg, but I'm guessing it won't help
+    #             too much.
+    #    lr annealing: let's try an annealing session.
+    #
+
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
+    actor_kw_args["hidden_left"]  = 256
+    actor_kw_args["hidden_right"] = 64
+
+    #
+    # The action range for Humanoid is [-.4, .4]. Enforcing
+    # this range in our predicted actions isn't required for
+    # learning a good policy, but it does help speed things up.
+    #
+    actor_kw_args["distribution_min"] = -0.4
+    actor_kw_args["distribution_max"] = 0.4
 
     critic_kw_args = actor_kw_args.copy()
     critic_kw_args["hidden_left"]  = 256
     critic_kw_args["hidden_right"] = 256
 
-    lr     = 0.0003
-    min_lr = 0.0000
+    lr     = 0.0001
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
         max_iteration = 3000,
@@ -957,15 +982,13 @@ def humanoid_ppo(state_path,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
-            ts_per_rollout      = 2056,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
             use_gae             = True,
-            target_kl           = 1.0,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-30., 30.),
+            obs_clip            = None,
             reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
             entropy_weight      = 0.0,
             lr_dec              = lr_dec,
             lr                  = lr,
