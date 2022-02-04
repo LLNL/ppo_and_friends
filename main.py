@@ -31,7 +31,10 @@ if __name__ == "__main__":
                  "BreakoutPixels",
                  "BreakoutRAM",
                  "InvertedPendulum",
+                 "InvertedDoublePendulum",
                  "Ant",
+                 "Walker2d",
+                 "Hopper",
                  "Humanoid"])
 
     args          = parser.parse_args()
@@ -191,8 +194,38 @@ if __name__ == "__main__":
             test          = test,
             num_test_runs = num_test_runs)
 
+    elif env_name == "InvertedDoublePendulum":
+        inverted_double_pendulum_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
     elif env_name == "Ant":
         ant_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Walker2d":
+        walker2d_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Hopper":
+        hopper_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

@@ -852,6 +852,67 @@ def inverted_pendulum_ppo(state_path,
             num_test_runs       = num_test_runs)
 
 
+def inverted_double_pendulum_ppo(state_path,
+                                 load_state,
+                                 render,
+                                 num_timesteps,
+                                 device,
+                                 test = False,
+                                 num_test_runs = 1):
+
+    env = gym.make('InvertedDoublePendulum-v2')
+
+    #
+    # Ant observations are organized as follows:
+    #    Positions: 1
+    #    Angles: 4
+    #    Velocities: 3
+    #    Contact forces: 3
+    #
+    actor_kw_args = {}
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
+    actor_kw_args["hidden_left"]  = 64
+    actor_kw_args["hidden_right"] = 16
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 128
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2056,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
 def ant_ppo(state_path,
             load_state,
             render,
@@ -936,6 +997,11 @@ def humanoid_ppo(state_path,
     #    Actuator forces (?): 23
     #    Contact forces: 84
     #
+    # Technically, I think actuator forces would fall under
+    # proprioceptive information, but the model seems to train
+    # a bit more quickly when it's coupled with the
+    # exteroceptive contact forces.
+    #
     actor_kw_args = {}
 
     # TODO: the current settings work pretty well, but it
@@ -947,7 +1013,6 @@ def humanoid_ppo(state_path,
     #    obs_clip: this seems to negatively impact results. Does that hold?
     #    entropy: we could allow entropy reg, but I'm guessing it won't help
     #             too much.
-    #    lr annealing: let's try an annealing session.
     #
 
     actor_kw_args["activation"]   = nn.Tanh()
@@ -971,7 +1036,7 @@ def humanoid_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 3000,
+        max_iteration = 1.0,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -986,6 +1051,108 @@ def humanoid_ppo(state_path,
             normalize_obs       = True,
             normalize_rewards   = True,
             obs_clip            = None,
+            reward_clip         = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def walker2d_ppo(state_path,
+                 load_state,
+                 render,
+                 num_timesteps,
+                 device,
+                 test = False,
+                 num_test_runs = 1):
+
+    env = gym.make('Walker2d-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.Tanh()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    max_iter = 2000000. / 2048.
+
+    lr_dec = LinearDecrementer(
+        max_iteration = max_iter,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def hopper_ppo(state_path,
+               load_state,
+               render,
+               num_timesteps,
+               device,
+               test = False,
+               num_test_runs = 1):
+
+    env = gym.make('Hopper-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.Tanh()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             entropy_weight      = 0.0,
             lr_dec              = lr_dec,
