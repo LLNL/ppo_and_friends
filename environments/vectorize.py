@@ -16,6 +16,10 @@
 import numpy as np
 from .env_wrappers import IdentityWrapper
 
+# TODO: it might be advantagous to have an option to reset from the
+# last point that we left off (when it wasn't a done state). This
+# would allow us to see states beyond our maximum ts per rollout
+# since we could start at that maximum ts.
 class VectorizedEnv(IdentityWrapper):
 
     def __init__(self,
