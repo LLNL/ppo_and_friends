@@ -219,9 +219,8 @@ class GaussianDistribution(nn.Module):
     def refine_sample(self, sample):
         """
             Given a sample from the distribution, refine this
-            sample. In our case, this means sending our sample through
-            tanh to enforce a [-1, 1] distribution, and then we enforce
-            any extra range transformations that have been requested.
+            sample. In our case, this means checking if we need
+            to enforce a particular range.
 
             Arguments:
                 sample    The sample to refine.
@@ -229,12 +228,15 @@ class GaussianDistribution(nn.Module):
             Returns:
                 The refined sample.
         """
-        tanh_sample = torch.tanh(sample)
-
         if self.dist_min != -1.0 or self.dist_max != 1.0:
-            tanh_sample = self._enforce_sample_range(tanh_sample)
+            # FIXME: do we perform better in testing when using tanh
+            # before enforcing the sample range? If so, we need to
+            # handle this better. we currently tanh the sample before
+            # sending it here.
+            #sample = torch.tanh(sample)
+            sample = self._enforce_sample_range(sample)
 
-        return tanh_sample
+        return sample
 
     def sample_distribution(self, dist):
         """
@@ -242,7 +244,9 @@ class GaussianDistribution(nn.Module):
             want to return two different versions of the sample:
                 1. The un-altered, raw sample.
                 2. A version of the sample that has been sent though
-                   a Tanh function, i.e. squashed to a [-1, 1] range.
+                   a Tanh function, i.e. squashed to a [-1, 1] range,
+                   and potentially altered further to fit a different
+                   range.
 
             Arguments:
                 dist    The Gaussian distribution to sample.
@@ -250,8 +254,9 @@ class GaussianDistribution(nn.Module):
             Returns:
                 A tuple of form (tanh_sample, raw_sample).
         """
-        sample  = dist.sample()
-        refined = self.refine_sample(sample)
+        sample      = dist.sample()
+        tanh_sample = torch.tanh(sample)
+        refined     = self.refine_sample(tanh_sample)
 
         return refined, sample
 
