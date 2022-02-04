@@ -887,6 +887,7 @@ def inverted_double_pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #TODO: test dynamic bs clip
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1053,6 +1054,76 @@ def humanoid_ppo(state_path,
             obs_clip            = None,
             reward_clip         = (-10., 10.),
             entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def humanoid_stand_up_ppo(state_path,
+                          load_state,
+                          render,
+                          num_timesteps,
+                          device,
+                          test = False,
+                          num_test_runs = 1):
+
+    env = gym.make('HumanoidStandup-v2')
+
+    #
+    #    Positions: 22
+    #    Velocities: 23
+    #    Center of mass based on inertia (?): 140
+    #    Center of mass based on velocity (?): 84
+    #    Actuator forces (?): 23
+    #    Contact forces: 84
+    #
+    actor_kw_args = {}
+
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
+    actor_kw_args["hidden_left"]  = 256
+    actor_kw_args["hidden_right"] = 64
+
+    #
+    # The action range for Humanoid is [-.4, .4]. Enforcing
+    # this range in our predicted actions isn't required for
+    # learning a good policy, but it does help speed things up.
+    #
+    actor_kw_args["distribution_min"] = -0.4
+    actor_kw_args["distribution_max"] = 0.4
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 256
+    critic_kw_args["hidden_right"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = None,
+            reward_clip         = (-10., 10.),
+            #entropy_weight      = 0.0,#FIXME:
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
