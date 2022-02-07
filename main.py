@@ -35,6 +35,7 @@ if __name__ == "__main__":
                  "Ant",
                  "Walker2d",
                  "Hopper",
+                 "Swimmer",
                  "HumanoidStandup",
                  "Humanoid"])
 
@@ -65,6 +66,7 @@ if __name__ == "__main__":
 
     print("Using device: {}".format(device))
 
+    #TODO: we can probably simplify this here.
     if env_name == "CartPole":
         cartpole_ppo(
             state_path    = state_path,
@@ -227,6 +229,16 @@ if __name__ == "__main__":
 
     elif env_name == "Hopper":
         hopper_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Swimmer":
+        swimmer_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
