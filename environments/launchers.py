@@ -2,16 +2,16 @@
     A home for environment "launchers", defined as simple functions
     that initialize training for a specific environment.
 """
-from ppo import PPO
 import gym
-from testing import test_policy
+from ppo_and_friends.ppo import PPO
+from ppo_and_friends.testing import test_policy
 from ppo_and_friends.networks.actor_critic_networks import SimpleFeedForward, AtariPixelNetwork
 from ppo_and_friends.networks.actor_critic_networks import SimpleSplitObsNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from .gym_wrappers import *
 import torch.nn as nn
-from utils.decrementers import *
+from ppo_and_friends.utils.decrementers import *
 
 
 def run_ppo(env,

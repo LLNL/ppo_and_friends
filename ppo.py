@@ -3,22 +3,19 @@ import pickle
 import numpy as np
 import os
 from copy import deepcopy
-from torch.distributions import MultivariateNormal
-from torch.distributions import Categorical
 import torch
 from torch.optim import Adam
-from torch.optim.lr_scheduler import LambdaLR
 from torch import nn
 from torch.utils.data import DataLoader
-from utils.episode_info import EpisodeInfo, PPODataset
-from utils.misc import get_action_type, need_action_squeeze
-from utils.decrementers import *
-from utils.misc import update_optimizer_lr
-from networks.icm import ICM
-from networks.encoders import LinearObservationEncoder
-from environments.vectorize import VectorizedEnv
-from environments.env_wrappers import ObservationNormalizer, ObservationClipper
-from environments.env_wrappers import RewardNormalizer, RewardClipper
+from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
+from ppo_and_friends.utils.misc import get_action_type, need_action_squeeze
+from ppo_and_friends.utils.decrementers import *
+from ppo_and_friends.utils.misc import update_optimizer_lr
+from ppo_and_friends.networks.icm import ICM
+from ppo_and_friends.networks.encoders import LinearObservationEncoder
+from ppo_and_friends.environments.vectorize import VectorizedEnv
+from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
+from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 import time
 
 

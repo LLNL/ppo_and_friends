@@ -1,6 +1,6 @@
 import torch
-from utils.misc import get_action_type, need_action_squeeze
-from environments.env_wrappers import ObservationNormalizer
+from ppo_and_friends.utils.misc import get_action_type, need_action_squeeze
+from ppo_and_friends.environments.env_wrappers import ObservationNormalizer
 import numpy as np
 
 def test_policy(ppo,
