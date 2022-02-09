@@ -1000,6 +1000,10 @@ def humanoid_ppo(state_path,
     #    Actuator forces (?): 23
     #    Contact forces: 84
     #
+    # UPDATE: more complete information on the observations cane be found
+    # here:
+    # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
+    #
     # Technically, I think actuator forces would fall under
     # proprioceptive information, but the model seems to train
     # a bit more quickly when it's coupled with the
@@ -1088,6 +1092,10 @@ def humanoid_stand_up_ppo(state_path,
     #    Center of mass based on velocity (?): 84
     #    Actuator forces (?): 23
     #    Contact forces: 84
+    #
+    # UPDATE: more complete information on the observations cane be found
+    # here:
+    # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
     #
     actor_kw_args = {}
 
