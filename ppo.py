@@ -14,6 +14,7 @@ from utils.episode_info import EpisodeInfo, PPODataset
 from utils.misc import get_action_type, need_action_squeeze
 from utils.decrementers import *
 from utils.misc import update_optimizer_lr
+from utils.misc import RunningStatNormalizer
 from networks.icm import ICM
 from networks.encoders import LinearObservationEncoder
 from environments.vectorize import VectorizedEnv
@@ -934,17 +935,6 @@ class PPO(object):
 
             #
             # The heart of PPO: arXiv:1707.06347v2
-            # We udpate our policy using gradient ascent. Our advantages relay
-            # how much better or worse the outcome of various actions were than
-            # "expected" (from our value approximator). Since actions that are
-            # already very likely will be taken more often and thus updated
-            # more often, we divide the gradient of the current probabilities
-            # by the original probabilities. This helps lessen the impact of
-            # frequent updates of probable actions while giving less probable
-            # actions a chance to be considered.
-            # We take the difference between the current and previous log probs
-            # to further constrain updates and clip the output to a specified
-            # range.
             #
             ratios = torch.exp(curr_log_probs - log_probs)
             surr1  = ratios * advantages
