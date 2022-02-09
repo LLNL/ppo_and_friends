@@ -36,6 +36,7 @@ if __name__ == "__main__":
                  "Walker2d",
                  "Hopper",
                  "Swimmer",
+                 "HalfCheetah",
                  "HumanoidStandup",
                  "Humanoid"])
 
@@ -239,6 +240,16 @@ if __name__ == "__main__":
 
     elif env_name == "Swimmer":
         swimmer_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "HalfCheetah":
+        half_cheetah_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

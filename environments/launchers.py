@@ -1239,6 +1239,55 @@ def hopper_ppo(state_path,
             num_test_runs       = num_test_runs)
 
 
+def half_cheetah_ppo(state_path,
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test = False,
+                     num_test_runs = 1):
+
+    env = gym.make('HalfCheetah-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
 def swimmer_ppo(state_path,
                 load_state,
                 render,
