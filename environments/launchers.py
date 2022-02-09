@@ -859,6 +859,10 @@ def inverted_double_pendulum_ppo(state_path,
                                  test = False,
                                  num_test_runs = 1):
 
+    #
+    # TODO: this environment is a bit unstable. Let's find
+    # some better settings.
+    #
     env = gym.make('InvertedDoublePendulum-v2')
 
     #
@@ -886,7 +890,6 @@ def inverted_double_pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    #TODO: test dynamic bs clip
     run_ppo(env                 = env,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
