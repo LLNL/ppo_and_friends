@@ -3,7 +3,7 @@ import torch
 import random
 import numpy as np
 import argparse
-from environments.launchers import *
+from ppo_and_friends.environments.launchers import *
 import os
 
 
