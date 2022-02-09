@@ -8,12 +8,12 @@ class RunningMeanStd(object):
     """
 
     def __init__(self,
-                 shape,
+                 shape   = (),
                  epsilon = 1e-4):
         """
             Arguments:
                 shape    The shape of data to track.
-                epsilon  A very small number to help avoid 0 divisions.
+                epsilon  A very small number to help avoid 0 errors.
         """
 
         self.mean     = np.zeros(shape, dtype=np.float32)
