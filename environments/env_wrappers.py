@@ -2,7 +2,7 @@
     A home for generic environment wrappers. The should not be
     specific to any type of environment.
 """
-from .utils import RunningMeanStd
+from ppo_and_friends.utils.stats import RunningMeanStd
 import numpy as np
 import pickle
 import os

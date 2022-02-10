@@ -82,6 +82,21 @@ class CategoricalDistribution(object):
         """
         return dist.entropy()
 
+    def refine_sample(self,
+                      sample,
+                      testing = False):
+        """
+            Given a sample from the distribution, refine this
+            sample. In our case, we have no refinements yet.
+
+            Arguments:
+                sample    The sample to refine.
+
+            Returns:
+                The refined sample.
+        """
+        return sample
+
 
 class GaussianDistribution(nn.Module):
     """
@@ -95,15 +110,25 @@ class GaussianDistribution(nn.Module):
 
     def __init__(self,
                  act_dim,
-                 std_offset = 0.5,
+                 std_offset       = 0.5,
+                 min_std          = 0.01,
+                 distribution_min = -1.,
+                 distribution_max = 1.,
                  **kw_args):
         """
             Arguments:
-                act_dim        The action dimension.
-                std_offset     An offset to use when initializing the log
-                               std. It will be negated.
+                act_dim           The action dimension.
+                std_offset        An offset to use when initializing the log
+                                  std. It will be negated.
+                min_std           A minimum action std to enforce.
+                distribution_min  A lower bound to enforce in the distribution.
+                distribution_max  An upper bound to enforce in the distribution.
         """
         super(GaussianDistribution, self).__init__()
+
+        self.min_std  =  torch.tensor([min_std]).float()
+        self.dist_min = distribution_min
+        self.dist_max = distribution_max
 
         #
         # arXiv:2006.05990v1 suggests an offset of -0.5 is best for
@@ -132,7 +157,8 @@ class GaussianDistribution(nn.Module):
         # TODO: add option to use softplus or exp.
         #
         std = nn.functional.softplus(self.log_std)
-        return Normal(action_mean, std.cpu())
+        std = torch.max(std.cpu(), self.min_std)
+        return Normal(action_mean, std)
 
     def get_log_probs(self,
                       dist,
@@ -171,13 +197,73 @@ class GaussianDistribution(nn.Module):
         s_log      = torch.log(tanh_prime).sum(dim=-1)
         return normal_log_probs - s_log
 
+    def _enforce_sample_range(self, sample):
+        """
+            Force a given sample into the range [dist_min, dist_max].
+
+            Arguments:
+                sample    The sample to alter into the above range.
+
+            Returns:
+                The input sample after being transformed into the
+                range [dist_min, dist_max].
+        """
+        #
+        # We can use a simple interpolation:
+        #     new_sample <-
+        #       ( (new_max - new_min) * (sample - current_min) ) /
+        #       (current_max - current_min) + new_min
+        #
+        sample = ((sample + 1.) / 2.) * \
+            (self.dist_max - self.dist_min) + self.dist_min
+        return sample
+
+    def refine_sample(self,
+                      sample,
+                      testing = False):
+        """
+            Given a sample from the distribution, refine this
+            sample. In our case, this means checking if we need
+            to enforce a particular range.
+
+            Arguments:
+                sample      The sample to refine.
+                testing     If we are testing, it seems that we need to send
+                            our sample through tanh before enforcing a range.
+                            The testing performs much better in this case.
+
+            Returns:
+                The refined sample.
+        """
+        if self.dist_min != -1.0 or self.dist_max != 1.0:
+
+            #
+            # NOTE:
+            # The humanoid env is the only one (so far) that requires an
+            # enforced range.
+            # In this env, sending the sample through tanh before enforcing a
+            # range results in improved performance. However, I've found that
+            # there are some envs that perform much worse when the sample is
+            # sent through tanh during testing, and others that seem to be
+            # unaffected. Given this, I'm only using tanh if a range is
+            # enforced. Let's keep an eye on this.
+            #
+            if testing:
+                sample = torch.tanh(sample)
+
+            sample = self._enforce_sample_range(sample)
+
+        return sample
+
     def sample_distribution(self, dist):
         """
             Sample a Gaussian distribution. In this case, we
             want to return two different versions of the sample:
                 1. The un-altered, raw sample.
                 2. A version of the sample that has been sent though
-                   a Tanh function, i.e. squashed to a [-1, 1] range.
+                   a Tanh function, i.e. squashed to a [-1, 1] range,
+                   and potentially altered further to fit a different
+                   range.
 
             Arguments:
                 dist    The Gaussian distribution to sample.
@@ -187,7 +273,9 @@ class GaussianDistribution(nn.Module):
         """
         sample      = dist.sample()
         tanh_sample = torch.tanh(sample)
-        return tanh_sample, sample
+        refined     = self.refine_sample(tanh_sample)
+
+        return refined, sample
 
     def get_entropy(self,
                     dist,

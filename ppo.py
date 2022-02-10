@@ -179,6 +179,13 @@ class PPO(object):
                 env        = env,
                 clip_range = obs_clip)
 
+        #
+        # There are multiple ways to go about normalizing values/rewards.
+        # The approach in arXiv:2006.05990v1 is to normalize before
+        # sending targets to the critic and then de-normalize when predicting.
+        # We're taking the OpenAI approach of normalizing the rewards straight
+        # from the environment and keeping them normalized at all times.
+        #
         if normalize_rewards:
             env = RewardNormalizer(
                 env          = env,
@@ -285,6 +292,15 @@ class PPO(object):
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
 
+        #
+        # arXiv:2006.05990v1 suggests initializing the output layer
+        # of the actor network with a weight that's ~100x smaller
+        # than the rest of the layers. We initialize layers with a
+        # value near 1.0 by default, so we set the last layer to
+        # 0.01. The same paper also suggests that the last layer of
+        # the value network doesn't matter so much. I can't remember
+        # where I got 1.0 from... I'll try to track that down.
+        #
         if use_conv2d_setup:
             obs_dim = self.obs_shape
 
@@ -838,7 +854,9 @@ class PPO(object):
                 self._ppo_batch_train(data_loader)
 
                 #
-                # Early ending using KL.
+                # Early ending using KL. Why multiply by 1.5, you ask? I have
+                # no idea, really. It's a magic number that the folks at
+                # OpenAI are using.
                 #
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
@@ -920,17 +938,6 @@ class PPO(object):
 
             #
             # The heart of PPO: arXiv:1707.06347v2
-            # We udpate our policy using gradient ascent. Our advantages relay
-            # how much better or worse the outcome of various actions were than
-            # "expected" (from our value approximator). Since actions that are
-            # already very likely will be taken more often and thus updated
-            # more often, we divide the gradient of the current probabilities
-            # by the original probabilities. This helps lessen the impact of
-            # frequent updates of probable actions while giving less probable
-            # actions a chance to be considered.
-            # We take the difference between the current and previous log probs
-            # to further constrain updates and clip the output to a specified
-            # range.
             #
             ratios = torch.exp(curr_log_probs - log_probs)
             surr1  = ratios * advantages

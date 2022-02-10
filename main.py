@@ -18,13 +18,27 @@ if __name__ == "__main__":
     parser.add_argument("--num_timesteps", default=10000000, type=int)
     parser.add_argument("--random_seed", default=2, type=int)
     parser.add_argument("--environment", "-e", type=str, required=True,
-        choices=["CartPole", "Pendulum", "LunarLander",
-                 "MountainCar", "MountainCarContinuous", "Acrobot",
-                 "AssaultRAM", "AssaultPixels",
-                 "BreakoutPixels", "BreakoutRAM",
+        choices=["CartPole",
+                 "Pendulum",
+                 "Acrobot",
+                 "MountainCar",
+                 "MountainCarContinuous",
+                 "LunarLander",
                  "LunarLanderContinuous",
                  "BipedalWalker",
-                 "InvertedPendulum", "Ant"])
+                 "AssaultRAM",
+                 "AssaultPixels",
+                 "BreakoutPixels",
+                 "BreakoutRAM",
+                 "InvertedPendulum",
+                 "InvertedDoublePendulum",
+                 "Ant",
+                 "Walker2d",
+                 "Hopper",
+                 "Swimmer",
+                 "HalfCheetah",
+                 "HumanoidStandup",
+                 "Humanoid"])
 
     args          = parser.parse_args()
     test          = args.test
@@ -53,6 +67,7 @@ if __name__ == "__main__":
 
     print("Using device: {}".format(device))
 
+    #TODO: we can probably simplify this here.
     if env_name == "CartPole":
         cartpole_ppo(
             state_path    = state_path,
@@ -183,8 +198,78 @@ if __name__ == "__main__":
             test          = test,
             num_test_runs = num_test_runs)
 
+    elif env_name == "InvertedDoublePendulum":
+        inverted_double_pendulum_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
     elif env_name == "Ant":
         ant_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Walker2d":
+        walker2d_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Hopper":
+        hopper_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Swimmer":
+        swimmer_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "HalfCheetah":
+        half_cheetah_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "Humanoid":
+        humanoid_ppo(
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            num_timesteps = num_timesteps,
+            device        = device,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "HumanoidStandup":
+        humanoid_stand_up_ppo(
             state_path    = state_path,
             load_state    = load_state,
             render        = render,

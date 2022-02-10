@@ -31,6 +31,7 @@ class PPONetwork(nn.Module):
         in_f = os.path.join(path, self.name + ".model")
         self.load_state_dict(torch.load(in_f))
 
+
 class PPOActorCriticNetwork(PPONetwork):
 
     def __init__(self,
@@ -67,6 +68,28 @@ class PPOActorCriticNetwork(PPONetwork):
             elif action_type == "continuous":
                 self.distribution = GaussianDistribution(out_dim, **kw_args)
 
+    def get_result(self,
+                   obs,
+                   testing = True):
+        """
+            Given an observation, return the results of performing
+            inference + any other alterations that should be made
+            to the result before it's fed back into the world.
+
+            Arguments:
+                obs      The observation to infer from.
+                testing  Are we testing a trained environment?
+
+            Returns:
+                The predicted result with any required alterations.
+        """
+        if self.name == "actor":
+            res = self.__call__(obs)
+            res = self.distribution.refine_sample(res, testing)
+            return res
+        else:
+            return self.__call__(obs)
+
 
 class PPOConv2dNetwork(PPOActorCriticNetwork):
 
@@ -74,7 +97,7 @@ class PPOConv2dNetwork(PPOActorCriticNetwork):
         super(PPOConv2dNetwork, self).__init__(**kw_args)
 
 
-class SplitObservationNetwork(PPOActorCriticNetwork):
+class SingleSplitObservationNetwork(PPOActorCriticNetwork):
     """
         The idea here is to support splitting the observations into
         two sub-networks before merging them back together. This is
@@ -91,11 +114,11 @@ class SplitObservationNetwork(PPOActorCriticNetwork):
                                  should start.
         """
 
-        super(SplitObservationNetwork, self).__init__(**kw_args)
+        super(SingleSplitObservationNetwork, self).__init__(**kw_args)
 
         if split_start <= 0:
-            msg  = "ERROR: SplitObservationNetwork requires a split start "
-            msg += "> 0."
+            msg  = "ERROR: SingleSplitObservationNetwork requires a split "
+            msg += "start > 0."
             print(msg)
             sys.exit(1)
 

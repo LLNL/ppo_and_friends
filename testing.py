@@ -45,7 +45,7 @@ def test_policy(ppo,
             obs = torch.tensor(obs, dtype=torch.float).to(device).unsqueeze(0)
 
             with torch.no_grad():
-                action = policy(obs).detach().cpu()
+                action = policy.get_result(obs).detach().cpu()
 
             if action_type == "continuous":
                 action = torch.tanh(action)

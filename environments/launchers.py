@@ -39,6 +39,7 @@ def run_ppo(env,
             surr_clip           = 0.2,
             bootstrap_clip      = (-10.0, 10.0),
             dynamic_bs_clip     = False,
+            gradient_clip       = 0.5,
             mean_window_size    = 100,
             normalize_adv       = True,
             normalize_obs       = False,
@@ -75,6 +76,7 @@ def run_ppo(env,
               surr_clip          = surr_clip,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
+              gradient_clip      = gradient_clip,
               normalize_adv      = normalize_adv,
               normalize_obs      = normalize_obs,
               normalize_rewards  = normalize_rewards,
@@ -120,7 +122,6 @@ def cartpole_ppo(state_path,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 32,
             use_gae            = True,
-            use_icm            = False,
             normalize_obs      = True,
             normalize_rewards  = True,
             obs_clip           = (-10., 10.),
@@ -850,6 +851,71 @@ def inverted_pendulum_ppo(state_path,
             num_test_runs       = num_test_runs)
 
 
+def inverted_double_pendulum_ppo(state_path,
+                                 load_state,
+                                 render,
+                                 num_timesteps,
+                                 device,
+                                 test = False,
+                                 num_test_runs = 1):
+
+    #
+    # TODO: this environment is a bit unstable. Let's find
+    # some better settings.
+    #
+    env = gym.make('InvertedDoublePendulum-v2')
+
+    #
+    # Ant observations are organized as follows:
+    #    Positions: 1
+    #    Angles: 4
+    #    Velocities: 3
+    #    Contact forces: 3
+    #
+    actor_kw_args = {}
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
+    actor_kw_args["hidden_left"]  = 64
+    actor_kw_args["hidden_right"] = 16
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 128
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2056,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
 def ant_ppo(state_path,
             load_state,
             render,
@@ -900,6 +966,376 @@ def ant_ppo(state_path,
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
             entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def humanoid_ppo(state_path,
+                 load_state,
+                 render,
+                 num_timesteps,
+                 device,
+                 test = False,
+                 num_test_runs = 1):
+
+    env = gym.make('Humanoid-v3')
+
+    #
+    # Humanoid observations are a bit mysterious. See
+    # https://github.com/openai/gym/issues/585
+    # Here's a best guess:
+    #
+    #    Positions: 22
+    #    Velocities: 23
+    #    Center of mass based on inertia (?): 140
+    #    Center of mass based on velocity (?): 84
+    #    Actuator forces (?): 23
+    #    Contact forces: 84
+    #
+    # UPDATE: more complete information on the observations cane be found
+    # here:
+    # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
+    #
+    # Technically, I think actuator forces would fall under
+    # proprioceptive information, but the model seems to train
+    # a bit more quickly when it's coupled with the
+    # exteroceptive contact forces.
+    #
+    actor_kw_args = {}
+
+    # TODO: the current settings work pretty well, but it
+    # takes a while to train. Can we do better? Some things
+    # that need more exploring:
+    #    std offset: is the default optimal?
+    #    activation: How does leaky relu do?
+    #    target_kl: we could experiment more with this.
+    #    obs_clip: this seems to negatively impact results. Does that hold?
+    #    entropy: we could allow entropy reg, but I'm guessing it won't help
+    #             too much.
+    #
+
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
+    actor_kw_args["hidden_left"]  = 256
+    actor_kw_args["hidden_right"] = 64
+
+    #
+    # The action range for Humanoid is [-.4, .4]. Enforcing
+    # this range in our predicted actions isn't required for
+    # learning a good policy, but it does help speed things up.
+    #
+    actor_kw_args["distribution_min"] = -0.4
+    actor_kw_args["distribution_max"] = 0.4
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 256
+    critic_kw_args["hidden_right"] = 256
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = None,
+            reward_clip         = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def humanoid_stand_up_ppo(state_path,
+                          load_state,
+                          render,
+                          num_timesteps,
+                          device,
+                          test = False,
+                          num_test_runs = 1):
+
+    #
+    # NOTE: this is an UNSOVLED environment.
+    #
+    env = gym.make('HumanoidStandup-v2')
+
+    #
+    #    Positions: 22
+    #    Velocities: 23
+    #    Center of mass based on inertia (?): 140
+    #    Center of mass based on velocity (?): 84
+    #    Actuator forces (?): 23
+    #    Contact forces: 84
+    #
+    # UPDATE: more complete information on the observations cane be found
+    # here:
+    # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
+    #
+    actor_kw_args = {}
+
+    actor_kw_args["activation"]   = nn.Tanh()
+    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    actor_kw_args["hidden_left"]  = 512
+    actor_kw_args["hidden_right"] = 32
+
+    #
+    # The action range for Humanoid is [-.4, .4]. Enforcing
+    # this range in our predicted actions isn't required for
+    # learning a good policy, but it does help speed things up.
+    #
+    actor_kw_args["distribution_min"] = -0.4
+    actor_kw_args["distribution_max"] = 0.4
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 512
+    critic_kw_args["hidden_right"] = 128
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = None,
+            reward_clip         = (-10., 10.),
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def walker2d_ppo(state_path,
+                 load_state,
+                 render,
+                 num_timesteps,
+                 device,
+                 test = False,
+                 num_test_runs = 1):
+
+    env = gym.make('Walker2d-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.Tanh()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0
+
+    max_iter = 2000000. / 2048.
+
+    lr_dec = LinearDecrementer(
+        max_iteration = max_iter,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def hopper_ppo(state_path,
+               load_state,
+               render,
+               num_timesteps,
+               device,
+               test = False,
+               num_test_runs = 1):
+
+    env = gym.make('Hopper-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.Tanh()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 16,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def half_cheetah_ppo(state_path,
+                     load_state,
+                     render,
+                     num_timesteps,
+                     device,
+                     test = False,
+                     num_test_runs = 1):
+
+    env = gym.make('HalfCheetah-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def swimmer_ppo(state_path,
+                load_state,
+                render,
+                num_timesteps,
+                device,
+                test = False,
+                num_test_runs = 1):
+
+    env = gym.make('Swimmer-v3')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 128
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleFeedForward,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
