@@ -82,7 +82,9 @@ class CategoricalDistribution(object):
         """
         return dist.entropy()
 
-    def refine_sample(self, sample):
+    def refine_sample(self,
+                      sample,
+                      testing = False):
         """
             Given a sample from the distribution, refine this
             sample. In our case, we have no refinements yet.
@@ -216,24 +218,39 @@ class GaussianDistribution(nn.Module):
             (self.dist_max - self.dist_min) + self.dist_min
         return sample
 
-    def refine_sample(self, sample):
+    def refine_sample(self,
+                      sample,
+                      testing = False):
         """
             Given a sample from the distribution, refine this
             sample. In our case, this means checking if we need
             to enforce a particular range.
 
             Arguments:
-                sample    The sample to refine.
+                sample      The sample to refine.
+                testing     If we are testing, it seems that we need to send
+                            our sample through tanh before enforcing a range.
+                            The testing performs much better in this case.
 
             Returns:
                 The refined sample.
         """
         if self.dist_min != -1.0 or self.dist_max != 1.0:
-            # FIXME: do we perform better in testing when using tanh
-            # before enforcing the sample range? If so, we need to
-            # handle this better. we currently tanh the sample before
-            # sending it here.
-            #sample = torch.tanh(sample)
+
+            #
+            # NOTE:
+            # The humanoid env is the only one (so far) that requires an
+            # enforced range.
+            # In this env, sending the sample through tanh before enforcing a
+            # range results in improved performance. However, I've found that
+            # there are some envs that perform much worse when the sample is
+            # sent through tanh during testing, and others that seem to be
+            # unaffected. Given this, I'm only using tanh if a range is
+            # enforced. Let's keep an eye on this.
+            #
+            if testing:
+                sample = torch.tanh(sample)
+
             sample = self._enforce_sample_range(sample)
 
         return sample
