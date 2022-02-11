@@ -534,6 +534,71 @@ def bipedal_walker_ppo(state_path,
             num_test_runs       = num_test_runs)
 
 
+def bipedal_walker_hardcore_ppo(state_path,
+                                load_state,
+                                render,
+                                num_timesteps,
+                                device,
+                                test = False,
+                                num_test_runs = 1):
+
+    env = gym.make('BipedalWalkerHardcore-v3')
+
+    #
+    # The lidar observations are the last 10.
+    #
+    actor_kw_args = {}
+    #actor_kw_args["activation"]     = nn.LeakyReLU()
+    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
+    actor_kw_args["hidden_left"]    = 64
+    actor_kw_args["hidden_right"]   = 64
+
+    #
+    # I've found that a lower std offset greatly improves performance
+    # in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that ReLU works better
+    # here, which is the default.
+    #
+    #actor_kw_args["std_offset"] = 0.1
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_left"]  = 128
+    critic_kw_args["hidden_right"] = 128
+
+    lr     = 0.0003
+    min_lr = 0.0003
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            ac_network          = SimpleSplitObsNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            bootstrap_clip      = (-10., 10.),
+            #entropy_weight      = 0.0,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
 ###############################################################################
 #                                Atari                                        #
 ###############################################################################
