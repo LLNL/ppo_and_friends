@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import torch
 import gym
+from gym.spaces import Box, Discrete
 import cv2
 from abc import ABC
 
@@ -220,8 +221,15 @@ class AtariPixels(AtariEnvWrapper):
         self.w_stop     = prev_shape[1]
         self.frame_size = frame_size
 
-        new_shape    = (1, frame_size, frame_size)
-        self.observation_space = CustomObservationSpace(new_shape)
+        new_shape = (1, frame_size, frame_size)
+        low       = np.zeros(new_shape)
+        high      = np.full(new_shape, 255)
+
+        self.observation_space = Box(
+            low   = low,
+            high  = high,
+            shape = new_shape,
+            dtype = np.uint8)
 
     def rgb_to_gray(self, rgb_frame):
         rgb_frame  = rgb_frame.astype(np.float32) / 255.
@@ -340,8 +348,14 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         ram_shape   = env.observation_space.shape
         cache_shape = (ram_shape[0] * hist_size,)
 
-        self.observation_space = CustomObservationSpace(
-            cache_shape)
+        low       = np.zeros(cache_shape)
+        high      = np.full(cache_shape, 255)
+
+        self.observation_space = Box(
+            low   = low,
+            high  = high,
+            shape = cache_shape,
+            dtype = np.uint8)
 
         self.ram_size           = ram_shape[0]
         self.cache_size         = cache_shape[0]
@@ -405,9 +419,7 @@ class BreakoutEnvWrapper():
         # change the action space to only be (no-op, left, right) since we're
         # removing the ball launch action.
         #
-        self.action_space = CustomActionSpace(
-            env.action_space.dtype,
-            3)
+        self.action_space = Discrete(3)
 
         self.action_map        = [0, 2, 3]
         self.cur_lives         = self.env.ale.lives()
@@ -520,8 +532,15 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         self.w_start = 0
         self.w_stop  = prev_shape[1]
 
-        new_shape    = (hist_size, self.frame_size, self.frame_size)
-        self.observation_space = CustomObservationSpace(new_shape)
+        new_shape = (hist_size, self.frame_size, self.frame_size)
+        low       = np.zeros(new_shape)
+        high      = np.full(new_shape, 255)
+
+        self.observation_space = Box(
+            low   = low,
+            high  = high,
+            shape = new_shape,
+            dtype = np.uint8)
 
     def step(self, action):
 
@@ -594,7 +613,14 @@ class AssaultPixelsEnvWrapper(AssaultEnvWrapper, PixelHistEnvWrapper):
             **kw_args)
 
         new_shape = (hist_size, self.frame_size, self.frame_size)
-        self.observation_space = CustomObservationSpace(new_shape)
+        low       = np.zeros(new_shape)
+        high      = np.full(new_shape, 255)
+
+        self.observation_space = Box(
+            low   = low,
+            high  = high,
+            shape = new_shape,
+            dtype = np.uint8)
 
     def step(self, action):
         step_func = lambda a : PixelHistEnvWrapper.step(self, a)

@@ -35,7 +35,7 @@ class PPONetwork(nn.Module):
 class PPOActorCriticNetwork(PPONetwork):
 
     def __init__(self,
-                 action_type,
+                 action_dtype,
                  out_dim,
                  **kw_args):
         """
@@ -43,18 +43,18 @@ class PPOActorCriticNetwork(PPONetwork):
             given the name "actor".
 
             Arguments:
-                action_type      Where in the observation space the split
+                action_dtype     The data type of our action space.
                 out_dim          The output dimension.
         """
 
         super(PPOActorCriticNetwork, self).__init__(**kw_args)
 
-        if action_type not in ["discrete", "continuous"]:
-            msg = "ERROR: unknown action type {}".format(action_type)
+        if action_dtype not in ["discrete", "continuous"]:
+            msg = "ERROR: unknown action type {}".format(action_dtype)
             print(msg)
             sys.exit(1)
 
-        self.action_type  = action_type
+        self.action_dtype = action_dtype
         self.need_softmax = False
 
         #
@@ -62,10 +62,10 @@ class PPOActorCriticNetwork(PPONetwork):
         #
         if self.name == "actor":
 
-            if action_type == "discrete":
+            if action_dtype == "discrete":
                 self.need_softmax = True
-                self.distribution  = CategoricalDistribution(**kw_args)
-            elif action_type == "continuous":
+                self.distribution = CategoricalDistribution(**kw_args)
+            elif action_dtype == "continuous":
                 self.distribution = GaussianDistribution(out_dim, **kw_args)
 
     def get_result(self,

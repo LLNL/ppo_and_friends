@@ -1,10 +1,23 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
+from gym.spaces import Box, Discrete
 import os
 import pickle
 
-def get_action_type(env):
+def get_action_dtype(env):
+    """
+        Get our action space data type. Options are continuous
+        and discrete. Note that "discrete" in this case is NOT
+        the same as a "Discrete" gym space. A Box space can
+        have a discrete data type.
+
+        Arguments:
+            env    The environment to query.
+
+        Returns:
+            A string representing the action space dtype.
+    """
     if np.issubdtype(env.action_space.dtype, np.floating):
         return "continuous"
     elif np.issubdtype(env.action_space.dtype, np.integer):
@@ -13,36 +26,32 @@ def get_action_type(env):
 
 
 def need_action_squeeze(env):
-    if np.issubdtype(env.action_space.dtype, np.floating):
-        act_dim = env.action_space.shape[0]
-    elif np.issubdtype(env.action_space.dtype, np.integer):
-        act_dim = env.action_space.n
 
-    action_type = get_action_type(env)
+    need_action_squeze = False
 
-    #
-    # Environments are very inconsistent! We need to check what shape
-    # they expect actions to be in.
-    #
-    need_action_squeeze = True
-    if action_type == "continuous":
+
+    if type(env.action_space) == Box:
+        action = env.action_space.sample()
+
         try:
-            padded_shape = (1, act_dim)
-            action = np.random.randint(0, 1, padded_shape)
-    
+            padded_action = np.expand_dims(action, axis=0)
             env.reset()
-            env.step(action)
+            env.step(padded_action)
             env.reset()
             need_action_squeeze = False
-    
         except:
-            action_shape = (act_dim,)
-            action = np.random.randint(0, 1, action_shape)
-    
             env.reset()
             env.step(action)
             env.reset()
             need_action_squeeze = True
+
+    elif type(env.action_space) == Discrete:
+        need_action_squeeze = True
+    else:
+        msg  = "ERROR: unsupported action space "
+        msg += "{}".format(env.action_space)
+        print(msg)
+        sys.exit(1)
 
     return need_action_squeeze
 
