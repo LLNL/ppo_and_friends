@@ -441,10 +441,6 @@ class PPO(object):
         """
         values = self.critic(batch_obs).squeeze()
 
-        #FIXME: is this still needed? Doesn't seem like it...
-        #if self.action_dtype == "discrete":
-        #    batch_actions = batch_actions.flatten()
-
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
