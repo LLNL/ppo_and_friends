@@ -174,9 +174,9 @@ class PPODataset(Dataset):
 
     def __init__(self,
                  device,
-                 action_type):
+                 action_dtype):
 
-        self.action_type   = action_type
+        self.action_dtype  = action_dtype
         self.device        = device
         self.episodes      = []
         self.is_built      = False
@@ -245,14 +245,14 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_type == "continuous":
+        if self.action_dtype == "continuous":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.float).to(self.device)
 
-        elif self.action_type == "discrete":
+        elif self.action_dtype == "discrete":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,

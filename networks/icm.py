@@ -4,9 +4,10 @@
 from .encoders import *
 import torch
 import torch.nn as nn
+from functools import reduce
 from .utils import init_layer
 from .ppo_networks import PPONetwork
-import torch.nn.functional as F
+import torch.nn.functional as t_func
 
 class LinearInverseModel(nn.Module):
 
@@ -15,6 +16,7 @@ class LinearInverseModel(nn.Module):
                  out_dim,
                  out_init,
                  hidden_size,
+                 action_dtype,
                  activation = nn.ReLU(),
                  **kw_args):
         """
@@ -30,6 +32,17 @@ class LinearInverseModel(nn.Module):
 
         super(LinearInverseModel, self).__init__()
 
+        if type(out_dim) == tuple:
+            out_size     = reduce(lambda a, b: a*b, out_dim)
+            self.out_dim = out_dim
+        else:
+            out_size     = out_dim
+            self.out_dim = (out_dim,)
+
+        self.need_softmax = False
+        if action_dtype == "discrete":
+            self.need_softmax = True
+
         self.activation = activation
 
         #
@@ -37,7 +50,7 @@ class LinearInverseModel(nn.Module):
         #
         self.inv_1 = init_layer(nn.Linear(in_dim, hidden_size))
         self.inv_2 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.inv_3 = init_layer(nn.Linear(hidden_size, out_dim),
+        self.inv_3 = init_layer(nn.Linear(hidden_size, out_size),
             weight_std=out_init)
 
     def forward(self,
@@ -53,7 +66,12 @@ class LinearInverseModel(nn.Module):
         out = self.activation(out)
 
         out = self.inv_3(out)
-        out = F.softmax(out, dim=-1)
+
+        if self.need_softmax:
+            out = t_func.softmax(out, dim=-1)
+
+        out_shape = (out.shape[0],) + self.out_dim
+        out = out.reshape(out_shape)
 
         return out
 
@@ -66,7 +84,7 @@ class LinearForwardModel(nn.Module):
                  out_init,
                  act_dim,
                  hidden_size,
-                 action_type,
+                 action_dtype,
                  activation = nn.ReLU(),
                  **kw_args):
         """
@@ -81,32 +99,37 @@ class LinearForwardModel(nn.Module):
 
         super(LinearForwardModel, self).__init__()
 
-        self.activation  = activation
-        self.action_type = action_type
-        self.act_dim     = act_dim
+        if type(out_dim) == tuple:
+            out_size = reduce(lambda a, b: a*b, out_dim)
+        else:
+            out_size = out_dim
+
+        self.activation   = activation
+        self.action_dtype = action_dtype
+        self.act_dim      = act_dim
 
         #
         # Forward model; Predict s_2 given s_1 and a_1.
         #
         self.f_1 = init_layer(nn.Linear(in_dim, hidden_size))
         self.f_2 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.f_3 = init_layer(nn.Linear(hidden_size, out_dim),
+        self.f_3 = init_layer(nn.Linear(hidden_size, out_size),
             weight_std=out_init)
 
     def forward(self,
                 enc_obs_1,
                 actions):
 
-        actions = actions.flatten(start_dim = 1)
-
-        if self.action_type == "discrete":
-            actions = torch.nn.functional.one_hot(actions,
-                num_classes=self.act_dim).float()
-
+        if self.action_dtype == "discrete":
             #
-            # One-hot adds an extra dimension. Let's get rid of that bit.
+            # This is a bit funny here... ICM likes to use one-hot encodings of
+            # the actions, but we also need to flatten the actions before we
+            # can concat with our encoded observations. So, if we have a
+            # multi-dimensional discrete action space, we can create a multi-
+            # dimensional one-hot encoding, but we then need to flatten it.
             #
-            actions = actions.squeeze(-2)
+            actions = t_func.one_hot(actions,
+                num_classes=self.act_dim[-1]).float().flatten(start_dim = 1)
 
         _input = torch.cat((enc_obs_1, actions), dim=1)
 
@@ -128,7 +151,7 @@ class ICM(PPONetwork):
     def __init__(self,
                  obs_dim,
                  act_dim,
-                 action_type,
+                 action_dtype,
                  out_init        = 1.0,
                  obs_encoder     = LinearObservationEncoder,
                  reward_scale    = 0.01,
@@ -142,9 +165,15 @@ class ICM(PPONetwork):
 
         super(ICM, self).__init__(**kw_args)
 
-        self.act_dim      = act_dim
+        if type(act_dim) == tuple:
+            act_size     = reduce(lambda a, b: a*b, act_dim)
+            act_dim = act_dim
+        else:
+            act_size     = act_dim
+            act_dim = (act_dim,)
+
         self.reward_scale = reward_scale
-        self.action_type  = action_type
+        self.action_dtype = action_dtype
 
         self.activation   = activation
         self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
@@ -168,18 +197,19 @@ class ICM(PPONetwork):
             act_dim,
             out_init,
             hidden_size,
+            action_dtype,
             **kw_args)
 
         #
         # Forward model; Predict s_2 given s_1 and a_1.
         #
         self.forward_model = LinearForwardModel(
-            encoded_obs_dim + act_dim,
+            encoded_obs_dim + act_size,
             encoded_obs_dim,
             out_init,
             act_dim,
             hidden_size,
-            action_type,
+            action_dtype,
             **kw_args)
 
     def forward(self,
@@ -198,9 +228,26 @@ class ICM(PPONetwork):
         #
         action_pred = self.inv_model(enc_obs_1, enc_obs_2)
 
-        if self.action_type == "discrete":
-            inv_loss = self.ce_loss(action_pred, actions.flatten())
-        elif self.action_type == "continuous":
+        if self.action_dtype == "discrete":
+
+            shape_len = len(action_pred.shape)
+
+            if shape_len != 2 and shape_len != 3:
+                msg  = "ERROR: encountered unexpected shape when "
+                msg += "predicting actions in ICM: "
+                msg += "{}.".format(action_pred.shape)
+                print(msg)
+                sys.exit(1)
+            elif shape_len == 3:
+                #
+                # Our action space is (batch_size, dims, num_classes), but
+                # torch requires shape (batch_size, num_classes, dims) for
+                # cross entropy.
+                #
+                action_pred = action_pred.transpose(1, 2)
+
+            inv_loss = self.ce_loss(action_pred, actions.squeeze(1))
+        elif self.action_dtype == "continuous":
             actions = actions.reshape(action_pred.shape)
             inv_loss = self.mse_loss(action_pred, actions).mean()
 
