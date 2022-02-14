@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 import os
 import sys
 import pickle
@@ -29,8 +29,12 @@ def get_action_dtype(env):
 def need_action_squeeze(env):
 
     need_action_squeze = False
+    act_type = type(env.action_space)
 
-    if issubclass(type(env.action_space), Box):
+    if (issubclass(act_type, Box) or
+        issubclass(act_type, MultiBinary) or
+        issubclass(act_type, MultiDiscrete)):
+
         action = env.action_space.sample()
 
         try:
@@ -45,7 +49,7 @@ def need_action_squeeze(env):
             env.reset()
             need_action_squeeze = True
 
-    elif issubclass(type(env.action_space), Discrete):
+    elif issubclass(act_type, Discrete):
         need_action_squeeze = True
     else:
         msg  = "ERROR: unsupported action space "

@@ -17,7 +17,7 @@ from ppo_and_friends.environments.vectorize import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 import time
-from gym.spaces import Box, Discrete
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 
 
 class PPO(object):
@@ -200,10 +200,17 @@ class PPO(object):
                 env        = env,
                 clip_range = reward_clip)
 
-        if issubclass(type(env.action_space), Box):
+        act_type = type(env.action_space)
+
+        if (issubclass(act_type, Box) or
+            issubclass(act_type, MultiBinary) or
+            issubclass(act_type, MultiDiscrete)):
+
             self.act_dim = env.action_space.shape
-        elif issubclass(type(env.action_space), Discrete):
+
+        elif issubclass(act_type, Discrete):
             self.act_dim = env.action_space.n
+
         else:
             print("ERROR: unsupported action space {}".format(env.action_space))
             sys.exit(1)
