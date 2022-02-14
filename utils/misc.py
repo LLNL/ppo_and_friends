@@ -3,6 +3,7 @@ import torch
 from .stats import RunningMeanStd
 from gym.spaces import Box, Discrete
 import os
+import sys
 import pickle
 
 def get_action_dtype(env):
@@ -29,8 +30,7 @@ def need_action_squeeze(env):
 
     need_action_squeze = False
 
-
-    if type(env.action_space) == Box:
+    if issubclass(type(env.action_space), Box):
         action = env.action_space.sample()
 
         try:
@@ -45,7 +45,7 @@ def need_action_squeeze(env):
             env.reset()
             need_action_squeeze = True
 
-    elif type(env.action_space) == Discrete:
+    elif issubclass(type(env.action_space), Discrete):
         need_action_squeeze = True
     else:
         msg  = "ERROR: unsupported action space "
