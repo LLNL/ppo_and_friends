@@ -215,6 +215,12 @@ class PPO(object):
             print("ERROR: unsupported action space {}".format(env.action_space))
             sys.exit(1)
 
+        if (issubclass(act_type, MultiBinary) or
+            issubclass(act_type, MultiDiscrete)):
+            msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
+            msg += "may not be fully supported. Use at your own risk."
+            print(msg)
+
         action_dtype = get_action_dtype(env)
 
         if action_dtype == "unknown":
