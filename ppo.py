@@ -200,9 +200,9 @@ class PPO(object):
                 env        = env,
                 clip_range = reward_clip)
 
-        if type(env.action_space) == Box:
+        if issubclass(type(env.action_space), Box):
             self.act_dim = env.action_space.shape
-        elif type(env.action_space) ==  Discrete:
+        elif issubclass(type(env.action_space), Discrete):
             self.act_dim = env.action_space.n
         else:
             print("ERROR: unsupported action space {}".format(env.action_space))
