@@ -17,6 +17,7 @@ from ppo_and_friends.environments.vectorize import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 import time
+from gym.spaces import Box, Discrete
 
 
 class PPO(object):
@@ -199,9 +200,9 @@ class PPO(object):
                 env        = env,
                 clip_range = reward_clip)
 
-        if np.issubdtype(env.action_space.dtype, np.floating):
+        if type(env.action_space, Box):
             self.act_dim = env.action_space.shape
-        elif np.issubdtype(env.action_space.dtype, np.integer):
+        elif type(env.action_space, Discrete):
             self.act_dim = env.action_space.n
 
         action_dtype = get_action_dtype(env)
