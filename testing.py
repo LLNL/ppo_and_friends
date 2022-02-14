@@ -1,5 +1,5 @@
 import torch
-from ppo_and_friends.utils.misc import get_action_type, need_action_squeeze
+from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer
 import numpy as np
 
@@ -19,7 +19,7 @@ def test_policy(ppo,
     policy = ppo.actor
     render = ppo.render
 
-    action_type    = get_action_type(env)
+    action_dtype   = get_action_dtype(env)
     action_squeeze = need_action_squeeze(env)
 
     max_int     = np.iinfo(np.int32).max
@@ -47,11 +47,11 @@ def test_policy(ppo,
             with torch.no_grad():
                 action = policy.get_result(obs).detach().cpu()
 
-            if action_type == "continuous":
+            if action_dtype == "continuous":
                 action = torch.tanh(action)
 
-            if action_type == "discrete":
-                action = torch.argmax(action).numpy()
+            if action_dtype == "discrete":
+                action = torch.argmax(action, axis=-1).numpy()
             else:
                 action = action.numpy()
 

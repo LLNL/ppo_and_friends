@@ -174,9 +174,9 @@ class PPODataset(Dataset):
 
     def __init__(self,
                  device,
-                 action_type):
+                 action_dtype):
 
-        self.action_type   = action_type
+        self.action_dtype  = action_dtype
         self.device        = device
         self.episodes      = []
         self.is_built      = False
@@ -245,14 +245,14 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_type == "continuous":
+        if self.action_dtype == "continuous":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.float).to(self.device)
 
-        elif self.action_type == "discrete":
+        elif self.action_dtype == "discrete":
             self.actions = torch.tensor(self.actions,
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,
@@ -272,44 +272,3 @@ class PPODataset(Dataset):
                 self.log_probs[idx],
                 self.rewards_to_go[idx])
 
-
-def get_action_type(env):
-    if np.issubdtype(env.action_space.dtype, np.floating):
-        return "continuous"
-    elif np.issubdtype(env.action_space.dtype, np.integer):
-        return "discrete"
-    return "unknown"
-
-def need_action_squeeze(env):
-    if np.issubdtype(env.action_space.dtype, np.floating):
-        act_dim = env.action_space.shape[0]
-    elif np.issubdtype(env.action_space.dtype, np.integer):
-        act_dim = env.action_space.n
-
-    action_type = get_action_type(env)
-
-    #
-    # Environments are very inconsistent! We need to check what shape
-    # they expect actions to be in.
-    #
-    need_action_squeeze = True
-    if action_type == "continuous":
-        try:
-            padded_shape = (1, act_dim)
-            action = np.random.randint(0, 1, padded_shape)
-    
-            env.reset()
-            env.step(action)
-            env.reset()
-            need_action_squeeze = False
-    
-        except:
-            action_shape = (act_dim,)
-            action = np.random.randint(0, 1, action_shape)
-    
-            env.reset()
-            env.step(action)
-            env.reset()
-            need_action_squeeze = True
-
-    return need_action_squeeze

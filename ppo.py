@@ -8,7 +8,7 @@ from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
-from ppo_and_friends.utils.misc import get_action_type, need_action_squeeze
+from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
 from ppo_and_friends.utils.decrementers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
@@ -200,17 +200,17 @@ class PPO(object):
                 clip_range = reward_clip)
 
         if np.issubdtype(env.action_space.dtype, np.floating):
-            self.act_dim = env.action_space.shape[0]
+            self.act_dim = env.action_space.shape
         elif np.issubdtype(env.action_space.dtype, np.integer):
             self.act_dim = env.action_space.n
 
-        action_type = get_action_type(env)
+        action_dtype = get_action_dtype(env)
 
-        if action_type == "unknown":
+        if action_dtype == "unknown":
             print("ERROR: unknown action type!")
             sys.exit(1)
         else:
-            print("Using {} actions.".format(action_type))
+            print("Using {} actions.".format(action_dtype))
 
         #
         # Environments are very inconsistent! We need to check what shape
@@ -230,7 +230,7 @@ class PPO(object):
         self.device              = device
         self.state_path          = state_path
         self.render              = render
-        self.action_type         = action_type
+        self.action_dtype        = action_dtype
         self.use_gae             = use_gae
         self.use_icm             = use_icm
         self.icm_beta            = icm_beta
@@ -309,7 +309,7 @@ class PPO(object):
                 in_shape     = obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                action_type  = action_type,
+                action_dtype = action_dtype,
                 **actor_kw_args)
 
             self.critic = ac_network(
@@ -317,7 +317,7 @@ class PPO(object):
                 in_shape     = obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
-                action_type  = action_type,
+                action_dtype = action_dtype,
                 **critic_kw_args)
 
         else:
@@ -328,7 +328,7 @@ class PPO(object):
                 in_dim       = obs_dim, 
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                action_type  = action_type,
+                action_dtype = action_dtype,
                 **actor_kw_args)
 
             self.critic = ac_network(
@@ -336,7 +336,7 @@ class PPO(object):
                 in_dim       = obs_dim, 
                 out_dim      = 1,
                 out_init     = 1.0,
-                action_type  = action_type,
+                action_dtype = action_dtype,
                 **critic_kw_args)
 
         self.actor  = self.actor.to(device)
@@ -344,10 +344,10 @@ class PPO(object):
 
         if self.use_icm:
             self.icm_model = icm_network(
-                name        = "icm",
-                obs_dim     = obs_dim,
-                act_dim     = self.act_dim,
-                action_type = self.action_type,
+                name         = "icm",
+                obs_dim      = obs_dim,
+                act_dim      = self.act_dim,
+                action_dtype = self.action_dtype,
                 **icm_kw_args)
 
             self.icm_model.to(device)
@@ -414,7 +414,7 @@ class PPO(object):
         action, raw_action = self.actor.distribution.sample_distribution(dist)
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        if self.action_type == "discrete":
+        if self.action_dtype == "discrete":
             action = action.int().unsqueeze(0)
 
         action     = action.detach().numpy()
@@ -441,13 +441,10 @@ class PPO(object):
         """
         values = self.critic(batch_obs).squeeze()
 
-        if self.action_type == "discrete":
-            batch_actions = batch_actions.flatten()
-
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
-        if self.action_type == "continuous" and len(batch_actions.shape) < 2:
+        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
             log_probs = self.actor.distribution.get_log_probs(
                 dist,
                 batch_actions.unsqueeze(1).cpu())
@@ -514,11 +511,11 @@ class PPO(object):
         obs_2 = torch.tensor(obs,
             dtype=torch.float).to(self.device).unsqueeze(0)
 
-        if self.action_type == "discrete":
+        if self.action_dtype == "discrete":
             action = torch.tensor(action,
                 dtype=torch.long).to(self.device).unsqueeze(0)
 
-        elif self.action_type == "continuous":
+        elif self.action_dtype == "continuous":
             action = torch.tensor(action,
                 dtype=torch.float).to(self.device)
 
@@ -552,7 +549,7 @@ class PPO(object):
             Returns:
                 A PyTorch dataset containing our rollout.
         """
-        dataset            = PPODataset(self.device, self.action_type)
+        dataset            = PPODataset(self.device, self.action_dtype)
         total_episodes     = 0  
         total_rollout_ts   = 0
         total_ext_rewards  = 0

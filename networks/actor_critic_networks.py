@@ -2,6 +2,7 @@ import torch
 import os
 from torch import nn
 import torch.nn.functional as F
+from functools import reduce
 import numpy as np
 import sys
 from .utils import *
@@ -22,12 +23,19 @@ class SimpleFeedForward(PPOActorCriticNetwork):
             out_dim = out_dim,
             **kw_args)
 
+        if type(out_dim) == tuple:
+            out_size     = reduce(lambda a, b: a*b, out_dim)
+            self.out_dim = out_dim
+        else:
+            out_size     = out_dim
+            self.out_dim = (out_dim,)
+
         self.activation = activation
 
         self.l1 = init_layer(nn.Linear(in_dim, hidden_size))
         self.l2 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.l3 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.l4 = init_layer(nn.Linear(hidden_size, out_dim),
+        self.l4 = init_layer(nn.Linear(hidden_size, out_size),
             weight_std=out_init)
 
     def forward(self, _input):
@@ -48,6 +56,9 @@ class SimpleFeedForward(PPOActorCriticNetwork):
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
 
+        out_shape = (out.shape[0],) + self.out_dim
+        out = out.reshape(out_shape)
+
         return out
 
 
@@ -66,6 +77,13 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         super(SimpleSplitObsNetwork, self).__init__(
             out_dim = out_dim,
             **kw_args)
+
+        if type(out_dim) == tuple:
+            out_size     = reduce(lambda a, b: a*b, out_dim)
+            self.out_dim = out_dim
+        else:
+            out_size     = out_dim
+            self.out_dim = (out_dim,)
 
         self.activation = activation
 
@@ -114,7 +132,7 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
             out_layer_list.append(activation)
 
         out_layer_list.append(init_layer(nn.Linear(inner_hidden_size,
-            out_dim), weight_std=out_init))
+            out_size), weight_std=out_init))
 
         self.out_layers = nn.Sequential(*out_layer_list)
 
@@ -142,6 +160,9 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
+
+        out_shape = (out.shape[0],) + self.out_dim
+        out = out.reshape(out_shape)
 
         return out
 
