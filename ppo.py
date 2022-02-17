@@ -302,6 +302,18 @@ class PPO(object):
             self.status_dict["last save"] = -1
 
         #
+        # Some methods (ICM) perform best if we can clone the environment,
+        # but not all environments support this.
+        #
+        try:
+            self.env.reset()
+            cloned_env = deepcopy(self.env)
+            cloned_env.step(cloned_env.action_space.sample())
+            self.can_clone_env = True
+        except:
+            self.can_clone_env = False
+
+        #
         # Initialize our networks: actor, critic, and possible ICM.
         #
         use_conv2d_setup = False
@@ -717,22 +729,27 @@ class PPO(object):
                     # but we don't want to actually take another step... So,
                     # one way around this is to clone the env and only step
                     # with the clone.
+                    # Unfortunately, not all environments support cloning. In
+                    # this case, we can be hand wavy and assume (without ground)
+                    # that our next action will result in a similar intrinsic
+                    # reward as our last action.
                     #
                     if self.use_icm:
-                        _, clone_action, _ = self.get_action(obs)
+                        if self.can_clone_env:
+                            _, clone_action, _ = self.get_action(obs)
 
-                        if self.action_squeeze:
-                            clone_action = clone_action.squeeze()
+                            if self.action_squeeze:
+                                clone_action = clone_action.squeeze()
 
-                        clone_prev_obs = obs.copy()
-                        cloned_env = deepcopy(self.env)
-                        clone_obs, _, _, _ = cloned_env.step(clone_action)
-                        del cloned_env
+                            clone_prev_obs = obs.copy()
+                            cloned_env = deepcopy(self.env)
+                            clone_obs, _, _, _ = cloned_env.step(clone_action)
+                            del cloned_env
 
-                        intr_reward = self.get_intrinsic_reward(
-                            clone_prev_obs,
-                            clone_obs,
-                            clone_action)
+                            intr_reward = self.get_intrinsic_reward(
+                                clone_prev_obs,
+                                clone_obs,
+                                clone_action)
 
                         nxt_reward += intr_reward
 
