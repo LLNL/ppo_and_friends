@@ -695,6 +695,8 @@ class PPO(object):
                         lambd          = self.lambd,
                         bootstrap_clip = self.bootstrap_clip)
 
+                    longest_run = max(longest_run, episode_length)
+
                     total_ext_rewards += ep_score
                     total_rewards     += ep_rewards
                     top_rollout_score  = max(top_rollout_score, ep_score)
