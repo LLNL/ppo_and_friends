@@ -7,6 +7,7 @@ from ppo_and_friends.environments.launchers import *
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 from mpi4py import MPI
+import shutil
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
@@ -68,6 +69,7 @@ if __name__ == "__main__":
 
     if clobber:
         if os.path.exists(state_path):
+            shutil.rmtree(state_path)
 
     if torch.cuda.is_available() and not test and num_procs == 1:
         device = torch.device("cuda")
