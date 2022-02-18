@@ -1,6 +1,7 @@
 import numpy as np
 from torch.utils.data import Dataset
 import torch
+from ppo_and_friends.utils.mpi_utils import rank_print
 
 class EpisodeInfo(object):
 
@@ -198,7 +199,7 @@ class PPODataset(Dataset):
         if self.is_built:
             msg  = "ERROR: attempting to build a batch, but it's "
             msg += "already been built! Bailing..."
-            print(msg)
+            rank_print(msg)
             sys.exit(1)
 
         self.actions           = []
@@ -215,7 +216,7 @@ class PPODataset(Dataset):
             if not ep.is_finished:
                 msg  = "ERROR: attempting to build a batch using "
                 msg += "an incomplete episode! Bailing..."
-                print(msg)
+                rank_print(msg)
                 sys.exit(1)
 
             self.actions.extend(ep.actions)

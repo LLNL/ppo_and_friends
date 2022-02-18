@@ -5,6 +5,12 @@ import numpy as np
 import argparse
 from ppo_and_friends.environments.launchers import *
 import os
+from ppo_and_friends.utils.mpi_utils import rank_print
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 
 if __name__ == "__main__":
@@ -42,7 +48,7 @@ if __name__ == "__main__":
 
     args          = parser.parse_args()
     test          = args.test
-    random_seed   = args.random_seed
+    random_seed   = args.random_seed + rank
     num_test_runs = args.num_test_runs
     env_name      = args.environment
     state_path    = os.path.join(args.state_path, "saved_states", env_name)
@@ -60,12 +66,15 @@ if __name__ == "__main__":
 
     load_state = not clobber or test
 
-    if torch.cuda.is_available() and not test:
+    if clobber:
+        if os.path.exists(state_path):
+
+    if torch.cuda.is_available() and not test and num_procs == 1:
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
-    print("Using device: {}".format(device))
+    rank_print("Using device: {}".format(device))
 
     #TODO: we can probably simplify this here.
     if env_name == "CartPole":

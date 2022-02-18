@@ -6,6 +6,12 @@ from ppo_and_friends.utils.stats import RunningMeanStd
 import numpy as np
 import pickle
 import os
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
+
 
 class IdentityWrapper(object):
     """
@@ -200,7 +206,8 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
-        out_file = os.path.join(path, "RunningObsStats.pkl")
+        file_name = "RunningObsStats_{}.pkl".format(rank)
+        out_file  = os.path.join(path, file_name)
 
         with open(out_file, "wb") as fh:
             pickle.dump(self.running_stats, fh)
@@ -215,7 +222,8 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        in_file = os.path.join(path, "RunningObsStats.pkl")
+        file_name = "RunningObsStats_{}.pkl".format(rank)
+        in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
@@ -309,7 +317,8 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
-        out_file = os.path.join(path, "RunningRewardStats.pkl")
+        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        out_file  = os.path.join(path, file_name)
 
         with open(out_file, "wb") as fh:
             pickle.dump(self.running_stats, fh)
@@ -324,7 +333,8 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        in_file = os.path.join(path, "RunningRewardStats.pkl")
+        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
