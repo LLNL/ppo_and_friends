@@ -111,10 +111,10 @@ def cartpole_ppo(state_path,
     env = gym.make('CartPole-v0')
 
     lr     = 0.0003
-    min_lr = 0.000090
+    min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration  = 1000,
+        max_iteration  = 1,
         max_value      = lr,
         min_value      = min_lr)
 
