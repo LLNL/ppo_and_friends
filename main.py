@@ -67,9 +67,10 @@ if __name__ == "__main__":
 
     load_state = not clobber or test
 
-    if clobber:
+    if clobber and rank == 0:
         if os.path.exists(state_path):
             shutil.rmtree(state_path)
+    comm.barrier()
 
     if torch.cuda.is_available() and not test and num_procs == 1:
         device = torch.device("cuda")
