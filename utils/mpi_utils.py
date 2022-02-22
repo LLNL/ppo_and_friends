@@ -1,6 +1,7 @@
 from mpi4py import MPI
 import torch
 import numpy as np
+import sys
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
@@ -16,7 +17,9 @@ def rank_print(msg,
             target_rank    The rank to print from.
     """
     if target_rank == rank:
-        print(msg)
+        rank_msg = "{}: {}".format(target_rank, msg)
+        print(rank_msg)
+    sys.stdout.flush()
 
 def set_torch_threads():
     """
@@ -33,9 +36,8 @@ def set_torch_threads():
 
 def sync_model_parameters(model):
     """
-        If we're running with multiple procs, we want to make sure that
-        our initial model looks the same across all processors. We
-        can simply make everything match rank 0.
+        This allows us to sync all model parameters to be exactly
+        like the 0th processor.
 
         Arguments:
             model    The model whose parameters should be synced.

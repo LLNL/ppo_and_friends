@@ -200,7 +200,7 @@ class PPODataset(Dataset):
             msg  = "ERROR: attempting to build a batch, but it's "
             msg += "already been built! Bailing..."
             rank_print(msg)
-            sys.exit(1)
+            comm.Abort()
 
         self.actions           = []
         self.raw_actions       = []
@@ -217,7 +217,7 @@ class PPODataset(Dataset):
                 msg  = "ERROR: attempting to build a batch using "
                 msg += "an incomplete episode! Bailing..."
                 rank_print(msg)
-                sys.exit(1)
+                comm.Abort()
 
             self.actions.extend(ep.actions)
             self.raw_actions.extend(ep.raw_actions)

@@ -10,6 +10,11 @@ import gym
 from gym.spaces import Box, Discrete
 import cv2
 from abc import ABC
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 #DEBUGGING SUPPORT
 def show_frame(frame_cache):
@@ -410,7 +415,7 @@ class BreakoutEnvWrapper():
             msg  = "ERROR: expected env to be a variation of Breakout "
             msg += "but received {}".format(env.spec._env_name)
             sys.stderr.write(msg)
-            sys.exit(1)
+            comm.Abort()
 
         #
         # Breakout doesn't auto-launch the ball, which is a bit of a pain.
@@ -580,7 +585,7 @@ class AssaultEnvWrapper():
             msg  = "ERROR: expected env to be a variation of Assault "
             msg += "but received {}".format(env.spec._env_name)
             sys.stderr.write(msg)
-            sys.exit(1)
+            comm.Abort()
 
         self.action_space      = self.env.action_space
         self.cur_lives         = self.env.ale.lives()

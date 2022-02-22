@@ -238,7 +238,7 @@ class ICM(PPONetwork):
                 msg += "predicting actions in ICM: "
                 msg += "{}.".format(action_pred.shape)
                 rank_print(msg)
-                sys.exit(1)
+                comm.Abort()
             elif shape_len == 3:
                 #
                 # Our action space is (batch_size, dims, num_classes), but

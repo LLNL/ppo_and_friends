@@ -167,6 +167,14 @@ class PPO(object):
         set_torch_threads()
 
         #
+        # Divide the ts per rollout up among the processors. Let rank
+        # 0 take any excess.
+        #
+        ts_per_rollout = int(ts_per_rollout / num_procs)
+        if rank == 0:
+            ts_per_rollout += ts_per_rollout % num_procs
+
+        #
         # Vectorize our environment and add any requested wrappers.
         #
         env = VectorizedEnv(env)
@@ -223,7 +231,7 @@ class PPO(object):
         else:
             msg = "ERROR: unsupported action space {}".format(env.action_space)
             rank_print(msg)
-            sys.exit(1)
+            comm.Abort()
 
         if (issubclass(act_type, MultiBinary) or
             issubclass(act_type, MultiDiscrete)):
@@ -235,7 +243,7 @@ class PPO(object):
 
         if action_dtype == "unknown":
             rank_print("ERROR: unknown action type!")
-            sys.exit(1)
+            comm.Abort()
         else:
             rank_print("Using {} actions.".format(action_dtype))
 
@@ -291,6 +299,7 @@ class PPO(object):
         max_int           = np.iinfo(np.int32).max
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
+        #self.status_dict["proc timesteps"]       = 0#FIXME
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
@@ -369,6 +378,7 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
+        #FIXME:
         sync_model_parameters(self.actor)
         sync_model_parameters(self.critic)
         comm.barrier()
@@ -416,35 +426,6 @@ class PPO(object):
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
         comm.barrier()
-
-    def sync_status_dict(self):
-        """
-            Update the status dictionary to contain averages across all
-            processors.
-        """
-        if num_procs == 1:
-            return
-
-        for key in self.status_dict:
-            value = self.status_dict[key]
-
-            if type(value) == str:
-                continue
-            elif type(value) == tuple:
-                value = tuple(mpi_avg(np.array(value)))
-            elif issubclass(type(value), np.ndarray):
-                value = mpi_avg(value)
-            elif issubclass(type(value), int):
-                value = mpi_avg(value)
-            elif issubclass(type(value), float):
-                value = mpi_avg(value)
-            else:
-                msg  = "ERROR: unknown value encountered in the "
-                msg += "status dictionary of type {}".format(type(value))
-                rank_print(msg)
-                comm.Abort()
-
-        self.status_dict[key] = value
 
     def get_action(self, obs):
         """
@@ -632,9 +613,12 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
+        #FIXME: does a soft reset perform better or worse?
         obs = self.env.reset()
+        #obs = self.env.soft_reset()
 
         while total_rollout_ts < self.ts_per_rollout:
+            #rank_print("Stepping", rank)#FIXME
 
             episode_info = EpisodeInfo(
                 use_gae        = self.use_gae,
@@ -806,26 +790,45 @@ class PPO(object):
             longest_run  = max(longest_run, episode_length)
 
         if total_episodes == 0:
-            msg  = "\nERROR: your rollout did not finish any episodes. "
-            msg += "This could be due to setting the max ts per episodes "
-            msg += "too small, or there could be an issue with your "
-            msg += "environment.\n"
-            sys.stderr.write(msg)
-            sys.exit(1)
+            #FIXME: testing
+            #msg  = "WARNING: your rollout did not finish any episodes. "
+            #msg += "This could be due to setting the max ts per episodes "
+            #msg += "too small, or there could be an issue with your "
+            #msg += "environment.\n"
+            #rank_print(msg, rank)
+            total_episodes     = 1
+            total_ext_rewards += ep_score
+            total_rewards     += ep_rewards
+            top_rollout_score  = max(top_rollout_score, ep_score)
+            #comm.Abort()
 
         #
         # Update our status dict.
         #
         top_score = max(top_rollout_score, self.status_dict["top score"])
+        top_score = comm.allreduce(top_score, MPI.MAX)
+
         rollout_max_reward = max(self.status_dict["reward range"][1],
             rollout_max_reward)
+        rollout_max_reward = comm.allreduce(rollout_max_reward, MPI.MAX)
+
         rollout_min_reward = min(self.status_dict["reward range"][0],
             rollout_min_reward)
+        rollout_min_reward = comm.allreduce(rollout_min_reward, MPI.MIN)
 
         rollout_max_obs = max(self.status_dict["obs range"][1],
             rollout_max_obs)
+        rollout_max_obs = comm.allreduce(rollout_max_obs, MPI.MAX)
+
         rollout_min_obs = min(self.status_dict["obs range"][0],
             rollout_min_obs)
+        rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
+
+        longest_run       = comm.allreduce(longest_run, MPI.MAX)
+        total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
+        total_ext_rewards = comm.allreduce(total_ext_rewards, MPI.SUM)
+        total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
+        total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
 
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_rewards / total_episodes
@@ -868,10 +871,9 @@ class PPO(object):
                     self.status_dict["window avg"]
 
         if self.use_icm:
+            total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
             ism = total_intr_rewards / total_episodes
             self.status_dict["intrinsic score avg"] = ism
-
-        self.sync_status_dict()
 
         #
         # Finally, bulid the dataset.
@@ -957,6 +959,8 @@ class PPO(object):
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
 
+            comm.barrier()
+
         stop_time = time.time()
         hours   = (stop_time - start_time) / 3600
         rank_print("Time spent training: {} hours".format(hours))
@@ -995,7 +999,7 @@ class PPO(object):
                 if torch.isnan(adv_std):
                     rank_print("\nAdvantages std is nan!")
                     rank_print("Advantages:\n{}".format(advantages))
-                    sys.exit(1)
+                    comm.Abort()
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
@@ -1037,7 +1041,7 @@ class PPO(object):
                 std = nn.functional.softplus(self.actor.distribution.log_std)
                 rank_print("actor std: {}".format(std))
 
-                sys.exit(1)
+                comm.Abort()
 
             #
             # We negate here to perform gradient ascent rather than descent.
@@ -1063,22 +1067,28 @@ class PPO(object):
             # have a positive effect on training.
             #
             self.actor_optim.zero_grad()
-            actor_loss.backward(retain_graph=True)
+            actor_loss.backward()
+            mpi_avg_gradients(self.actor)#FIXME
             nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
-            mpi_avg_gradients(self.actor)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
+            mpi_avg_gradients(self.critic)#FIXME
             nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
-            mpi_avg_gradients(self.critic)
             self.critic_optim.step()
 
+            comm.barrier()
             counter += 1
 
-        w_entropy = total_entropy * self.entropy_weight
+        counter           = comm.allreduce(counter, MPI.SUM)
+        total_entropy     = comm.allreduce(total_entropy, MPI.SUM)
+        total_actor_loss  = comm.allreduce(total_actor_loss, MPI.SUM)
+        total_critic_loss = comm.allreduce(total_critic_loss, MPI.SUM)
+        total_kl          = comm.allreduce(total_kl, MPI.SUM)
+        w_entropy         = total_entropy * self.entropy_weight
 
         self.status_dict["weighted entropy"] = w_entropy / counter
         self.status_dict["actor loss"]       = total_actor_loss / counter
@@ -1110,10 +1120,13 @@ class PPO(object):
 
             self.icm_optim.zero_grad()
             icm_loss.backward()
+            mpi_avg_gradients(self.icm_model)
             self.icm_optim.step()
 
             counter += 1
 
+        counter        = comm.allreduce(counter, MPI.SUM)
+        total_icm_loss = comm.allreduce(total_icm_loss, MPI.SUM)
         self.status_dict["icm loss"] = total_icm_loss / counter
 
 

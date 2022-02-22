@@ -110,10 +110,14 @@ def cartpole_ppo(state_path,
 
     env = gym.make('CartPole-v0')
 
-    lr     = 0.0003
-    min_lr = 0.0003
+    #lr     = 0.0003
+    #min_lr = 0.0001
+
+    lr     = 0.0002
+    min_lr = 0.0002
 
     lr_dec = LinearDecrementer(
+        #max_iteration  = 200,
         max_iteration  = 1,
         max_value      = lr,
         min_value      = min_lr)
@@ -121,11 +125,16 @@ def cartpole_ppo(state_path,
     run_ppo(env                = env,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 32,
-            use_gae            = True,
-            normalize_obs      = True,
-            normalize_rewards  = True,
+
+            use_gae            = False,
+            normalize_obs      = False,
+            normalize_rewards  = False,
+            normalize_adv      = True,
+            #gradient_clip      = 1000000.,
+
             obs_clip           = (-10., 10.),
             reward_clip        = (-10., 10.),
+
             state_path         = state_path,
             load_state         = load_state,
             render             = render,

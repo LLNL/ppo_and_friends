@@ -60,7 +60,7 @@ class PPOActorCriticNetwork(PPONetwork):
         if action_dtype not in ["discrete", "continuous"]:
             msg = "ERROR: unknown action type {}".format(action_dtype)
             rank_print(msg)
-            sys.exit(1)
+            comm.Abort()
 
         self.action_dtype = action_dtype
         self.need_softmax = False
@@ -128,6 +128,6 @@ class SingleSplitObservationNetwork(PPOActorCriticNetwork):
             msg  = "ERROR: SingleSplitObservationNetwork requires a split "
             msg += "start > 0."
             rank_print(msg)
-            sys.exit(1)
+            comm.Abort()
 
         self.split_start = split_start

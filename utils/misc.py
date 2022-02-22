@@ -61,7 +61,7 @@ def need_action_squeeze(env):
         msg  = "ERROR: unsupported action space "
         msg += "{}".format(env.action_space)
         rank_print(msg)
-        sys.exit(1)
+        comm.Abort()
 
     return need_action_squeeze
 

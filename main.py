@@ -64,6 +64,7 @@ if __name__ == "__main__":
     torch.manual_seed(random_seed)
     random.seed(random_seed)
     np.random.seed(random_seed)
+    #torch.use_deterministic_algorithms(True)#FIXME: test
 
     load_state = not clobber or test
 
@@ -73,11 +74,13 @@ if __name__ == "__main__":
     comm.barrier()
 
     if torch.cuda.is_available() and not test and num_procs == 1:
-        device = torch.device("cuda")
+        #device = torch.device("cuda")
+        device = torch.device("cpu")#FIXME: testing
     else:
         device = torch.device("cpu")
 
     rank_print("Using device: {}".format(device))
+    rank_print("Number of processors: {}".format(num_procs))
 
     #TODO: we can probably simplify this here.
     if env_name == "CartPole":

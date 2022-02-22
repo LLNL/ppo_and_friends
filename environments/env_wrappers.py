@@ -32,6 +32,8 @@ class IdentityWrapper(object):
         self.env               = env
         self.observation_space = env.observation_space
         self.action_space      = env.action_space
+        self.need_hard_reset   = True
+        self.obs_cache         = None
 
     def step(self, action):
         """
@@ -52,6 +54,9 @@ class IdentityWrapper(object):
         #
         obs = obs.reshape(self.observation_space.shape)
 
+        self.obs_cache = obs.copy()
+        self.need_hard_reset = False
+
         return obs, reward, done, info
 
     def reset(self):
@@ -64,6 +69,14 @@ class IdentityWrapper(object):
         obs = self.env.reset()
         obs = obs.reshape(self.observation_space.shape)
         return obs
+
+    #FIXME: does this help?
+    def soft_reset(self):
+        """
+        """
+        if self.need_hard_reset:
+            return self.reset()
+        return self.obs_cache
 
     def render(self):
         """
