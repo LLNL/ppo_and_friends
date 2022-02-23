@@ -17,6 +17,7 @@ from ppo_and_friends.utils.decrementers import *
 def run_ppo(env,
             ac_network,
             device,
+            random_seed,
             icm_network         = ICM,
             batch_size          = 256,
             ts_per_rollout      = 1024,
@@ -57,6 +58,7 @@ def run_ppo(env,
               ac_network         = ac_network,
               icm_network        = icm_network,
               device             = device,
+              random_seed        = random_seed,
               batch_size         = batch_size,
               ts_per_rollout     = ts_per_rollout,
               lr                 = lr,
@@ -105,6 +107,7 @@ def cartpole_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
+                 random_seed,
                  test = False,
                  num_test_runs = 1):
 
@@ -123,6 +126,7 @@ def cartpole_ppo(state_path,
         min_value      = min_lr)
 
     run_ppo(env                = env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 32,
 
@@ -152,6 +156,7 @@ def pendulum_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
+                 random_seed,
                  test = False,
                  num_test_runs = 1):
 
@@ -173,6 +178,7 @@ def pendulum_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                = env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
@@ -200,6 +206,7 @@ def mountain_car_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
+                     random_seed,
                      test = False,
                      num_test_runs = 1):
 
@@ -217,6 +224,7 @@ def mountain_car_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                = env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 64,
             ts_per_rollout     = 2048,
@@ -245,6 +253,7 @@ def mountain_car_continuous_ppo(state_path,
                                 render,
                                 num_timesteps,
                                 device,
+                                random_seed,
                                 test = False,
                                 num_test_runs = 1):
 
@@ -274,6 +283,7 @@ def mountain_car_continuous_ppo(state_path,
     # 10-50 iterations).
     #
     run_ppo(env                = env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 64,
             batch_size         = 512,
@@ -307,6 +317,7 @@ def acrobot_ppo(state_path,
                 render,
                 num_timesteps,
                 device,
+                random_seed,
                 test = False,
                 num_test_runs = 1):
 
@@ -327,6 +338,7 @@ def acrobot_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                = env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             max_ts_per_ep      = 32,
             ts_per_rollout     = 2048,
@@ -359,6 +371,7 @@ def lunar_lander_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
+                     random_seed,
                      test = False,
                      num_test_runs = 1):
 
@@ -385,6 +398,7 @@ def lunar_lander_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             max_ts_per_ep       = 128,
             ts_per_rollout      = 2048,
@@ -416,6 +430,7 @@ def lunar_lander_continuous_ppo(state_path,
                                 render,
                                 num_timesteps,
                                 device,
+                                random_seed,
                                 test = False,
                                 num_test_runs = 1):
 
@@ -451,6 +466,7 @@ def lunar_lander_continuous_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
@@ -482,6 +498,7 @@ def bipedal_walker_ppo(state_path,
                        render,
                        num_timesteps,
                        device,
+                       random_seed,
                        test = False,
                        num_test_runs = 1):
 
@@ -516,6 +533,7 @@ def bipedal_walker_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -553,6 +571,7 @@ def assault_ram_ppo(state_path,
                     render,
                     num_timesteps,
                     device,
+                    random_seed,
                     test = False,
                     num_test_runs = 1):
 
@@ -596,6 +615,7 @@ def assault_ram_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                = wrapped_env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
@@ -624,6 +644,7 @@ def assault_pixels_ppo(state_path,
                        render,
                        num_timesteps,
                        device,
+                       random_seed,
                        test = False,
                        num_test_runs = 1):
 
@@ -670,6 +691,7 @@ def assault_pixels_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                  = wrapped_env,
+            random_seed          = random_seed,
             ac_network           = AtariPixelNetwork,
             actor_kw_args        = actor_kw_args,
             critic_kw_args       = critic_kw_args,
@@ -698,6 +720,7 @@ def breakout_pixels_ppo(state_path,
                         render,
                         num_timesteps,
                         device,
+                        random_seed,
                         test = False,
                         num_test_runs = 1):
 
@@ -738,6 +761,7 @@ def breakout_pixels_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                  = wrapped_env,
+            random_seed          = random_seed,
             ac_network           = AtariPixelNetwork,
             actor_kw_args        = actor_kw_args,
             critic_kw_args       = critic_kw_args,
@@ -766,6 +790,7 @@ def breakout_ram_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
+                     random_seed,
                      test = False,
                      num_test_runs = 1):
 
@@ -809,6 +834,7 @@ def breakout_ram_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                = wrapped_env,
+            random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
@@ -842,12 +868,14 @@ def inverted_pendulum_ppo(state_path,
                           render,
                           num_timesteps,
                           device,
+                          random_seed,
                           test = False,
                           num_test_runs = 1):
 
     env = gym.make('InvertedPendulum-v2')
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             use_gae             = True,
             use_icm             = False,
@@ -865,6 +893,7 @@ def inverted_double_pendulum_ppo(state_path,
                                  render,
                                  num_timesteps,
                                  device,
+                                 random_seed,
                                  test = False,
                                  num_test_runs = 1):
 
@@ -900,6 +929,7 @@ def inverted_double_pendulum_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -930,6 +960,7 @@ def ant_ppo(state_path,
             render,
             num_timesteps,
             device,
+            random_seed,
             test = False,
             num_test_runs = 1):
 
@@ -960,6 +991,7 @@ def ant_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -992,6 +1024,7 @@ def humanoid_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
+                 random_seed,
                  test = False,
                  num_test_runs = 1):
 
@@ -1057,6 +1090,7 @@ def humanoid_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -1086,6 +1120,7 @@ def humanoid_stand_up_ppo(state_path,
                           render,
                           num_timesteps,
                           device,
+                          random_seed,
                           test = False,
                           num_test_runs = 1):
 
@@ -1134,6 +1169,7 @@ def humanoid_stand_up_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -1162,6 +1198,7 @@ def walker2d_ppo(state_path,
                  render,
                  num_timesteps,
                  device,
+                 random_seed,
                  test = False,
                  num_test_runs = 1):
 
@@ -1185,6 +1222,7 @@ def walker2d_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -1214,6 +1252,7 @@ def hopper_ppo(state_path,
                render,
                num_timesteps,
                device,
+               random_seed,
                test = False,
                num_test_runs = 1):
 
@@ -1235,6 +1274,7 @@ def hopper_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -1264,6 +1304,7 @@ def half_cheetah_ppo(state_path,
                      render,
                      num_timesteps,
                      device,
+                     random_seed,
                      test = False,
                      num_test_runs = 1):
 
@@ -1285,6 +1326,7 @@ def half_cheetah_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -1313,6 +1355,7 @@ def swimmer_ppo(state_path,
                 render,
                 num_timesteps,
                 device,
+                random_seed,
                 test = False,
                 num_test_runs = 1):
 
@@ -1334,6 +1377,7 @@ def swimmer_ppo(state_path,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleFeedForward,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,

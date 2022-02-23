@@ -27,6 +27,14 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+seed_gen = torch.Generator()
+seed_gen.manual_seed(0)
+
 
 class PPO(object):
 
@@ -34,6 +42,7 @@ class PPO(object):
                  env,
                  ac_network,
                  device,
+                 random_seed,
                  icm_network         = ICM,
                  icm_kw_args         = {},
                  actor_kw_args       = {},
@@ -76,6 +85,7 @@ class PPO(object):
                  env                  The environment to learn from.
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
+                 random_seed          A random seed to use.
                  icm_network          The network to use for ICM applications.
                  icm_kw_args          Extra keyword args for the ICM network.
                  actor_kw_args        Extra keyword args for the actor
@@ -173,6 +183,13 @@ class PPO(object):
         ts_per_rollout = int(ts_per_rollout / num_procs)
         if rank == 0:
             ts_per_rollout += ts_per_rollout % num_procs
+
+        #
+        # For reproducibility, we need to set the environment's random
+        # seeds.
+        #
+        env.action_space.seed(random_seed)
+        env.seed(random_seed)
 
         #
         # Vectorize our environment and add any requested wrappers.
@@ -908,7 +925,11 @@ class PPO(object):
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
-                shuffle    = True)
+                shuffle    = True,
+
+                #FIXME: testing
+                worker_init_fn = seed_worker,
+                generator      = seed_gen)
 
             self.actor.train()
             self.critic.train()
