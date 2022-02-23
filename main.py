@@ -6,8 +6,8 @@ import argparse
 from ppo_and_friends.environments.launchers import *
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
-from mpi4py import MPI
 import shutil
+from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
@@ -90,8 +90,7 @@ if __name__ == "__main__":
     comm.barrier()
 
     if torch.cuda.is_available() and not test and num_procs == 1:
-        #device = torch.device("cuda")
-        device = torch.device("cpu")#FIXME: testing
+        device = torch.device("cuda")
     else:
         device = torch.device("cpu")
 
