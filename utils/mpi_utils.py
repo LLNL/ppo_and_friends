@@ -8,16 +8,16 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 def rank_print(msg,
-               target_rank = 0):
+               root = 0):
     """
         Print from a single rank.
 
         Arguments: 
             msg            The message to print.
-            target_rank    The rank to print from.
+            root           The rank to print from.
     """
-    if target_rank == rank:
-        rank_msg = "{}: {}".format(target_rank, msg)
+    if root == rank:
+        rank_msg = "{}: {}".format(root, msg)
         print(rank_msg)
     sys.stdout.flush()
 
