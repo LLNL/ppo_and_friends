@@ -27,14 +27,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
-    numpy.random.seed(worker_seed)
-    random.seed(worker_seed)
-
-seed_gen = torch.Generator()
-seed_gen.manual_seed(0)
-
 
 class PPO(object):
 
@@ -316,7 +308,7 @@ class PPO(object):
         max_int           = np.iinfo(np.int32).max
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
-        #self.status_dict["proc timesteps"]       = 0#FIXME
+        self.status_dict["rollout time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
@@ -395,7 +387,6 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
-        #FIXME:
         sync_model_parameters(self.actor)
         sync_model_parameters(self.critic)
         comm.barrier()
@@ -634,8 +625,9 @@ class PPO(object):
         obs = self.env.reset()
         #obs = self.env.soft_reset()
 
+        start_time = time.time()
+
         while total_rollout_ts < self.ts_per_rollout:
-            #rank_print("Stepping", rank)#FIXME
 
             episode_info = EpisodeInfo(
                 use_gae        = self.use_gae,
@@ -806,18 +798,15 @@ class PPO(object):
 
             longest_run  = max(longest_run, episode_length)
 
+        #
+        # If we haven't actually completed any episodes, we can just
+        # wave our hands here.
+        #
         if total_episodes == 0:
-            #FIXME: testing
-            #msg  = "WARNING: your rollout did not finish any episodes. "
-            #msg += "This could be due to setting the max ts per episodes "
-            #msg += "too small, or there could be an issue with your "
-            #msg += "environment.\n"
-            #rank_print(msg, rank)
             total_episodes     = 1
             total_ext_rewards += ep_score
             total_rewards     += ep_rewards
             top_rollout_score  = max(top_rollout_score, ep_score)
-            #comm.Abort()
 
         #
         # Update our status dict.
@@ -897,6 +886,10 @@ class PPO(object):
         #
         dataset.build()
 
+        comm.barrier()
+        stop_time = time.time()
+        self.status_dict["rollout time"] = stop_time - start_time
+
         return dataset
 
     def learn(self, num_timesteps):
@@ -925,11 +918,7 @@ class PPO(object):
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
-                shuffle    = True,
-
-                #FIXME: testing
-                worker_init_fn = seed_worker,
-                generator      = seed_gen)
+                shuffle    = True)
 
             self.actor.train()
             self.critic.train()
@@ -1089,14 +1078,14 @@ class PPO(object):
             #
             self.actor_optim.zero_grad()
             actor_loss.backward()
-            mpi_avg_gradients(self.actor)#FIXME
+            mpi_avg_gradients(self.actor)
             nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
-            mpi_avg_gradients(self.critic)#FIXME
+            mpi_avg_gradients(self.critic)
             nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
             self.critic_optim.step()
