@@ -59,7 +59,7 @@ class VectorizedEnv(IdentityWrapper):
             reward = reward[0]
 
         if done:
-            info["terminal obsveration"] = obs
+            info["terminal observation"] = obs.copy()
             obs = self.env.reset()
             obs = obs.reshape(self.observation_space.shape)
 
