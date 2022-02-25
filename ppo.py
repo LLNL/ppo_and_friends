@@ -175,13 +175,15 @@ class PPO(object):
         ts_per_rollout = int(ts_per_rollout / num_procs)
         if rank == 0:
             ts_per_rollout += ts_per_rollout % num_procs
+        rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
         # For reproducibility, we need to set the environment's random
-        # seeds.
+        # seeds. Let's allow testing to be random.
         #
-        env.action_space.seed(random_seed)
-        env.seed(random_seed)
+        if not test_mode:
+            env.action_space.seed(random_seed)
+            env.seed(random_seed)
 
         #
         # Vectorize our environment and add any requested wrappers.
@@ -314,7 +316,7 @@ class PPO(object):
         self.status_dict["window avg"]           = 'N/A'
         self.status_dict["window grad"]          = 'N/A'
         self.status_dict["top window avg"]       = 'N/A'
-        self.status_dict["reward avg"]           = 0
+        self.status_dict["episode reward avg"]   = 0
         self.status_dict["extrinsic score avg"]  = 0
         self.status_dict["top score"]            = -max_int
         self.status_dict["total episodes"]       = 0
@@ -603,7 +605,7 @@ class PPO(object):
                 A PyTorch dataset containing our rollout.
         """
         dataset            = PPODataset(self.device, self.action_dtype)
-        total_episodes     = 0  
+        total_episodes     = 0.0
         total_rollout_ts   = 0
         total_ext_rewards  = 0
         total_rewards      = 0
@@ -621,9 +623,12 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
-        #FIXME: does a soft reset perform better or worse?
-        obs = self.env.reset()
-        #obs = self.env.soft_reset()
+        if self.use_icm:
+            self.icm_model.eval()
+
+        #FIXME: test remaining envs.
+        #obs = self.env.reset()
+        obs = self.env.soft_reset()
 
         start_time = time.time()
 
@@ -640,10 +645,13 @@ class PPO(object):
                 #
                 # We end if we've reached our timesteps per rollout limit.
                 #
-                if ep_ts >= self.ts_per_rollout:
-                    rank_print("WARNING: the episode timestep is >= timesteps ")
-                    rank_print("per rollout. Are you sure this is intended??")
-                    break
+                if ep_ts > self.ts_per_rollout:
+                    rank_print("ERROR: the episode timestep is > timesteps ")
+                    rank_print("per rollout. This is not allowable.")
+                    msg  = "episode timestep, max timesteps: {}, ".format(ep_ts)
+                    msg += "{}.".format(self.ts_per_rollout)
+                    rank_print(msg)
+                    comm.Abort()
 
                 if self.render:
                     self.env.render()
@@ -699,9 +707,14 @@ class PPO(object):
                 else:
                     reward = ext_reward
 
+                ep_obs = obs
+                #FIXME: test remaining environments using this.
+                if done:
+                    ep_obs = info["terminal observation"]
+
                 episode_info.add_info(
                     prev_obs,
-                    obs,
+                    ep_obs,
                     raw_action,
                     ep_action,
                     ep_value,
@@ -743,7 +756,7 @@ class PPO(object):
                     episode_length     = 0
                     ep_score           = 0
                     ep_rewards         = 0
-                    total_episodes    += 1
+                    total_episodes    += 1.
 
                 elif (ep_ts == self.max_ts_per_ep or
                     total_rollout_ts == self.ts_per_rollout):
@@ -754,11 +767,29 @@ class PPO(object):
                     nxt_reward = nxt_value
 
                     #
-                    # Tricky business: ICM needs to take another step in the
-                    # environment in order to calculate the intrinsic reward,
-                    # but we don't want to actually take another step... So,
-                    # one way around this is to clone the env and only step
-                    # with the clone.
+                    # Tricky business:
+                    # Typically, we just use the result of our critic to
+                    # bootstrap the expected reward. This is problematic
+                    # with ICM because we can't really expect our critic to
+                    # learn about "surprise". I dont' know of any perfect
+                    # ways to handle this, but here are some ideas:
+                    #
+                    #     1. Just use the value anyways. As long as the
+                    #        max ts per episode is long enough, we'll
+                    #        hopefully see enough intrinsic reward to
+                    #        learn a good policy. In my experience, this
+                    #        works, but it takes a bit longer to learn.
+                    #     2. If we can clone the environment, we can take
+                    #        an extra step with the clone to get the
+                    #        intrinsic reward, and we can decide what to
+                    #        do with this. Approaches that integrate this
+                    #        reward tend to learn a bit more quickly.
+                    #
+                    # If we have this intrinsic reward from a clone step,
+                    # we can hand wavily calcluate a "surprise" by taking
+                    # the difference between the average intrinsic reward
+                    # and the one we get. Adding that to the critic's
+                    # output can act as an extra surprise bonus.
                     #
                     if self.use_icm:
                         _, clone_action, _ = self.get_action(obs)
@@ -768,6 +799,7 @@ class PPO(object):
 
                         clone_prev_obs = obs.copy()
                         cloned_env = deepcopy(self.env)
+
                         clone_obs, _, _, _ = cloned_env.step(clone_action)
                         del cloned_env
 
@@ -776,7 +808,9 @@ class PPO(object):
                             clone_obs,
                             clone_action)
 
-                        nxt_reward += intr_reward
+                        ism         = self.status_dict["intrinsic score avg"]
+                        surprise    = intr_reward - ism
+                        nxt_reward += surprise
 
                     episode_info.end_episode(
                         ending_value   = nxt_value,
@@ -796,17 +830,22 @@ class PPO(object):
                         lambd          = self.lambd,
                         bootstrap_clip = self.bootstrap_clip)
 
-            longest_run  = max(longest_run, episode_length)
+                    if total_rollout_ts == self.ts_per_rollout:
+                        ts_before_ep    = self.ts_per_rollout - episode_length
+                        avg_ep_len      = ts_before_ep / total_episodes
+                        ep_perc         = episode_length / avg_ep_len
+                        total_episodes += ep_perc
+                        total_ext_rewards += ep_score
+                        total_rewards     += ep_rewards
+
+            longest_run = max(longest_run, episode_length)
 
         #
         # If we haven't actually completed any episodes, we can just
         # wave our hands here.
         #
-        if total_episodes == 0:
-            total_episodes     = 1
-            total_ext_rewards += ep_score
-            total_rewards     += ep_rewards
-            top_rollout_score  = max(top_rollout_score, ep_score)
+        if total_episodes < 1.0:
+            top_rollout_score = max(top_rollout_score, ep_score)
 
         #
         # Update our status dict.
@@ -841,7 +880,7 @@ class PPO(object):
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
 
-        self.status_dict["reward avg"]          = running_score
+        self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
         self.status_dict["total episodes"]      = total_episodes
@@ -923,6 +962,9 @@ class PPO(object):
             self.actor.train()
             self.critic.train()
 
+            if self.use_icm:
+                self.icm_model.train()
+
             # TODO: there is some evidence that re-computing advantages at
             # each epoch can improve training performance. Let's try this
             # out.
@@ -935,6 +977,7 @@ class PPO(object):
                 # no idea, really. It's a magic number that the folks at
                 # OpenAI are using.
                 #
+                comm.barrier()
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
                     msg += "has been reached. "
@@ -965,11 +1008,10 @@ class PPO(object):
                     self.status_dict["last save"] = \
                         self.status_dict["iteration"]
 
+            comm.barrier()
             if self.lr <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
-
-            comm.barrier()
 
         stop_time = time.time()
         hours   = (stop_time - start_time) / 3600
@@ -1134,6 +1176,7 @@ class PPO(object):
             self.icm_optim.step()
 
             counter += 1
+            comm.barrier()
 
         counter        = comm.allreduce(counter, MPI.SUM)
         total_icm_loss = comm.allreduce(total_icm_loss, MPI.SUM)
