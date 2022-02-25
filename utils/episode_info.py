@@ -145,8 +145,7 @@ class EpisodeInfo(object):
         #
         # Clipping the ending value can have dramaticly positive
         # effects on training. MountainCarContinuous is a great
-        # example of an environment that just can't learn at all
-        # without clipping.
+        # example of an environment that I've seen struggle quite
         #
         ending_reward = np.clip(
             ending_reward,
@@ -228,11 +227,21 @@ class PPODataset(Dataset):
             self.ep_lens.append(ep.length)
             self.advantages.extend(ep.advantages)
 
+        self.actions           = np.array(self.actions)
+        self.raw_actions       = np.array(self.raw_actions)
+        self.observations      = np.array(self.observations)
+        self.next_observations = np.array(self.next_observations)
+        self.rewards_to_go     = np.array(self.rewards_to_go)
+        self.log_probs         = np.array(self.log_probs)
+        self.ep_lens           = np.array(self.ep_lens)
+        self.advantages        = np.array(self.advantages)
+
         self.advantages = torch.tensor(self.advantages,
             dtype=torch.float).to(self.device)
 
-        self.advantages = (self.advantages - self.advantages.mean()) / \
-            (self.advantages.std() + 1e-10)
+        # FIXME: test remaining envs
+        #self.advantages = (self.advantages - self.advantages.mean()) / \
+        #    (self.advantages.std() + 1e-10)
 
         self.observations = torch.tensor(self.observations,
             dtype=torch.float).to(self.device)
