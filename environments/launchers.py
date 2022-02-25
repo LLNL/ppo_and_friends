@@ -12,6 +12,11 @@ from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.decrementers import *
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 
 def run_ppo(env,
@@ -204,22 +209,39 @@ def mountain_car_ppo(state_path,
 
     env = gym.make('MountainCar-v0')
 
-    ac_kw_args = {"activation" : nn.LeakyReLU()}
-    ac_kw_args["hidden_size"] = 64
+    actor_kw_args = {"activation" : nn.LeakyReLU()}
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 128
 
     lr     = 0.0003
     min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1000,
+        max_iteration = 1,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # NOTE: This environment performs dramatically  better when
+    # max_ts_per_ep is set to the total timesteps allowed by the
+    # environment. It's not 100% clear to me why this is the case.
+    # We should probably explore this a bit more. MountainCarContinuous
+    # doesn't seem to exhibit this behavior, so it's unlikely an issue
+    # with ICM.
+    # Also, the extrinsic reward weight fraction is also very important
+    # for good performance.
+    #
     run_ppo(env                = env,
             random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 64,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
+            dynamic_bs_clip    = True,
+            max_ts_per_ep      = 200,
             ts_per_rollout     = 2048,
+            ext_reward_weight  = 1./100.,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
@@ -230,7 +252,6 @@ def mountain_car_ppo(state_path,
             obs_clip           = None,
             reward_clip        = None,
             bootstrap_clip     = (-10, 10),
-            ext_reward_weight  = 1./100.,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -265,7 +286,7 @@ def mountain_car_continuous_ppo(state_path,
     min_lr = 0.0003
 
     lr_dec = LinearDecrementer(
-        max_iteration = 8000,
+        max_iteration = 1,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -277,9 +298,9 @@ def mountain_car_continuous_ppo(state_path,
     run_ppo(env                = env,
             random_seed        = random_seed,
             ac_network         = SimpleFeedForward,
-            max_ts_per_ep      = 64,
-            batch_size         = 512,
+            max_ts_per_ep      = 128,
             ts_per_rollout     = 2048,
+            batch_size         = 512,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
@@ -293,6 +314,7 @@ def mountain_car_continuous_ppo(state_path,
             reward_clip        = None,
             normalize_adv      = True,
             bootstrap_clip     = (-10., 10.),
+            dynamic_bs_clip    = True,
             ext_reward_weight  = 1./100.,
             intr_reward_weight = 50.,
             state_path         = state_path,
@@ -517,10 +539,10 @@ def bipedal_walker_ppo(state_path,
     critic_kw_args["hidden_right"] = 128
 
     lr     = 0.0003
-    min_lr = 0.0
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 2000,
+        max_iteration = 200,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -896,7 +918,7 @@ def inverted_double_pendulum_ppo(state_path,
     env = gym.make('InvertedDoublePendulum-v2')
 
     #
-    # Ant observations are organized as follows:
+    # Pendulum observations are organized as follows:
     #    Positions: 1
     #    Angles: 4
     #    Velocities: 3
