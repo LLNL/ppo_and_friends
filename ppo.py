@@ -831,8 +831,17 @@ class PPO(object):
                         bootstrap_clip = self.bootstrap_clip)
 
                     if total_rollout_ts == self.ts_per_rollout:
-                        ts_before_ep    = self.ts_per_rollout - episode_length
-                        avg_ep_len      = ts_before_ep / total_episodes
+                        ts_before_ep  = self.ts_per_rollout - episode_length
+                        current_total = total_episodes
+
+                        if current_total == 0:
+                            current_total = 1.0
+
+                        if ts_before_ep == 0:
+                            avg_ep_len = self.ts_per_rollout
+                        else:
+                            avg_ep_len = ts_before_ep / current_total
+
                         ep_perc         = episode_length / avg_ep_len
                         total_episodes += ep_perc
                         total_ext_rewards += ep_score
