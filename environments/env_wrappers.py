@@ -70,9 +70,15 @@ class IdentityWrapper(object):
         obs = obs.reshape(self.observation_space.shape)
         return obs
 
-    #FIXME: does this help?
     def soft_reset(self):
         """
+            Perform a "soft reset". This results in only performing the reset
+            if the environment hasn't been reset since being created. This can
+            allow us to start a new rollout from a previous rollout that ended
+            near later in the environments timesteps.
+
+            Returns:
+                An observation.
         """
         if self.need_hard_reset:
             return self.reset()
