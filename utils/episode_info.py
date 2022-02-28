@@ -242,10 +242,6 @@ class PPODataset(Dataset):
         self.advantages = torch.tensor(self.advantages,
             dtype=torch.float).to(self.device)
 
-        # FIXME: test remaining envs
-        #self.advantages = (self.advantages - self.advantages.mean()) / \
-        #    (self.advantages.std() + 1e-10)
-
         self.observations = torch.tensor(self.observations,
             dtype=torch.float).to(self.device)
 
