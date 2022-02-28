@@ -66,6 +66,46 @@ should be appropriate comments describing why these choices were made.
 
 Documentation is a work in progress.
 
+# MPI
+MPI training is supported and can greatly speed up the training process.
+Currently, GPUs are only used when training on a single processor, and
+CPUs are used when training on more than one processor.
+
+**Usage:**
+
+mpirun:
+```
+mpirun -n {num_procs} python main.py ...
+
+```
+
+srun:
+```
+srun -n {num_procs} python main.py ...
+
+```
+
+Some things to note:
+1. The total timesteps per rollout is divided among the processors. So,
+   if the environment is set to run 1024 timesteps per rollout, each
+   processor will collect 1024/N of those timesteps, where N is the total
+   number of processors (remainders go to processor 0). Note that there
+   are various side effects of this, some of which are outlined below.
+2. Increasing the processor count doesn't always increase training speed.
+   For instance, imagine an environment that can only reach unique states
+   in the set Us after running for at least 500 time steps. If our total
+   timesteps per rollout is set to 1024, and we run with > 2 processors,
+   we will never collect states from Us and thus might not ever learn
+   how to handle those unique situations.
+3. When running with multiple processors, the stats that are displayed
+   might not fully reflect the true status of learning. For instance,
+   imagine an environment that, when performing well, receives +1 for
+   every timestep and is allowed to run for a maximum of 100 timesteps.
+   This results in a max score of +100. If each processor is only collecting
+   32 timesteps per rollout, the highest score any of them could ever
+   achieve would be 32. Therefore, a reported score around 32 might
+   actually signal a converged policy.
+
 
 # Tips And Tricks
 
