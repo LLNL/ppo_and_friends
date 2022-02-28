@@ -626,8 +626,6 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.eval()
 
-        #FIXME: test remaining envs.
-        #obs = self.env.reset()
         obs = self.env.soft_reset()
 
         start_time = time.time()
@@ -708,7 +706,6 @@ class PPO(object):
                     reward = ext_reward
 
                 ep_obs = obs
-                #FIXME: test remaining environments using this.
                 if done:
                     ep_obs = info["terminal observation"]
 
@@ -853,7 +850,7 @@ class PPO(object):
         # If we haven't actually completed any episodes, we can just
         # wave our hands here.
         #
-        if total_episodes < 1.0:
+        if total_episodes <= 1.0:
             top_rollout_score = max(top_rollout_score, ep_score)
 
         #
