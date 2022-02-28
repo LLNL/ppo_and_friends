@@ -227,12 +227,15 @@ class PPODataset(Dataset):
             self.ep_lens.append(ep.length)
             self.advantages.extend(ep.advantages)
 
+        #
+        # Note that log_probs is a list of tensors, so we'll skip converting
+        # it to a numpy array.
+        #
         self.actions           = np.array(self.actions)
         self.raw_actions       = np.array(self.raw_actions)
         self.observations      = np.array(self.observations)
         self.next_observations = np.array(self.next_observations)
         self.rewards_to_go     = np.array(self.rewards_to_go)
-        self.log_probs         = np.array(self.log_probs)
         self.ep_lens           = np.array(self.ep_lens)
         self.advantages        = np.array(self.advantages)
 
