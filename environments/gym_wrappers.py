@@ -2,7 +2,6 @@
     A home for OpenAI Gym wrappers. These wrappers should all be
     specific to environments found in OpenAI Gym.
 """
-from .utils import *
 import sys
 import numpy as np
 import torch
