@@ -146,6 +146,7 @@ class EpisodeInfo(object):
         # Clipping the ending value can have dramaticly positive
         # effects on training. MountainCarContinuous is a great
         # example of an environment that I've seen struggle quite
+        # a bit without a propper bs clip.
         #
         ending_reward = np.clip(
             ending_reward,
