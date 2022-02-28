@@ -201,6 +201,15 @@ class AtariEnvWrapper(ABC):
         self.lives = self.env.ale.lives()
         return obs, true_done
 
+    def seed(self, seed):
+        """
+            Set the environment's random seed.
+
+            Arguments:
+                seed    The random seed.
+        """
+        self.env.seed(seed)
+
 
 class AtariPixels(AtariEnvWrapper):
     """
