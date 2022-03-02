@@ -93,9 +93,9 @@ Some things to note:
    are various side effects of this, some of which are outlined below.
 2. Increasing the processor count doesn't always increase training speed.
    For instance, imagine an environment that can only reach unique states
-   in the set Us after running for at least 500 time steps. If our total
+   in the set `U` after running for at least 500 time steps. If our total
    timesteps per rollout is set to 1024, and we run with > 2 processors,
-   we will never collect states from Us and thus might not ever learn
+   we will never collect states from `U` and thus might not ever learn
    how to handle those unique situations.
 3. When running with multiple processors, the stats that are displayed
    might not fully reflect the true status of learning. For instance,
