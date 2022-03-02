@@ -846,10 +846,6 @@ class PPO(object):
 
             longest_run = max(longest_run, episode_length)
 
-        #
-        # If we haven't actually completed any episodes, we can just
-        # wave our hands here.
-        #
         if total_episodes <= 1.0:
             top_rollout_score = max(top_rollout_score, ep_score)
 
