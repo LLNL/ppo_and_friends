@@ -131,14 +131,8 @@ environments that do not provide definitions of success, I wing it.
 Currently, the only "unsolved" environment in this repository is the
 HumanoidStandup environment.
 
-Note that, even though random seeds are set, Torch is still allowed to use
-stochastic algorithms. This results in training performance varying from
-one run to another. In general, though, most supported environments will
-produce successful polices with each training instance. BipedalWalker is
-one that can be picky at times and is very sensitive to small changes in
-settings. If any environment is performing poorly, I'd suggest restarting
-training from scratch. If that doesn't work, feel free to open a ticket.
-
+If any environment is performing poorly, I'd suggest trying a different seed.
+If that doesn't work, feel free to open a ticket.
 Of course, different systems will also result in different performance.
 For comparison's sake, here is my system info:
 
