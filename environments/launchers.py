@@ -522,6 +522,7 @@ def bipedal_walker_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
+    actor_kw_args["activation"]     = nn.LeakyReLU()
     actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
     actor_kw_args["hidden_left"]    = 64
     actor_kw_args["hidden_right"]   = 64
@@ -552,17 +553,14 @@ def bipedal_walker_ppo(state_path,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 32,
+            max_ts_per_ep       = 64,
             ts_per_rollout      = 2048,
             use_gae             = True,
-            target_kl           = 0.3,
-            save_best_only      = False,
             normalize_obs       = True,
             normalize_rewards   = True,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            entropy_weight      = 0.0,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
