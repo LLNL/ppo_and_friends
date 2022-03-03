@@ -1,6 +1,6 @@
 import numpy as np
 from mpi4py import MPI
-from utils.mpi_utils import rank_print
+from ppo_and_friends.utils.mpi_utils import rank_print
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
