@@ -172,9 +172,10 @@ class PPO(object):
         # Divide the ts per rollout up among the processors. Let rank
         # 0 take any excess.
         #
+        orig_ts        = ts_per_rollout
         ts_per_rollout = int(ts_per_rollout / num_procs)
         if rank == 0:
-            ts_per_rollout += ts_per_rollout % num_procs
+            ts_per_rollout += orig_ts % num_procs
         rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
