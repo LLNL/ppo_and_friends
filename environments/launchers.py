@@ -578,6 +578,7 @@ def bipedal_walker_hardcore_ppo(state_path,
                                 render,
                                 num_timesteps,
                                 device,
+                                random_seed,
                                 test = False,
                                 num_test_runs = 1):
 
@@ -587,10 +588,10 @@ def bipedal_walker_hardcore_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    #actor_kw_args["activation"]     = nn.LeakyReLU()
+    actor_kw_args["activation"]     = nn.LeakyReLU()
     actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]    = 64
-    actor_kw_args["hidden_right"]   = 64
+    actor_kw_args["hidden_left"]    = 128
+    actor_kw_args["hidden_right"]   = 128
 
     #
     # I've found that a lower std offset greatly improves performance
@@ -601,18 +602,19 @@ def bipedal_walker_hardcore_ppo(state_path,
     #actor_kw_args["std_offset"] = 0.1
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["hidden_left"]  = 256
+    critic_kw_args["hidden_right"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0003
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1,
+        max_iteration = 100,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
+            random_seed         = random_seed,
             ac_network          = SimpleSplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -625,7 +627,6 @@ def bipedal_walker_hardcore_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            #entropy_weight      = 0.0,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,

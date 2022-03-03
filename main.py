@@ -233,6 +233,7 @@ if __name__ == "__main__":
 
     elif env_name == "BipedalWalkerHardcore":
         bipedal_walker_hardcore_ppo(
+            random_seed   = random_seed,
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
