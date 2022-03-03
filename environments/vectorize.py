@@ -16,9 +16,6 @@
 import numpy as np
 from .env_wrappers import IdentityWrapper
 
-# TODO: it might be advantagous to have an option to reset from the
-# last point that we left off (when it wasn't a done state). This
-# would allow us to see states beyond our maximum ts per rollout.
 class VectorizedEnv(IdentityWrapper):
 
     def __init__(self,
@@ -30,10 +27,9 @@ class VectorizedEnv(IdentityWrapper):
             Arguments:
                 env    The environment to vectorize.
         """
-
-        self.env               = env
-        self.observation_space = env.observation_space
-        self.action_space      = env.action_space
+        super(VectorizedEnv, self).__init__(
+            env,
+            **kw_args)
 
     def step(self, action):
         """
@@ -60,7 +56,8 @@ class VectorizedEnv(IdentityWrapper):
             reward = reward[0]
 
         if done:
-            info["terminal obsveration"] = obs
+            info["terminal observation"] = obs.copy()
             obs = self.env.reset()
+            obs = obs.reshape(self.observation_space.shape)
 
         return obs, reward, done, info

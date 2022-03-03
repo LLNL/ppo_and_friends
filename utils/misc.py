@@ -1,9 +1,16 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 import os
+import sys
 import pickle
+from ppo_and_friends.utils.mpi_utils import rank_print
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 def get_action_dtype(env):
     """
@@ -28,9 +35,12 @@ def get_action_dtype(env):
 def need_action_squeeze(env):
 
     need_action_squeze = False
+    act_type = type(env.action_space)
 
+    if (issubclass(act_type, Box) or
+        issubclass(act_type, MultiBinary) or
+        issubclass(act_type, MultiDiscrete)):
 
-    if type(env.action_space) == Box:
         action = env.action_space.sample()
 
         try:
@@ -45,13 +55,13 @@ def need_action_squeeze(env):
             env.reset()
             need_action_squeeze = True
 
-    elif type(env.action_space) == Discrete:
+    elif issubclass(act_type, Discrete):
         need_action_squeeze = True
     else:
         msg  = "ERROR: unsupported action space "
         msg += "{}".format(env.action_space)
-        print(msg)
-        sys.exit(1)
+        rank_print(msg)
+        comm.Abort()
 
     return need_action_squeeze
 
@@ -128,7 +138,7 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to save to.
         """
-        f_name   = "{}_stats.pkl".format(self.name)
+        f_name   = "{}_stats_{}.pkl".format(self.name, rank)
         out_file = os.path.join(path, f_name)
 
         with open(out_file, "wb") as fh:
@@ -142,7 +152,7 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to load from.
         """
-        f_name  = "{}_stats.pkl".format(self.name)
+        f_name  = "{}_stats_{}.pkl".format(self.name, rank)
         in_file = os.path.join(path, f_name)
 
         with open(in_file, "rb") as fh:

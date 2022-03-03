@@ -8,6 +8,7 @@ from functools import reduce
 from .utils import init_layer
 from .ppo_networks import PPONetwork
 import torch.nn.functional as t_func
+from ppo_and_friends.utils.mpi_utils import rank_print
 
 class LinearInverseModel(nn.Module):
 
@@ -236,8 +237,8 @@ class ICM(PPONetwork):
                 msg  = "ERROR: encountered unexpected shape when "
                 msg += "predicting actions in ICM: "
                 msg += "{}.".format(action_pred.shape)
-                print(msg)
-                sys.exit(1)
+                rank_print(msg)
+                comm.Abort()
             elif shape_len == 3:
                 #
                 # Our action space is (batch_size, dims, num_classes), but

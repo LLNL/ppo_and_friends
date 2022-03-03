@@ -6,6 +6,12 @@ from ppo_and_friends.utils.stats import RunningMeanStd
 import numpy as np
 import pickle
 import os
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
+
 
 class IdentityWrapper(object):
     """
@@ -26,6 +32,8 @@ class IdentityWrapper(object):
         self.env               = env
         self.observation_space = env.observation_space
         self.action_space      = env.action_space
+        self.need_hard_reset   = True
+        self.obs_cache         = None
 
     def step(self, action):
         """
@@ -46,6 +54,9 @@ class IdentityWrapper(object):
         #
         obs = obs.reshape(self.observation_space.shape)
 
+        self.obs_cache = obs.copy()
+        self.need_hard_reset = False
+
         return obs, reward, done, info
 
     def reset(self):
@@ -58,6 +69,20 @@ class IdentityWrapper(object):
         obs = self.env.reset()
         obs = obs.reshape(self.observation_space.shape)
         return obs
+
+    def soft_reset(self):
+        """
+            Perform a "soft reset". This results in only performing the reset
+            if the environment hasn't been reset since being created. This can
+            allow us to start a new rollout from a previous rollout that ended
+            near later in the environments timesteps.
+
+            Returns:
+                An observation.
+        """
+        if self.need_hard_reset:
+            return self.reset()
+        return self.obs_cache
 
     def render(self):
         """
@@ -200,7 +225,8 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
-        out_file = os.path.join(path, "RunningObsStats.pkl")
+        file_name = "RunningObsStats_{}.pkl".format(rank)
+        out_file  = os.path.join(path, file_name)
 
         with open(out_file, "wb") as fh:
             pickle.dump(self.running_stats, fh)
@@ -215,7 +241,8 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        in_file = os.path.join(path, "RunningObsStats.pkl")
+        file_name = "RunningObsStats_{}.pkl".format(rank)
+        in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
@@ -309,7 +336,8 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
-        out_file = os.path.join(path, "RunningRewardStats.pkl")
+        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        out_file  = os.path.join(path, file_name)
 
         with open(out_file, "wb") as fh:
             pickle.dump(self.running_stats, fh)
@@ -324,7 +352,8 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        in_file = os.path.join(path, "RunningRewardStats.pkl")
+        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
