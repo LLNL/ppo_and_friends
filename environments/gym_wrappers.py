@@ -2,7 +2,6 @@
     A home for OpenAI Gym wrappers. These wrappers should all be
     specific to environments found in OpenAI Gym.
 """
-from .utils import *
 import sys
 import numpy as np
 import torch
@@ -10,6 +9,11 @@ import gym
 from gym.spaces import Box, Discrete
 import cv2
 from abc import ABC
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 #DEBUGGING SUPPORT
 def show_frame(frame_cache):
@@ -196,6 +200,15 @@ class AtariEnvWrapper(ABC):
 
         self.lives = self.env.ale.lives()
         return obs, true_done
+
+    def seed(self, seed):
+        """
+            Set the environment's random seed.
+
+            Arguments:
+                seed    The random seed.
+        """
+        self.env.seed(seed)
 
 
 class AtariPixels(AtariEnvWrapper):
@@ -410,7 +423,7 @@ class BreakoutEnvWrapper():
             msg  = "ERROR: expected env to be a variation of Breakout "
             msg += "but received {}".format(env.spec._env_name)
             sys.stderr.write(msg)
-            sys.exit(1)
+            comm.Abort()
 
         #
         # Breakout doesn't auto-launch the ball, which is a bit of a pain.
@@ -580,7 +593,7 @@ class AssaultEnvWrapper():
             msg  = "ERROR: expected env to be a variation of Assault "
             msg += "but received {}".format(env.spec._env_name)
             sys.stderr.write(msg)
-            sys.exit(1)
+            comm.Abort()
 
         self.action_space      = self.env.action_space
         self.cur_lives         = self.env.ale.lives()

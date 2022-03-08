@@ -1,6 +1,7 @@
 import numpy as np
 from torch.utils.data import Dataset
 import torch
+from ppo_and_friends.utils.mpi_utils import rank_print
 
 class EpisodeInfo(object):
 
@@ -144,8 +145,8 @@ class EpisodeInfo(object):
         #
         # Clipping the ending value can have dramaticly positive
         # effects on training. MountainCarContinuous is a great
-        # example of an environment that just can't learn at all
-        # without clipping.
+        # example of an environment that I've seen struggle quite
+        # a bit without a propper bs clip.
         #
         ending_reward = np.clip(
             ending_reward,
@@ -198,8 +199,8 @@ class PPODataset(Dataset):
         if self.is_built:
             msg  = "ERROR: attempting to build a batch, but it's "
             msg += "already been built! Bailing..."
-            print(msg)
-            sys.exit(1)
+            rank_print(msg)
+            comm.Abort()
 
         self.actions           = []
         self.raw_actions       = []
@@ -215,8 +216,8 @@ class PPODataset(Dataset):
             if not ep.is_finished:
                 msg  = "ERROR: attempting to build a batch using "
                 msg += "an incomplete episode! Bailing..."
-                print(msg)
-                sys.exit(1)
+                rank_print(msg)
+                comm.Abort()
 
             self.actions.extend(ep.actions)
             self.raw_actions.extend(ep.raw_actions)
@@ -227,11 +228,20 @@ class PPODataset(Dataset):
             self.ep_lens.append(ep.length)
             self.advantages.extend(ep.advantages)
 
+        #
+        # Note that log_probs is a list of tensors, so we'll skip converting
+        # it to a numpy array.
+        #
+        self.actions           = np.array(self.actions)
+        self.raw_actions       = np.array(self.raw_actions)
+        self.observations      = np.array(self.observations)
+        self.next_observations = np.array(self.next_observations)
+        self.rewards_to_go     = np.array(self.rewards_to_go)
+        self.ep_lens           = np.array(self.ep_lens)
+        self.advantages        = np.array(self.advantages)
+
         self.advantages = torch.tensor(self.advantages,
             dtype=torch.float).to(self.device)
-
-        self.advantages = (self.advantages - self.advantages.mean()) / \
-            (self.advantages.std() + 1e-10)
 
         self.observations = torch.tensor(self.observations,
             dtype=torch.float).to(self.device)

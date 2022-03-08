@@ -16,8 +16,16 @@ from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.environments.vectorize import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
+from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
+from ppo_and_friends.utils.mpi_utils import mpi_avg
+from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 
 class PPO(object):
@@ -26,6 +34,7 @@ class PPO(object):
                  env,
                  ac_network,
                  device,
+                 random_seed,
                  icm_network         = ICM,
                  icm_kw_args         = {},
                  actor_kw_args       = {},
@@ -68,6 +77,7 @@ class PPO(object):
                  env                  The environment to learn from.
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
+                 random_seed          A random seed to use.
                  icm_network          The network to use for ICM applications.
                  icm_kw_args          Extra keyword args for the ICM network.
                  actor_kw_args        Extra keyword args for the actor
@@ -156,6 +166,25 @@ class PPO(object):
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
         """
+        set_torch_threads()
+
+        #
+        # Divide the ts per rollout up among the processors. Let rank
+        # 0 take any excess.
+        #
+        orig_ts        = ts_per_rollout
+        ts_per_rollout = int(ts_per_rollout / num_procs)
+        if rank == 0:
+            ts_per_rollout += orig_ts % num_procs
+        rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
+
+        #
+        # For reproducibility, we need to set the environment's random
+        # seeds. Let's allow testing to be random.
+        #
+        if not test_mode:
+            env.action_space.seed(random_seed)
+            env.seed(random_seed)
 
         #
         # Vectorize our environment and add any requested wrappers.
@@ -212,22 +241,23 @@ class PPO(object):
             self.act_dim = env.action_space.n
 
         else:
-            print("ERROR: unsupported action space {}".format(env.action_space))
-            sys.exit(1)
+            msg = "ERROR: unsupported action space {}".format(env.action_space)
+            rank_print(msg)
+            comm.Abort()
 
         if (issubclass(act_type, MultiBinary) or
             issubclass(act_type, MultiDiscrete)):
             msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
             msg += "may not be fully supported. Use at your own risk."
-            print(msg)
+            rank_print(msg)
 
         action_dtype = get_action_dtype(env)
 
         if action_dtype == "unknown":
-            print("ERROR: unknown action type!")
-            sys.exit(1)
+            rank_print("ERROR: unknown action type!")
+            comm.Abort()
         else:
-            print("Using {} actions.".format(action_dtype))
+            rank_print("Using {} actions.".format(action_dtype))
 
         #
         # Environments are very inconsistent! We need to check what shape
@@ -281,12 +311,13 @@ class PPO(object):
         max_int           = np.iinfo(np.int32).max
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
+        self.status_dict["rollout time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
         self.status_dict["window grad"]          = 'N/A'
         self.status_dict["top window avg"]       = 'N/A'
-        self.status_dict["reward avg"]           = 0
+        self.status_dict["episode reward avg"]   = 0
         self.status_dict["extrinsic score avg"]  = 0
         self.status_dict["top score"]            = -max_int
         self.status_dict["total episodes"]       = 0
@@ -371,6 +402,10 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
+        sync_model_parameters(self.actor)
+        sync_model_parameters(self.critic)
+        comm.barrier()
+
         if self.use_icm:
             self.icm_model = icm_network(
                 name         = "icm",
@@ -383,11 +418,14 @@ class PPO(object):
             self.status_dict["icm loss"] = 0
             self.status_dict["intrinsic score avg"] = 0
 
+            sync_model_parameters(self.icm_model)
+            comm.barrier()
+
         if load_state:
             if not os.path.exists(state_path):
                 msg  = "WARNING: state_path does not exist. Unable "
                 msg += "to load state."
-                print(msg)
+                rank_print(msg)
             else:
                 #
                 # Let's ensure backwards compatibility with previous commits.
@@ -408,8 +446,9 @@ class PPO(object):
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
 
-        if not os.path.exists(state_path):
+        if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
+        comm.barrier()
 
     def get_action(self, obs):
         """
@@ -490,11 +529,11 @@ class PPO(object):
         """
             Print out statistics from our status_dict.
         """
-        print("\n--------------------------------------------------------")
-        print("Status Report:")
+        rank_print("\n--------------------------------------------------------")
+        rank_print("Status Report:")
         for key in self.status_dict:
-            print("    {}: {}".format(key, self.status_dict[key]))
-        print("--------------------------------------------------------")
+            rank_print("    {}: {}".format(key, self.status_dict[key]))
+        rank_print("--------------------------------------------------------")
 
     def update_learning_rate(self,
                              iteration):
@@ -579,7 +618,7 @@ class PPO(object):
                 A PyTorch dataset containing our rollout.
         """
         dataset            = PPODataset(self.device, self.action_dtype)
-        total_episodes     = 0  
+        total_episodes     = 0.0
         total_rollout_ts   = 0
         total_ext_rewards  = 0
         total_rewards      = 0
@@ -597,7 +636,12 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
-        obs = self.env.reset()
+        if self.use_icm:
+            self.icm_model.eval()
+
+        obs = self.env.soft_reset()
+
+        start_time = time.time()
 
         while total_rollout_ts < self.ts_per_rollout:
 
@@ -612,10 +656,13 @@ class PPO(object):
                 #
                 # We end if we've reached our timesteps per rollout limit.
                 #
-                if ep_ts >= self.ts_per_rollout:
-                    print("WARNING: the episode timestep is >= timesteps ")
-                    print("per rollout. Are you sure this is intended??")
-                    break
+                if ep_ts > self.ts_per_rollout:
+                    rank_print("ERROR: the episode timestep is > timesteps ")
+                    rank_print("per rollout. This is not allowable.")
+                    msg  = "episode timestep, max timesteps: {}, ".format(ep_ts)
+                    msg += "{}.".format(self.ts_per_rollout)
+                    rank_print(msg)
+                    comm.Abort()
 
                 if self.render:
                     self.env.render()
@@ -671,9 +718,13 @@ class PPO(object):
                 else:
                     reward = ext_reward
 
+                ep_obs = obs
+                if done:
+                    ep_obs = info["terminal observation"]
+
                 episode_info.add_info(
                     prev_obs,
-                    obs,
+                    ep_obs,
                     raw_action,
                     ep_action,
                     ep_value,
@@ -715,7 +766,7 @@ class PPO(object):
                     episode_length     = 0
                     ep_score           = 0
                     ep_rewards         = 0
-                    total_episodes    += 1
+                    total_episodes    += 1.
 
                 elif (ep_ts == self.max_ts_per_ep or
                     total_rollout_ts == self.ts_per_rollout):
@@ -726,15 +777,29 @@ class PPO(object):
                     nxt_reward = nxt_value
 
                     #
-                    # Tricky business: ICM needs to take another step in the
-                    # environment in order to calculate the intrinsic reward,
-                    # but we don't want to actually take another step... So,
-                    # one way around this is to clone the env and only step
-                    # with the clone.
-                    # Unfortunately, not all environments support cloning. In
-                    # this case, we can be hand wavy and assume (without ground)
-                    # that our next action will result in a similar intrinsic
-                    # reward as our last action.
+                    # Tricky business:
+                    # Typically, we just use the result of our critic to
+                    # bootstrap the expected reward. This is problematic
+                    # with ICM because we can't really expect our critic to
+                    # learn about "surprise". I dont' know of any perfect
+                    # ways to handle this, but here are some ideas:
+                    #
+                    #     1. Just use the value anyways. As long as the
+                    #        max ts per episode is long enough, we'll
+                    #        hopefully see enough intrinsic reward to
+                    #        learn a good policy. In my experience, this
+                    #        works, but it takes a bit longer to learn.
+                    #     2. If we can clone the environment, we can take
+                    #        an extra step with the clone to get the
+                    #        intrinsic reward, and we can decide what to
+                    #        do with this. Approaches that integrate this
+                    #        reward tend to learn a bit more quickly.
+                    #
+                    # If we have this intrinsic reward from a clone step,
+                    # we can hand wavily calcluate a "surprise" by taking
+                    # the difference between the average intrinsic reward
+                    # and the one we get. Adding that to the critic's
+                    # output can act as an extra surprise bonus.
                     #
                     if self.use_icm:
                         if self.can_clone_env:
@@ -753,7 +818,9 @@ class PPO(object):
                                 clone_obs,
                                 clone_action)
 
-                        nxt_reward += intr_reward
+                        ism         = self.status_dict["intrinsic score avg"]
+                        surprise    = intr_reward - ism
+                        nxt_reward += surprise
 
                     episode_info.end_episode(
                         ending_value   = nxt_value,
@@ -773,36 +840,62 @@ class PPO(object):
                         lambd          = self.lambd,
                         bootstrap_clip = self.bootstrap_clip)
 
-            longest_run  = max(longest_run, episode_length)
+                    if total_rollout_ts == self.ts_per_rollout:
+                        ts_before_ep  = self.ts_per_rollout - episode_length
+                        current_total = total_episodes
 
-        if total_episodes == 0:
-            msg  = "\nERROR: your rollout did not finish any episodes. "
-            msg += "This could be due to setting the max ts per episodes "
-            msg += "too small, or there could be an issue with your "
-            msg += "environment.\n"
-            sys.stderr.write(msg)
-            sys.exit(1)
+                        if current_total == 0:
+                            current_total = 1.0
+
+                        if ts_before_ep == 0:
+                            avg_ep_len = self.ts_per_rollout
+                        else:
+                            avg_ep_len = ts_before_ep / current_total
+
+                        ep_perc         = episode_length / avg_ep_len
+                        total_episodes += ep_perc
+                        total_ext_rewards += ep_score
+                        total_rewards     += ep_rewards
+
+            longest_run = max(longest_run, episode_length)
+
+        if total_episodes <= 1.0:
+            top_rollout_score = max(top_rollout_score, ep_score)
 
         #
         # Update our status dict.
         #
         top_score = max(top_rollout_score, self.status_dict["top score"])
+        top_score = comm.allreduce(top_score, MPI.MAX)
+
         rollout_max_reward = max(self.status_dict["reward range"][1],
             rollout_max_reward)
+        rollout_max_reward = comm.allreduce(rollout_max_reward, MPI.MAX)
+
         rollout_min_reward = min(self.status_dict["reward range"][0],
             rollout_min_reward)
+        rollout_min_reward = comm.allreduce(rollout_min_reward, MPI.MIN)
 
         rollout_max_obs = max(self.status_dict["obs range"][1],
             rollout_max_obs)
+        rollout_max_obs = comm.allreduce(rollout_max_obs, MPI.MAX)
+
         rollout_min_obs = min(self.status_dict["obs range"][0],
             rollout_min_obs)
+        rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
+
+        longest_run       = comm.allreduce(longest_run, MPI.MAX)
+        total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
+        total_ext_rewards = comm.allreduce(total_ext_rewards, MPI.SUM)
+        total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
+        total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
 
         running_ext_score = total_ext_rewards / total_episodes
         running_score     = total_rewards / total_episodes
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
 
-        self.status_dict["reward avg"]          = running_score
+        self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
         self.status_dict["total episodes"]      = total_episodes
@@ -838,6 +931,7 @@ class PPO(object):
                     self.status_dict["window avg"]
 
         if self.use_icm:
+            total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
             ism = total_intr_rewards / total_episodes
             self.status_dict["intrinsic score avg"] = ism
 
@@ -845,6 +939,10 @@ class PPO(object):
         # Finally, bulid the dataset.
         #
         dataset.build()
+
+        comm.barrier()
+        stop_time = time.time()
+        self.status_dict["rollout time"] = stop_time - start_time
 
         return dataset
 
@@ -879,6 +977,9 @@ class PPO(object):
             self.actor.train()
             self.critic.train()
 
+            if self.use_icm:
+                self.icm_model.train()
+
             # TODO: there is some evidence that re-computing advantages at
             # each epoch can improve training performance. Let's try this
             # out.
@@ -891,11 +992,12 @@ class PPO(object):
                 # no idea, really. It's a magic number that the folks at
                 # OpenAI are using.
                 #
+                comm.barrier()
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
                     msg += "has been reached. "
                     msg += "Ending early (after {} epochs)".format(i + 1)
-                    print(msg)
+                    rank_print(msg)
                     break
 
             if self.use_icm:
@@ -921,13 +1023,14 @@ class PPO(object):
                     self.status_dict["last save"] = \
                         self.status_dict["iteration"]
 
+            comm.barrier()
             if self.lr <= 0.0:
-                print("Learning rate has bottomed out. Terminating early")
+                rank_print("Learning rate has bottomed out. Terminating early")
                 break
 
         stop_time = time.time()
         hours   = (stop_time - start_time) / 3600
-        print("Time spent training: {} hours".format(hours))
+        rank_print("Time spent training: {} hours".format(hours))
 
     def _ppo_batch_train(self, data_loader):
         """
@@ -949,8 +1052,8 @@ class PPO(object):
             torch.cuda.empty_cache()
 
             if obs.shape[0] == 1:
-                print("Skipping batch of size 1")
-                print("    obs shape: {}".format(obs.shape))
+                rank_print("Skipping batch of size 1")
+                rank_print("    obs shape: {}".format(obs.shape))
                 continue
 
             #
@@ -961,9 +1064,9 @@ class PPO(object):
                 adv_std  = advantages.std()
                 adv_mean = advantages.mean()
                 if torch.isnan(adv_std):
-                    print("\nAdvantages std is nan!")
-                    print("Advantages:\n{}".format(advantages))
-                    sys.exit(1)
+                    rank_print("\nAdvantages std is nan!")
+                    rank_print("Advantages:\n{}".format(advantages))
+                    comm.Abort()
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
@@ -980,32 +1083,32 @@ class PPO(object):
             total_kl += (log_probs - curr_log_probs).mean().item()
 
             if torch.isnan(ratios).any() or torch.isinf(ratios).any():
-                print("ERROR: ratios are nan or inf!")
+                rank_print("ERROR: ratios are nan or inf!")
 
                 ratios_min = ratios.min()
                 ratios_max = ratios.max()
-                print("ratios min, max: {}, {}".format(
+                rank_print("ratios min, max: {}, {}".format(
                     ratios_min, ratios_max))
 
                 clp_min = curr_log_probs.min()
                 clp_max = curr_log_probs.min()
-                print("curr_log_probs min, max: {}, {}".format(
+                rank_print("curr_log_probs min, max: {}, {}".format(
                     clp_min, clp_max))
 
                 lp_min = log_probs.min()
                 lp_max = log_probs.min()
-                print("log_probs min, max: {}, {}".format(
+                rank_print("log_probs min, max: {}, {}".format(
                     lp_min, lp_max))
 
                 act_min = raw_actions.min()
                 act_max = raw_actions.max()
-                print("actions min, max: {}, {}".format(
+                rank_print("actions min, max: {}, {}".format(
                     act_min, act_max))
 
                 std = nn.functional.softplus(self.actor.distribution.log_std)
-                print("actor std: {}".format(std))
+                rank_print("actor std: {}".format(std))
 
-                sys.exit(1)
+                comm.Abort()
 
             #
             # We negate here to perform gradient ascent rather than descent.
@@ -1031,20 +1134,28 @@ class PPO(object):
             # have a positive effect on training.
             #
             self.actor_optim.zero_grad()
-            actor_loss.backward(retain_graph=True)
+            actor_loss.backward()
+            mpi_avg_gradients(self.actor)
             nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
             critic_loss.backward()
+            mpi_avg_gradients(self.critic)
             nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
             self.critic_optim.step()
 
+            comm.barrier()
             counter += 1
 
-        w_entropy = total_entropy * self.entropy_weight
+        counter           = comm.allreduce(counter, MPI.SUM)
+        total_entropy     = comm.allreduce(total_entropy, MPI.SUM)
+        total_actor_loss  = comm.allreduce(total_actor_loss, MPI.SUM)
+        total_critic_loss = comm.allreduce(total_critic_loss, MPI.SUM)
+        total_kl          = comm.allreduce(total_kl, MPI.SUM)
+        w_entropy         = total_entropy * self.entropy_weight
 
         self.status_dict["weighted entropy"] = w_entropy / counter
         self.status_dict["actor loss"]       = total_actor_loss / counter
@@ -1076,10 +1187,14 @@ class PPO(object):
 
             self.icm_optim.zero_grad()
             icm_loss.backward()
+            mpi_avg_gradients(self.icm_model)
             self.icm_optim.step()
 
             counter += 1
+            comm.barrier()
 
+        counter        = comm.allreduce(counter, MPI.SUM)
+        total_icm_loss = comm.allreduce(total_icm_loss, MPI.SUM)
         self.status_dict["icm loss"] = total_icm_loss / counter
 
 
@@ -1087,7 +1202,6 @@ class PPO(object):
         """
             Save all information required for a restart.
         """
-
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
@@ -1097,10 +1211,13 @@ class PPO(object):
         if self.save_env_info:
             self.env.save_info(self.state_path)
 
-        state_file = os.path.join(self.state_path, "state.pickle")
+        file_name  = "state_{}.pickle".format(rank)
+        state_file = os.path.join(self.state_path, file_name)
         with open(state_file, "wb") as out_f:
             pickle.dump(self.status_dict, out_f,
                 protocol=pickle.HIGHEST_PROTOCOL)
+
+        comm.barrier()
 
     def load(self):
         """
@@ -1115,7 +1232,8 @@ class PPO(object):
         if self.save_env_info:
             self.env.load_info(self.state_path)
 
-        state_file = os.path.join(self.state_path, "state.pickle")
+        file_name  = "state_{}.pickle".format(rank)
+        state_file = os.path.join(self.state_path, file_name)
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
 

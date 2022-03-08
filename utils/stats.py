@@ -1,4 +1,10 @@
 import numpy as np
+from mpi4py import MPI
+from ppo_and_friends.utils.mpi_utils import rank_print
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 class RunningMeanStd(object):
     """
@@ -27,6 +33,18 @@ class RunningMeanStd(object):
             Arguments:
                 data    A new batch of data.
         """
+        #
+        # If we're running with multiple processors, I've found that
+        # it's very important to normalize environments across all
+        # processors. This does add a bit of overhead, but not too much.
+        # NOTE: allgathers can be dangerous with large datasets.
+        # If this becomes problematic, we can perform all work on rank
+        # 0 and broadcast. That approach is just a bit slower.
+        #
+        if num_procs > 1:
+            data = comm.allgather(data)
+            data = np.concatenate(data)
+
         batch_mean     = np.mean(data, axis=0)
         batch_variance = np.var(data, axis=0)
         batch_size     = data.shape[0]

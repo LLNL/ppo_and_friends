@@ -6,6 +6,12 @@ import torch
 import sys
 from .utils import GaussianDistribution, CategoricalDistribution
 import os
+from ppo_and_friends.utils.mpi_utils import rank_print
+from mpi4py import MPI
+
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
 
 class PPONetwork(nn.Module):
     """
@@ -24,11 +30,13 @@ class PPONetwork(nn.Module):
         self.name = name
 
     def save(self, path):
-        out_f = os.path.join(path, self.name + ".model")
+        f_name = "{}_{}.model".format(self.name, rank)
+        out_f  = os.path.join(path, f_name)
         torch.save(self.state_dict(), out_f)
 
     def load(self, path):
-        in_f = os.path.join(path, self.name + ".model")
+        f_name = "{}_{}.model".format(self.name, rank)
+        in_f   = os.path.join(path, f_name)
         self.load_state_dict(torch.load(in_f))
 
 
@@ -51,8 +59,8 @@ class PPOActorCriticNetwork(PPONetwork):
 
         if action_dtype not in ["discrete", "continuous"]:
             msg = "ERROR: unknown action type {}".format(action_dtype)
-            print(msg)
-            sys.exit(1)
+            rank_print(msg)
+            comm.Abort()
 
         self.action_dtype = action_dtype
         self.need_softmax = False
@@ -119,7 +127,7 @@ class SingleSplitObservationNetwork(PPOActorCriticNetwork):
         if split_start <= 0:
             msg  = "ERROR: SingleSplitObservationNetwork requires a split "
             msg += "start > 0."
-            print(msg)
-            sys.exit(1)
+            rank_print(msg)
+            comm.Abort()
 
         self.split_start = split_start

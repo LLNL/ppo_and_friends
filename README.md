@@ -66,6 +66,46 @@ should be appropriate comments describing why these choices were made.
 
 Documentation is a work in progress.
 
+# MPI
+MPI training is supported and can greatly speed up the training process.
+Currently, GPUs are only used when training on a single processor, and
+CPUs are used when training on more than one processor.
+
+**Usage:**
+
+mpirun:
+```
+mpirun -n {num_procs} python main.py ...
+
+```
+
+srun:
+```
+srun -n {num_procs} python main.py ...
+
+```
+
+Some things to note:
+1. The total timesteps per rollout is divided among the processors. So,
+   if the environment is set to run 1024 timesteps per rollout, each
+   processor will collect 1024/N of those timesteps, where N is the total
+   number of processors (remainders go to processor 0). Note that there
+   are various side effects of this, some of which are outlined below.
+2. Increasing the processor count doesn't always increase training speed.
+   For instance, imagine an environment that can only reach unique states
+   in the set `U` after running for at least 500 time steps. If our total
+   timesteps per rollout is set to 1024, and we run with > 2 processors,
+   we will never collect states from `U` and thus might not ever learn
+   how to handle those unique situations.
+3. When running with multiple processors, the stats that are displayed
+   might not fully reflect the true status of learning. For instance,
+   imagine an environment that, when performing well, receives +1 for
+   every timestep and is allowed to run for a maximum of 100 timesteps.
+   This results in a max score of +100. If each processor is only collecting
+   32 timesteps per rollout, the highest score any of them could ever
+   achieve would be 32. Therefore, a reported score around 32 might
+   actually signal a converged policy.
+
 
 # Tips And Tricks
 
@@ -91,14 +131,8 @@ environments that do not provide definitions of success, I wing it.
 Currently, the only "unsolved" environment in this repository is the
 HumanoidStandup environment.
 
-Note that, even though random seeds are set, Torch is still allowed to use
-stochastic algorithms. This results in training performance varying from
-one run to another. In general, though, most supported environments will
-produce successful polices with each training instance. BipedalWalker is
-one that can be picky at times and is very sensitive to small changes in
-settings. If any environment is performing poorly, I'd suggest restarting
-training from scratch. If that doesn't work, feel free to open a ticket.
-
+If any environment is performing poorly, I'd suggest trying a different seed.
+If that doesn't work, feel free to open a ticket.
 Of course, different systems will also result in different performance.
 For comparison's sake, here is my system info:
 
