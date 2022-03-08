@@ -511,7 +511,7 @@ def bipedal_walker_ppo(state_path,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 32,
+            max_ts_per_ep       = 64,
             ts_per_rollout      = 2048,
             use_gae             = True,
             target_kl           = 0.3,
@@ -548,9 +548,9 @@ def bipedal_walker_hardcore_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    #actor_kw_args["activation"]     = nn.LeakyReLU()
+    actor_kw_args["activation"]     = nn.LeakyReLU()
     actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]    = 64
+    actor_kw_args["hidden_left"]    = 256
     actor_kw_args["hidden_right"]   = 64
 
     #
@@ -559,14 +559,14 @@ def bipedal_walker_hardcore_ppo(state_path,
     # provides the best performance, but I find that ReLU works better
     # here, which is the default.
     #
-    #actor_kw_args["std_offset"] = 0.1
+    actor_kw_args["std_offset"] = 0.1
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["hidden_left"]  = 256
+    critic_kw_args["hidden_right"] = 64
 
-    lr     = 0.0003
-    min_lr = 0.0003
+    lr     = 0.0001
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
         max_iteration = 1,
@@ -578,7 +578,7 @@ def bipedal_walker_hardcore_ppo(state_path,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
+            max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
@@ -588,7 +588,8 @@ def bipedal_walker_hardcore_ppo(state_path,
             bootstrap_clip      = (-10., 10.),
 
             #entropy_weight      = 0.0,
-            use_icm             = True,
+            #use_icm             = True,
+            #intr_reward_weight  = 0.2,
 
             lr_dec              = lr_dec,
             lr                  = lr,
