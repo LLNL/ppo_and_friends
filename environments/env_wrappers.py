@@ -88,7 +88,7 @@ class IdentityWrapper(object):
         """
             Render the environment.
         """
-        self.env.render(**kw_args)
+        return self.env.render(**kw_args)
 
     def save_info(self, path):
         """
