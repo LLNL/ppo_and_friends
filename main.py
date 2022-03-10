@@ -30,6 +30,8 @@ if __name__ == "__main__":
         help="Clobber any existing saves associated with this environment.")
     parser.add_argument("--render", action="store_true",
         help="Render the environment at each step.")
+    parser.add_argument("--render_gif", action="store_true",
+        help="Render a gif when testing.")
     parser.add_argument("--num_timesteps", default=10000000, type=int,
         help="The number of timesteps to train for.")
     parser.add_argument("--random_seed", default=2, type=int,
@@ -69,8 +71,25 @@ if __name__ == "__main__":
     state_path        = os.path.join(args.state_path, "saved_states", env_name)
     clobber           = args.clobber
     render            = args.render
+    render_gif        = args.render_gif
     num_timesteps     = args.num_timesteps
     force_determinism = args.force_deterministic
+
+    if render and render_gif:
+        msg  = "ERROR: render and render_gif are both enabled, "
+        msg += "but they cannot be used simultaneously."
+        rank_print(msg)
+        comm.Abort()
+
+    if render_gif and not test:
+        msg = "ERROR: render_gif is only allowed when testing."
+        rank_print(msg)
+        comm.Abort()
+
+    if num_test_runs > 1 and not test:
+        msg = "ERROR: --num_test_runs can only be used with --test."
+        rank_print(msg)
+        comm.Abort()
 
     #
     # Set random seeds (this doesn't guarantee reproducibility, but it should
@@ -105,6 +124,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -116,6 +136,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -127,6 +148,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -138,6 +160,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -149,6 +172,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -160,6 +184,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -171,6 +196,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -182,6 +208,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -193,6 +220,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -204,6 +232,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -215,6 +244,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -226,6 +256,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -237,6 +268,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -248,6 +280,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -259,6 +292,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -270,6 +304,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -281,6 +316,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -292,6 +328,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -303,6 +340,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -314,6 +352,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -325,6 +364,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
@@ -336,6 +376,7 @@ if __name__ == "__main__":
             state_path    = state_path,
             load_state    = load_state,
             render        = render,
+            render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
             test          = test,
