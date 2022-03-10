@@ -84,11 +84,11 @@ class IdentityWrapper(object):
             return self.reset()
         return self.obs_cache
 
-    def render(self):
+    def render(self, **kw_args):
         """
             Render the environment.
         """
-        self.env.render()
+        self.env.render(**kw_args)
 
     def save_info(self, path):
         """
