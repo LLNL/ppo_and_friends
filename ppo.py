@@ -312,6 +312,7 @@ class PPO(object):
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["rollout time"]         = 0
+        self.status_dict["running time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
@@ -963,6 +964,8 @@ class PPO(object):
         ts_max     = self.status_dict["timesteps"] + num_timesteps
 
         while self.status_dict["timesteps"] < ts_max:
+            iter_start_time = time.time()
+
             dataset = self.rollout()
 
             self.status_dict["iteration"] += 1
@@ -1027,6 +1030,9 @@ class PPO(object):
             if self.lr <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
+
+            running_time = (time.time() - iter_start_time) / 60.
+            self.status_dict["running time"] += running_time
 
         stop_time = time.time()
         hours   = (stop_time - start_time) / 3600
