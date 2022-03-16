@@ -1041,9 +1041,10 @@ class PPO(object):
             running_time = (time.time() - iter_start_time)
             self.status_dict["running time"] += running_time
 
-        stop_time = time.time()
-        hours   = (stop_time - start_time) / 3600
-        rank_print("Time spent training: {} hours".format(hours))
+        stop_time   = time.time()
+        seconds     = (stop_time - start_time)
+        pretty_time = format_seconds(seconds)
+        rank_print("Time spent training: {}".format(pretty_time))
 
     def _ppo_batch_train(self, data_loader):
         """
