@@ -906,7 +906,7 @@ class PPO(object):
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
-        self.status_dict["total episodes"]      = total_episodes
+        self.status_dict["total episodes"]     += total_episodes
         self.status_dict["longest run"]         = longest_run
         self.status_dict["reward range"]        = rw_range
         self.status_dict["obs range"]           = obs_range
