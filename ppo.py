@@ -19,6 +19,7 @@ from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardCl
 from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
+from ppo_and_friends.utils.misc import format_seconds
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
@@ -533,7 +534,13 @@ class PPO(object):
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
         for key in self.status_dict:
-            rank_print("    {}: {}".format(key, self.status_dict[key]))
+
+            if key == "running time":
+                pretty_time = format_seconds(self.status_dict[key])
+                rank_print("    {}: {}".format(key, pretty_time))
+            else:
+                rank_print("    {}: {}".format(key, self.status_dict[key]))
+
         rank_print("--------------------------------------------------------")
 
     def update_learning_rate(self,
@@ -1031,7 +1038,7 @@ class PPO(object):
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
 
-            running_time = (time.time() - iter_start_time) / 60.
+            running_time = (time.time() - iter_start_time)
             self.status_dict["running time"] += running_time
 
         stop_time = time.time()

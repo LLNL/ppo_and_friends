@@ -175,3 +175,28 @@ class RunningStatNormalizer(object):
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
+
+def format_seconds(seconds):
+    """
+        Format a floating point representing seconds into
+        a nice readable string.
+
+        Arguments:
+            seconds    The seconds to format.
+
+        Returns:
+            A formatted string as either seconds, minutes, or hours.
+    """
+
+    output_time = seconds
+    output_unit = "seconds"
+
+    if output_time >= 60.:
+        output_time /= 60.
+        output_unit = "minutes"
+
+        if output_time >= 60.:
+            output_time /= 60.
+            output_unit = "hours"
+
+    return "{:.2f} {}".format(output_time, output_unit)
