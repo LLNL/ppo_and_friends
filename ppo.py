@@ -535,7 +535,7 @@ class PPO(object):
         rank_print("Status Report:")
         for key in self.status_dict:
 
-            if key == "running time":
+            if key == "running time" or key == "rollout time":
                 pretty_time = format_seconds(self.status_dict[key])
                 rank_print("    {}: {}".format(key, pretty_time))
             else:
