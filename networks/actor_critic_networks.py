@@ -15,8 +15,9 @@ class SimpleFeedForward(PPOActorCriticNetwork):
                  in_dim,
                  out_dim,
                  out_init,
-                 activation   = nn.ReLU(),
-                 hidden_size  = 128,
+                 activation        = nn.ReLU(),
+                 hidden_size       = 128,
+                 num_hidden_layers = 2,
                  **kw_args):
 
         super(SimpleFeedForward, self).__init__(
@@ -30,28 +31,32 @@ class SimpleFeedForward(PPOActorCriticNetwork):
             out_size     = out_dim
             self.out_dim = (out_dim,)
 
-        self.activation = activation
+        self.activation  = activation
+        self.input_layer = init_layer(nn.Linear(in_dim, hidden_size))
 
-        self.l1 = init_layer(nn.Linear(in_dim, hidden_size))
-        self.l2 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.l3 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.l4 = init_layer(nn.Linear(hidden_size, out_size),
+        hidden_layer_list = []
+        for _ in range(num_hidden_layers - 1):
+            hidden_layer_list.append(init_layer(
+                nn.Linear(
+                    hidden_size,
+                    hidden_size)))
+
+            hidden_layer_list.append(self.activation)
+
+        self.hidden_layers = nn.Sequential(*hidden_layer_list)
+
+        self.output_layer = init_layer(nn.Linear(hidden_size, out_size),
             weight_std=out_init)
 
     def forward(self, _input):
 
         out = _input.flatten(start_dim = 1)
 
-        out = self.l1(out)
+        out = self.input_layer(out)
         out = self.activation(out)
 
-        out = self.l2(out)
-        out = self.activation(out)
-
-        out = self.l3(out)
-        out = self.activation(out)
-
-        out = self.l4(out)
+        out = self.hidden_layers(out)
+        out = self.output_layer(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
