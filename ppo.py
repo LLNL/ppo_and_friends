@@ -317,7 +317,6 @@ class PPO(object):
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
-        self.status_dict["window grad"]          = 'N/A'
         self.status_dict["top window avg"]       = 'N/A'
         self.status_dict["episode reward avg"]   = 0
         self.status_dict["extrinsic score avg"]  = 0
@@ -918,15 +917,11 @@ class PPO(object):
         if self.score_cache.size < self.mean_window_size:
             self.score_cache = np.append(self.score_cache, running_score)
             self.status_dict["window avg"]  = "N/A"
-            self.status_dict["window grad"] = "N/A"
         else:
             self.score_cache = np.roll(self.score_cache, -1)
             self.score_cache[-1] = running_score
 
             self.status_dict["window avg"]  = self.score_cache.mean()
-
-            w_grad = np.gradient(self.score_cache).mean()
-            self.status_dict["window grad"] = w_grad
 
             if type(self.status_dict["top window avg"]) == str:
                 self.status_dict["top window avg"] = \
