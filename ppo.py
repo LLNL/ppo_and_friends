@@ -177,7 +177,9 @@ class PPO(object):
         ts_per_rollout = int(ts_per_rollout / num_procs)
         if rank == 0:
             ts_per_rollout += orig_ts % num_procs
-        rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
+
+        if not test_mode:
+            rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
         # For reproducibility, we need to set the environment's random
