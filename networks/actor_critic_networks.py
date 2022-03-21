@@ -12,17 +12,21 @@ from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SingleSplitOb
 class SimpleFeedForward(PPOActorCriticNetwork):
 
     def __init__(self,
+                 #FIXME: change to in_size, out_size?
                  in_dim,
                  out_dim,
-                 out_init,
-                 activation        = nn.ReLU(),
-                 hidden_size       = 128,
-                 num_hidden_layers = 2,
+                 out_init     = None,
+                 activation   = nn.ReLU(),
+                 hidden_size  = 128,
+                 hidden_depth = 2,
+                 is_embedded  = False,
                  **kw_args):
 
         super(SimpleFeedForward, self).__init__(
             out_dim = out_dim,
             **kw_args)
+
+        self.is_embedded = is_embedded
 
         if type(out_dim) == tuple:
             out_size     = reduce(lambda a, b: a*b, out_dim)
@@ -35,7 +39,7 @@ class SimpleFeedForward(PPOActorCriticNetwork):
         self.input_layer = init_layer(nn.Linear(in_dim, hidden_size))
 
         hidden_layer_list = []
-        for _ in range(num_hidden_layers - 1):
+        for _ in range(hidden_depth):
             hidden_layer_list.append(init_layer(
                 nn.Linear(
                     hidden_size,
@@ -45,8 +49,11 @@ class SimpleFeedForward(PPOActorCriticNetwork):
 
         self.hidden_layers = nn.Sequential(*hidden_layer_list)
 
-        self.output_layer = init_layer(nn.Linear(hidden_size, out_size),
-            weight_std=out_init)
+        if out_init != None:
+            self.output_layer = init_layer(nn.Linear(hidden_size, out_size),
+                weight_std=out_init)
+        else:
+            self.output_layer = init_layer(nn.Linear(hidden_size, out_size))
 
     def forward(self, _input):
 
@@ -56,7 +63,16 @@ class SimpleFeedForward(PPOActorCriticNetwork):
         out = self.activation(out)
 
         out = self.hidden_layers(out)
+
         out = self.output_layer(out)
+
+        #
+        # If this network is embedded in a larger network,
+        # we want to treat it as such and return the output
+        # after activation.
+        #
+        if self.is_embedded:
+            return self.activation(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
@@ -73,10 +89,12 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
                  in_dim,
                  out_dim,
                  out_init,
-                 hidden_left    = 64,
-                 hidden_right   = 64,
-                 num_out_layers = 1,
-                 activation     = nn.ReLU(),
+                 hidden_left_size   = 64,
+                 hidden_right_size  = 64,
+                 hidden_left_depth  = 2,
+                 hidden_right_depth = 2,
+                 output_depth       = 1,
+                 activation         = nn.ReLU(),
                  **kw_args):
 
         super(SimpleSplitObsNetwork, self).__init__(
@@ -105,41 +123,47 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         # that it splits between proprioceptive and exteroceptive (sensory
         # information about the environment).
         #
+
+        #
+        # Left side network.
+        #
         s1_kw_args = kw_args.copy()
         s1_kw_args["name"] = self.name + "_s1"
 
         self.s1_net = SimpleFeedForward(
-            in_dim     = side_1_dim,
-            out_dim    = hidden_left,
-            out_init   = np.sqrt(2),
-            activation = self.activation,
+            in_dim      = side_1_dim,
+            hidden_size = hidden_left_size,
+            out_dim     = hidden_left_size,
+            activation  = self.activation,
+            is_embedded = True,
             **s1_kw_args)
 
+        #
+        # Right side network.
+        #
         s2_kw_args = kw_args.copy()
         s2_kw_args["name"] = self.name + "_s2"
 
         self.s2_net = SimpleFeedForward(
-            in_dim     = side_2_dim,
-            out_dim    = hidden_right,
-            out_init   = np.sqrt(2),
-            activation = self.activation,
+            in_dim      = side_2_dim,
+            hidden_size = hidden_right_size,
+            out_dim     = hidden_right_size,
+            activation  = self.activation,
+            is_embedded = True,
             **s2_kw_args)
+        #
+        # Combined sides network.
+        #
+        combined_hidden_size = hidden_left_size + hidden_right_size
 
-        inner_hidden_size  = hidden_left + hidden_right
-
-        out_layer_list = []
-        for _ in range(num_out_layers - 1):
-            out_layer_list.append(init_layer(
-                nn.Linear(
-                    inner_hidden_size,
-                    inner_hidden_size)))
-
-            out_layer_list.append(activation)
-
-        out_layer_list.append(init_layer(nn.Linear(inner_hidden_size,
-            out_size), weight_std=out_init))
-
-        self.out_layers = nn.Sequential(*out_layer_list)
+        self.combined_layers = SimpleFeedForward(
+            in_dim      = combined_hidden_size,
+            hidden_size = combined_hidden_size,
+            out_dim     = out_size,
+            activation  = self.activation,
+            is_embedded = False,
+            out_init    = out_init,
+            **s2_kw_args)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -161,7 +185,7 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         # Full layers.
         #
         out = torch.cat((s1_out, s2_out), dim=1)
-        out = self.out_layers(out)
+        out = self.combined_layers(out)
 
         if self.need_softmax:
             out = F.softmax(out, dim=-1)
