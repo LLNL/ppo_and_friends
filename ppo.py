@@ -12,7 +12,6 @@ from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
 from ppo_and_friends.utils.decrementers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.environments.vectorize import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
@@ -1213,6 +1212,8 @@ class PPO(object):
         """
             Save all information required for a restart.
         """
+        comm.barrier()
+
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
