@@ -138,7 +138,6 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
 
 class SplitObsNetwork(SingleSplitObservationNetwork):
-
     def __init__(self,
                  in_dim,
                  out_dim,
@@ -153,6 +152,58 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
                  combined_hidden_depth = 1,
                  activation            = nn.ReLU(),
                  **kw_args):
+        """
+            A class defining a customizable "split" network, where we
+            split the network into 2 halves before joining them into
+            a "merged" section. The idea here comes from arXiv:1610.05182v1,
+            although this implementation more closely resembles the network
+            used in arXiv:1707.02286v2. In both cases, the goal is to
+            split proprioceptive/egocentric information (think joints,
+            angular velocities, etc.) from exteroceptive information that
+            relates to the environment (terrain sensors, position in relation
+            to the terrain, etc.).
+
+            Arguments:
+
+             in_dim                The dimensions of the input data. For
+                                   instance, if the expected input shape is
+                                   (batch_size, 16, 4), in_dim would be (16, 4).
+             out_dim               The expected dimensions for the output. For
+                                   instance, if the expected output shape is
+                                   (batch_size, 16, 4), out_dim would be
+                                   (16, 4).
+             out_init              A std weight to apply to the output layer.
+             left_hidden_size      The number of output neurons for each hidden
+                                   layer of the left network. Note that this can
+                                   be set to 0, resulting in only an input and
+                                   output layer.
+             left_hidden_depth     The number of hidden layers in the left
+                                   network. Note that this does NOT include the
+                                   input and output layers.
+             left_out_size         The number of output neurons for the left
+                                   network.
+             right_hidden_size     The number of output neurons for each hidden
+                                   layer of the right network. Note that this
+                                   can be set to 0, resulting in only an input
+                                   and output layer.
+             right_hidden_depth    The number of hidden layers in the right
+                                   network. Note that this does NOT include the
+                                   input and output layers.
+             right_out_size        The number of output neurons for the right
+                                   network.
+
+             combined_hidden_size  The number of output neurons for each hidden
+                                   layer of the right network. Note that this
+                                   can be set to 0, resulting in only an input
+                                   and output layer.
+             combined_hidden_depth The number of hidden layers in the right
+                                   network. Note that this does NOT include the
+                                   input and output layers.
+
+             activation            The activation function to use on the output
+                                   of hidden layers.
+        """
+
 
         super(SplitObsNetwork, self).__init__(
             out_dim = out_dim,
