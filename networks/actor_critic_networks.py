@@ -16,7 +16,7 @@ num_procs = comm.Get_size()
 
 
 #TODO: add doc strings
-class SimpleFeedForward(PPOActorCriticNetwork):
+class FeedForwardNetwork(PPOActorCriticNetwork):
 
     def __init__(self,
                  in_dim,
@@ -28,7 +28,7 @@ class SimpleFeedForward(PPOActorCriticNetwork):
                  is_embedded  = False,
                  **kw_args):
 
-        super(SimpleFeedForward, self).__init__(
+        super(FeedForwardNetwork, self).__init__(
             out_dim = out_dim,
             **kw_args)
 
@@ -113,28 +113,24 @@ class SimpleFeedForward(PPOActorCriticNetwork):
         return out
 
 
-class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
+class SplitObsNetwork(SingleSplitObservationNetwork):
 
     def __init__(self,
                  in_dim,
                  out_dim,
                  out_init,
-
                  left_hidden_size      = 64,
                  left_hidden_depth     = 2,
                  left_out_size         = 64,
-
                  right_hidden_size     = 64,
                  right_hidden_depth    = 2,
                  right_out_size        = 64,
-
                  combined_hidden_size  = 128,
                  combined_hidden_depth = 1,
                  activation            = nn.ReLU(),
-
                  **kw_args):
 
-        super(SimpleSplitObsNetwork, self).__init__(
+        super(SplitObsNetwork, self).__init__(
             out_dim = out_dim,
             **kw_args)
 
@@ -167,7 +163,7 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         s1_kw_args = kw_args.copy()
         s1_kw_args["name"] = self.name + "_s1"
 
-        self.s1_net = SimpleFeedForward(
+        self.s1_net = FeedForwardNetwork(
             in_dim       = side_1_dim,
             hidden_size  = left_hidden_size,
             hidden_depth = left_hidden_depth,
@@ -182,7 +178,7 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         s2_kw_args = kw_args.copy()
         s2_kw_args["name"] = self.name + "_s2"
 
-        self.s2_net = SimpleFeedForward(
+        self.s2_net = FeedForwardNetwork(
             in_dim       = side_2_dim,
             hidden_size  = right_hidden_size,
             hidden_depth = right_hidden_depth,
@@ -195,7 +191,7 @@ class SimpleSplitObsNetwork(SingleSplitObservationNetwork):
         #
         combined_in_size = left_out_size + right_out_size
 
-        self.combined_layers = SimpleFeedForward(
+        self.combined_layers = FeedForwardNetwork(
             in_dim       = combined_in_size,
             hidden_size  = combined_hidden_size,
             hidden_depth = combined_hidden_depth,

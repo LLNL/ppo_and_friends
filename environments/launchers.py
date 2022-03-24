@@ -5,8 +5,8 @@
 import gym
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
-from ppo_and_friends.networks.actor_critic_networks import SimpleFeedForward, AtariPixelNetwork
-from ppo_and_friends.networks.actor_critic_networks import SimpleSplitObsNetwork
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
+from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from .gym_wrappers import *
@@ -42,6 +42,8 @@ def run_ppo(env,
             actor_kw_args       = {},
             critic_kw_args      = {},
             icm_kw_args         = {},
+            gamma               = 0.99,
+            lambd               = 0.95,
             surr_clip           = 0.2,
             bootstrap_clip      = (-10.0, 10.0),
             dynamic_bs_clip     = False,
@@ -81,6 +83,8 @@ def run_ppo(env,
               icm_kw_args        = icm_kw_args,
               actor_kw_args      = actor_kw_args,
               critic_kw_args     = critic_kw_args,
+              gamma              = gamma,
+              lambd              = lambd,
               surr_clip          = surr_clip,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
@@ -131,7 +135,7 @@ def cartpole_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
             use_gae            = True,
             normalize_obs      = True,
@@ -181,7 +185,7 @@ def pendulum_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             max_ts_per_ep      = 32,
@@ -242,7 +246,7 @@ def mountain_car_ppo(state_path,
     #
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             dynamic_bs_clip    = True,
@@ -306,7 +310,7 @@ def mountain_car_continuous_ppo(state_path,
     #
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 128,
             ts_per_rollout     = 2048,
             batch_size         = 512,
@@ -364,7 +368,7 @@ def acrobot_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
             ts_per_rollout     = 2048,
             lr_dec             = lr_dec,
@@ -426,7 +430,7 @@ def lunar_lander_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 128,
             ts_per_rollout      = 2048,
             batch_size          = 512,
@@ -496,7 +500,7 @@ def lunar_lander_continuous_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             batch_size          = 512,
@@ -539,22 +543,31 @@ def bipedal_walker_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]     = nn.LeakyReLU()
-    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]    = 64
-    actor_kw_args["hidden_right"]   = 64
 
     #
     # I've found that a lower std offset greatly improves performance
-    # in this environment. Also, most papers suggest that using Tanh
-    # provides the best performance, but I find that ReLU works better
-    # here, which is the default.
+    # stability in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that LeakyReLU works better
+    # here.
     #
     actor_kw_args["std_offset"] = 0.1
 
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
+
+    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 32
+
+    actor_kw_args["right_hidden_size"]  = 16
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 16
+
+    actor_kw_args["combined_hidden_size"]  = 64
+    actor_kw_args["combined_hidden_depth"] = 2
+
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -566,18 +579,19 @@ def bipedal_walker_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
-            ts_per_rollout      = 2048,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 1024,
             use_gae             = True,
+            normalize_adv       = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
+            obs_clip            = (-100., 100.),
+            reward_clip         = (-100., 100.),
+            bootstrap_clip      = (-100., 100.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
@@ -607,49 +621,59 @@ def bipedal_walker_hardcore_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]     = nn.LeakyReLU()
-    actor_kw_args["hidden size"]    = 512
-    #actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    #actor_kw_args["hidden_left"]    = 256
-    #actor_kw_args["hidden_right"]   = 128
 
     #
     # I've found that a lower std offset greatly improves performance
-    # in this environment. Also, most papers suggest that using Tanh
-    # provides the best performance, but I find that ReLU works better
-    # here, which is the default.
+    # stability in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that LeakyReLU works better
+    # here.
     #
     actor_kw_args["std_offset"] = 0.1
 
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
+
+    actor_kw_args["left_hidden_size"]  = 64
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 64
+
+    actor_kw_args["right_hidden_size"]  = 16
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 16
+
+    actor_kw_args["combined_hidden_size"]  = 128
+    actor_kw_args["combined_hidden_depth"] = 2
+
     critic_kw_args = actor_kw_args.copy()
-    #critic_kw_args["hidden_left"]  = 256
-    #critic_kw_args["hidden_right"] = 256
 
     lr     = 0.0003
     min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1000,
+        max_iteration = 200,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
 
-            #ac_network          = SimpleSplitObsNetwork,
-            ac_network          = SimpleFeedForward,
+            ac_network          = SplitObsNetwork,
 
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
+
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
+            #ts_per_rollout      = 2048,
+
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
+            obs_clip            = (-100., 100.),
+            reward_clip         = (-100., 100.),
+            bootstrap_clip      = (-100., 100.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
@@ -719,7 +743,7 @@ def assault_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             batch_size         = 512,
@@ -944,7 +968,7 @@ def breakout_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             batch_size         = 512,
@@ -987,7 +1011,7 @@ def inverted_pendulum_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             use_gae             = True,
             use_icm             = False,
             state_path          = state_path,
@@ -1024,14 +1048,15 @@ def inverted_double_pendulum_ppo(state_path,
     #    Contact forces: 3
     #
     actor_kw_args = {}
+    #FIXME: make sure this still makes sense with changes.
     actor_kw_args["activation"]   = nn.LeakyReLU()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
-    actor_kw_args["hidden_left"]  = 64
-    actor_kw_args["hidden_right"] = 16
+    actor_kw_args["left_hidden_size"]  = 64
+    actor_kw_args["right_hidden_size"] = 16
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["left_hidden_size"]  = 128
+    critic_kw_args["right_hidden_size"] = 128
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1043,7 +1068,7 @@ def inverted_double_pendulum_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1088,14 +1113,15 @@ def ant_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
+    #FIXME: make sure this still makes sense with changes.
     actor_kw_args["activation"]   = nn.LeakyReLU()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 32
-    actor_kw_args["hidden_right"] = 84
+    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["right_hidden_size"] = 84
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 256
-    critic_kw_args["hidden_right"] = 256
+    critic_kw_args["left_hidden_size"]  = 256
+    critic_kw_args["right_hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0000
@@ -1107,7 +1133,7 @@ def ant_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1181,10 +1207,11 @@ def humanoid_ppo(state_path,
     #             too much.
     #
 
+    #FIXME: make sure this still makes sense with changes.
     actor_kw_args["activation"]   = nn.Tanh()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
-    actor_kw_args["hidden_left"]  = 256
-    actor_kw_args["hidden_right"] = 64
+    actor_kw_args["left_hidden_size"]  = 256
+    actor_kw_args["right_hidden_size"] = 64
 
     #
     # The action range for Humanoid is [-.4, .4]. Enforcing
@@ -1195,8 +1222,8 @@ def humanoid_ppo(state_path,
     actor_kw_args["distribution_max"] = 0.4
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 256
-    critic_kw_args["hidden_right"] = 256
+    critic_kw_args["left_hidden_size"]  = 256
+    critic_kw_args["right_hidden_size"] = 256
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1208,7 +1235,7 @@ def humanoid_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1262,10 +1289,11 @@ def humanoid_stand_up_ppo(state_path,
     #
     actor_kw_args = {}
 
+    #FIXME: make sure this still makes sense with changes.
     actor_kw_args["activation"]   = nn.Tanh()
     actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 512
-    actor_kw_args["hidden_right"] = 32
+    actor_kw_args["left_hidden_size"]  = 512
+    actor_kw_args["right_hidden_size"] = 32
 
     #
     # The action range for Humanoid is [-.4, .4]. Enforcing
@@ -1276,8 +1304,8 @@ def humanoid_stand_up_ppo(state_path,
     actor_kw_args["distribution_max"] = 0.4
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 512
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["left_hidden_size"]  = 512
+    critic_kw_args["right_hidden_size"] = 128
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1289,7 +1317,7 @@ def humanoid_stand_up_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1344,7 +1372,7 @@ def walker2d_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1398,7 +1426,7 @@ def hopper_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1452,7 +1480,7 @@ def half_cheetah_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1505,7 +1533,7 @@ def swimmer_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
