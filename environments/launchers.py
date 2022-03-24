@@ -408,6 +408,10 @@ def lunar_lander_ppo(state_path,
 
     env = gym.make('LunarLander-v2')
 
+    # TODO: we could try treating the x,y coordinates of the observation
+    # space as exteroceptive information in a split network. Let's see if
+    # that speeds up training at all.
+
     #
     # Extra args for the actor critic models.
     # I find that leaky relu does much better with the lunar
@@ -635,19 +639,21 @@ def bipedal_walker_hardcore_ppo(state_path,
 
     actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
 
-    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["left_hidden_size"]  = 16
     actor_kw_args["left_hidden_depth"] = 1
-    actor_kw_args["left_out_size"]     = 32
+    actor_kw_args["left_out_size"]     = 16
 
-    actor_kw_args["right_hidden_size"]  = 16
-    actor_kw_args["right_hidden_depth"] = 2
-    actor_kw_args["right_out_size"]     = 16
+    # TODO: we could try outputing size of 4 to represent the
+    # 4 motor controls.
+    actor_kw_args["right_hidden_size"]  = 32
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 32
 
-    actor_kw_args["combined_hidden_size"]  = 64
+    actor_kw_args["combined_hidden_size"]  = 128
     actor_kw_args["combined_hidden_depth"] = 2
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["combined_hidden_size"] = 128
+    critic_kw_args["combined_hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -1188,11 +1194,6 @@ def humanoid_ppo(state_path,
     # UPDATE: more complete information on the observations cane be found
     # here:
     # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
-    #
-    # Technically, I think actuator forces would fall under
-    # proprioceptive information, but the model seems to train
-    # a bit more quickly when it's coupled with the
-    # exteroceptive contact forces.
     #
     actor_kw_args = {}
 
