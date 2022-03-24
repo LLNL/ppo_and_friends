@@ -634,18 +634,20 @@ def bipedal_walker_hardcore_ppo(state_path,
 
     actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
 
-    actor_kw_args["left_hidden_size"]  = 64
+    actor_kw_args["left_hidden_size"]  = 32
     actor_kw_args["left_hidden_depth"] = 1
-    actor_kw_args["left_out_size"]     = 64
+    actor_kw_args["left_out_size"]     = 32
 
     actor_kw_args["right_hidden_size"]  = 16
     actor_kw_args["right_hidden_depth"] = 1
     actor_kw_args["right_out_size"]     = 16
 
-    actor_kw_args["combined_hidden_size"]  = 128
+    actor_kw_args["combined_hidden_size"]  = 64
     actor_kw_args["combined_hidden_depth"] = 2
 
     critic_kw_args = actor_kw_args.copy()
+    #TODO: test this
+    #critic_kw_args["combined_hidden_size"] = 128
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -664,7 +666,7 @@ def bipedal_walker_hardcore_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
 
-            max_ts_per_ep       = 32,
+            max_ts_per_ep       = 64,
             ts_per_rollout      = 1024,
             #ts_per_rollout      = 2048,
 
@@ -1048,15 +1050,35 @@ def inverted_double_pendulum_ppo(state_path,
     #    Contact forces: 3
     #
     actor_kw_args = {}
+
     #FIXME: make sure this still makes sense with changes.
-    actor_kw_args["activation"]   = nn.LeakyReLU()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
-    actor_kw_args["left_hidden_size"]  = 64
-    actor_kw_args["right_hidden_size"] = 16
+    #actor_kw_args["activation"]   = nn.LeakyReLU()
+    #actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
+    #actor_kw_args["left_hidden_size"]  = 64
+    #actor_kw_args["right_hidden_size"] = 16
+
+    #critic_kw_args = actor_kw_args.copy()
+    #critic_kw_args["left_hidden_size"]  = 128
+    #critic_kw_args["right_hidden_size"] = 128
+
+    #FIXME: test this out
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 3
+
+    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 32
+
+    actor_kw_args["right_hidden_size"]  = 16
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 16
+
+    actor_kw_args["combined_hidden_size"]  = 64
+    actor_kw_args["combined_hidden_depth"] = 2
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["left_hidden_size"]  = 128
-    critic_kw_args["right_hidden_size"] = 128
+    actor_kw_args["combined_hidden_size"] = 128
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1073,7 +1095,7 @@ def inverted_double_pendulum_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2056,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1114,14 +1136,33 @@ def ant_ppo(state_path,
     #
     actor_kw_args = {}
     #FIXME: make sure this still makes sense with changes.
-    actor_kw_args["activation"]   = nn.LeakyReLU()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    #actor_kw_args["activation"]   = nn.LeakyReLU()
+    #actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    #actor_kw_args["left_hidden_size"]  = 32
+    #actor_kw_args["right_hidden_size"] = 84
+
+    #critic_kw_args = actor_kw_args.copy()
+    #critic_kw_args["left_hidden_size"]  = 256
+    #critic_kw_args["right_hidden_size"] = 256
+
+    #TODO: test this
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 84
+
     actor_kw_args["left_hidden_size"]  = 32
-    actor_kw_args["right_hidden_size"] = 84
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 32
+
+    actor_kw_args["right_hidden_size"]  = 84
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 84
+
+    actor_kw_args["combined_hidden_size"]  = 128
+    actor_kw_args["combined_hidden_depth"] = 2
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["left_hidden_size"]  = 256
-    critic_kw_args["right_hidden_size"] = 256
+    actor_kw_args["combined_hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0000
@@ -1208,22 +1249,44 @@ def humanoid_ppo(state_path,
     #
 
     #FIXME: make sure this still makes sense with changes.
-    actor_kw_args["activation"]   = nn.Tanh()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
-    actor_kw_args["left_hidden_size"]  = 256
-    actor_kw_args["right_hidden_size"] = 64
+    #actor_kw_args["activation"]   = nn.Tanh()
+    #actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
+    #actor_kw_args["left_hidden_size"]  = 256
+    #actor_kw_args["right_hidden_size"] = 64
 
-    #
-    # The action range for Humanoid is [-.4, .4]. Enforcing
-    # this range in our predicted actions isn't required for
-    # learning a good policy, but it does help speed things up.
-    #
+    ##
+    ## The action range for Humanoid is [-.4, .4]. Enforcing
+    ## this range in our predicted actions isn't required for
+    ## learning a good policy, but it does help speed things up.
+    ##
+    #actor_kw_args["distribution_min"] = -0.4
+    #actor_kw_args["distribution_max"] = 0.4
+
+    #critic_kw_args = actor_kw_args.copy()
+    #critic_kw_args["left_hidden_size"]  = 256
+    #critic_kw_args["right_hidden_size"] = 256
+
+    #TODO: test this
+    actor_kw_args["activation"]  = nn.Tanh()
+
     actor_kw_args["distribution_min"] = -0.4
     actor_kw_args["distribution_max"] = 0.4
 
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - (84 + 23)
+
+    actor_kw_args["left_hidden_size"]  = 256
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 256
+
+    actor_kw_args["right_hidden_size"]  = 64
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 64
+
+    actor_kw_args["combined_hidden_size"]  = 512
+    actor_kw_args["combined_hidden_depth"] = 2
+
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["left_hidden_size"]  = 256
-    critic_kw_args["right_hidden_size"] = 256
+    actor_kw_args["combined_hidden_size"] = 512
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1290,10 +1353,25 @@ def humanoid_stand_up_ppo(state_path,
     actor_kw_args = {}
 
     #FIXME: make sure this still makes sense with changes.
-    actor_kw_args["activation"]   = nn.Tanh()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["left_hidden_size"]  = 512
-    actor_kw_args["right_hidden_size"] = 32
+    #actor_kw_args["activation"]   = nn.Tanh()
+    #actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
+    #actor_kw_args["left_hidden_size"]  = 512
+    #actor_kw_args["right_hidden_size"] = 32
+
+    ##
+    ## The action range for Humanoid is [-.4, .4]. Enforcing
+    ## this range in our predicted actions isn't required for
+    ## learning a good policy, but it does help speed things up.
+    ##
+    #actor_kw_args["distribution_min"] = -0.4
+    #actor_kw_args["distribution_max"] = 0.4
+
+    #critic_kw_args = actor_kw_args.copy()
+    #critic_kw_args["left_hidden_size"]  = 512
+    #critic_kw_args["right_hidden_size"] = 128
+
+    #TODO: test this
+    actor_kw_args["activation"]  = nn.Tanh()
 
     #
     # The action range for Humanoid is [-.4, .4]. Enforcing
@@ -1303,9 +1381,21 @@ def humanoid_stand_up_ppo(state_path,
     actor_kw_args["distribution_min"] = -0.4
     actor_kw_args["distribution_max"] = 0.4
 
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 84
+
+    actor_kw_args["left_hidden_size"]  = 512
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 512
+
+    actor_kw_args["right_hidden_size"]  = 32
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 32
+
+    actor_kw_args["combined_hidden_size"]  = 512
+    actor_kw_args["combined_hidden_depth"] = 2
+
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["left_hidden_size"]  = 512
-    critic_kw_args["right_hidden_size"] = 128
+    actor_kw_args["combined_hidden_size"] = 512
 
     lr     = 0.0001
     min_lr = 0.0001
