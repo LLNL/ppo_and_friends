@@ -96,7 +96,8 @@ Some things to note:
    in the set `U` after running for at least 500 time steps. If our total
    timesteps per rollout is set to 1024, and we run with > 2 processors,
    we will never collect states from `U` and thus might not ever learn
-   how to handle those unique situations.
+   how to handle those unique situations. **Note**: this particular issue
+   is now partially mitigated by the recent addition of "soft resets".
 3. When running with multiple processors, the stats that are displayed
    might not fully reflect the true status of learning. For instance,
    imagine an environment that, when performing well, receives +1 for
