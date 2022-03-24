@@ -18,6 +18,7 @@ num_procs = comm.Get_size()
 #TODO: add doc strings
 class FeedForwardNetwork(PPOActorCriticNetwork):
 
+    #TODO: let's allow varying hidden sizes.
     def __init__(self,
                  in_dim,
                  out_dim,
@@ -27,13 +28,36 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
                  hidden_depth = 2,
                  is_embedded  = False,
                  **kw_args):
+        """
+            A class defining a customizable feed-forward network.
+
+            Arguments:
+                in_dim          The dimensions of the input data. For
+                                instance, if the expected input shape is
+                                (batch_size, 16, 4), in_dim would be (16, 4).
+                out_dim         The expected dimensions for the output. For
+                                instance, if the expected output shape is
+                                (batch_size, 16, 4), out_dim would be (16, 4).
+                out_init        A std weight to apply to the output layer.
+                activation      The activation function to use on the output
+                                of hidden layers.
+                hidden_size     The number of output neurons for each hidden
+                                layer. Note that this can be set to 0, resulting
+                                in only an input and output layer.
+                hidden_depth    The number of hidden layers. Note that this
+                                does NOT include the input and output layers.
+                is_embedded     If True, this network will be treated as being
+                                embedded in a large network, and the output
+                                from the output layer will be sent through
+                                the activation function.
+        """
 
         super(FeedForwardNetwork, self).__init__(
             out_dim = out_dim,
             **kw_args)
 
         self.is_embedded = is_embedded
-        self.output_only = False
+        self.no_hidden   = False
 
         if type(out_dim) == tuple:
             out_size     = reduce(lambda a, b: a*b, out_dim)
@@ -76,7 +100,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
                 self.output_layer = init_layer(nn.Linear(hidden_size, out_size))
         else:
             self.input_layer = None
-            self.output_only = True
+            self.no_hidden   = True
 
             if out_init != None:
                 self.output_layer = init_layer(nn.Linear(in_dim, out_size),
@@ -88,7 +112,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         out = _input.flatten(start_dim = 1)
 
-        if not self.output_only:
+        if not self.no_hidden:
             out = self.input_layer(out)
             out = self.activation(out)
 
