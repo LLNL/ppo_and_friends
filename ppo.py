@@ -647,7 +647,11 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.eval()
 
-        obs = self.env.soft_reset()
+        # FIXME: soft resets might cause issues with local traps... We could
+        # maybe mitigate this by alternating between soft and hard resets every
+        # other rollout.
+        #obs = self.env.soft_reset()
+        obs = self.env.reset()
 
         start_time = time.time()
 
