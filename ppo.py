@@ -12,13 +12,13 @@ from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
 from ppo_and_friends.utils.decrementers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.environments.vectorize import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
+from ppo_and_friends.utils.misc import format_seconds
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
@@ -69,6 +69,7 @@ class PPO(object):
                  load_state          = False,
                  state_path          = "./",
                  save_best_only      = False,
+                 use_soft_resets     = True,
                  test_mode           = False):
         """
             Initialize the PPO trainer.
@@ -163,6 +164,7 @@ class PPO(object):
                                       this assumes that the top scores will be
                                       the best policy, which might not always
                                       hold up, but it's a general assumption.
+                 use_soft_resets      Use "soft resets" during rollouts.
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
         """
@@ -176,7 +178,9 @@ class PPO(object):
         ts_per_rollout = int(ts_per_rollout / num_procs)
         if rank == 0:
             ts_per_rollout += orig_ts % num_procs
-        rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
+
+        if not test_mode:
+            rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
         # For reproducibility, we need to set the environment's random
@@ -304,6 +308,7 @@ class PPO(object):
         self.normalize_rewards   = normalize_rewards
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
+        self.use_soft_resets     = use_soft_resets
 
         #
         # Create a dictionary to track the status of training.
@@ -312,10 +317,10 @@ class PPO(object):
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["rollout time"]         = 0
+        self.status_dict["running time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
         self.status_dict["window avg"]           = 'N/A'
-        self.status_dict["window grad"]          = 'N/A'
         self.status_dict["top window avg"]       = 'N/A'
         self.status_dict["episode reward avg"]   = 0
         self.status_dict["extrinsic score avg"]  = 0
@@ -331,6 +336,18 @@ class PPO(object):
 
         if save_best_only:
             self.status_dict["last save"] = -1
+
+        #
+        # Some methods (ICM) perform best if we can clone the environment,
+        # but not all environments support this.
+        #
+        try:
+            self.env.reset()
+            cloned_env = deepcopy(self.env)
+            cloned_env.step(cloned_env.action_space.sample())
+            self.can_clone_env = True
+        except:
+            self.can_clone_env = False
 
         #
         # Initialize our networks: actor, critic, and possible ICM.
@@ -520,7 +537,13 @@ class PPO(object):
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
         for key in self.status_dict:
-            rank_print("    {}: {}".format(key, self.status_dict[key]))
+
+            if key == "running time" or key == "rollout time":
+                pretty_time = format_seconds(self.status_dict[key])
+                rank_print("    {}: {}".format(key, pretty_time))
+            else:
+                rank_print("    {}: {}".format(key, self.status_dict[key]))
+
         rank_print("--------------------------------------------------------")
 
     def update_learning_rate(self,
@@ -627,7 +650,15 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.eval()
 
-        obs = self.env.soft_reset()
+        #
+        # TODO: soft resets might cause rollouts to start off in "traps"
+        # that are impossible to escape. We might be able to handle this
+        # more intelligently.
+        #
+        if self.use_soft_resets:
+            obs = self.env.soft_reset()
+        else:
+            obs = self.env.reset()
 
         start_time = time.time()
 
@@ -790,21 +821,21 @@ class PPO(object):
                     # output can act as an extra surprise bonus.
                     #
                     if self.use_icm:
-                        _, clone_action, _ = self.get_action(obs)
+                        if self.can_clone_env:
+                            _, clone_action, _ = self.get_action(obs)
 
-                        if self.action_squeeze:
-                            clone_action = clone_action.squeeze()
+                            if self.action_squeeze:
+                                clone_action = clone_action.squeeze()
 
-                        clone_prev_obs = obs.copy()
-                        cloned_env = deepcopy(self.env)
+                            clone_prev_obs = obs.copy()
+                            cloned_env = deepcopy(self.env)
+                            clone_obs, _, _, _ = cloned_env.step(clone_action)
+                            del cloned_env
 
-                        clone_obs, _, _, _ = cloned_env.step(clone_action)
-                        del cloned_env
-
-                        intr_reward = self.get_intrinsic_reward(
-                            clone_prev_obs,
-                            clone_obs,
-                            clone_action)
+                            intr_reward = self.get_intrinsic_reward(
+                                clone_prev_obs,
+                                clone_obs,
+                                clone_action)
 
                         ism         = self.status_dict["intrinsic score avg"]
                         surprise    = intr_reward - ism
@@ -886,7 +917,7 @@ class PPO(object):
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
-        self.status_dict["total episodes"]      = total_episodes
+        self.status_dict["total episodes"]     += total_episodes
         self.status_dict["longest run"]         = longest_run
         self.status_dict["reward range"]        = rw_range
         self.status_dict["obs range"]           = obs_range
@@ -898,15 +929,11 @@ class PPO(object):
         if self.score_cache.size < self.mean_window_size:
             self.score_cache = np.append(self.score_cache, running_score)
             self.status_dict["window avg"]  = "N/A"
-            self.status_dict["window grad"] = "N/A"
         else:
             self.score_cache = np.roll(self.score_cache, -1)
             self.score_cache[-1] = running_score
 
             self.status_dict["window avg"]  = self.score_cache.mean()
-
-            w_grad = np.gradient(self.score_cache).mean()
-            self.status_dict["window grad"] = w_grad
 
             if type(self.status_dict["top window avg"]) == str:
                 self.status_dict["top window avg"] = \
@@ -951,6 +978,8 @@ class PPO(object):
         ts_max     = self.status_dict["timesteps"] + num_timesteps
 
         while self.status_dict["timesteps"] < ts_max:
+            iter_start_time = time.time()
+
             dataset = self.rollout()
 
             self.status_dict["iteration"] += 1
@@ -1016,9 +1045,13 @@ class PPO(object):
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
 
-        stop_time = time.time()
-        hours   = (stop_time - start_time) / 3600
-        rank_print("Time spent training: {} hours".format(hours))
+            running_time = (time.time() - iter_start_time)
+            self.status_dict["running time"] += running_time
+
+        stop_time   = time.time()
+        seconds     = (stop_time - start_time)
+        pretty_time = format_seconds(seconds)
+        rank_print("Time spent training: {}".format(pretty_time))
 
     def _ppo_batch_train(self, data_loader):
         """
@@ -1190,6 +1223,8 @@ class PPO(object):
         """
             Save all information required for a restart.
         """
+        comm.barrier()
+
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 

@@ -12,11 +12,12 @@ for pkg in packages:
 package_dirs["ppo_and_friends"] = "."
 
 dependencies = [
-          'pillow',
-          'gym',
-          'numpy',
-          'mpi4py',
-          'torch>=1.10.2',
+    'mujoco-py<2.2,>=2.1',
+    'pillow',
+    'gym',
+    'numpy',
+    'mpi4py',
+    'torch>=1.10.2',
 ]
 
 setup(name             = "ppo_and_friends",

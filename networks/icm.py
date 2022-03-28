@@ -162,6 +162,8 @@ class ICM(PPONetwork):
                  **kw_args):
         """
             The Intrinsic Curiosit Model (ICM).
+
+            This implementation of ICM comes from arXiv:1705.05363v1.
         """
 
         super(ICM, self).__init__(**kw_args)

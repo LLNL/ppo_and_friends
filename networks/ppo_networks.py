@@ -52,7 +52,7 @@ class PPOActorCriticNetwork(PPONetwork):
 
             Arguments:
                 action_dtype     The data type of our action space.
-                out_dim          The output dimension.
+                out_dim          The output dimensions.
         """
 
         super(PPOActorCriticNetwork, self).__init__(**kw_args)

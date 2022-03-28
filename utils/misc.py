@@ -33,6 +33,17 @@ def get_action_dtype(env):
 
 
 def need_action_squeeze(env):
+    """
+        Do we need to squeeze the actions before sending them to
+        the environment? This is typically an issue with the env,
+        but we can handle it ourselves.
+
+        Arguments:
+            env    The environment of interest.
+
+        Returns:
+            Whether or not we need to squeeze our actions.
+    """
 
     need_action_squeze = False
     act_type = type(env.action_space)
@@ -67,6 +78,13 @@ def need_action_squeeze(env):
 
 
 def update_optimizer_lr(optim, lr):
+    """
+        Update the learning rate of an optimizer.
+
+        Arguments:
+            optim    The optimizer to update.
+            lr       The new learning rate.
+    """
     for group in optim.param_groups:
         group['lr'] = lr
 
@@ -157,3 +175,28 @@ class RunningStatNormalizer(object):
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
+
+def format_seconds(seconds):
+    """
+        Format a floating point representing seconds into
+        a nice readable string.
+
+        Arguments:
+            seconds    The seconds to format.
+
+        Returns:
+            A formatted string as either seconds, minutes, or hours.
+    """
+
+    output_time = seconds
+    output_unit = "seconds"
+
+    if output_time >= 60.:
+        output_time /= 60.
+        output_unit = "minutes"
+
+        if output_time >= 60.:
+            output_time /= 60.
+            output_unit = "hours"
+
+    return "{:.2f} {}".format(output_time, output_unit)

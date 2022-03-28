@@ -5,8 +5,8 @@
 import gym
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
-from ppo_and_friends.networks.actor_critic_networks import SimpleFeedForward, AtariPixelNetwork
-from ppo_and_friends.networks.actor_critic_networks import SimpleSplitObsNetwork
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
+from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from .gym_wrappers import *
@@ -42,6 +42,8 @@ def run_ppo(env,
             actor_kw_args       = {},
             critic_kw_args      = {},
             icm_kw_args         = {},
+            gamma               = 0.99,
+            lambd               = 0.95,
             surr_clip           = 0.2,
             bootstrap_clip      = (-10.0, 10.0),
             dynamic_bs_clip     = False,
@@ -53,10 +55,12 @@ def run_ppo(env,
             obs_clip            = None,
             reward_clip         = None,
             render              = False,
+            render_gif          = False,
             load_state          = False,
             state_path          = "./",
             num_timesteps       = 1,
             test                = False,
+            use_soft_resets     = True,
             num_test_runs       = 1):
 
     ppo = PPO(env                = env,
@@ -80,6 +84,8 @@ def run_ppo(env,
               icm_kw_args        = icm_kw_args,
               actor_kw_args      = actor_kw_args,
               critic_kw_args     = critic_kw_args,
+              gamma              = gamma,
+              lambd              = lambd,
               surr_clip          = surr_clip,
               bootstrap_clip     = bootstrap_clip,
               dynamic_bs_clip    = dynamic_bs_clip,
@@ -93,10 +99,12 @@ def run_ppo(env,
               render             = render,
               load_state         = load_state,
               state_path         = state_path,
+              use_soft_resets    = use_soft_resets,
               test_mode          = test)
 
     if test:
         test_policy(ppo,
+                    render_gif,
                     num_test_runs,
                     device)
     else: 
@@ -110,6 +118,7 @@ def run_ppo(env,
 def cartpole_ppo(state_path,
                  load_state,
                  render,
+                 render_gif,
                  num_timesteps,
                  device,
                  random_seed,
@@ -128,7 +137,7 @@ def cartpole_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
             use_gae            = True,
             normalize_obs      = True,
@@ -139,6 +148,7 @@ def cartpole_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             lr                 = lr,
@@ -151,6 +161,7 @@ def cartpole_ppo(state_path,
 def pendulum_ppo(state_path,
                  load_state,
                  render,
+                 render_gif,
                  num_timesteps,
                  device,
                  random_seed,
@@ -176,7 +187,7 @@ def pendulum_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             max_ts_per_ep      = 32,
@@ -189,6 +200,7 @@ def pendulum_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             lr                 = lr,
@@ -201,6 +213,7 @@ def pendulum_ppo(state_path,
 def mountain_car_ppo(state_path,
                      load_state,
                      render,
+                     render_gif,
                      num_timesteps,
                      device,
                      random_seed,
@@ -235,7 +248,7 @@ def mountain_car_ppo(state_path,
     #
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             dynamic_bs_clip    = True,
@@ -255,6 +268,7 @@ def mountain_car_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             test               = test,
@@ -264,6 +278,7 @@ def mountain_car_ppo(state_path,
 def mountain_car_continuous_ppo(state_path,
                                 load_state,
                                 render,
+                                render_gif,
                                 num_timesteps,
                                 device,
                                 random_seed,
@@ -297,7 +312,7 @@ def mountain_car_continuous_ppo(state_path,
     #
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 128,
             ts_per_rollout     = 2048,
             batch_size         = 512,
@@ -320,6 +335,7 @@ def mountain_car_continuous_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             test               = test,
@@ -329,6 +345,7 @@ def mountain_car_continuous_ppo(state_path,
 def acrobot_ppo(state_path,
                 load_state,
                 render,
+                render_gif,
                 num_timesteps,
                 device,
                 random_seed,
@@ -353,9 +370,9 @@ def acrobot_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
-            ts_per_rollout     = 2048,
+            ts_per_rollout     = 1024,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
@@ -370,6 +387,7 @@ def acrobot_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             test               = test,
@@ -383,6 +401,7 @@ def acrobot_ppo(state_path,
 def lunar_lander_ppo(state_path,
                      load_state,
                      render,
+                     render_gif,
                      num_timesteps,
                      device,
                      random_seed,
@@ -390,6 +409,10 @@ def lunar_lander_ppo(state_path,
                      num_test_runs = 1):
 
     env = gym.make('LunarLander-v2')
+
+    # TODO: we could try treating the x,y coordinates of the observation
+    # space as exteroceptive information in a split network. Let's see if
+    # that speeds up training at all.
 
     #
     # Extra args for the actor critic models.
@@ -413,7 +436,7 @@ def lunar_lander_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 128,
             ts_per_rollout      = 2048,
             batch_size          = 512,
@@ -430,6 +453,7 @@ def lunar_lander_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             lr_dec              = lr_dec,
@@ -442,6 +466,7 @@ def lunar_lander_ppo(state_path,
 def lunar_lander_continuous_ppo(state_path,
                                 load_state,
                                 render,
+                                render_gif,
                                 num_timesteps,
                                 device,
                                 random_seed,
@@ -481,7 +506,7 @@ def lunar_lander_continuous_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             batch_size          = 512,
@@ -498,6 +523,7 @@ def lunar_lander_continuous_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             lr_dec              = lr_dec,
@@ -510,6 +536,7 @@ def lunar_lander_continuous_ppo(state_path,
 def bipedal_walker_ppo(state_path,
                        load_state,
                        render,
+                       render_gif,
                        num_timesteps,
                        device,
                        random_seed,
@@ -522,22 +549,32 @@ def bipedal_walker_ppo(state_path,
     # The lidar observations are the last 10.
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]     = nn.LeakyReLU()
-    actor_kw_args["split_start"]    = env.observation_space.shape[0] - 10
-    actor_kw_args["hidden_left"]    = 64
-    actor_kw_args["hidden_right"]   = 64
 
     #
     # I've found that a lower std offset greatly improves performance
-    # in this environment. Also, most papers suggest that using Tanh
-    # provides the best performance, but I find that ReLU works better
-    # here, which is the default.
+    # stability in this environment. Also, most papers suggest that using Tanh
+    # provides the best performance, but I find that LeakyReLU works better
+    # here.
     #
     actor_kw_args["std_offset"] = 0.1
 
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
+
+    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 32
+
+    actor_kw_args["right_hidden_size"]  = 16
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 16
+
+    actor_kw_args["combined_hidden_size"]  = 64
+    actor_kw_args["combined_hidden_depth"] = 2
+
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["combined_hidden_size"] = 128
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -549,27 +586,92 @@ def bipedal_walker_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
-            ts_per_rollout      = 2048,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 1024,
             use_gae             = True,
+            normalize_adv       = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-10., 10.),
-            reward_clip         = (-10., 10.),
-            bootstrap_clip      = (-10., 10.),
+            obs_clip            = (-100., 100.),
+            reward_clip         = (-100., 100.),
+            bootstrap_clip      = (-100., 100.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
+            num_test_runs       = num_test_runs)
+
+
+def bipedal_walker_hardcore_ppo(state_path,
+                                load_state,
+                                render,
+                                render_gif,
+                                num_timesteps,
+                                device,
+                                random_seed,
+                                test = False,
+                                num_test_runs = 1):
+
+    #
+    # TODO: find optimal settings for this problem. It can take
+    # a long time to train.
+    #
+    env = gym.make('BipedalWalkerHardcore-v3')
+
+    #
+    # The lidar observations are the last 10.
+    #
+    actor_kw_args = {}
+
+    actor_kw_args["std_offset"] = 0.1
+    actor_kw_args["activation"] = nn.LeakyReLU()
+
+    actor_kw_args["hidden_size"] = 512
+    critic_kw_args = actor_kw_args.copy()
+
+    lr     = 0.0003
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 200,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env                 = env,
+            random_seed         = random_seed,
+            ac_network          = FeedForwardNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 64,
+            ts_per_rollout      = 1024,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-100., 100.),
+            reward_clip         = (-100., 100.),
+            bootstrap_clip      = (-100., 100.),
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            render_gif          = render_gif,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            test                = test,
+            use_soft_resets     = False,
             num_test_runs       = num_test_runs)
 
 
@@ -581,6 +683,7 @@ def bipedal_walker_ppo(state_path,
 def assault_ram_ppo(state_path,
                     load_state,
                     render,
+                    render_gif,
                     num_timesteps,
                     device,
                     random_seed,
@@ -628,7 +731,7 @@ def assault_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             batch_size         = 512,
@@ -645,6 +748,7 @@ def assault_ram_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             test               = test,
@@ -654,6 +758,7 @@ def assault_ram_ppo(state_path,
 def assault_pixels_ppo(state_path,
                        load_state,
                        render,
+                       render_gif,
                        num_timesteps,
                        device,
                        random_seed,
@@ -721,6 +826,7 @@ def assault_pixels_ppo(state_path,
             state_path           = state_path,
             load_state           = load_state,
             render               = render,
+            render_gif           = render_gif,
             num_timesteps        = num_timesteps,
             device               = device,
             test                 = test,
@@ -730,6 +836,7 @@ def assault_pixels_ppo(state_path,
 def breakout_pixels_ppo(state_path,
                         load_state,
                         render,
+                        render_gif,
                         num_timesteps,
                         device,
                         random_seed,
@@ -791,6 +898,7 @@ def breakout_pixels_ppo(state_path,
             state_path           = state_path,
             load_state           = load_state,
             render               = render,
+            render_gif           = render_gif,
             num_timesteps        = num_timesteps,
             device               = device,
             test                 = test,
@@ -800,6 +908,7 @@ def breakout_pixels_ppo(state_path,
 def breakout_ram_ppo(state_path,
                      load_state,
                      render,
+                     render_gif,
                      num_timesteps,
                      device,
                      random_seed,
@@ -847,7 +956,7 @@ def breakout_ram_ppo(state_path,
 
     run_ppo(env                = wrapped_env,
             random_seed        = random_seed,
-            ac_network         = SimpleFeedForward,
+            ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             batch_size         = 512,
@@ -864,6 +973,7 @@ def breakout_ram_ppo(state_path,
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
+            render_gif         = render_gif,
             num_timesteps      = num_timesteps,
             device             = device,
             test               = test,
@@ -878,6 +988,7 @@ def breakout_ram_ppo(state_path,
 def inverted_pendulum_ppo(state_path,
                           load_state,
                           render,
+                          render_gif,
                           num_timesteps,
                           device,
                           random_seed,
@@ -888,12 +999,13 @@ def inverted_pendulum_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             use_gae             = True,
             use_icm             = False,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -903,16 +1015,13 @@ def inverted_pendulum_ppo(state_path,
 def inverted_double_pendulum_ppo(state_path,
                                  load_state,
                                  render,
+                                 render_gif,
                                  num_timesteps,
                                  device,
                                  random_seed,
                                  test = False,
                                  num_test_runs = 1):
 
-    #
-    # TODO: this environment is a bit unstable. Let's find
-    # some better settings.
-    #
     env = gym.make('InvertedDoublePendulum-v2')
 
     #
@@ -923,14 +1032,23 @@ def inverted_double_pendulum_ppo(state_path,
     #    Contact forces: 3
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]   = nn.LeakyReLU()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 3
-    actor_kw_args["hidden_left"]  = 64
-    actor_kw_args["hidden_right"] = 16
+
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["split_start"] = env.observation_space.shape[0] - 3
+
+    actor_kw_args["left_hidden_size"]  = 32
+    actor_kw_args["left_hidden_depth"] = 1
+    actor_kw_args["left_out_size"]     = 32
+
+    actor_kw_args["right_hidden_size"]  = 16
+    actor_kw_args["right_hidden_depth"] = 1
+    actor_kw_args["right_out_size"]     = 16
+
+    actor_kw_args["combined_hidden_size"]  = 64
+    actor_kw_args["combined_hidden_depth"] = 2
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 128
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["combined_hidden_size"] = 128
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -942,12 +1060,12 @@ def inverted_double_pendulum_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = SplitObsNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2056,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -961,6 +1079,7 @@ def inverted_double_pendulum_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -970,6 +1089,7 @@ def inverted_double_pendulum_ppo(state_path,
 def ant_ppo(state_path,
             load_state,
             render,
+            render_gif,
             num_timesteps,
             device,
             random_seed,
@@ -985,34 +1105,29 @@ def ant_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]   = nn.LeakyReLU()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 32
-    actor_kw_args["hidden_right"] = 84
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 256
-    critic_kw_args["hidden_right"] = 256
+    critic_kw_args["hidden_size"] = 256
 
-    lr     = 0.0003
-    min_lr = 0.0000
+    lr     = 0.00025
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 3000,
+        max_iteration = 100,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 2056,
+            ts_per_rollout      = 1024,
             use_gae             = True,
-            save_best_only      = False,
-            target_kl           = 1.0,
             normalize_obs       = True,
             normalize_rewards   = True,
             obs_clip            = (-30., 30.),
@@ -1025,6 +1140,7 @@ def ant_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1034,6 +1150,7 @@ def ant_ppo(state_path,
 def humanoid_ppo(state_path,
                  load_state,
                  render,
+                 render_gif,
                  num_timesteps,
                  device,
                  random_seed,
@@ -1058,11 +1175,6 @@ def humanoid_ppo(state_path,
     # here:
     # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
     #
-    # Technically, I think actuator forces would fall under
-    # proprioceptive information, but the model seems to train
-    # a bit more quickly when it's coupled with the
-    # exteroceptive contact forces.
-    #
     actor_kw_args = {}
 
     # TODO: the current settings work pretty well, but it
@@ -1076,22 +1188,13 @@ def humanoid_ppo(state_path,
     #             too much.
     #
 
-    actor_kw_args["activation"]   = nn.Tanh()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - (84 + 23)
-    actor_kw_args["hidden_left"]  = 256
-    actor_kw_args["hidden_right"] = 64
-
-    #
-    # The action range for Humanoid is [-.4, .4]. Enforcing
-    # this range in our predicted actions isn't required for
-    # learning a good policy, but it does help speed things up.
-    #
+    actor_kw_args["activation"]       = nn.Tanh()
     actor_kw_args["distribution_min"] = -0.4
     actor_kw_args["distribution_max"] = 0.4
+    actor_kw_args["hidden_size"]      = 256
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 256
-    critic_kw_args["hidden_right"] = 256
+    critic_kw_args["hidden_size"] = 512
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1103,16 +1206,15 @@ def humanoid_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = None,
             reward_clip         = (-10., 10.),
             entropy_weight      = 0.0,
             lr_dec              = lr_dec,
@@ -1121,6 +1223,7 @@ def humanoid_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1130,6 +1233,7 @@ def humanoid_ppo(state_path,
 def humanoid_stand_up_ppo(state_path,
                           load_state,
                           render,
+                          render_gif,
                           num_timesteps,
                           device,
                           random_seed,
@@ -1154,40 +1258,30 @@ def humanoid_stand_up_ppo(state_path,
     # https://github.com/openai/gym/blob/master/gym/envs/mujoco/humanoidstandup.py
     #
     actor_kw_args = {}
-
-    actor_kw_args["activation"]   = nn.Tanh()
-    actor_kw_args["split_start"]  = env.observation_space.shape[0] - 84
-    actor_kw_args["hidden_left"]  = 512
-    actor_kw_args["hidden_right"] = 32
-
-    #
-    # The action range for Humanoid is [-.4, .4]. Enforcing
-    # this range in our predicted actions isn't required for
-    # learning a good policy, but it does help speed things up.
-    #
+    actor_kw_args["activation"]       = nn.Tanh()
     actor_kw_args["distribution_min"] = -0.4
     actor_kw_args["distribution_max"] = 0.4
+    actor_kw_args["hidden_size"]      = 256
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_left"]  = 512
-    critic_kw_args["hidden_right"] = 128
+    critic_kw_args["hidden_size"] = 512
 
-    lr     = 0.0001
+    lr     = 0.0003
     min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1.0,
+        max_iteration = 200.0,
         max_value     = lr,
         min_value     = min_lr)
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleSplitObsNetwork,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1199,6 +1293,7 @@ def humanoid_stand_up_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1208,6 +1303,7 @@ def humanoid_stand_up_ppo(state_path,
 def walker2d_ppo(state_path,
                  load_state,
                  render,
+                 render_gif,
                  num_timesteps,
                  device,
                  random_seed,
@@ -1235,12 +1331,12 @@ def walker2d_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1253,6 +1349,7 @@ def walker2d_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1262,6 +1359,7 @@ def walker2d_ppo(state_path,
 def hopper_ppo(state_path,
                load_state,
                render,
+               render_gif,
                num_timesteps,
                device,
                random_seed,
@@ -1287,12 +1385,12 @@ def hopper_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1305,6 +1403,7 @@ def hopper_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1314,6 +1413,7 @@ def hopper_ppo(state_path,
 def half_cheetah_ppo(state_path,
                      load_state,
                      render,
+                     render_gif,
                      num_timesteps,
                      device,
                      random_seed,
@@ -1339,12 +1439,12 @@ def half_cheetah_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1356,6 +1456,7 @@ def half_cheetah_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
@@ -1365,6 +1466,7 @@ def half_cheetah_ppo(state_path,
 def swimmer_ppo(state_path,
                 load_state,
                 render,
+                render_gif,
                 num_timesteps,
                 device,
                 random_seed,
@@ -1390,12 +1492,12 @@ def swimmer_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SimpleFeedForward,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = 1024,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1407,6 +1509,7 @@ def swimmer_ppo(state_path,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
+            render_gif          = render_gif,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
