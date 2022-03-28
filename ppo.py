@@ -69,6 +69,7 @@ class PPO(object):
                  load_state          = False,
                  state_path          = "./",
                  save_best_only      = False,
+                 pickle_class        = False,
                  use_soft_resets     = True,
                  test_mode           = False):
         """
@@ -164,6 +165,9 @@ class PPO(object):
                                       this assumes that the top scores will be
                                       the best policy, which might not always
                                       hold up, but it's a general assumption.
+                 pickle_class         When enabled, the entire PPO class will
+                                      be pickled and saved into the output
+                                      directory after it's been initialized.
                  use_soft_resets      Use "soft resets" during rollouts.
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
@@ -454,6 +458,21 @@ class PPO(object):
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
         comm.barrier()
+
+        #
+        # If requested, pickle the entire class. This is useful for situations
+        # where we want to load a trained model into a particular env for
+        # testing or deploying.
+        #
+        if pickle_class and rank == 0:
+            file_name  = "PPO.pickle"
+            state_file = os.path.join(self.state_path, file_name)
+            with open(state_file, "wb") as out_f:
+                pickle.dump(self, out_f,
+                    protocol=pickle.HIGHEST_PROTOCOL)
+
+        comm.barrier()
+
 
     def get_action(self, obs):
         """

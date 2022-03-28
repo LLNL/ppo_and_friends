@@ -60,6 +60,7 @@ def run_ppo(env,
             state_path          = "./",
             num_timesteps       = 1,
             test                = False,
+            pickle_class        = False,
             use_soft_resets     = True,
             num_test_runs       = 1):
 
@@ -99,6 +100,7 @@ def run_ppo(env,
               render             = render,
               load_state         = load_state,
               state_path         = state_path,
+              pickle_class       = pickle_class,
               use_soft_resets    = use_soft_resets,
               test_mode          = test)
 
