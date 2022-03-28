@@ -647,6 +647,13 @@ class PPO(object):
             Returns:
                 A PyTorch dataset containing our rollout.
         """
+        if self.env ==  None:
+            msg  = "ERROR: unable to perform rollout due to the environment "
+            msg += "being of type None. This is likey due to loading the "
+            msg += "PPO class from a pickled state."
+            rank_print(msg)
+            comm.Abort()
+
         dataset            = PPODataset(self.device, self.action_dtype)
         total_episodes     = 0.0
         total_rollout_ts   = 0
@@ -695,9 +702,9 @@ class PPO(object):
                 # We end if we've reached our timesteps per rollout limit.
                 #
                 if ep_ts > self.ts_per_rollout:
-                    rank_print("ERROR: the episode timestep is > timesteps ")
-                    rank_print("per rollout. This is not allowable.")
-                    msg  = "episode timestep, max timesteps: {}, ".format(ep_ts)
+                    msg  = "ERROR: the episode timestep is > timesteps "
+                    msg += "per rollout. This is not allowable."
+                    msg += "episode timestep, max timesteps: {}, ".format(ep_ts)
                     msg += "{}.".format(self.ts_per_rollout)
                     rank_print(msg)
                     comm.Abort()
@@ -1250,7 +1257,7 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.save(self.state_path)
 
-        if self.save_env_info:
+        if self.save_env_info and self.env != None:
             self.env.save_info(self.state_path)
 
         file_name  = "state_{}.pickle".format(rank)
@@ -1271,7 +1278,7 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.load(self.state_path)
 
-        if self.save_env_info:
+        if self.save_env_info and self.env != None:
             self.env.load_info(self.state_path)
 
         file_name  = "state_{}.pickle".format(rank)
@@ -1280,3 +1287,28 @@ class PPO(object):
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
+
+    def __getstate__(self):
+        """
+            Override the getstate method for pickling. We want everything
+            but the environment since we can't guarantee that the env can
+            be pickled.
+
+            Returns:
+                The state dictionary minus the environment.
+        """
+        state = self.__dict__.copy()
+        del state["env"]
+        return state
+
+    def __setstate__(self, state):
+        """
+            Override the setstate method for pickling. We want everything
+            but the environment since we can't guarantee that the env can
+            be pickled.
+
+            Arguments:
+                The state loaded from a pickled PPO object.
+        """
+        self.__dict__.update(state)
+        self.env = None
