@@ -69,6 +69,7 @@ class PPO(object):
                  load_state          = False,
                  state_path          = "./",
                  save_best_only      = False,
+                 use_soft_resets     = True,
                  test_mode           = False):
         """
             Initialize the PPO trainer.
@@ -163,6 +164,7 @@ class PPO(object):
                                       this assumes that the top scores will be
                                       the best policy, which might not always
                                       hold up, but it's a general assumption.
+                 use_soft_resets      Use "soft resets" during rollouts.
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
         """
@@ -306,6 +308,7 @@ class PPO(object):
         self.normalize_rewards   = normalize_rewards
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
+        self.use_soft_resets     = use_soft_resets
 
         #
         # Create a dictionary to track the status of training.
@@ -647,11 +650,15 @@ class PPO(object):
         if self.use_icm:
             self.icm_model.eval()
 
-        # FIXME: soft resets might cause issues with local traps... We could
-        # maybe mitigate this by alternating between soft and hard resets every
-        # other rollout.
-        #obs = self.env.soft_reset()
-        obs = self.env.reset()
+        #
+        # TODO: soft resets might cause rollouts to start off in "traps"
+        # that are impossible to escape. We might be able to handle this
+        # more intelligently.
+        #
+        if self.use_soft_resets:
+            obs = self.env.soft_reset()
+        else:
+            obs = self.env.reset()
 
         start_time = time.time()
 
