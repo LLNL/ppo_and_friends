@@ -620,6 +620,10 @@ def bipedal_walker_hardcore_ppo(state_path,
                                 test = False,
                                 num_test_runs = 1):
 
+    #
+    # TODO: find optimal settings for this problem. It can take
+    # a long time to train.
+    #
     env = gym.make('BipedalWalkerHardcore-v3')
 
     #
@@ -627,33 +631,11 @@ def bipedal_walker_hardcore_ppo(state_path,
     #
     actor_kw_args = {}
 
-    #
-    # I've found that a lower std offset greatly improves performance
-    # stability in this environment. Also, most papers suggest that using Tanh
-    # provides the best performance, but I find that LeakyReLU works better
-    # here.
-    #
     actor_kw_args["std_offset"] = 0.1
+    actor_kw_args["activation"] = nn.LeakyReLU()
 
-    actor_kw_args["activation"]  = nn.LeakyReLU()
-
-    actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
-
-    actor_kw_args["left_hidden_size"]  = 16
-    actor_kw_args["left_hidden_depth"] = 1
-    actor_kw_args["left_out_size"]     = 16
-
-    # TODO: we could try outputing size of 4 to represent the
-    # 4 motor controls.
-    actor_kw_args["right_hidden_size"]  = 32
-    actor_kw_args["right_hidden_depth"] = 1
-    actor_kw_args["right_out_size"]     = 32
-
-    actor_kw_args["combined_hidden_size"]  = 128
-    actor_kw_args["combined_hidden_depth"] = 2
-
+    actor_kw_args["hidden_size"] = 512
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["combined_hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -665,17 +647,12 @@ def bipedal_walker_hardcore_ppo(state_path,
 
     run_ppo(env                 = env,
             random_seed         = random_seed,
-
-            ac_network          = SplitObsNetwork,
-
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-
             max_ts_per_ep       = 64,
             ts_per_rollout      = 1024,
-            #ts_per_rollout      = 2048,
-
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
