@@ -1021,6 +1021,9 @@ class PPO(object):
                 for _ in range(self.epochs_per_iter):
                     self._icm_batch_train(data_loader)
 
+
+            running_time = (time.time() - iter_start_time)
+            self.status_dict["running time"] += running_time
             self.print_status()
 
             need_save = False
@@ -1044,9 +1047,6 @@ class PPO(object):
             if self.lr <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
-
-            running_time = (time.time() - iter_start_time)
-            self.status_dict["running time"] += running_time
 
         stop_time   = time.time()
         seconds     = (stop_time - start_time)

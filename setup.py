@@ -17,6 +17,7 @@ dependencies = [
     'gym',
     'numpy',
     'mpi4py',
+    'moviepy',
     'torch>=1.10.2',
 ]
 
