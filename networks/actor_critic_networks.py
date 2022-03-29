@@ -15,7 +15,6 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-#TODO: add doc strings
 class FeedForwardNetwork(PPOActorCriticNetwork):
 
     #TODO: let's allow varying hidden sizes.
