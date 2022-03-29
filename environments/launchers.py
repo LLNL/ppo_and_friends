@@ -412,10 +412,6 @@ def lunar_lander_ppo(state_path,
 
     env = gym.make('LunarLander-v2')
 
-    # TODO: we could try treating the x,y coordinates of the observation
-    # space as exteroceptive information in a split network. Let's see if
-    # that speeds up training at all.
-
     #
     # Extra args for the actor critic models.
     # I find that leaky relu does much better with the lunar
@@ -436,11 +432,16 @@ def lunar_lander_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # Running with 2 processors works well here.
+    #
+    ts_per_rollout = num_procs * 1024
+
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 128,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             batch_size          = 512,
             use_gae             = True,
             normalize_obs       = True,
@@ -449,7 +450,6 @@ def lunar_lander_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            target_kl           = 0.015,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             state_path          = state_path,
@@ -506,11 +506,16 @@ def lunar_lander_continuous_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # Running with 2 processors works well here.
+    #
+    ts_per_rollout = num_procs * 1024
+
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             batch_size          = 512,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
@@ -521,7 +526,6 @@ def lunar_lander_continuous_ppo(state_path,
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
             dynamic_bs_clip     = False,
-            target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -639,7 +643,9 @@ def bipedal_walker_hardcore_ppo(state_path,
     actor_kw_args["activation"] = nn.LeakyReLU()
 
     actor_kw_args["hidden_size"] = 512
+
     critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 1024
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -655,8 +661,8 @@ def bipedal_walker_hardcore_ppo(state_path,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
-            ts_per_rollout      = 1024,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
