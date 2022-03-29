@@ -897,8 +897,8 @@ class PPO(object):
                         else:
                             avg_ep_len = ts_before_ep / current_total
 
-                        ep_perc         = episode_length / avg_ep_len
-                        total_episodes += ep_perc
+                        ep_perc            = episode_length / avg_ep_len
+                        total_episodes    += ep_perc
                         total_ext_rewards += ep_score
                         total_rewards     += ep_rewards
 
