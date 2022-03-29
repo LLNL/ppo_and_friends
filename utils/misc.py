@@ -102,30 +102,38 @@ class RunningStatNormalizer(object):
         """
             Arguments:
                 name        The name of the structure (used for saving/loading).
+                device      The device where data should be transfered to.
                 epsilon     A very small number to help avoid 0 errors.
         """
+        self.device        = device
         self.name          = name
         self.running_stats = RunningMeanStd()
         self.epsilon       = torch.tensor([epsilon]).to(device)
 
     def normalize(self,
                   data,
-                  update_stats = True):
+                  update_stats = True,
+                  gather_stats = True):
         """
             Normalize incoming data and potential update our stats.
 
             Arguments:
                 data           The data to normalize.
                 update_stats   Whether or not to update our runnign stats.
+                gather_stats   If update_stats is True, we can need to
+                               decide whether or not to gather data across
+                               processors before computing our stats.
 
             Returns:
                 The normalized data.
         """
         if update_stats:
-            self.running_stats.update(data.cpu().numpy())
+            self.running_stats.update(
+                data.detach().cpu().numpy(),
+                gather_stats)
 
-        mean     = torch.tensor(self.running_stats.mean)
-        variance = torch.tensor(self.running_stats.variance)
+        mean     = torch.tensor(self.running_stats.mean).to(self.device)
+        variance = torch.tensor(self.running_stats.variance).to(self.device)
 
         data = (data - mean) / torch.sqrt(variance + self.epsilon)
 
