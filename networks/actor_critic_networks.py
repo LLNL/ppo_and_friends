@@ -260,10 +260,13 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
             activation   = self.activation,
             is_embedded  = True,
             **s2_kw_args)
+
         #
         # Combined sides network.
         #
         combined_in_size = left_out_size + right_out_size
+        c_kw_args = kw_args.copy()
+        c_kw_args["name"] = self.name + "_combined"
 
         self.combined_layers = FeedForwardNetwork(
             in_dim       = combined_in_size,
@@ -273,7 +276,7 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
             activation   = self.activation,
             is_embedded  = False,
             out_init     = out_init,
-            **s2_kw_args)
+            **c_kw_args)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -296,12 +299,6 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         #
         out = torch.cat((s1_out, s2_out), dim=1)
         out = self.combined_layers(out)
-
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
-
-        out_shape = (out.shape[0],) + self.out_dim
-        out = out.reshape(out_shape)
 
         return out
 
@@ -377,3 +374,108 @@ class AtariPixelNetwork(PPOConv2dNetwork):
             out = F.softmax(out, dim=-1)
 
         return out
+
+
+class LSTMNetwork(PPOActorCriticNetwork):
+
+    def __init__(self,
+                 in_dim,
+                 out_dim,
+                 out_init          = None,
+                 activation        = nn.ReLU(),
+                 lstm_hidden_size  = 128,
+                 num_lstm_layers   = 1,
+                 ff_hidden_size    = 0,
+                 ff_hidden_depth   = 0,
+                 **kw_args):
+        """
+            A class defining a customizable feed-forward network.
+
+            Arguments:
+                in_dim            The dimensions of the input data. For
+                                  instance, if the expected input shape is
+                                  (length, batch_size, 16), in_dim would be
+                                  (length, 16).
+                out_dim           The expected dimensions for the output. For
+                                  instance, if the expected output shape is
+                                  (length, batch_size, 16), out_dim would be
+                                  (length, 16,).
+                out_init          A std weight to apply to the output layer.
+                activation        The activation function to use on the
+                                  output of hidden layers.
+                lstm_hidden_size  The hidden size for the lstm layers.
+                num_lstm_layers   The the number of lstm layers to stack.
+                ff_hidden_size    You can optionally add hidden layers to
+                                  the output feed forward section, and this
+                                  determines their size.
+                ff_hidden_depth   You can optionally add hidden layers to
+                                  the output feed forward section, and this
+                                  determines its depth.
+        """
+
+        super(LSTMNetwork, self).__init__(
+            out_dim = out_dim,
+            **kw_args)
+
+        if type(out_dim) == tuple:
+            out_size     = reduce(lambda a, b: a*b, out_dim)
+            self.out_dim = out_dim
+        else:
+            out_size     = out_dim
+            self.out_dim = (out_dim,)
+
+        self.activation       = activation
+        self.lstm_hidden_size = lstm_hidden_size
+        self.num_lstm_layers  = num_lstm_layers
+
+        self.lstm = nn.LSTM(in_dim, lstm_hidden_size, num_lstm_layers)
+        self.hidden_state = None
+
+        ff_kw_args = kw_args.copy()
+        ff_kw_args["name"] = self.name + "_lstm_ff"
+
+        self.ff_layers = FeedForwardNetwork(
+            in_dim       = lstm_hidden_size,
+            hidden_size  = ff_hidden_size,
+            hidden_depth = ff_hidden_depth,
+            out_dim      = out_size,
+            activation   = self.activation,
+            is_embedded  = False,
+            out_init     = out_init,
+            **ff_kw_args)
+
+    def get_zero_hidden_state(self,
+                              batch_size,
+                              device):
+
+        hidden = torch.zeros(
+            self.num_lstm_layers, batch_size, self.num_lstm_layers)
+        cell   = torch.zeros(
+            self.num_lstm_layers, batch_size, self.num_lstm_layers)
+
+        hidden = hidden.to(device)
+        cell   = hidden.to(device)
+
+        return (hidden, cell) 
+
+
+    def forward(self, _input):
+
+        batch_size = _input.shape[1]
+
+        # FIXME: do we need to handle terminal states differently here?
+        # It looks like other implementations alter the hidden state
+        # on the terminal calculation for retrieval during the network
+        # udpates. When evalulate is called, the hidden state is
+        # initialized to the state that it was during the rollout (?).
+        # So, during the rollout, maybe we need to save the hidden states
+        # for later retieval and alter them at terminals. Also, the hidden
+        # state is reset at the onset of each rollout (?). It looks like
+        # terminal states result in the hidden state being zeroed out.
+        # We can just grab that during the rollout from this class.
+        if (self.hidden_state == None or
+            self.hidden_state[0].shape[1] != batch_size):
+
+            self.hidden_state = self.get_zero_hidden_state(
+                batch_size, _input.device)
+
