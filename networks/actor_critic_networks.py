@@ -261,10 +261,13 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
             activation   = self.activation,
             is_embedded  = True,
             **s2_kw_args)
+
         #
         # Combined sides network.
         #
         combined_in_size = left_out_size + right_out_size
+        c_kw_args = kw_args.copy()
+        c_kw_args["name"] = self.name + "_combined"
 
         self.combined_layers = FeedForwardNetwork(
             in_dim       = combined_in_size,
@@ -274,7 +277,7 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
             activation   = self.activation,
             is_embedded  = False,
             out_init     = out_init,
-            **s2_kw_args)
+            **c_kw_args)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
@@ -297,12 +300,6 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         #
         out = torch.cat((s1_out, s2_out), dim=1)
         out = self.combined_layers(out)
-
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
-
-        out_shape = (out.shape[0],) + self.out_dim
-        out = out.reshape(out_shape)
 
         return out
 
