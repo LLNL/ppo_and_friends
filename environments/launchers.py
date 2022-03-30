@@ -50,8 +50,9 @@ def run_ppo(env,
             gradient_clip       = 0.5,
             mean_window_size    = 100,
             normalize_adv       = True,
-            normalize_obs       = False,
-            normalize_rewards   = False,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            normalize_values    = True,
             obs_clip            = None,
             reward_clip         = None,
             render              = False,
@@ -94,6 +95,7 @@ def run_ppo(env,
               normalize_adv      = normalize_adv,
               normalize_obs      = normalize_obs,
               normalize_rewards  = normalize_rewards,
+              normalize_values   = normalize_values,
               obs_clip           = obs_clip,
               reward_clip        = reward_clip,
               mean_window_size   = mean_window_size,
@@ -264,6 +266,7 @@ def mountain_car_ppo(state_path,
             use_gae            = True,
             normalize_obs      = False,
             normalize_rewards  = False,
+            normalize_values   = False,
             obs_clip           = None,
             reward_clip        = None,
             bootstrap_clip     = (-10, 10),
@@ -327,6 +330,7 @@ def mountain_car_continuous_ppo(state_path,
             use_gae            = True,
             normalize_obs      = False,
             normalize_rewards  = False,
+            normalize_values   = False,
             obs_clip           = None,
             reward_clip        = None,
             normalize_adv      = True,
@@ -445,7 +449,6 @@ def lunar_lander_ppo(state_path,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            dynamic_bs_clip     = False,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
@@ -520,7 +523,6 @@ def lunar_lander_continuous_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            dynamic_bs_clip     = False,
             target_kl           = 0.015,
             state_path          = state_path,
             load_state          = load_state,
@@ -635,11 +637,12 @@ def bipedal_walker_hardcore_ppo(state_path,
     #
     actor_kw_args = {}
 
-    actor_kw_args["std_offset"] = 0.1
-    actor_kw_args["activation"] = nn.LeakyReLU()
-
+    actor_kw_args["std_offset"]  = 0.1
+    actor_kw_args["activation"]  = nn.LeakyReLU()
     actor_kw_args["hidden_size"] = 512
+
     critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 1024
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -656,7 +659,7 @@ def bipedal_walker_hardcore_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1218,7 +1221,6 @@ def humanoid_ppo(state_path,
             normalize_obs       = True,
             normalize_rewards   = True,
             reward_clip         = (-10., 10.),
-            entropy_weight      = 0.0,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
@@ -1322,15 +1324,17 @@ def walker2d_ppo(state_path,
     critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0
-
-    max_iter = 2000000. / 2048.
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = max_iter,
+        max_iteration = 600,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # arXiv:2006.05990v1 suggests that value normalization significantly hurts
+    # performance in walker2d. I also find this to be the case.
+    #
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1342,6 +1346,7 @@ def walker2d_ppo(state_path,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
+            normalize_values    = False,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             entropy_weight      = 0.0,
@@ -1385,6 +1390,10 @@ def hopper_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # I find that value normalization hurts the hopper environment training.
+    # That may be a result of it's combination with other settings in here.
+    #
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1396,6 +1405,7 @@ def hopper_ppo(state_path,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
+            normalize_values    = False,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             entropy_weight      = 0.0,
@@ -1439,6 +1449,9 @@ def half_cheetah_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # Normalizing values seems to stabilize results in this env.
+    #
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,

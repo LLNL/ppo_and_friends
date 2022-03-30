@@ -14,24 +14,28 @@ class RunningMeanStd(object):
     """
 
     def __init__(self,
-                 shape   = (),
-                 epsilon = 1e-4):
+                 shape       = (),
+                 epsilon     = 1e-4):
         """
             Arguments:
-                shape    The shape of data to track.
-                epsilon  A very small number to help avoid 0 errors.
+                shape        The shape of data to track.
+                epsilon      A very small number to help avoid 0 errors.
         """
 
         self.mean     = np.zeros(shape, dtype=np.float32)
         self.variance = np.ones(shape, dtype=np.float32)
         self.count    = epsilon
 
-    def update(self, data):
+    def update(self,
+               data,
+               gather_stats = True):
         """
             Update the running stats.
 
             Arguments:
-                data    A new batch of data.
+                data          A new batch of data.
+                gather_stats  Should we gather the data across processors
+                              before computing stats?
         """
         #
         # If we're running with multiple processors, I've found that
@@ -41,7 +45,7 @@ class RunningMeanStd(object):
         # If this becomes problematic, we can perform all work on rank
         # 0 and broadcast. That approach is just a bit slower.
         #
-        if num_procs > 1:
+        if num_procs > 1 and gather_stats:
             data = comm.allgather(data)
             data = np.concatenate(data)
 
