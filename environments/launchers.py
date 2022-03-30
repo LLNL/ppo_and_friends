@@ -563,7 +563,6 @@ def bipedal_walker_ppo(state_path,
     actor_kw_args["std_offset"] = 0.1
 
     actor_kw_args["activation"]  = nn.LeakyReLU()
-
     actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
 
     actor_kw_args["left_hidden_size"]  = 32
@@ -600,9 +599,9 @@ def bipedal_walker_ppo(state_path,
             normalize_adv       = True,
             normalize_obs       = True,
             normalize_rewards   = True,
-            obs_clip            = (-100., 100.),
-            reward_clip         = (-100., 100.),
-            bootstrap_clip      = (-100., 100.),
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-1., 10.),
+            bootstrap_clip      = (-10., 10.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
