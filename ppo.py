@@ -343,6 +343,13 @@ class PPO(object):
         self.status_dict["reward range"]         = (max_int, -max_int)
         self.status_dict["obs range"]            = (max_int, -max_int)
 
+        #
+        # Value normalization is discussed in multiple papers, so I'm not
+        # going to reference one in particular. In general, the idea is
+        # to normalize the targets of the critic network using a running
+        # average. The output of the critic then needs to be de-normalized
+        # for calcultaing advantages.
+        #
         if normalize_values:
             self.value_normalizer = RunningStatNormalizer(
                 "value_normalizer",
