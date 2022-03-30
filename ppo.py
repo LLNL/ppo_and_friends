@@ -9,6 +9,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
 from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
+from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.decrementers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
@@ -63,6 +64,7 @@ class PPO(object):
                  normalize_adv       = True,
                  normalize_obs       = False,
                  normalize_rewards   = False,
+                 normalize_values    = False,
                  obs_clip            = None,
                  reward_clip         = None,
                  render              = False,
@@ -150,6 +152,8 @@ class PPO(object):
                                       occurs at the minibatch level.
                  normalize_obs        Should we normalize the observations?
                  normalize_rewards    Should we normalize the rewards?
+                 normalize_values     Should we normalize the "values" that our
+                                      critic calculates loss against?
                  obs_clip             Disabled if None. Otherwise, this should
                                       be a tuple containing a clip range for
                                       the observation space as (min, max).
@@ -310,6 +314,7 @@ class PPO(object):
         self.mean_window_size    = mean_window_size 
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
+        self.normalize_values    = normalize_values
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
@@ -337,6 +342,18 @@ class PPO(object):
         self.status_dict["lr"]                   = self.lr
         self.status_dict["reward range"]         = (max_int, -max_int)
         self.status_dict["obs range"]            = (max_int, -max_int)
+
+        #
+        # Value normalization is discussed in multiple papers, so I'm not
+        # going to reference one in particular. In general, the idea is
+        # to normalize the targets of the critic network using a running
+        # average. The output of the critic then needs to be de-normalized
+        # for calcultaing advantages.
+        #
+        if normalize_values:
+            self.value_normalizer = RunningStatNormalizer(
+                "value_normalizer",
+                self.device)
 
         if save_best_only:
             self.status_dict["last save"] = -1
@@ -716,9 +733,13 @@ class PPO(object):
                 episode_length   += 1
                 raw_action, action, log_prob = self.get_action(obs)
 
-                t_obs    = torch.tensor(obs, dtype=torch.float).to(self.device)
-                t_obs    = t_obs.unsqueeze(0)
-                value    = self.critic(t_obs)
+                t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+                t_obs = t_obs.unsqueeze(0)
+                value = self.critic(t_obs)
+
+                if self.normalize_values:
+                    value = self.value_normalizer.denormalize(value)
+
                 prev_obs = obs.copy()
 
                 if self.action_squeeze:
@@ -818,7 +839,12 @@ class PPO(object):
 
                     t_obs      = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs      = t_obs.unsqueeze(0)
-                    nxt_value  = self.critic(t_obs).item()
+                    nxt_value  = self.critic(t_obs)
+
+                    if self.normalize_values:
+                        nxt_value = self.value_normalizer.denormalize(nxt_value)
+
+                    nxt_value  = nxt_value.item()
                     nxt_reward = nxt_value
 
                     #
@@ -1098,6 +1124,9 @@ class PPO(object):
 
             torch.cuda.empty_cache()
 
+            if self.normalize_values:
+                rewards_tg = self.value_normalizer.normalize(rewards_tg)
+
             if obs.shape[0] == 1:
                 rank_print("Skipping batch of size 1")
                 rank_print("    obs shape: {}".format(obs.shape))
@@ -1260,6 +1289,9 @@ class PPO(object):
         if self.save_env_info and self.env != None:
             self.env.save_info(self.state_path)
 
+        if self.normalize_values:
+            self.value_normalizer.save_info(self.state_path)
+
         file_name  = "state_{}.pickle".format(rank)
         state_file = os.path.join(self.state_path, file_name)
         with open(state_file, "wb") as out_f:
@@ -1280,6 +1312,9 @@ class PPO(object):
 
         if self.save_env_info and self.env != None:
             self.env.load_info(self.state_path)
+
+        if self.normalize_values:
+            self.value_normalizer.load_info(self.state_path)
 
         file_name  = "state_{}.pickle".format(rank)
         state_file = os.path.join(self.state_path, file_name)
