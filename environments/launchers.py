@@ -528,11 +528,7 @@ def lunar_lander_continuous_ppo(state_path,
             obs_clip            = (-10., 10.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-<<<<<<< gEAD
-            dynamic_bs_clip     = False,
-=======
             target_kl           = 0.015,
->>>>>>> main
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
