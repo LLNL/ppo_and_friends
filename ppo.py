@@ -291,7 +291,7 @@ class PPO(object):
         self.render              = render
         self.action_dtype        = action_dtype
         self.use_gae             = use_gae
-        self.use_icm             = use_icm
+        self.using_icm           = use_icm
         self.icm_beta            = icm_beta
         self.ext_reward_weight   = ext_reward_weight
         self.intr_reward_weight  = intr_reward_weight
@@ -378,6 +378,11 @@ class PPO(object):
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
 
+        self.using_lstm = False
+        for base in ac_network.__bases__:
+            if base.__name__ == "PPOLSTMNetwork":
+                self.using_lstm = True
+
         #
         # arXiv:2006.05990v1 suggests initializing the output layer
         # of the actor network with a weight that's ~100x smaller
@@ -432,7 +437,7 @@ class PPO(object):
         sync_model_parameters(self.critic)
         comm.barrier()
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -468,7 +473,7 @@ class PPO(object):
         self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
 
@@ -602,7 +607,7 @@ class PPO(object):
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
 
-        if self.use_icm:
+        if self.using_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
@@ -671,7 +676,28 @@ class PPO(object):
             rank_print(msg)
             comm.Abort()
 
-        dataset            = PPODataset(self.device, self.action_dtype)
+        sequence_length = 1
+
+        #
+        # When using lstm networks, we need to reset the hidden state
+        # for each rollout and pass our sequence length to our dataset.
+        #
+        if self.using_lstm:
+            self.actor.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            self.critic.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            sequence_length = self.actor.sequence_length
+
+        dataset = PPODataset(
+            device          = self.device,
+            action_dtype    = self.action_dtype,
+            sequence_length = sequence_length)
+
         total_episodes     = 0.0
         total_rollout_ts   = 0
         total_ext_rewards  = 0
@@ -690,7 +716,7 @@ class PPO(object):
         self.actor.eval()
         self.critic.eval()
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.eval()
 
         #
@@ -705,13 +731,14 @@ class PPO(object):
 
         start_time = time.time()
 
-        while total_rollout_ts < self.ts_per_rollout:
+        episode_info = EpisodeInfo(
+            starting_ts    = 0,
+            use_gae        = self.use_gae,
+            gamma          = self.gamma,
+            lambd          = self.lambd,
+            bootstrap_clip = self.bootstrap_clip)
 
-            episode_info = EpisodeInfo(
-                use_gae        = self.use_gae,
-                gamma          = self.gamma,
-                lambd          = self.lambd,
-                bootstrap_clip = self.bootstrap_clip)
+        while total_rollout_ts < self.ts_per_rollout:
 
             for ep_ts in range(1, self.max_ts_per_ep + 1):
 
@@ -771,7 +798,7 @@ class PPO(object):
                 # This amounts to adding "curiosity", aka intrinsic reward,
                 # to out extrinsic reward.
                 #
-                if self.use_icm:
+                if self.using_icm:
 
                     intr_reward = self.get_intrinsic_reward(
                         prev_obs,
@@ -788,6 +815,27 @@ class PPO(object):
                 if done:
                     ep_obs = info["terminal observation"]
 
+                #
+                # When using lstm networks, we need to save the hidden states
+                # encountered during the rollouts. These will later be used to
+                # initialize the hidden states when updating the models.
+                #
+                if self.using_lstm:
+                    if done:
+                        actor_hidden_state = self.actor.get_zero_hidden_state(
+                            batch_size = 1,
+                            device     = self.device)
+
+                        critic_hidden_state = self.critic.get_zero_hidden_state(
+                            batch_size = 1,
+                            device     = self.device)
+                    else:
+                        actor_hidden_state  = self.actor.hidden_state
+                        critic_hidden_state = self.critic.hidden_state
+                else:
+                    actor_hidden_state  = None
+                    critic_hidden_state = None
+
                 episode_info.add_info(
                     prev_obs,
                     ep_obs,
@@ -795,7 +843,9 @@ class PPO(object):
                     ep_action,
                     ep_value,
                     log_prob,
-                    reward)
+                    reward,
+                    actor_hidden_state,
+                    critic_hidden_state)
 
                 rollout_max_reward = max(rollout_max_reward, reward)
                 rollout_min_reward = min(rollout_min_reward, reward)
@@ -807,9 +857,10 @@ class PPO(object):
 
                 if done:
                     episode_info.end_episode(
+                        ending_ts      = episode_length,
+                        terminal       = True,
                         ending_value   = 0,
-                        ending_reward  = 0,
-                        episode_length = episode_length)
+                        ending_reward  = 0)
 
                     dataset.add_episode(episode_info)
 
@@ -819,6 +870,7 @@ class PPO(object):
                         self.bootstrap_clip = (ep_min_reward, ep_max_reward)
 
                     episode_info = EpisodeInfo(
+                        starting_ts    = 0,
                         use_gae        = self.use_gae,
                         gamma          = self.gamma,
                         lambd          = self.lambd,
@@ -872,7 +924,7 @@ class PPO(object):
                     # and the one we get. Adding that to the critic's
                     # output can act as an extra surprise bonus.
                     #
-                    if self.use_icm:
+                    if self.using_icm:
                         if self.can_clone_env:
                             _, clone_action, _ = self.get_action(obs)
 
@@ -894,9 +946,10 @@ class PPO(object):
                         nxt_reward += surprise
 
                     episode_info.end_episode(
+                        ending_ts      = episode_length,
+                        terminal       = False,
                         ending_value   = nxt_value,
-                        ending_reward  = nxt_reward,
-                        episode_length = episode_length)
+                        ending_reward  = nxt_reward)
 
                     dataset.add_episode(episode_info)
 
@@ -906,6 +959,7 @@ class PPO(object):
                         self.bootstrap_clip = (ep_min_reward, ep_max_reward)
 
                     episode_info = EpisodeInfo(
+                        starting_ts    = episode_length,
                         use_gae        = self.use_gae,
                         gamma          = self.gamma,
                         lambd          = self.lambd,
@@ -997,7 +1051,7 @@ class PPO(object):
                 self.status_dict["top window avg"] = \
                     self.status_dict["window avg"]
 
-        if self.use_icm:
+        if self.using_icm:
             total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
             ism = total_intr_rewards / total_episodes
             self.status_dict["intrinsic score avg"] = ism
@@ -1025,7 +1079,6 @@ class PPO(object):
                                  Note that this is in addtion to however
                                  many timesteps were run during the last save.
         """
-
         start_time = time.time()
         ts_max     = self.status_dict["timesteps"] + num_timesteps
 
@@ -1046,7 +1099,7 @@ class PPO(object):
             self.actor.train()
             self.critic.train()
 
-            if self.use_icm:
+            if self.using_icm:
                 self.icm_model.train()
 
             # TODO: there is some evidence that re-computing advantages at
@@ -1069,7 +1122,7 @@ class PPO(object):
                     rank_print(msg)
                     break
 
-            if self.use_icm:
+            if self.using_icm:
                 for _ in range(self.epochs_per_iter):
                     self._icm_batch_train(data_loader)
 
@@ -1119,8 +1172,10 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for obs, _, raw_actions, _, advantages, log_probs, rewards_tg \
-            in data_loader:
+        for batch in data_loader:
+            obs, _, raw_actions, _, advantages, log_probs, \
+                rewards_tg, actor_hidden, critic_hidden, \
+                actor_cell, critic_cell = batch
 
             torch.cuda.empty_cache()
 
@@ -1131,6 +1186,19 @@ class PPO(object):
                 rank_print("Skipping batch of size 1")
                 rank_print("    obs shape: {}".format(obs.shape))
                 continue
+
+            #
+            # In the case of lstm networks, we need to initialze our hidden
+            # states to those that developed during the rollout.
+            #
+            if self.using_lstm:
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
+
+                self.actor.hidden_state  = (actor_hidden[:1], actor_cell[:1])
+                self.critic.hidden_state = (critic_hidden[:1], critic_cell[:1])
 
             #
             # arXiv:2005.12729v1 suggests that normalizing advantages
@@ -1210,14 +1278,14 @@ class PPO(object):
             # have a positive effect on training.
             #
             self.actor_optim.zero_grad()
-            actor_loss.backward()
+            actor_loss.backward(retain_graph = self.using_lstm)
             mpi_avg_gradients(self.actor)
             nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
-            critic_loss.backward()
+            critic_loss.backward(retain_graph = self.using_lstm)
             mpi_avg_gradients(self.critic)
             nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
@@ -1249,7 +1317,7 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, _, actions, _, _, _ in data_loader:
+        for obs, next_obs, _, actions, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
@@ -1283,7 +1351,7 @@ class PPO(object):
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.save(self.state_path)
 
         if self.save_env_info and self.env != None:
@@ -1307,7 +1375,7 @@ class PPO(object):
         self.actor.load(self.state_path)
         self.critic.load(self.state_path)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.load(self.state_path)
 
         if self.save_env_info and self.env != None:
