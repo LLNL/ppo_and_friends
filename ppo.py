@@ -357,8 +357,9 @@ class PPO(object):
         #
         if normalize_values:
             self.value_normalizer = RunningStatNormalizer(
-                "value_normalizer",
-                self.device)
+                name      = "value_normalizer",
+                device    = self.device,
+                test_mode = test_mode)
 
         if save_best_only:
             self.status_dict["last save"] = -1
