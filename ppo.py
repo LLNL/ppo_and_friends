@@ -175,6 +175,8 @@ class PPO(object):
                  use_soft_resets      Use "soft resets" during rollouts.
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
+                                      Setting this to True will enable test
+                                      mode.
         """
         set_torch_threads()
 
@@ -244,6 +246,12 @@ class PPO(object):
                 env        = env,
                 test_mode  = test_mode,
                 clip_range = reward_clip)
+
+        #
+        # When we toggle test mode on/off, we need to make sure to also
+        # toggle this flag for any modules that depend on it.
+        #
+        self.test_mode_dependencies = [env]
 
         act_type = type(env.action_space)
 
@@ -361,6 +369,8 @@ class PPO(object):
                 device    = self.device,
                 test_mode = test_mode)
 
+            self.test_mode_dependencies.append(self.value_normalizer)
+
         if save_best_only:
             self.status_dict["last save"] = -1
 
@@ -438,6 +448,9 @@ class PPO(object):
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
 
+        self.test_mode_dependencies.append(self.actor)
+        self.test_mode_dependencies.append(self.critic)
+
         sync_model_parameters(self.actor)
         sync_model_parameters(self.critic)
         comm.barrier()
@@ -450,6 +463,8 @@ class PPO(object):
                 action_dtype = self.action_dtype,
                 test_mode    = test_mode,
                 **icm_kw_args)
+
+            self.test_mode_dependencies.append(self.icm)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -1343,6 +1358,17 @@ class PPO(object):
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
+
+    def set_test_mode(self, test_mode):
+        """
+            Enable or disable test mode in all required modules.
+
+            Arguments:
+                test_mode    A bool representing whether or not to enable
+                             test_mode.
+        """
+        for module in self.test_mode_depenencies:
+            module.test_mode = test_mode
 
     def __getstate__(self):
         """
