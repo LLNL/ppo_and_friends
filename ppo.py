@@ -1373,6 +1373,8 @@ class PPO(object):
                 test_mode    A bool representing whether or not to enable
                              test_mode.
         """
+        self.test_mode = test_mode
+
         for module in self.test_mode_dependencies:
             module.test_mode = test_mode
 
