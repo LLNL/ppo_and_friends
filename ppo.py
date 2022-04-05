@@ -1367,7 +1367,7 @@ class PPO(object):
                 test_mode    A bool representing whether or not to enable
                              test_mode.
         """
-        for module in self.test_mode_depenencies:
+        for module in self.test_mode_dependencies:
             module.test_mode = test_mode
 
     def __getstate__(self):
