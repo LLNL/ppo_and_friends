@@ -1387,7 +1387,7 @@ class PPO(object):
         """
         state = self.__dict__.copy()
         del state["env"]
-        del state["teset_mode_dependencies"]
+        del state["test_mode_dependencies"]
         return state
 
     def __setstate__(self, state):
