@@ -85,6 +85,14 @@ def mpi_avg_gradients(model):
         return
 
     for param in model.parameters():
+
+        #
+        # Some of the paramters in our LSTM networks don't
+        # have gradients.
+        #
+        if type(param.grad) == type(None):
+            continue
+
         param_grad    = param.grad.numpy()
         avg_grad      = mpi_avg(param_grad)
         param_grad[:] = avg_grad[:]
