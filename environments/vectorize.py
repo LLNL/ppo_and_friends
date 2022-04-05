@@ -16,6 +16,7 @@
 import numpy as np
 from .env_wrappers import IdentityWrapper
 
+#TODO: move this into env_wrappers.py
 class VectorizedEnv(IdentityWrapper):
 
     def __init__(self,
