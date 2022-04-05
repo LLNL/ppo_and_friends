@@ -252,6 +252,7 @@ class PPO(object):
         # toggle this flag for any modules that depend on it.
         #
         self.test_mode_dependencies = [env]
+        self.pickle_safe_test_mode_dependencies = []
 
         act_type = type(env.action_space)
 
@@ -370,6 +371,8 @@ class PPO(object):
                 test_mode = test_mode)
 
             self.test_mode_dependencies.append(self.value_normalizer)
+            self.pickle_safe_test_mode_dependencies.append(
+                self.value_normalizer)
 
         if save_best_only:
             self.status_dict["last save"] = -1
@@ -450,6 +453,8 @@ class PPO(object):
 
         self.test_mode_dependencies.append(self.actor)
         self.test_mode_dependencies.append(self.critic)
+        self.pickle_safe_test_mode_dependencies.append(self.actor)
+        self.pickle_safe_test_mode_dependencies.append(self.critic)
 
         sync_model_parameters(self.actor)
         sync_model_parameters(self.critic)
@@ -465,6 +470,7 @@ class PPO(object):
                 **icm_kw_args)
 
             self.test_mode_dependencies.append(self.icm)
+            self.pickle_safe_test_mode_dependencies.append(self.icm)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -1381,6 +1387,7 @@ class PPO(object):
         """
         state = self.__dict__.copy()
         del state["env"]
+        del state["teset_mode_dependencies"]
         return state
 
     def __setstate__(self, state):
@@ -1394,3 +1401,4 @@ class PPO(object):
         """
         self.__dict__.update(state)
         self.env = None
+        self.test_mode_dependencies = self.pickle_safe_test_mode_dependencies
