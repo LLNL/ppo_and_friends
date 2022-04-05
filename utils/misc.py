@@ -98,7 +98,8 @@ class RunningStatNormalizer(object):
     def __init__(self,
                  name,
                  device,
-                 epsilon = 1e-8):
+                 test_mode = False,
+                 epsilon   = 1e-8):
         """
             Arguments:
                 name        The name of the structure (used for saving/loading).
@@ -107,6 +108,7 @@ class RunningStatNormalizer(object):
         """
         self.device        = device
         self.name          = name
+        self.test_mode     = test_mode
         self.running_stats = RunningMeanStd()
         self.epsilon       = torch.tensor([epsilon]).to(device)
 
@@ -164,6 +166,9 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to save to.
         """
+        if test_mode:
+            return
+
         f_name   = "{}_stats_{}.pkl".format(self.name, rank)
         out_file = os.path.join(path, f_name)
 
@@ -178,7 +183,11 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to load from.
         """
-        f_name  = "{}_stats_{}.pkl".format(self.name, rank)
+        if test_mode:
+            f_name  = "{}_stats_0.pkl".format(self.name)
+        else:
+            f_name  = "{}_stats_{}.pkl".format(self.name, rank)
+
         in_file = os.path.join(path, f_name)
 
         with open(in_file, "rb") as fh:

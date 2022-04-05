@@ -20,6 +20,7 @@ class PPONetwork(nn.Module):
 
     def __init__(self,
                  name,
+                 test_mode = False,
                  **kw_args):
         """
             Arguments:
@@ -28,14 +29,24 @@ class PPONetwork(nn.Module):
 
         super(PPONetwork, self).__init__()
         self.name = name
+        self.test_mode = test_mode
 
     def save(self, path):
+
+        if test_mode:
+            return
+
         f_name = "{}_{}.model".format(self.name, rank)
         out_f  = os.path.join(path, f_name)
         torch.save(self.state_dict(), out_f)
 
     def load(self, path):
-        f_name = "{}_{}.model".format(self.name, rank)
+
+        if test_mode:
+            f_name = "{}_0.model".format(self.name)
+        else:
+            f_name = "{}_{}.model".format(self.name, rank)
+
         in_f   = os.path.join(path, f_name)
         self.load_state_dict(torch.load(in_f))
 
