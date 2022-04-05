@@ -8,6 +8,7 @@ import sys
 from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
 from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SingleSplitObservationNetwork
+from .ppo_networks import PPOLSTMNetwork
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -67,11 +68,9 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         self.activation = activation
 
-        if ((hidden_size == 0 and hidden_depth != 0) or
-            (hidden_depth == 0 and hidden_size != 0)):
-
-            msg  = "ERROR: if either hidden_size or hidden_depth is 0, "
-            msg += "both must be zero, but received "
+        if hidden_size == 0 and hidden_depth != 0:
+            msg  = "ERROR: hidden_size must be 0 if hidden_depth is 0, "
+            msg += "but received "
             msg += "hidden_size of {} ".format(hidden_size)
             msg += "and hidden_depth of {}.".format(hidden_depth)
             rank_print(msg)
@@ -376,16 +375,17 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         return out
 
 
-class LSTMNetwork(PPOActorCriticNetwork):
+class LSTMNetwork(PPOLSTMNetwork):
 
     def __init__(self,
                  in_dim,
                  out_dim,
+                 sequence_length   = 10,
                  out_init          = None,
                  activation        = nn.ReLU(),
                  lstm_hidden_size  = 128,
                  num_lstm_layers   = 1,
-                 ff_hidden_size    = 0,
+                 ff_hidden_size    = 128,
                  ff_hidden_depth   = 0,
                  **kw_args):
         """
@@ -400,6 +400,7 @@ class LSTMNetwork(PPOActorCriticNetwork):
                                   instance, if the expected output shape is
                                   (length, batch_size, 16), out_dim would be
                                   (length, 16,).
+                sequence_length   The length of the input sequence.
                 out_init          A std weight to apply to the output layer.
                 activation        The activation function to use on the
                                   output of hidden layers.
@@ -424,11 +425,15 @@ class LSTMNetwork(PPOActorCriticNetwork):
             out_size     = out_dim
             self.out_dim = (out_dim,)
 
+        self.sequence_length  = sequence_length
         self.activation       = activation
         self.lstm_hidden_size = lstm_hidden_size
         self.num_lstm_layers  = num_lstm_layers
 
         self.lstm = nn.LSTM(in_dim, lstm_hidden_size, num_lstm_layers)
+        self.lstm = init_net_parameters(self.lstm)
+        self.layer_norm = nn.LayerNorm(lstm_hidden_size)
+
         self.hidden_state = None
 
         ff_kw_args = kw_args.copy()
@@ -447,35 +452,58 @@ class LSTMNetwork(PPOActorCriticNetwork):
     def get_zero_hidden_state(self,
                               batch_size,
                               device):
+        """
+            Get a hidden state tuple containing the lstm hidden state
+            and cell state as zero tensors.
+
+            Arguments:
+                batch_size    The batch size to replicate.
+                device        The device to send the states to.
+
+            Returns:
+                A hidden state tuple containing zero tensors.
+        """
 
         hidden = torch.zeros(
-            self.num_lstm_layers, batch_size, self.num_lstm_layers)
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
         cell   = torch.zeros(
-            self.num_lstm_layers, batch_size, self.num_lstm_layers)
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
 
         hidden = hidden.to(device)
         cell   = hidden.to(device)
 
         return (hidden, cell) 
 
+    def reset_hidden_state(self, batch_size, device):
+        """
+            Reset our hidden state to zero tensors.
+
+            Arguments:
+                batch_size    The batch size to replicate.
+                device        The device to send the states to.
+        """
+        self.hidden_state = self.get_zero_hidden_state(
+            batch_size, device)
 
     def forward(self, _input):
 
-        batch_size = _input.shape[1]
+        if len(_input.shape) == 2:
+            out = _input.unsqueeze(0)
+        else:
+            out = torch.transpose(_input, 0, 1)
 
-        # FIXME: do we need to handle terminal states differently here?
-        # It looks like other implementations alter the hidden state
-        # on the terminal calculation for retrieval during the network
-        # udpates. When evalulate is called, the hidden state is
-        # initialized to the state that it was during the rollout (?).
-        # So, during the rollout, maybe we need to save the hidden states
-        # for later retieval and alter them at terminals. Also, the hidden
-        # state is reset at the onset of each rollout (?). It looks like
-        # terminal states result in the hidden state being zeroed out.
-        # We can just grab that during the rollout from this class.
+        batch_size = out.shape[1]
+
         if (self.hidden_state == None or
             self.hidden_state[0].shape[1] != batch_size):
+            self.reset_hidden_state(batch_size, out.device)
 
-            self.hidden_state = self.get_zero_hidden_state(
-                batch_size, _input.device)
+        _, self.hidden_state = self.lstm(out, self.hidden_state)
 
+        out = self.hidden_state[0][-1]
+        out = self.layer_norm(out)
+        out = self.activation(out)
+
+        out = self.ff_layers(out)
+
+        return out

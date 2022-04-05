@@ -68,7 +68,7 @@ class PPOActorCriticNetwork(PPONetwork):
         #
         # Actors have special roles.
         #
-        if self.name == "actor":
+        if "actor" in self.name:
 
             if action_dtype == "discrete":
                 self.need_softmax = True
@@ -103,6 +103,12 @@ class PPOConv2dNetwork(PPOActorCriticNetwork):
 
     def __init__(self, **kw_args):
         super(PPOConv2dNetwork, self).__init__(**kw_args)
+
+
+class PPOLSTMNetwork(PPOActorCriticNetwork):
+
+    def __init__(self, **kw_args):
+        super(PPOLSTMNetwork, self).__init__(**kw_args)
 
 
 class SingleSplitObservationNetwork(PPOActorCriticNetwork):
