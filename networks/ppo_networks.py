@@ -33,7 +33,7 @@ class PPONetwork(nn.Module):
 
     def save(self, path):
 
-        if test_mode:
+        if self.test_mode:
             return
 
         f_name = "{}_{}.model".format(self.name, rank)
@@ -42,7 +42,7 @@ class PPONetwork(nn.Module):
 
     def load(self, path):
 
-        if test_mode:
+        if self.test_mode:
             f_name = "{}_0.model".format(self.name)
         else:
             f_name = "{}_{}.model".format(self.name, rank)

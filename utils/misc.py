@@ -166,7 +166,7 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to save to.
         """
-        if test_mode:
+        if self.test_mode:
             return
 
         f_name   = "{}_stats_{}.pkl".format(self.name, rank)
@@ -183,7 +183,7 @@ class RunningStatNormalizer(object):
             Arguments:
                 path    The path to load from.
         """
-        if test_mode:
+        if self.test_mode:
             f_name  = "{}_stats_0.pkl".format(self.name)
         else:
             f_name  = "{}_stats_{}.pkl".format(self.name, rank)
