@@ -14,6 +14,9 @@ package_dirs["ppo_and_friends"] = "."
 dependencies = [
     'mujoco-py<2.2,>=2.1',
     'pillow',
+    'matplotlib',
+    'opencv-python',
+    'pygame',
     'gym',
     'numpy',
     'mpi4py',
