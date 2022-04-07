@@ -403,7 +403,24 @@ class LSTMNetwork(PPOLSTMNetwork):
                  ff_hidden_depth   = 0,
                  **kw_args):
         """
-            A class defining a customizable feed-forward network.
+            A class defining an LSTM centered network.
+
+            NOTES: I've found that feed forward networks generally learn
+            a lot faster than lstm in all of the environments I've tested
+            so far. However, there are certainly situations where using an
+            lstm network is advantageous. For instance, if you mask the
+            velocities from even a simple environment like CartPole, the
+            feed forward networks begin to lose the ability to learn much
+            (which makes sense), but an LSTM network can perform just fine
+            here. Some other things I've found:
+                1. LSTM networks seem to be very sensitive to hyper-parameter
+                   tuning (much more so than MLPs).
+                2. The sequence length can have a dramatic impact on
+                   performance. As an example, I adjusted the sequence length
+                   from 8 to 12 while testing on the LunarLander environment
+                   with masked velocities, and that adjustment made the
+                   difference between not learning much of anything and
+                   learning a robust policy in fairly few iterations.
 
             Arguments:
                 in_dim            The dimensions of the input data. For
