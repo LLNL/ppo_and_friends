@@ -196,6 +196,20 @@ class EpisodeInfo(object):
             self.critic_cell.append(
                 critic_hidden_state[1].detach().cpu().numpy())
 
+    def compute_advantages(self):
+        """
+            Compute our advantages using either a standard formula or GAE.
+        """
+        if self.use_gae:
+            padded_values = np.concatenate((self.values, (self.ending_value,)))
+            padded_values = padded_values.astype(np.float32)
+
+            self.advantages = self._compute_gae_advantages(
+                padded_values,
+                self.rewards)
+        else:
+            self.advantages = self._compute_standard_advantages()
+
     def end_episode(self,
                     ending_ts,
                     terminal,
@@ -210,10 +224,11 @@ class EpisodeInfo(object):
                 ending_value   The ending value of the episode.
                 ending_reward  The ending reward of the episode.
         """
-        self.ending_ts   = ending_ts
-        self.terminal    = terminal
-        self.length      = self.ending_ts - self.starting_ts
-        self.is_finished = True
+        self.ending_ts    = ending_ts
+        self.terminal     = terminal
+        self.length       = self.ending_ts - self.starting_ts
+        self.is_finished  = True
+        self.ending_value = ending_value
 
         #
         # Clipping the ending value can have dramaticly positive
@@ -233,15 +248,9 @@ class EpisodeInfo(object):
             padded_rewards,
             self.gamma)[:-1]
 
-        if self.use_gae:
-            padded_values = np.array(self.values + [ending_value],
-                dtype=np.float32)
+        self.values = np.array(self.values).astype(np.float32)
 
-            self.advantages = self._compute_gae_advantages(
-                padded_values,
-                self.rewards)
-        else:
-            self.advantages = self._compute_standard_advantages()
+        self.compute_advantages()
 
 
 class PPODataset(Dataset):
@@ -290,6 +299,7 @@ class PPODataset(Dataset):
         self.actor_cell           = None
         self.critic_cell          = None
         self.terminal_mask        = None
+        self.values               = None
 
     def add_episode(self, episode):
         """
@@ -308,6 +318,25 @@ class PPODataset(Dataset):
             comm.Abort()
 
         self.episodes.append(episode)
+
+    def recalculate_advantages(self):
+        """
+            Recalculate our advantages. This can be used to mitigate using
+            stale advantages when training over > 1 epochs.
+        """
+        if not self.is_built:
+            msg  = "WARNING: recalculate_advantages was called before "
+            msg += "the dataset has been built. Ignoring call."
+            rank_print(msg)
+            return
+
+        val_idx = 0
+        for ep in self.episodes:
+            for ep_ts in range(ep.length):
+                ep.values[ep_ts] = self.values[val_idx]
+                val_idx += 1
+
+            ep.compute_advantages()
 
     def build(self):
         """
@@ -335,6 +364,7 @@ class PPODataset(Dataset):
         self.critic_hidden     = []
         self.actor_cell        = []
         self.critic_cell       = []
+        self.values            = []
 
         self.num_episodes      = len(self.episodes)
         self.total_timestates  = 0
@@ -362,6 +392,7 @@ class PPODataset(Dataset):
             self.log_probs.extend(ep.log_probs)
             self.ep_lens.append(ep.length)
             self.advantages.extend(ep.advantages)
+            self.values.extend(ep.values)
 
             if self.build_hidden_states:
                 self.actor_hidden.extend(ep.actor_hidden)
@@ -414,19 +445,31 @@ class PPODataset(Dataset):
         self.rewards_to_go     = np.array(self.rewards_to_go)
         self.ep_lens           = np.array(self.ep_lens)
         self.advantages        = np.array(self.advantages)
+        self.values            = torch.tensor(self.values).to(self.device)
 
         if self.build_hidden_states:
+            #
+            # Torch expects the shape to be
+            # (num_lstm_layers, batch_size, hidden_size), but our
+            # data loader will concat on the first dimension. So, we
+            # need to transpose so that the batch size comes first.
+            #
             self.actor_hidden = torch.tensor(
-                np.concatenate(self.actor_hidden)).to(self.device)
+                np.concatenate(self.actor_hidden, axis=1)).to(self.device)
 
             self.critic_hidden = torch.tensor(
-                np.concatenate(self.critic_hidden)).to(self.device)
+                np.concatenate(self.critic_hidden, axis=1)).to(self.device)
 
             self.actor_cell = torch.tensor(
-                np.concatenate(self.actor_cell)).to(self.device)
+                np.concatenate(self.actor_cell, axis=1)).to(self.device)
 
             self.critic_cell = torch.tensor(
-                np.concatenate(self.critic_cell)).to(self.device)
+                np.concatenate(self.critic_cell, axis=1)).to(self.device)
+
+            self.actor_hidden  = torch.transpose(self.actor_hidden, 0, 1)
+            self.actor_cell    = torch.transpose(self.actor_cell, 0, 1)
+            self.critic_hidden = torch.transpose(self.critic_hidden, 0, 1)
+            self.critic_cell   = torch.transpose(self.critic_cell, 0, 1)
 
         else:
             empty_state = np.zeros(self.total_timestates).astype(np.uint8)
@@ -498,7 +541,8 @@ class PPODataset(Dataset):
                     self.actor_hidden[idx],
                     self.critic_hidden[idx],
                     self.actor_cell[idx],
-                    self.critic_cell[idx])
+                    self.critic_cell[idx],
+                    idx)
 
         #
         # We want our time sequence to start at the most recent state,
@@ -530,4 +574,5 @@ class PPODataset(Dataset):
                 self.actor_hidden[idx],
                 self.critic_hidden[idx],
                 self.actor_cell[idx],
-                self.critic_cell[idx])
+                self.critic_cell[idx],
+                idx)

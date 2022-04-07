@@ -326,6 +326,7 @@ class PPO(object):
         self.status_dict  = {}
         self.status_dict["iteration"]            = 0
         self.status_dict["rollout time"]         = 0
+        self.status_dict["train time"]           = 0
         self.status_dict["running time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
@@ -579,7 +580,7 @@ class PPO(object):
         rank_print("Status Report:")
         for key in self.status_dict:
 
-            if key == "running time" or key == "rollout time":
+            if key in ["running time", "rollout time", "train time"]:
                 pretty_time = format_seconds(self.status_dict[key])
                 rank_print("    {}: {}".format(key, pretty_time))
             else:
@@ -1096,16 +1097,23 @@ class PPO(object):
                 batch_size = self.batch_size,
                 shuffle    = True)
 
+            train_start_time = time.time()
+
             self.actor.train()
             self.critic.train()
 
             if self.using_icm:
                 self.icm_model.train()
 
-            # TODO: there is some evidence that re-computing advantages at
-            # each epoch can improve training performance. Let's try this
-            # out.
-            for i in range(self.epochs_per_iter):
+            for epoch_idx in range(self.epochs_per_iter):
+
+                #
+                # arXiv:2006.05990v1 suggests that re-computing the advantages
+                # before each new epoch helps mitigate issues that can arrise
+                # from "stale" advantages.
+                #
+                #if epoch_idx > 0:
+                #    data_loader.dataset.recalculate_advantages()
 
                 self._ppo_batch_train(data_loader)
 
@@ -1118,16 +1126,19 @@ class PPO(object):
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
                     msg += "has been reached. "
-                    msg += "Ending early (after {} epochs)".format(i + 1)
+                    msg += "Ending early (after "
+                    msg += "{} epochs)".format(epoch_idx + 1)
                     rank_print(msg)
                     break
 
-            if self.using_icm:
-                for _ in range(self.epochs_per_iter):
+                if self.using_icm:
                     self._icm_batch_train(data_loader)
 
+            now_time      = time.time()
+            training_time = (now_time - train_start_time)
+            self.status_dict["train time"] = now_time - train_start_time
 
-            running_time = (time.time() - iter_start_time)
+            running_time = (now_time - iter_start_time)
             self.status_dict["running time"] += running_time
             self.print_status()
 
@@ -1175,7 +1186,7 @@ class PPO(object):
         for batch in data_loader:
             obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell = batch
+                actor_cell, critic_cell, batch_idxs = batch
 
             torch.cuda.empty_cache()
 
@@ -1197,8 +1208,8 @@ class PPO(object):
                 critic_hidden = torch.transpose(critic_hidden, 0, 1)
                 critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                self.actor.hidden_state  = (actor_hidden[:1], actor_cell[:1])
-                self.critic.hidden_state = (critic_hidden[:1], critic_cell[:1])
+                self.actor.hidden_state  = (actor_hidden, actor_cell)
+                self.critic.hidden_state = (critic_hidden, critic_cell)
 
             #
             # arXiv:2005.12729v1 suggests that normalizing advantages
@@ -1215,6 +1226,8 @@ class PPO(object):
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
             values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
+
+            data_loader.dataset.values[batch_idxs] = values
 
             #
             # The heart of PPO: arXiv:1707.06347v2
@@ -1291,6 +1304,28 @@ class PPO(object):
                 self.gradient_clip)
             self.critic_optim.step()
 
+            #
+            # The idea here is similar to re-computing advantages, but now
+            # we want to update the hidden states before the next epoch.
+            #
+            if self.using_lstm:
+                actor_hidden  = self.actor.hidden_state[0].detach().clone()
+                critic_hidden = self.critic.hidden_state[0].detach().clone()
+
+                actor_cell    = self.actor.hidden_state[1].detach().clone()
+                critic_cell   = self.critic.hidden_state[1].detach().clone()
+
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
+
+                data_loader.dataset.actor_hidden[batch_idxs]  = actor_hidden
+                data_loader.dataset.critic_hidden[batch_idxs] = critic_hidden
+
+                data_loader.dataset.actor_cell[batch_idxs]  = actor_cell
+                data_loader.dataset.critic_cell[batch_idxs] = critic_cell
+
             comm.barrier()
             counter += 1
 
@@ -1317,7 +1352,7 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, _, actions, _, _, _, _, _, _, _ in data_loader:
+        for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
