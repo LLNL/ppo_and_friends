@@ -16,6 +16,7 @@ Some of our friends:
 
 * Intrinsic Curiosity Module (ICM)
 * Generalized Advantage Estimations (GAE)
+* LSTM integration into PPO algorithm
 * Gradient, reward, bootstrap, and observation clipping
 * KL based early ending
 * Splitting observations by proprioceptive and exteroceptive information
