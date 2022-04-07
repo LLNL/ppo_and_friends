@@ -56,8 +56,9 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
             out_dim = out_dim,
             **kw_args)
 
-        self.is_embedded = is_embedded
-        self.no_hidden   = False
+        self.is_embedded   = is_embedded
+        self.have_hidden   = True
+        self.two_layer_net = False
 
         if type(out_dim) == tuple:
             out_size     = reduce(lambda a, b: a*b, out_dim)
@@ -89,6 +90,16 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
                 hidden_layer_list.append(self.activation)
 
+            #
+            # This is a funny edge case. We allow users to set the hidden size
+            # > 0 while having the hidden depth == 0. This is a funny way of
+            # setting the output/input dimentions of a 2 layer network that
+            # has no hidden layers.
+            #
+            if hidden_depth == 0:
+                self.have_hidden   = False
+                self.two_layer_net = True
+
             self.hidden_layers = nn.Sequential(*hidden_layer_list)
 
             if out_init != None:
@@ -98,7 +109,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
                 self.output_layer = init_layer(nn.Linear(hidden_size, out_size))
         else:
             self.input_layer = None
-            self.no_hidden   = True
+            self.have_hidden = False
 
             if out_init != None:
                 self.output_layer = init_layer(nn.Linear(in_dim, out_size),
@@ -110,11 +121,14 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         out = _input.flatten(start_dim = 1)
 
-        if not self.no_hidden:
+        if self.have_hidden:
             out = self.input_layer(out)
             out = self.activation(out)
-
             out = self.hidden_layers(out)
+
+        elif self.two_layer_net:
+            out = self.input_layer(out)
+            out = self.activation(out)
 
         out = self.output_layer(out)
 
@@ -501,9 +515,11 @@ class LSTMNetwork(PPOLSTMNetwork):
         _, self.hidden_state = self.lstm(out, self.hidden_state)
 
         out = self.hidden_state[0][-1]
+
         out = self.layer_norm(out)
         out = self.activation(out)
 
         out = self.ff_layers(out)
 
         return out
+
