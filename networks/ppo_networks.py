@@ -110,6 +110,42 @@ class PPOLSTMNetwork(PPOActorCriticNetwork):
     def __init__(self, **kw_args):
         super(PPOLSTMNetwork, self).__init__(**kw_args)
 
+    def get_zero_hidden_state(self,
+                              batch_size,
+                              device):
+        """
+            Get a hidden state tuple containing the lstm hidden state
+            and cell state as zero tensors.
+
+            Arguments:
+                batch_size    The batch size to replicate.
+                device        The device to send the states to.
+
+            Returns:
+                A hidden state tuple containing zero tensors.
+        """
+
+        hidden = torch.zeros(
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
+        cell   = torch.zeros(
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
+
+        hidden = hidden.to(device)
+        cell   = hidden.to(device)
+
+        return (hidden, cell)
+
+    def reset_hidden_state(self, batch_size, device):
+        """
+            Reset our hidden state to zero tensors.
+
+            Arguments:
+                batch_size    The batch size to replicate.
+                device        The device to send the states to.
+        """
+        self.hidden_state = self.get_zero_hidden_state(
+            batch_size, device)
+
 
 class SingleSplitObservationNetwork(PPOActorCriticNetwork):
     """

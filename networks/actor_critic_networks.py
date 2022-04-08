@@ -315,7 +315,6 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
 
         return out
 
-
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
@@ -480,42 +479,6 @@ class LSTMNetwork(PPOLSTMNetwork):
             out_init     = out_init,
             **ff_kw_args)
 
-    def get_zero_hidden_state(self,
-                              batch_size,
-                              device):
-        """
-            Get a hidden state tuple containing the lstm hidden state
-            and cell state as zero tensors.
-
-            Arguments:
-                batch_size    The batch size to replicate.
-                device        The device to send the states to.
-
-            Returns:
-                A hidden state tuple containing zero tensors.
-        """
-
-        hidden = torch.zeros(
-            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
-        cell   = torch.zeros(
-            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
-
-        hidden = hidden.to(device)
-        cell   = hidden.to(device)
-
-        return (hidden, cell) 
-
-    def reset_hidden_state(self, batch_size, device):
-        """
-            Reset our hidden state to zero tensors.
-
-            Arguments:
-                batch_size    The batch size to replicate.
-                device        The device to send the states to.
-        """
-        self.hidden_state = self.get_zero_hidden_state(
-            batch_size, device)
-
     def forward(self, _input):
 
         if len(_input.shape) == 2:
@@ -539,4 +502,3 @@ class LSTMNetwork(PPOLSTMNetwork):
         out = self.ff_layers(out)
 
         return out
-
