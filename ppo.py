@@ -1112,8 +1112,8 @@ class PPO(object):
                 # before each new epoch helps mitigate issues that can arrise
                 # from "stale" advantages.
                 #
-                #if epoch_idx > 0:
-                #    data_loader.dataset.recalculate_advantages()
+                if epoch_idx > 0:
+                    data_loader.dataset.recalculate_advantages()
 
                 self._ppo_batch_train(data_loader)
 
