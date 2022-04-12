@@ -6,6 +6,7 @@ from ppo_and_friends.utils.stats import RunningMeanStd
 import numpy as np
 import pickle
 import os
+from ppo_and_friends.utils.mpi_utils import rank_print
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -26,7 +27,8 @@ class IdentityWrapper(object):
             Initialize the wrapper.
 
             Arguments:
-                env    The environment to wrap.
+                env           The environment to wrap.
+                status_dict   The dictionary containing training stats.
         """
 
         self.env               = env
@@ -421,28 +423,109 @@ class RewardNormalizer(IdentityWrapper):
         self._check_env_load(path)
 
 
-class ObservationClipper(IdentityWrapper):
+class GenericClipper(IdentityWrapper):
     """
-        An environment wrapper that clips observations.
+        A wrapper for clipping rewards.
     """
 
     def __init__(self,
                  env,
-                 clip_range = (-10., 10.),
+                 status_dict = {},
+                 clip_range  = (-10., 10.),
                  **kw_args):
         """
             Initialize the wrapper.
 
             Arguments:
                 env         The environment to wrap.
-                clip_range  The range to clip our observations into.
+                status_dict The training status dictionary. This is used when
+                            our clip range contains callables.
+                clip_range  The range to clip our rewards into. This can be
+                            either a real number or a class that inherits from
+                            IterationMapper.
         """
 
-        super(ObservationClipper, self).__init__(
+        super(GenericClipper, self).__init__(
             env,
             **kw_args)
 
-        self.clip_range = clip_range
+        min_callable = None
+        max_callable = None
+
+        self.need_iteration = False
+        self.status_dict    = status_dict
+
+        if callable(clip_range[0]):
+            min_callable = clip_range[0]
+            self.need_iteration = True
+        else:
+            min_callable = lambda x : clip_range[0]
+
+        if callable(clip_range[1]):
+            max_callable = clip_range[1]
+            self.need_iteration = True
+        else:
+            max_callable = lambda x : clip_range[1]
+
+        self.clip_range = (min_callable, max_callable)
+
+    def get_clip_range(self):
+        """
+            Get the current clip range.
+
+            Returns:
+                A tuple containing the clip range as (min, max).
+        """
+        if self.need_iteration:
+            if "iteration" not in self.status_dict:
+                msg  = "ERROR: clipper requires 'iteration' from the status "
+                msg += "dictionary, but it's not there. "
+                msg += "\nstatus_dict: \n{}".format(self.status_dict)
+                rank_print(msg)
+                comm.Abort()
+
+            min_value = self.clip_range[0](self.status_dict["iteration"])
+            max_value = self.clip_range[1](self.status_dict["iteration"])
+        else:
+            min_value = self.clip_range[0](None)
+            max_value = self.clip_range[1](None)
+
+        return (min_value, max_value)
+
+    def _clip(self, val):
+        """
+            Perform the clip.
+
+            Arguments:
+                val    The value to be clipped.
+        """
+        raise NotImplementedError
+
+
+class ObservationClipper(GenericClipper):
+    """
+        An environment wrapper that clips observations.
+    """
+
+    def __init__(self,
+                 env,
+                 status_dict = {},
+                 clip_range  = (-10., 10.),
+                 **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env         The environment to wrap.
+                status_dict The training status dictionary. This is used when
+                            our clip range contains callables.
+                clip_range  The range to clip our observations into.
+        """
+        super(ObservationClipper, self).__init__(
+            env,
+            status_dict = status_dict,
+            clip_range  = clip_range,
+            **kw_args)
 
     def step(self, action):
         """
@@ -480,31 +563,35 @@ class ObservationClipper(IdentityWrapper):
             Returns:
                 The clipped observation.
         """
-        return np.clip(obs, self.clip_range[0], self.clip_range[1])
+        min_value, max_value = self.get_clip_range()
+        return np.clip(obs, min_value, max_value)
 
 
-class RewardClipper(IdentityWrapper):
+class RewardClipper(GenericClipper):
     """
         A wrapper for clipping rewards.
     """
 
     def __init__(self,
                  env,
-                 clip_range = (-10., 10.),
+                 status_dict = {},
+                 clip_range  = (-10., 10.),
                  **kw_args):
         """
             Initialize the wrapper.
 
             Arguments:
                 env         The environment to wrap.
+                status_dict The training status dictionary. This is used when
+                            our clip range contains callables.
                 clip_range  The range to clip our rewards into.
         """
 
         super(RewardClipper, self).__init__(
             env,
+            status_dict = status_dict,
+            clip_range  = clip_range,
             **kw_args)
-
-        self.clip_range = clip_range
 
     def step(self, action):
         """
@@ -536,5 +623,6 @@ class RewardClipper(IdentityWrapper):
             Returns:
                 The clipped reward.
         """
-        return np.clip(reward, self.clip_range[0], self.clip_range[1])
+        min_value, max_value = self.get_clip_range()
+        return np.clip(reward, min_value, max_value)
 
