@@ -63,7 +63,7 @@ class LinearStepMapper(IterationMapper):
                  ending_value,
                  **kw_args):
         """
-            A class that maps iteration ranges to values. Steps should
+            A class that maps iteration steps to values. Steps should
             be a list containing iteration steps in ascending order. As long
             as our iteration is < the current index of the step list (starting
             at index 0), the associated value from step_values will be returned.
@@ -79,42 +79,33 @@ class LinearStepMapper(IterationMapper):
                               last entry of steps.
         """
 
-        self.ranges       = ranges
-        self.range_values = range_values
+        self.steps        = steps
+        self.step_values  = step_values
         self.ending_value = ending_value
         self.range_idx    = 0
 
-        if len(self.ranges) == 0:
+        if len(self.steps) == 0:
             msg = "ERROR: RangeMapper requires at least one range."
             rank_print(msg)
             comm.Abort()
 
-        if len(self.ranges) != len(self.range_values):
-            msg  = "ERROR: ranges and range values must contain "
+        if len(self.steps) != len(self.step_values):
+            msg  = "ERROR: steps and range values must contain "
             msg += "the same number of entries."
             rank_print(msg)
             comm.Abort()
-
-        for r in self.ranges:
-            if type(r) != type(range):
-                msg  = "ERROR: ranges must contain entries of type "
-                msg += "{}, but found at least one ".format(type(range))
-                msg += "entry of type {}".format(type(r))
-                rank_print(msg)
-                comm.Abort()
-
 
     def __call__(self,
                  iteration,
                  **kw_args):
 
-        if self.range_idx >= len(self.ranges):
+        if self.range_idx >= len(self.steps):
             return self.ending_value
 
-        while iteration > self.ranges[self.range_idx]:
+        while iteration > self.steps[self.range_idx]:
             self.range_idx += 1
 
-            if self.range_idx >= len(self.ranges):
+            if self.range_idx >= len(self.steps):
                 return self.ending_value
 
-        return self.range_values[self.range_idx]
+        return self.step_values[self.range_idx]
