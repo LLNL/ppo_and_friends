@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
 from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
 from ppo_and_friends.utils.misc import RunningStatNormalizer
-from ppo_and_friends.utils.decrementers import *
+from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.environments.vectorize import VectorizedEnv
+from ppo_and_friends.environments.env_wrappers import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
@@ -90,8 +90,9 @@ class PPO(object):
                                       network.
                  lr                   The initial learning rate.
                  min_lr               The minimum learning rate.
-                 lr_dec               A class that inherits from the Decrement
-                                      class located in utils/decrementers.py.
+                 lr_dec               A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
                                       This class has a decrement function that
                                       will be used to updated the learning rate.
                  max_ts_per_ep        The maximum timesteps to allow per
