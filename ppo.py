@@ -125,7 +125,9 @@ class PPO(object):
                                       specific range. Why is this? Well, our
                                       estimated reward (from our value network)
                                       might be way outside of the expected
-                                      range.
+                                      range. We also allow the range min/max
+                                      to be callables that take in the
+                                      current iteration.
                  dynamic_bs_clip      If set to True, bootstrap_clip will be
                                       used as the initial clip values, but all
                                       values thereafter will be taken from the
@@ -178,6 +180,8 @@ class PPO(object):
                                       testing, but some of its attributes are.
         """
         set_torch_threads()
+        self.status_dict  = {}
+        self.status_dict["iteration"] = 0
 
         #
         # Divide the ts per rollout up among the processors. Let rank
@@ -219,8 +223,9 @@ class PPO(object):
 
         if obs_clip != None and type(obs_clip) == tuple:
             env = ObservationClipper(
-                env        = env,
-                clip_range = obs_clip)
+                env         = env,
+                status_dict = self.status_dict,
+                clip_range  = obs_clip)
 
         #
         # There are multiple ways to go about normalizing values/rewards.
@@ -239,8 +244,9 @@ class PPO(object):
 
         if reward_clip != None and type(reward_clip) == tuple:
             env = RewardClipper(
-                env        = env,
-                clip_range = reward_clip)
+                env         = env,
+                status_dict = self.status_dict,
+                clip_range  = reward_clip)
 
         act_type = type(env.action_space)
 
@@ -286,6 +292,39 @@ class PPO(object):
         else:
             self.lr_dec = lr_dec
 
+        #
+        # One or both of our bootstrap clip ends might be a function of
+        # our iteration.
+        # We turn them both into functions for sanity.
+        #
+        min_bs_callable  = None
+        max_bs_callable  = None
+        bs_clip_callable = False
+
+        if callable(bootstrap_clip[0]):
+            min_bs_callable  = bootstrap_clip[0]
+            bs_clip_callable = True
+        else:
+            min_bs_callable = lambda x : bootstrap_clip[0]
+
+        if callable(bootstrap_clip[1]):
+            max_bs_callable  = bootstrap_clip[1]
+            bs_clip_callable = True
+        else:
+            max_bs_callable = lambda x : bootstrap_clip[1]
+
+        callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
+
+        if bs_clip_callable and dynamic_bs_clip:
+            msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
+            msg += "and also set the bootstrap clip to be callables. This is "
+            msg += "redundant, and the dynamic clip will override the given "
+            msg += "functions."
+            rank_print(msg)
+
+        #
+        # Establish some class variables.
+        #
         self.env                 = env
         self.device              = device
         self.state_path          = state_path
@@ -306,7 +345,7 @@ class PPO(object):
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
         self.gradient_clip       = gradient_clip
-        self.bootstrap_clip      = bootstrap_clip
+        self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
         self.obs_shape           = env.observation_space.shape
@@ -323,9 +362,7 @@ class PPO(object):
         #
         # Create a dictionary to track the status of training.
         #
-        max_int           = np.iinfo(np.int32).max
-        self.status_dict  = {}
-        self.status_dict["iteration"]            = 0
+        max_int = np.iinfo(np.int32).max
         self.status_dict["rollout time"]         = 0
         self.status_dict["train time"]           = 0
         self.status_dict["running time"]         = 0
@@ -733,12 +770,20 @@ class PPO(object):
 
         start_time = time.time()
 
+        #
+        # Our bootstrap clip is a function of the iteration.
+        #
+        iteration = self.status_dict["iteration"]
+        bs_min    = self.bootstrap_clip[0](iteration)
+        bs_max    = self.bootstrap_clip[1](iteration)
+        bs_clip_range = (bs_min, bs_max)
+
         episode_info = EpisodeInfo(
             starting_ts    = 0,
             use_gae        = self.use_gae,
             gamma          = self.gamma,
             lambd          = self.lambd,
-            bootstrap_clip = self.bootstrap_clip)
+            bootstrap_clip = bs_clip_range)
 
         while total_rollout_ts < self.ts_per_rollout:
 
@@ -867,16 +912,25 @@ class PPO(object):
                     dataset.add_episode(episode_info)
 
                     if self.dynamic_bs_clip:
-                        ep_min_reward       = min(episode_info.rewards)
-                        ep_max_reward       = max(episode_info.rewards)
-                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
+                        ep_min_reward = min(episode_info.rewards)
+                        ep_max_reward = max(episode_info.rewards)
+                        bs_clip_range = (ep_min_reward, ep_max_reward)
+
+                    else:
+                        #
+                        # Our bootstrap clip is a function of the iteration.
+                        #
+                        iteration = self.status_dict["iteration"]
+                        bs_min    = self.bootstrap_clip[0](iteration)
+                        bs_max    = self.bootstrap_clip[1](iteration)
+                        bs_clip_range = (bs_min, bs_max)
 
                     episode_info = EpisodeInfo(
                         starting_ts    = 0,
                         use_gae        = self.use_gae,
                         gamma          = self.gamma,
                         lambd          = self.lambd,
-                        bootstrap_clip = self.bootstrap_clip)
+                        bootstrap_clip = bs_clip_range)
 
                     longest_run = max(longest_run, episode_length)
 
@@ -956,16 +1010,24 @@ class PPO(object):
                     dataset.add_episode(episode_info)
 
                     if self.dynamic_bs_clip:
-                        ep_min_reward       = min(episode_info.rewards)
-                        ep_max_reward       = max(episode_info.rewards)
-                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
+                        ep_min_reward = min(episode_info.rewards)
+                        ep_max_reward = max(episode_info.rewards)
+                        bs_clip_range = (ep_min_reward, ep_max_reward)
+                    else:
+                        #
+                        # Our bootstrap clip is a function of the iteration.
+                        #
+                        iteration = self.status_dict["iteration"]
+                        bs_min    = self.bootstrap_clip[0](iteration)
+                        bs_max    = self.bootstrap_clip[1](iteration)
+                        bs_clip_range = (bs_min, bs_max)
 
                     episode_info = EpisodeInfo(
                         starting_ts    = episode_length,
                         use_gae        = self.use_gae,
                         gamma          = self.gamma,
                         lambd          = self.lambd,
-                        bootstrap_clip = self.bootstrap_clip)
+                        bootstrap_clip = bs_clip_range)
 
                     if total_rollout_ts == self.ts_per_rollout:
                         ts_before_ep  = self.ts_per_rollout - episode_length
