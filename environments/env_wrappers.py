@@ -38,6 +38,10 @@ class IdentityWrapper(object):
         self.action_space      = env.action_space
         self.need_hard_reset   = True
         self.obs_cache         = None
+        self.can_augment_obs   = False
+
+        if callable(getattr(self.env, "augment_observation", None)):
+            self.can_augment_obs = True
 
     def step(self, action):
         """
@@ -111,6 +115,22 @@ class IdentityWrapper(object):
                 path    The path to load from.
         """
         self._check_env_load(path)
+
+    def augment_observation(self, obs):
+        """
+            If our environment has defined an observation augmentation
+            method, we can access it here.
+
+            Arguments:
+                The observation to augment.
+
+            Returns:
+                The batch of augmented observations.
+        """
+        if self.can_augment_obs:
+            return self.env.augment_observation(obs)
+        else:
+            raise NotImplementedError
 
     def _check_env_save(self, path):
         """
