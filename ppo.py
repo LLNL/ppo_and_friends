@@ -1610,6 +1610,7 @@ class PPO(object):
         state = self.__dict__.copy()
         del state["env"]
         del state["test_mode_dependencies"]
+        del state["bootstrap_clip"]
         return state
 
     def __setstate__(self, state):
@@ -1624,3 +1625,4 @@ class PPO(object):
         self.__dict__.update(state)
         self.env = None
         self.test_mode_dependencies = self.pickle_safe_test_mode_dependencies
+        self.bootstrap_clip = (None, None)
