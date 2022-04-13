@@ -7,11 +7,12 @@ from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
 from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
+from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from .gym_wrappers import *
 import torch.nn as nn
-from ppo_and_friends.utils.decrementers import *
+from ppo_and_friends.utils.iteration_mappers import *
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -133,6 +134,10 @@ def cartpole_ppo(state_path,
 
     env = gym.make('CartPole-v0')
 
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    critic_kw_args = actor_kw_args.copy()
+
     lr     = 0.0002
     min_lr = 0.0002
 
@@ -143,6 +148,9 @@ def cartpole_ppo(state_path,
 
     run_ppo(env                = env,
             random_seed        = random_seed,
+            batch_size         = 256,
+            actor_kw_args      = actor_kw_args,
+            critic_kw_args     = critic_kw_args,
             ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
             use_gae            = True,
@@ -150,7 +158,7 @@ def cartpole_ppo(state_path,
             normalize_rewards  = True,
             normalize_adv      = True,
             obs_clip           = (-10., 10.),
-            reward_clip        = (-10., 10.),
+	    reward_clip        = (-10., 10.),
             state_path         = state_path,
             load_state         = load_state,
             render             = render,
@@ -424,17 +432,20 @@ def lunar_lander_ppo(state_path,
     # lander env.
     #
     actor_kw_args = {}
+
     actor_kw_args["activation"]  = nn.LeakyReLU()
     actor_kw_args["hidden_size"] = 64
 
     critic_kw_args = actor_kw_args.copy()
     critic_kw_args["hidden_size"] = 256
 
+    critic_kw_args = actor_kw_args.copy()
+
     lr     = 0.0003
-    min_lr = 0.0
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1000,
+        max_iteration = 200,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -504,10 +515,10 @@ def lunar_lander_continuous_ppo(state_path,
     critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 500,
+        max_iteration = 100,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -568,24 +579,21 @@ def bipedal_walker_ppo(state_path,
     # here.
     #
     actor_kw_args["std_offset"] = 0.1
+    actor_kw_args["activation"] = nn.LeakyReLU()
 
-    #FIXME: try standard feed forward again.
-    actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["split_start"] = env.observation_space.shape[0] - 10
-
-    actor_kw_args["left_hidden_size"]  = 32
-    actor_kw_args["left_hidden_depth"] = 1
-    actor_kw_args["left_out_size"]     = 32
-
-    actor_kw_args["right_hidden_size"]  = 16
-    actor_kw_args["right_hidden_depth"] = 1
-    actor_kw_args["right_out_size"]     = 16
-
-    actor_kw_args["combined_hidden_size"]  = 64
-    actor_kw_args["combined_hidden_depth"] = 2
+    #
+    # You can also use an LSTM or Split Observation network here,
+    # but I've found that a simple MLP learns faster both in terms
+    # of iterations and wall-clock time. The LSTM is the slowest
+    # of the three options, which I would assume is related to the
+    # fact that velocity information is already contained in the
+    # observations, but it's a bit surprising that we can't infer
+    # extra "history" information from the lidar.
+    #
+    actor_kw_args["hidden_size"] = 128
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["combined_hidden_size"] = 128
+    critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -595,9 +603,14 @@ def bipedal_walker_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # Thresholding the reward to a low of -1 doesn't drastically
+    # change learning, but it does help a bit. Clipping the bootstrap
+    # reward to the same range seems to help with stability.
+    #
     run_ppo(env                 = env,
             random_seed         = random_seed,
-            ac_network          = SplitObsNetwork,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -609,7 +622,7 @@ def bipedal_walker_ppo(state_path,
             normalize_rewards   = True,
             obs_clip            = (-10., 10.),
             reward_clip         = (-1., 10.),
-            bootstrap_clip      = (-10., 10.),
+            bootstrap_clip      = (-1., 10.),
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
@@ -646,10 +659,10 @@ def bipedal_walker_hardcore_ppo(state_path,
 
     actor_kw_args["std_offset"]  = 0.1
     actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["hidden_size"] = 512
+    actor_kw_args["hidden_size"] = 256
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_size"] = 1024
+    critic_kw_args["hidden_size"] = 512
 
     lr     = 0.0003
     min_lr = 0.0001
@@ -659,20 +672,38 @@ def bipedal_walker_hardcore_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    reward_clip_min = LinearStepMapper(
+        steps        = [4900,],
+        step_values  = [-1.,],
+        ending_value = -10.)
+
+    bs_clip_min = LinearStepMapper(
+        steps        = [4900,],
+        step_values  = [-1.,],
+        ending_value = -10.)
+
     run_ppo(env                 = env,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
-            max_ts_per_ep       = 64,
+            max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
             obs_clip            = (-10., 10.),
+
+            #reward_clip         = (reward_clip_min, 10.),
+            #bootstrap_clip      = (bs_clip_min, 10.),
+
+            # TODO: it looks like starting at -1 works great for learning good stride
+            # quickly but we then need to decrement the clip in order to learn a
+            # policy that can solve the environment over 100 runs.
             reward_clip         = (-1., 10.),
-            bootstrap_clip      = (-10., 10.),
+            bootstrap_clip      = (-1., 10.),
+
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
@@ -683,7 +714,7 @@ def bipedal_walker_hardcore_ppo(state_path,
             num_timesteps       = num_timesteps,
             device              = device,
             test                = test,
-            use_soft_resets     = False,
+            use_soft_resets     = True,
             num_test_runs       = num_test_runs)
 
 

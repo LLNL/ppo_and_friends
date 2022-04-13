@@ -186,6 +186,8 @@ class PPO(object):
                                       treatment (a single action).
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
+                                      Setting this to True will enable test
+                                      mode.
         """
         set_torch_threads()
         self.status_dict  = {}
@@ -225,6 +227,7 @@ class PPO(object):
         if normalize_obs:
             env = ObservationNormalizer(
                 env          = env,
+                test_mode    = test_mode,
                 update_stats = not test_mode)
 
             self.save_env_info = True
@@ -232,6 +235,7 @@ class PPO(object):
         if obs_clip != None and type(obs_clip) == tuple:
             env = ObservationClipper(
                 env         = env,
+                test_mode   = test_mode,
                 status_dict = self.status_dict,
                 clip_range  = obs_clip)
 
@@ -245,6 +249,7 @@ class PPO(object):
         if normalize_rewards:
             env = RewardNormalizer(
                 env          = env,
+                test_mode    = test_mode,
                 update_stats = not test_mode,
                 gamma        = gamma)
 
@@ -253,8 +258,16 @@ class PPO(object):
         if reward_clip != None and type(reward_clip) == tuple:
             env = RewardClipper(
                 env         = env,
+                test_mode   = test_mode,
                 status_dict = self.status_dict,
                 clip_range  = reward_clip)
+
+        #
+        # When we toggle test mode on/off, we need to make sure to also
+        # toggle this flag for any modules that depend on it.
+        #
+        self.test_mode_dependencies = [env]
+        self.pickle_safe_test_mode_dependencies = []
 
         act_type = type(env.action_space)
 
@@ -367,6 +380,7 @@ class PPO(object):
         self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
+        self.test_mode           = test_mode
 
         #
         # Create a dictionary to track the status of training.
@@ -400,8 +414,13 @@ class PPO(object):
         #
         if normalize_values:
             self.value_normalizer = RunningStatNormalizer(
-                "value_normalizer",
-                self.device)
+                name      = "value_normalizer",
+                device    = self.device,
+                test_mode = test_mode)
+
+            self.test_mode_dependencies.append(self.value_normalizer)
+            self.pickle_safe_test_mode_dependencies.append(
+                self.value_normalizer)
 
         if save_best_only:
             self.status_dict["last save"] = -1
@@ -449,6 +468,7 @@ class PPO(object):
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_dtype = action_dtype,
+                test_mode    = test_mode,
                 **actor_kw_args)
 
             self.critic = ac_network(
@@ -457,6 +477,7 @@ class PPO(object):
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_dtype = action_dtype,
+                test_mode    = test_mode,
                 **critic_kw_args)
 
         else:
@@ -468,6 +489,7 @@ class PPO(object):
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_dtype = action_dtype,
+                test_mode    = test_mode,
                 **actor_kw_args)
 
             self.critic = ac_network(
@@ -476,10 +498,16 @@ class PPO(object):
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_dtype = action_dtype,
+                test_mode    = test_mode,
                 **critic_kw_args)
 
         self.actor  = self.actor.to(device)
         self.critic = self.critic.to(device)
+
+        self.test_mode_dependencies.append(self.actor)
+        self.test_mode_dependencies.append(self.critic)
+        self.pickle_safe_test_mode_dependencies.append(self.actor)
+        self.pickle_safe_test_mode_dependencies.append(self.critic)
 
         sync_model_parameters(self.actor)
         sync_model_parameters(self.critic)
@@ -491,7 +519,11 @@ class PPO(object):
                 obs_dim      = obs_dim,
                 act_dim      = self.act_dim,
                 action_dtype = self.action_dtype,
+                test_mode    = test_mode,
                 **icm_kw_args)
+
+            self.test_mode_dependencies.append(self.icm)
+            self.pickle_safe_test_mode_dependencies.append(self.icm)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -1495,6 +1527,11 @@ class PPO(object):
         """
             Save all information required for a restart.
         """
+        if self.test_mode:
+            msg = "WARNING: save() was called while in test mode. Disregarding."
+            rank_print(msg)
+            return
+
         comm.barrier()
 
         self.actor.save(self.state_path)
@@ -1533,12 +1570,30 @@ class PPO(object):
         if self.normalize_values:
             self.value_normalizer.load_info(self.state_path)
 
-        file_name  = "state_{}.pickle".format(rank)
+        if self.test_mode:
+            file_name  = "state_0.pickle"
+        else:
+            file_name  = "state_{}.pickle".format(rank)
+
         state_file = os.path.join(self.state_path, file_name)
+
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
+
+    def set_test_mode(self, test_mode):
+        """
+            Enable or disable test mode in all required modules.
+
+            Arguments:
+                test_mode    A bool representing whether or not to enable
+                             test_mode.
+        """
+        self.test_mode = test_mode
+
+        for module in self.test_mode_dependencies:
+            module.test_mode = test_mode
 
     def __getstate__(self):
         """
@@ -1551,6 +1606,7 @@ class PPO(object):
         """
         state = self.__dict__.copy()
         del state["env"]
+        del state["test_mode_dependencies"]
         return state
 
     def __setstate__(self, state):
@@ -1564,3 +1620,4 @@ class PPO(object):
         """
         self.__dict__.update(state)
         self.env = None
+        self.test_mode_dependencies = self.pickle_safe_test_mode_dependencies
