@@ -16,6 +16,7 @@ from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.environments.env_wrappers import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
+from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
 from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
