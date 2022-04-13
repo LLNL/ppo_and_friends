@@ -22,6 +22,7 @@ class IdentityWrapper(object):
 
     def __init__(self,
                  env,
+                 test_mode = False,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -32,6 +33,7 @@ class IdentityWrapper(object):
         """
 
         self.env               = env
+        self.test_mode         = test_mode
         self.observation_space = env.observation_space
         self.action_space      = env.action_space
         self.need_hard_reset   = True
@@ -287,6 +289,9 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
+        if self.test_mode:
+            return
+
         file_name = "RunningObsStats_{}.pkl".format(rank)
         out_file  = os.path.join(path, file_name)
 
@@ -303,7 +308,11 @@ class ObservationNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        file_name = "RunningObsStats_{}.pkl".format(rank)
+        if self.test_mode:
+            file_name = "RunningObsStats_0.pkl"
+        else:
+            file_name = "RunningObsStats_{}.pkl".format(rank)
+
         in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
@@ -398,6 +407,9 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to save to.
         """
+        if self.test_mode:
+            return
+
         file_name = "RunningRewardsStats_{}.pkl".format(rank)
         out_file  = os.path.join(path, file_name)
 
@@ -414,7 +426,11 @@ class RewardNormalizer(IdentityWrapper):
             Arguments:
                 path    The path to load from.
         """
-        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        if self.test_mode:
+            file_name = "RunningRewardsStats_0.pkl"
+        else:
+            file_name = "RunningRewardsStats_{}.pkl".format(rank)
+
         in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
