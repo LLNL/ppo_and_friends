@@ -657,7 +657,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
                 env            The environment to wrap.
         """
 
-        super(ObservationNormalizer, self).__init__(
+        super(AugmentingEnvWrapper, self).__init__(
             env,
             **kw_args)
 
