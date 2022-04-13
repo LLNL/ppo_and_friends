@@ -626,3 +626,71 @@ class RewardClipper(GenericClipper):
         min_value, max_value = self.get_clip_range()
         return np.clip(reward, min_value, max_value)
 
+
+class AugmentingEnvWrapper(IdentityWrapper):
+    """
+    """
+
+    def __init__(self,
+                 env,
+                 **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env            The environment to wrap.
+        """
+
+        super(ObservationNormalizer, self).__init__(
+            env,
+            **kw_args)
+
+        aug_func = getattr(env, "augment_observation", None)
+
+        if type(aug_func) == type(None):
+            msg  = "ERROR: env must define 'augment_observation' in order "
+            msg += "to qualify for the AugmentingEnvWrapper class."
+            rank_print(msg)
+            comm.Abort()
+
+    def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, allow the environment to augment the returned
+            observation, and set up the return values as a batch.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                A batch of observations, rewards, and dones along
+                with a single info dictionary. The observations will
+                contain augmentations of the original observation.
+        """
+        obs, reward, done, info = self.env.step(action)
+
+        aug_obs_batch = self.env.augment_observation(obs)
+        batch_size    = aug_obs_batch.shape[0]
+
+        if "terminal observation" in info:
+            terminal_obs = info["terminal observation"]
+            terminal_obs = self.env.augment_observation(terminal_obs)
+            info["terminal observation"] = terminal_obs
+
+        rewards = np.tile(np.array((reward,)), batch_size).reshape((batch_size, 1))
+        dones   = np.tile(np.array((done,)), batch_size).reshape((batch_size, 1))
+
+        return aug_obs_batch, rewards, dones, info
+
+    def reset(self):
+        """
+            Reset the environment, and update the running stats.
+
+            Returns:
+                The resulting observation.
+        """
+        obs = self.env.reset()
+
+        aug_obs_batch = self.env.augment_observation(obs)
+
+        return aug_obs_batch

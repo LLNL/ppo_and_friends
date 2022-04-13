@@ -63,6 +63,7 @@ def run_ppo(env,
             test                = False,
             pickle_class        = False,
             use_soft_resets     = True,
+            obs_augment         = False,
             num_test_runs       = 1):
 
     ppo = PPO(env                = env,
@@ -104,6 +105,7 @@ def run_ppo(env,
               state_path         = state_path,
               pickle_class       = pickle_class,
               use_soft_resets    = use_soft_resets,
+              obs_augment        = obs_augment,
               test_mode          = test)
 
     if test:

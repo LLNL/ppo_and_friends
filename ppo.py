@@ -73,6 +73,7 @@ class PPO(object):
                  save_best_only      = False,
                  pickle_class        = False,
                  use_soft_resets     = True,
+                 obs_augment         = False,
                  test_mode           = False):
         """
             Initialize the PPO trainer.
@@ -176,6 +177,13 @@ class PPO(object):
                                       be pickled and saved into the output
                                       directory after it's been initialized.
                  use_soft_resets      Use "soft resets" during rollouts.
+                 obs_augment          This is a funny option that can only be
+                                      enabled with environments that have a
+                                      "observation_augment" method defined.
+                                      When enabled, this method will be used to
+                                      augment observations into batches of
+                                      observations that all require the same
+                                      treatment (a single action).
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
         """
@@ -358,6 +366,7 @@ class PPO(object):
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
+        self.obs_augment         = obs_augment
 
         #
         # Create a dictionary to track the status of training.
@@ -805,8 +814,16 @@ class PPO(object):
 
                 total_rollout_ts += 1
                 episode_length   += 1
-                raw_action, action, log_prob = self.get_action(obs)
 
+                # TODO: obs will need to be the single index from our batch.
+                # we'll then need to tile the actions and log_probs.
+                if self.obs_augment:
+                    raw_action, action, log_prob = self.get_action(obs[0])
+                else:
+                    raw_action, action, log_prob = self.get_action(obs)
+
+                # TODO: t_obs will need to be the entire batch so that we have
+                # a batch of values
                 t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
                 t_obs = t_obs.unsqueeze(0)
                 value = self.critic(t_obs)
@@ -814,16 +831,29 @@ class PPO(object):
                 if self.normalize_values:
                     value = self.value_normalizer.denormalize(value)
 
+                # TODO: this will be the batch
                 prev_obs = obs.copy()
 
                 if self.action_squeeze:
                     action = action.squeeze()
 
+                # TODO: the action will be a single action, but all return
+                # values will be batches (except for info).
                 obs, ext_reward, done, info = self.env.step(action)
 
-                if action.size == 1:
+                if self.obs_augment:
+                    batch_size = obs.shape[0]
+                    action = np.tile(action, batch_size)
+                    action = action.reshape((batch_size, 1))
+
+                    lp_shape = log_prob.shape
+                    log_prob = np.tile(log_prob.flatten(), batch_size)
+                    log_prob = log_prob.reshape((batch_size,) + lp_shape)
+
+                elif action.size == 1:
                     ep_action  = action.item()
                     raw_action = raw_action.item()
+
                 else:
                     ep_action = action
 
@@ -835,6 +865,8 @@ class PPO(object):
                 #
                 if "natural reward" in info:
                     natural_reward = info["natural reward"]
+                elif self.obs_augment:
+                    natural_reward = ext_reward[0]
                 else:
                     natural_reward = ext_reward
 
@@ -847,6 +879,9 @@ class PPO(object):
                 #
                 if self.using_icm:
 
+                    #
+                    # TODO: All three of these inputs should be batches I think.
+                    #
                     intr_reward = self.get_intrinsic_reward(
                         prev_obs,
                         obs,
@@ -858,6 +893,7 @@ class PPO(object):
                 else:
                     reward = ext_reward
 
+                # TODO: ep_obs should be a batch.
                 ep_obs = obs
                 if done:
                     ep_obs = info["terminal observation"]
@@ -883,6 +919,8 @@ class PPO(object):
                     actor_hidden_state  = None
                     critic_hidden_state = None
 
+                # TODO: everything entered here shoud be batches, including the hidden
+                # states, which will need to be tiled.
                 episode_info.add_info(
                     prev_obs,
                     ep_obs,
@@ -945,6 +983,7 @@ class PPO(object):
                 elif (ep_ts == self.max_ts_per_ep or
                     total_rollout_ts == self.ts_per_rollout):
 
+                    # TODO: again, t_obs should be a batch.
                     t_obs      = torch.tensor(obs, dtype=torch.float).to(self.device)
                     t_obs      = t_obs.unsqueeze(0)
                     nxt_value  = self.critic(t_obs)
@@ -952,7 +991,9 @@ class PPO(object):
                     if self.normalize_values:
                         nxt_value = self.value_normalizer.denormalize(nxt_value)
 
-                    nxt_value  = nxt_value.item()
+                    if not self.obs_augment:
+                        nxt_value  = nxt_value.item()
+
                     nxt_reward = nxt_value
 
                     #
@@ -982,7 +1023,11 @@ class PPO(object):
                     #
                     if self.using_icm:
                         if self.can_clone_env:
-                            _, clone_action, _ = self.get_action(obs)
+                            # TODO: this should be a single instance of the batch, and then we tile the action.
+                            if self.obs_augment:
+                                _, clone_action, _ = self.get_action(obs[0])
+                            else:
+                                _, clone_action, _ = self.get_action(obs)
 
                             if self.action_squeeze:
                                 clone_action = clone_action.squeeze()
@@ -992,6 +1037,12 @@ class PPO(object):
                             clone_obs, _, _, _ = cloned_env.step(clone_action)
                             del cloned_env
 
+                            if self.obs_augment:
+                                batch_size   = obs.shape[0]
+                                clone_action = np.tile(clone_action, batch_size)
+                                clone_action = clone_action.reshape((batch_size, 1))
+
+                            # TODO: all input here should be batches.
                             intr_reward = self.get_intrinsic_reward(
                                 clone_prev_obs,
                                 clone_obs,
