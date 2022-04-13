@@ -262,6 +262,9 @@ class PPO(object):
                 status_dict = self.status_dict,
                 clip_range  = reward_clip)
 
+        if obs_augment:
+            env = AugmentingEnvWrapper(env)
+
         #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
