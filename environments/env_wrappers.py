@@ -7,6 +7,7 @@ import numpy as np
 import pickle
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
+from ppo_and_friends.utils.misc import need_action_squeeze
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -56,12 +57,6 @@ class IdentityWrapper(object):
         """
         obs, reward, done, info = self.env.step(action)
 
-        #
-        # HACK: some environments are buggy and don't follow their
-        # own rules!
-        #
-        obs = obs.reshape(self.observation_space.shape)
-
         self.obs_cache = obs.copy()
         self.need_hard_reset = False
 
@@ -75,7 +70,6 @@ class IdentityWrapper(object):
                 The resulting observation.
         """
         obs = self.env.reset()
-        obs = obs.reshape(self.observation_space.shape)
         return obs
 
     def soft_reset(self):
@@ -88,7 +82,7 @@ class IdentityWrapper(object):
             Returns:
                 An observation.
         """
-        if self.need_hard_reset:
+        if self.need_hard_reset or self.obs_cache == None:
             return self.reset()
         return self.obs_cache
 
@@ -187,6 +181,15 @@ class VectorizedEnv(IdentityWrapper):
             env,
             **kw_args)
 
+        #
+        # Environments are very inconsistent! Some of them require their
+        # actions to be squeezed before they can be sent to the env.
+        #
+        self.action_squeeze = need_action_squeeze(env)
+
+        # TODO: support multiple instances of an environment.
+        self.num_envs = 1
+
     def step(self, action):
         """
             Take a step in our environment with the given action.
@@ -195,7 +198,27 @@ class VectorizedEnv(IdentityWrapper):
 
             Arguments:
                 action    The action to take.
+            Returns:
+                The resulting observation, reward, done, and info
+                tuple.
+        """
+        #
+        # If we're testing, we don't want to return a batch.
+        #
+        if self.test_mode:
+            return self.single_step(action)
 
+        return self.batch_step(action)
+
+
+    def single_step(self, action):
+        """
+            Take a step in our environment with the given action.
+            Since we're vectorized, we reset the environment when
+            we've reached a "done" state.
+
+            Arguments:
+                action    The action to take.
             Returns:
                 The resulting observation, reward, done, and info
                 tuple.
@@ -217,6 +240,97 @@ class VectorizedEnv(IdentityWrapper):
             obs = obs.reshape(self.observation_space.shape)
 
         return obs, reward, done, info
+
+    def batch_step(self, actions):
+        """
+            Take a step in our environment with the given actions.
+            Since we're vectorized, we reset the environment when
+            we've reached a "done" state, and we return a batch
+            of step results. Since this is a batch step, we'll return
+            a batch of results of size self.num_envs.
+
+            Arguments:
+                actions    The actions to take.
+
+            Returns:
+                The resulting observation, reward, done, and info
+                tuple.
+        """
+        obs_shape     = (self.num_envs,) + self.observation_space.shape
+        batch_obs     = np.zeros(obs_shape)
+        batch_rewards = np.zeros((self.num_envs, 1))
+        batch_dones   = np.zeros((self.num_envs, 1)).astype(bool)
+        batch_infos   = np.array([None] * self.num_envs,
+            dtype=object)
+
+        for env_idx in range(self.num_envs):
+            act = actions[env_idx]
+
+            if self.action_squeeze:
+                act = act.squeeze()
+
+            obs, reward, done, info = self.env.step(act)
+
+            #
+            # HACK: some environments are buggy and don't follow their
+            # own rules!
+            #
+            obs = obs.reshape(self.observation_space.shape)
+
+            if type(reward) == np.ndarray:
+                reward = reward[0]
+
+            if done:
+                info["terminal observation"] = obs.copy()
+                obs = self.env.reset()
+                obs = obs.reshape(self.observation_space.shape)
+
+            batch_obs[env_idx]     = obs
+            batch_rewards[env_idx] = reward
+            batch_dones[env_idx]   = done
+            batch_infos[env_idx]   = info
+
+        self.obs_cache = batch_obs.copy()
+
+        return batch_obs, batch_rewards, batch_dones, batch_infos
+
+    def reset(self):
+        """
+            Reset the environment.
+
+            Returns:
+                The resulting observation.
+        """
+        if self.test_mode:
+            return self.single_reset()
+        return self.batch_reset()
+
+    def single_reset(self):
+        """
+            Reset the environment.
+
+            Returns:
+                The resulting observation.
+        """
+        obs = self.env.reset()
+        return obs
+
+    def batch_reset(self):
+        """
+            Reset the batch of environments.
+
+            Returns:
+                The resulting observation.
+        """
+        obs_shape = (self.num_envs,) + self.observation_space.shape
+        batch_obs = np.zeros(obs_shape)
+
+        for env_idx in range(self.num_envs):
+            obs = self.env.reset()
+            obs = obs.reshape(self.observation_space.shape)
+            batch_obs[env_idx] = obs
+
+        return batch_obs
 
 
 class ObservationNormalizer(IdentityWrapper):
@@ -269,7 +383,7 @@ class ObservationNormalizer(IdentityWrapper):
         if self.update_stats:
             self.running_stats.update(obs)
 
-        obs = self.normalize(obs)
+        obs = self.normalize(obs.copy())
 
         return obs, reward, done, info
 
@@ -399,10 +513,17 @@ class RewardNormalizer(IdentityWrapper):
         if done:
             self.running_reward[0] = 0.0
 
-        if "natural reward" not in info:
-            info["natural reward"] = reward
+        if type(reward) == np.ndarray:
+            batch_size = reward.shape[0]
 
-        reward = self.normalize(reward)
+            for r_idx in range(batch_size):
+                if "natural reward" not in info[r_idx]:
+                    info[r_idx]["natural reward"] = reward[r_idx]
+        else:
+            if "natural reward" not in info:
+                info["natural reward"] = reward
+
+        reward = self.normalize(reward.copy())
 
         return obs, reward, done, info
 
@@ -642,8 +763,15 @@ class RewardClipper(GenericClipper):
         """
         obs, reward, done, info = self.env.step(action)
 
-        if "natural reward" not in info:
-            info["natural reward"] = reward
+        if type(reward) == np.ndarray:
+            batch_size = reward.shape[0]
+
+            for r_idx in range(batch_size):
+                if "natural reward" not in info[r_idx]:
+                    info[r_idx]["natural reward"] = reward[r_idx]
+        else:
+            if "natural reward" not in info:
+                info["natural reward"] = reward
 
         reward = self._clip(reward)
 
