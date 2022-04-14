@@ -1375,9 +1375,6 @@ class PPO(object):
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            # TODO: should we add an option for value clipping? Research
-            # suggests this might not be that beneficial, but it might
-            # be nice to have it as an option...
             critic_loss        = nn.MSELoss()(values, rewards_tg)
             total_critic_loss += critic_loss.item()
 
