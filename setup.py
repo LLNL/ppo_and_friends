@@ -18,6 +18,7 @@ dependencies = [
     'opencv-python',
     'pygame',
     'gym',
+    'box2d-py',
     'numpy',
     'mpi4py',
     'moviepy',
