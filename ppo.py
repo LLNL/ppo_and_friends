@@ -1043,7 +1043,7 @@ class PPO(object):
                     longest_run = max(longest_run,
                         episode_lengths[where_done].max())
 
-                    top_rollout_score  = max(top_rollout_score,
+                    top_rollout_score = max(top_rollout_score,
                         ep_score[where_done].max())
 
                     done_count = where_done.size
@@ -1169,6 +1169,9 @@ class PPO(object):
                         total_ext_rewards += ep_score
                         total_rewards     += ep_rewards.sum()
 
+                        top_rollout_score = max(top_rollout_score,
+                            ep_score.max())
+
             longest_run = max(longest_run,
                 episode_lengths.max())
 
@@ -1210,7 +1213,7 @@ class PPO(object):
         total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
         total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
 
-        running_ext_score = total_ext_rewards / total_episodes
+        running_ext_score = total_ext_rewards / (total_episodes / env_batch_size)
         running_score     = total_rewards / total_episodes
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
