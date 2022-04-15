@@ -17,28 +17,41 @@ num_procs = comm.Get_size()
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--test", action="store_true",
         help="Test out an existing policy.")
+
     parser.add_argument("--num_test_runs", type=int, default=1,
         help="If used with --test, this will define the number of test "
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
+
     parser.add_argument("--state_path", default="./",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
+
     parser.add_argument("--clobber", action="store_true",
         help="Clobber any existing saves associated with this environment.")
+
     parser.add_argument("--render", action="store_true",
         help="Render the environment at each step.")
+
     parser.add_argument("--render_gif", action="store_true",
         help="Render a gif when testing.")
+
     #TODO: let's also let users stop at an iteration rather than timestep.
     parser.add_argument("--num_timesteps", default=10000000, type=int,
         help="The number of timesteps to train for.")
+
     parser.add_argument("--random_seed", default=2, type=int,
         help="The random seed to use.")
+
+    parser.add_argument("--envs_per_proc", default=1, type=int,
+        help="The number of environment instances each processor should have.")
+
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
+
     parser.add_argument("--environment", "-e", type=str, required=True,
         help="Which environment should we train or test?",
         choices=["CartPole",
@@ -75,6 +88,7 @@ if __name__ == "__main__":
     render_gif        = args.render_gif
     num_timesteps     = args.num_timesteps
     force_determinism = args.force_deterministic
+    envs_per_proc     = args.envs_per_proc
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -117,6 +131,7 @@ if __name__ == "__main__":
 
     rank_print("Using device: {}".format(device))
     rank_print("Number of processors: {}".format(num_procs))
+    rank_print("Number of environments per processor: {}".format(envs_per_proc))
 
     #TODO: we can probably simplify this here.
     if env_name == "CartPole":
@@ -128,6 +143,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -140,6 +156,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -152,6 +169,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -164,6 +182,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -176,6 +195,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -188,6 +208,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -200,6 +221,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -212,6 +234,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -224,6 +247,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -236,6 +260,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -248,6 +273,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -260,6 +286,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -272,6 +299,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -284,6 +312,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -296,6 +325,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -308,6 +338,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -320,6 +351,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -332,6 +364,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -344,6 +377,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -356,6 +390,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -368,6 +403,7 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)
 
@@ -380,5 +416,6 @@ if __name__ == "__main__":
             render_gif    = render_gif,
             num_timesteps = num_timesteps,
             device        = device,
+            envs_per_proc = envs_per_proc,
             test          = test,
             num_test_runs = num_test_runs)

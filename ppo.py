@@ -37,6 +37,7 @@ class PPO(object):
                  ac_network,
                  device,
                  random_seed,
+                 envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
                  actor_kw_args       = {},
@@ -85,6 +86,8 @@ class PPO(object):
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
+                 envs_per_proc        The number of environment instances each
+                                      processor owns.
                  icm_network          The network to use for ICM applications.
                  icm_kw_args          Extra keyword args for the ICM network.
                  actor_kw_args        Extra keyword args for the actor
@@ -212,6 +215,7 @@ class PPO(object):
         #
         env = VectorizedEnv(
             env_generator = env_generator,
+            num_envs      = envs_per_proc,
             test_mode     = test_mode)
 
         #
