@@ -282,7 +282,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        obs, reward, done, info = self.envs[0].step(action)
+        obs, reward, done, info = self.env.step(action)
 
         #
         # HACK: some environments are buggy and don't follow their
@@ -295,7 +295,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
         if done:
             info["terminal observation"] = obs.copy()
-            obs = self.envs[0].reset()
+            obs = self.env.reset()
             obs = obs.reshape(self.observation_space.shape)
 
         return obs, reward, done, info
@@ -371,7 +371,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Returns:
                 The resulting observation.
         """
-        obs = self.envs[0].reset()
+        obs = self.env.reset()
         return obs
 
     def batch_reset(self):
