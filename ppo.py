@@ -528,8 +528,8 @@ class PPO(object):
                 test_mode    = test_mode,
                 **icm_kw_args)
 
-            self.test_mode_dependencies.append(self.icm)
-            self.pickle_safe_test_mode_dependencies.append(self.icm)
+            self.test_mode_dependencies.append(self.icm_model)
+            self.pickle_safe_test_mode_dependencies.append(self.icm_model)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -597,6 +597,12 @@ class PPO(object):
                 environment, and log_prob is the log probabilities from our
                 probability distribution.
         """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: get_action expects a batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
         with torch.no_grad():
@@ -711,6 +717,12 @@ class PPO(object):
                 obs         The current observation.
                 action      The action taken.
         """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: get_intrinsic_reward expects a batch of "
+            msg += "observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
 
         obs_1 = torch.tensor(prev_obs,
             dtype=torch.float).to(self.device)
@@ -731,7 +743,9 @@ class PPO(object):
         with torch.no_grad():
             intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-        intr_reward  = intr_reward.item()
+        batch_size   = obs.shape[0]
+        intr_reward  = intr_reward.detach().cpu().numpy()
+        intr_reward  = intr_reward.reshape((batch_size, -1))
         intr_reward *= self.intr_reward_weight
 
         return intr_reward
@@ -788,7 +802,6 @@ class PPO(object):
         total_episodes     = 0.0
         total_rollout_ts   = 0
         total_rewards      = 0
-        total_intr_rewards = 0
         top_rollout_score  = -np.finfo(np.float32).max
         longest_run        = 0
         rollout_max_reward = -np.finfo(np.float32).max
@@ -817,6 +830,7 @@ class PPO(object):
         episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
         ep_score           = np.zeros((env_batch_size, 1))
         total_ext_rewards  = np.zeros((env_batch_size, 1))
+        total_intr_rewards = np.zeros((env_batch_size, 1))
 
         #
         # Our bootstrap clip is a function of the iteration.
@@ -868,7 +882,6 @@ class PPO(object):
                     raw_action, action, log_prob = self.get_action(obs)
 
                 t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
                 value = self.critic(t_obs)
 
                 if self.normalize_values:
@@ -883,7 +896,8 @@ class PPO(object):
                 if self.obs_augment:
                     batch_size = obs.shape[0]
                     action = np.tile(action, batch_size)
-                    action = action.reshape((batch_size, 1))
+                    #FIXME: how should this be handled?
+                    action = action.reshape((batch_size,))
 
                     lp_shape = log_prob.shape
                     log_prob = np.tile(log_prob.flatten(), batch_size)
@@ -899,9 +913,10 @@ class PPO(object):
                     natural_reward = np.zeros((env_batch_size, 1))
 
                     for b_idx in range(env_batch_size):
-                        natural_reward[b_idx] = info[b_idx]["natural reward"]
+                        natural_reward[b_idx] = \
+                            info[b_idx]["natural reward"].copy()
                 else:
-                    natural_reward = ext_reward
+                    natural_reward = ext_reward.copy()
 
                 ext_reward *= self.ext_reward_weight
 
@@ -911,15 +926,14 @@ class PPO(object):
                 # to out extrinsic reward.
                 #
                 if self.using_icm:
+                    batch_size = obs.shape[0]
 
                     intr_reward = self.get_intrinsic_reward(
                         prev_obs,
                         obs,
-                        action)
+                        action.reshape((batch_size, -1)))
 
-                    total_intr_rewards += intr_reward
                     reward = ext_reward + intr_reward
-
                 else:
                     reward = ext_reward
 
@@ -1048,6 +1062,9 @@ class PPO(object):
 
                     done_count = where_done.size
 
+                    if self.using_icm:
+                        total_intr_rewards += intr_reward[where_done]
+
                     total_ext_rewards          += ep_score[where_done]
                     total_rewards              += ep_rewards[where_done].sum()
                     episode_lengths[where_done] = 0
@@ -1064,7 +1081,7 @@ class PPO(object):
                     if self.normalize_values:
                         nxt_value = self.value_normalizer.denormalize(nxt_value)
 
-                    nxt_reward = nxt_value
+                    nxt_reward = nxt_value.detach().numpy()
 
                     #
                     # Tricky business:
@@ -1103,15 +1120,16 @@ class PPO(object):
                             clone_obs, _, _, _ = cloned_env.step(clone_action)
                             del cloned_env
 
+                            batch_size = obs.shape[0]
+
                             if self.obs_augment:
-                                batch_size   = obs.shape[0]
                                 clone_action = np.tile(clone_action, batch_size)
                                 clone_action = clone_action.reshape((batch_size, 1))
 
                             intr_reward = self.get_intrinsic_reward(
                                 clone_prev_obs,
                                 clone_obs,
-                                clone_action)
+                                clone_action.reshape((batch_size, -1)))
 
                         ism         = self.status_dict["intrinsic score avg"]
                         surprise    = intr_reward - ism
@@ -1163,6 +1181,9 @@ class PPO(object):
                         where_zero = np.where(ts_before_ep == 0.0)[0]
                         avg_ep_len = ts_before_ep / current_total
                         avg_ep_len[where_zero] = self.ts_per_rollout
+
+                        if self.using_icm:
+                            total_intr_rewards += intr_reward
 
                         ep_perc            = episode_lengths / avg_ep_len
                         total_episodes    += ep_perc.sum()
@@ -1218,6 +1239,8 @@ class PPO(object):
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
 
+        # FIXME: extrinsic score is still funky with > 1 env per proc. Watch
+        # Cartpole before it stablizes; it goes above the settled average.
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
@@ -1250,8 +1273,10 @@ class PPO(object):
                     self.status_dict["window avg"]
 
         if self.using_icm:
+            total_intr_rewards = total_intr_rewards.sum() / env_batch_size
             total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
-            ism = total_intr_rewards / total_episodes
+
+            ism = total_intr_rewards / (total_episodes/ env_batch_size)
             self.status_dict["intrinsic score avg"] = ism
 
         #
@@ -1549,8 +1574,7 @@ class PPO(object):
         for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
-            #FIXME: not needed anymore, right?
-            #actions = actions.unsqueeze(1)
+            actions = actions.unsqueeze(1)
 
             _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
 
