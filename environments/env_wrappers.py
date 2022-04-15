@@ -506,7 +506,10 @@ class ObservationNormalizer(IdentityWrapper):
         if self.update_stats:
             self.running_stats.update(obs)
 
-        obs = self.normalize(obs.copy())
+        if type(obs) == np.ndarray:
+            obs = self.normalize(obs.copy())
+        else:
+            obs = self.normalize(obs)
 
         return obs, reward, done, info
 
@@ -652,11 +655,14 @@ class RewardNormalizer(IdentityWrapper):
             for r_idx in range(batch_size):
                 if "natural reward" not in info[r_idx]:
                     info[r_idx]["natural reward"] = reward[r_idx]
+
+            reward = self.normalize(reward.copy())
+
         else:
             if "natural reward" not in info:
                 info["natural reward"] = reward
 
-        reward = self.normalize(reward.copy())
+            reward = self.normalize(reward)
 
         return obs, reward, done, info
 
