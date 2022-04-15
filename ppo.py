@@ -1063,14 +1063,14 @@ class PPO(object):
                     done_count = where_done.size
 
                     if self.using_icm:
-                        total_intr_rewards += intr_reward[where_done]
+                        total_intr_rewards[where_done] += intr_reward[where_done]
 
-                    total_ext_rewards          += ep_score[where_done]
-                    total_rewards              += ep_rewards[where_done].sum()
-                    episode_lengths[where_done] = 0
-                    ep_score[where_done]        = 0
-                    ep_rewards[where_done]      = 0
-                    total_episodes             += done_count
+                    total_ext_rewards[where_done] += ep_score[where_done]
+                    total_rewards                 += ep_rewards[where_done].sum()
+                    episode_lengths[where_done]    = 0
+                    ep_score[where_done]           = 0
+                    ep_rewards[where_done]         = 0
+                    total_episodes                += done_count
 
                 elif (ep_ts >= self.max_ts_per_ep or
                     total_rollout_ts >= self.ts_per_rollout):
