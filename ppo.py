@@ -33,7 +33,7 @@ num_procs = comm.Get_size()
 class PPO(object):
 
     def __init__(self,
-                 env,
+                 env_generator,
                  ac_network,
                  device,
                  random_seed,
@@ -80,7 +80,8 @@ class PPO(object):
             Initialize the PPO trainer.
 
             Parameters:
-                 env                  The environment to learn from.
+                 env_generator        A function that creates instances of
+                                      the environment to learn from.
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
@@ -207,19 +208,18 @@ class PPO(object):
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
+        # Vectorize our environment and add any requested wrappers.
+        #
+        env = VectorizedEnv(
+            env_generator = env_generator,
+            test_mode     = test_mode)
+
+        #
         # For reproducibility, we need to set the environment's random
         # seeds. Let's allow testing to be random.
         #
         if not test_mode:
-            env.action_space.seed(random_seed)
-            env.seed(random_seed)
-
-        #
-        # Vectorize our environment and add any requested wrappers.
-        #
-        env = VectorizedEnv(
-            env       = env,
-            test_mode = test_mode)
+            env.set_random_seed(random_seed)
 
         self.save_env_info = False
 
@@ -594,7 +594,6 @@ class PPO(object):
                 probability distribution.
         """
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-        t_obs = t_obs.unsqueeze(0)
 
         with torch.no_grad():
             action_pred = self.actor(t_obs)
@@ -610,8 +609,9 @@ class PPO(object):
         action, raw_action = self.actor.distribution.sample_distribution(dist)
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        if self.action_dtype == "discrete":
-            action = action.int().unsqueeze(0)
+        #FIXME: is this really needed anymore?
+        #if self.action_dtype == "discrete":
+        #    action = action.int().unsqueeze(0)
 
         action     = action.detach().numpy()
         raw_action = raw_action.detach().numpy()
@@ -709,13 +709,13 @@ class PPO(object):
         """
 
         obs_1 = torch.tensor(prev_obs,
-            dtype=torch.float).to(self.device).unsqueeze(0)
+            dtype=torch.float).to(self.device)
         obs_2 = torch.tensor(obs,
-            dtype=torch.float).to(self.device).unsqueeze(0)
+            dtype=torch.float).to(self.device)
 
         if self.action_dtype == "discrete":
             action = torch.tensor(action,
-                dtype=torch.long).to(self.device).unsqueeze(0)
+                dtype=torch.long).to(self.device)
 
         elif self.action_dtype == "continuous":
             action = torch.tensor(action,
@@ -783,7 +783,6 @@ class PPO(object):
 
         total_episodes     = 0.0
         total_rollout_ts   = 0
-        total_ext_rewards  = 0
         total_rewards      = 0
         total_intr_rewards = 0
         top_rollout_score  = -np.finfo(np.float32).max
@@ -809,10 +808,11 @@ class PPO(object):
         else:
             obs = self.env.reset()
 
-        env_batch_size  = obs.shape[0]
-        ep_rewards      = np.zeros((env_batch_size, 1))
-        episode_lengths = np.zeros(env_batch_size).astype(np.int32)
-        ep_score        = np.zeros((env_batch_size, 1))
+        env_batch_size     = obs.shape[0]
+        ep_rewards         = np.zeros((env_batch_size, 1))
+        episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
+        ep_score           = np.zeros((env_batch_size, 1))
+        total_ext_rewards  = np.zeros((env_batch_size, 1))
 
         #
         # Our bootstrap clip is a function of the iteration.
@@ -832,9 +832,14 @@ class PPO(object):
                 lambd          = self.lambd,
                 bootstrap_clip = bs_clip_range)
 
+        #
+        # TODO: If we're using multiple environments, we can end up going over
+        # our requested limits here... We could get around this by truncating
+        # the batch when necessary.
+        #
         while total_rollout_ts < self.ts_per_rollout:
 
-            for ep_ts in range(1, self.max_ts_per_ep + 1):
+            for ep_ts in range(1, self.max_ts_per_ep + 1, env_batch_size):
 
                 #
                 # We end if we've reached our timesteps per rollout limit.
@@ -1039,15 +1044,15 @@ class PPO(object):
 
                     done_count = where_done.size
 
+                    total_ext_rewards          += ep_score[where_done]
                     total_rewards              += ep_rewards[where_done].sum()
-                    total_ext_rewards          += ep_score[where_done].sum()
                     episode_lengths[where_done] = 0
                     ep_score[where_done]        = 0
                     ep_rewards[where_done]      = 0
                     total_episodes             += done_count
 
-                elif (ep_ts == self.max_ts_per_ep or
-                    total_rollout_ts == self.ts_per_rollout):
+                elif (ep_ts >= self.max_ts_per_ep or
+                    total_rollout_ts >= self.ts_per_rollout):
 
                     t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
                     nxt_value  = self.critic(t_obs)
@@ -1112,8 +1117,8 @@ class PPO(object):
                         episode_infos[env_idx].end_episode(
                             ending_ts      = episode_lengths[env_idx],
                             terminal       = False,
-                            ending_value   = nxt_value.item(),
-                            ending_reward  = nxt_reward.item())
+                            ending_value   = nxt_value[env_idx].item(),
+                            ending_reward  = nxt_reward[env_idx].item())
 
                         dataset.add_episode(episode_infos[env_idx])
 
@@ -1151,14 +1156,13 @@ class PPO(object):
                         if current_total == 0:
                             current_total = 1.0
 
-                        if ts_before_ep == 0:
-                            avg_ep_len = self.ts_per_rollout
-                        else:
-                            avg_ep_len = ts_before_ep / current_total
+                        where_zero = np.where(ts_before_ep == 0.0)[0]
+                        avg_ep_len = ts_before_ep / current_total
+                        avg_ep_len[where_zero] = self.ts_per_rollout
 
                         ep_perc            = episode_lengths / avg_ep_len
                         total_episodes    += ep_perc.sum()
-                        total_ext_rewards += ep_score.sum()
+                        total_ext_rewards += ep_score
                         total_rewards     += ep_rewards.sum()
 
             longest_run = max(longest_run,
@@ -1193,6 +1197,8 @@ class PPO(object):
         rollout_min_obs = min(self.status_dict["obs range"][0],
             rollout_min_obs)
         rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
+
+        total_ext_rewards = total_ext_rewards.sum() / env_batch_size
 
         longest_run       = comm.allreduce(longest_run, MPI.MAX)
         total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
@@ -1536,7 +1542,8 @@ class PPO(object):
         for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
-            actions = actions.unsqueeze(1)
+            #FIXME: not needed anymore, right?
+            #actions = actions.unsqueeze(1)
 
             _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
 

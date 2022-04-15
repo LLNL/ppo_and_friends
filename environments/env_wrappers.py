@@ -8,6 +8,7 @@ import pickle
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import need_action_squeeze
+from collections.abc import Iterable
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -43,6 +44,16 @@ class IdentityWrapper(object):
 
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
+
+    def set_random_seed(self, seed):
+        """
+            Set the random seed for the environment.
+
+            Arguments:
+                seed    The seed value.
+        """
+        self.env.seed(seed)
+        self.env.action_space.seed(seed)
 
     def step(self, action):
         """
@@ -152,8 +163,38 @@ class IdentityWrapper(object):
         if callable(load_info):
             load_info(path)
 
+    def supports_batched_environments(self):
+        """
+            Determine whether or not our wrapped environment supports
+            batched environments.
 
-class VectorizedEnv(IdentityWrapper):
+            Return:
+                True or False.
+        """
+        batch_support = getattr(self.env, "supports_batched_environments", None)
+
+        if callable(batch_support):
+            return batch_support()
+        else:
+            return False
+
+    def get_batch_size(self):
+        """
+            If any wrapped classes define this method, try to get the batch size
+            from them. Otherwise, assume we have a single environment.
+
+            Returns:
+                Our batch size.
+        """
+        batch_size_getter = getattr(self.env, "get_batch_size", None)
+
+        if callable(batch_size_getter):
+            return batch_size_getter()
+        else:
+            return 1
+
+
+class VectorizedEnv(IdentityWrapper, Iterable):
     """
         Wrapper for "vectorizing" environments. As far as I can tell, this
         definition of vectorize is pretty specific to RL and refers to a way
@@ -169,26 +210,44 @@ class VectorizedEnv(IdentityWrapper):
     """
 
     def __init__(self,
-                 env,
+                 env_generator,
+                 num_envs = 1,
                  **kw_args):
         """
             Initialize our vectorized environment.
 
             Arguments:
-                env    The environment to vectorize.
+                env_generator    A function that creates instances of our
+                                 environment.
+                num_envs         The number of environments to maintain.
         """
         super(VectorizedEnv, self).__init__(
-            env,
+            env_generator(),
             **kw_args)
 
         #
         # Environments are very inconsistent! Some of them require their
         # actions to be squeezed before they can be sent to the env.
         #
-        self.action_squeeze = need_action_squeeze(env)
+        self.action_squeeze = need_action_squeeze(env_generator())
 
-        # TODO: support multiple instances of an environment.
-        self.num_envs = 1
+        self.num_envs = num_envs
+        self.envs     = np.array([None] * self.num_envs, dtype=object)
+        self.iter_idx = 0
+
+        for i in range(self.num_envs):
+            self.envs[i] = env_generator()
+
+    def set_random_seed(self, seed):
+        """
+            Set the random seed for the environment.
+
+            Arguments:
+                seed    The seed value.
+        """
+        for env_idx in range(self.num_envs):
+            self.envs[env_idx].seed(seed)
+            self.envs[env_idx].action_space.seed(seed)
 
     def step(self, action):
         """
@@ -223,7 +282,7 @@ class VectorizedEnv(IdentityWrapper):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, done, info = self.envs[0].step(action)
 
         #
         # HACK: some environments are buggy and don't follow their
@@ -236,7 +295,7 @@ class VectorizedEnv(IdentityWrapper):
 
         if done:
             info["terminal observation"] = obs.copy()
-            obs = self.env.reset()
+            obs = self.envs[0].reset()
             obs = obs.reshape(self.observation_space.shape)
 
         return obs, reward, done, info
@@ -269,7 +328,7 @@ class VectorizedEnv(IdentityWrapper):
             if self.action_squeeze:
                 act = act.squeeze()
 
-            obs, reward, done, info = self.env.step(act)
+            obs, reward, done, info = self.envs[env_idx].step(act)
 
             #
             # HACK: some environments are buggy and don't follow their
@@ -282,7 +341,7 @@ class VectorizedEnv(IdentityWrapper):
 
             if done:
                 info["terminal observation"] = obs.copy()
-                obs = self.env.reset()
+                obs = self.envs[env_idx].reset()
                 obs = obs.reshape(self.observation_space.shape)
 
             batch_obs[env_idx]     = obs
@@ -312,7 +371,7 @@ class VectorizedEnv(IdentityWrapper):
             Returns:
                 The resulting observation.
         """
-        obs = self.env.reset()
+        obs = self.envs[0].reset()
         return obs
 
     def batch_reset(self):
@@ -326,11 +385,75 @@ class VectorizedEnv(IdentityWrapper):
         batch_obs = np.zeros(obs_shape)
 
         for env_idx in range(self.num_envs):
-            obs = self.env.reset()
+            obs = self.envs[env_idx].reset()
             obs = obs.reshape(self.observation_space.shape)
             batch_obs[env_idx] = obs
 
         return batch_obs
+
+    def __len__(self):
+        """
+            Represent our length as our batch size.
+
+            Returns:
+                The number of environments in our batch.
+        """
+        return self.num_envs
+
+    def __next__(self):
+        """
+            Allow iteration through our array of environments.
+
+            Returns:
+                The next environment in our array.
+        """
+        if self.iter_idx < self.num_envs:
+            env = self.envs[self.iter_idx]
+            self.iter_idx += 1
+            return env
+
+        raise StopIteration
+
+    def __iter__(self):
+        """
+            Allow iteration through our array of environments.
+
+            Returns:
+                Ourself as an iterable.
+        """
+        return self
+
+    def __getitem__(self, idx):
+        """
+            Allow accessing environments by index.
+
+            Arguments:
+                idx    The index to the desired environment.
+
+            Returns:
+                The environment from self.envs located at index idx.
+        """
+        return self.envs[idx]
+
+    def supports_batched_environments(self):
+        """
+            Determine whether or not our wrapped environment supports
+            batched environments.
+
+            Return:
+                True or False.
+        """
+        return True
+
+    def get_batch_size(self):
+        """
+            If any wrapped classes define this method, try to get the batch size
+            from them. Otherwise, assume we have a single environment.
+
+            Returns:
+                Return our batch size.
+        """
+        return len(self)
 
 
 class ObservationNormalizer(IdentityWrapper):
@@ -458,7 +581,7 @@ class ObservationNormalizer(IdentityWrapper):
 class RewardNormalizer(IdentityWrapper):
     """
         This wrapper uses running statistics to normalize rewards.
-        NOTE: much of this logic comes from Stable Baseline's
+        NOTE: some of this logic comes from Stable Baseline's
         VecNormalize.
     """
 
@@ -468,10 +591,6 @@ class RewardNormalizer(IdentityWrapper):
                  epsilon      = 1e-8,
                  gamma        = 0.99,
                  **kw_args):
-
-        super(RewardNormalizer, self).__init__(
-            env,
-            **kw_args)
         """
             Initialize the wrapper.
 
@@ -482,13 +601,22 @@ class RewardNormalizer(IdentityWrapper):
                 epsilon        A very small value to help avoid 0 divisions.
                 gamma          A discount factor for our running stats.
         """
+        super(RewardNormalizer, self).__init__(
+            env,
+            **kw_args)
 
         self.running_stats = RunningMeanStd(shape=())
+        self.update_stats  = update_stats
+        self.epsilon       = epsilon
+        self.gamma         = gamma
 
-        self.update_stats   = update_stats
-        self.epsilon        = epsilon
-        self.gamma          = gamma
-        self.running_reward = np.zeros(1)
+        #
+        # We might be wrapping an environment that supports batches.
+        # if so, we need to be able to correlate a running reward with
+        # each environment instance.
+        #
+        self.batch_size     = self.get_batch_size()
+        self.running_reward = np.zeros(self.batch_size)
 
     def step(self, action):
         """
@@ -505,12 +633,17 @@ class RewardNormalizer(IdentityWrapper):
 
         obs, reward, done, info = self.env.step(action)
 
-        if self.update_stats:
+        for env_idx in range(self.batch_size):
+            if self.update_stats:
+                self.running_reward[env_idx] = \
+                    self.running_reward[env_idx] * self.gamma + reward[env_idx]
 
-            self.running_reward[0] = self.running_reward * self.gamma + reward
-            self.running_stats.update(self.running_reward)
+                self.running_stats.update(self.running_reward)
 
-        if done:
+        if self.batch_size > 1:
+            where_done = np.where(done)[0]
+            self.running_reward[where_done] = 0.0
+        elif done:
             self.running_reward[0] = 0.0
 
         if type(reward) == np.ndarray:
@@ -572,7 +705,7 @@ class RewardNormalizer(IdentityWrapper):
         else:
             file_name = "RunningRewardsStats_{}.pkl".format(rank)
 
-        in_file   = os.path.join(path, file_name)
+        in_file = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
@@ -791,6 +924,7 @@ class RewardClipper(GenericClipper):
         return np.clip(reward, min_value, max_value)
 
 
+#FIXME: fix when ready
 class AugmentingEnvWrapper(IdentityWrapper):
     """
     """
@@ -858,3 +992,13 @@ class AugmentingEnvWrapper(IdentityWrapper):
         aug_obs_batch = self.env.augment_observation(obs)
 
         return aug_obs_batch
+
+    def supports_batched_environments(self):
+        """
+            Determine whether or not our wrapped environment supports
+            batched environments.
+
+            Return:
+                True.
+        """
+        return True

@@ -20,7 +20,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-def run_ppo(env,
+def run_ppo(env_generator,
             ac_network,
             device,
             random_seed,
@@ -67,7 +67,7 @@ def run_ppo(env,
             obs_augment         = False,
             num_test_runs       = 1):
 
-    ppo = PPO(env                = env,
+    ppo = PPO(env_generator      = env_generator,
               ac_network         = ac_network,
               icm_network        = icm_network,
               device             = device,
@@ -132,7 +132,7 @@ def cartpole_ppo(state_path,
                  test = False,
                  num_test_runs = 1):
 
-    env = gym.make('CartPole-v0')
+    env_generator = lambda : gym.make('CartPole-v0')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -146,7 +146,7 @@ def cartpole_ppo(state_path,
         max_value      = lr,
         min_value      = min_lr)
 
-    run_ppo(env                = env,
+    run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             batch_size         = 256,
             actor_kw_args      = actor_kw_args,
@@ -182,7 +182,7 @@ def pendulum_ppo(state_path,
                  test = False,
                  num_test_runs = 1):
 
-    env = gym.make('Pendulum-v1')
+    env_generator = lambda : gym.make('Pendulum-v1')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -199,7 +199,7 @@ def pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                = env,
+    run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
@@ -234,7 +234,7 @@ def mountain_car_ppo(state_path,
                      test = False,
                      num_test_runs = 1):
 
-    env = gym.make('MountainCar-v0')
+    env_generator = lambda : gym.make('MountainCar-v0')
 
     actor_kw_args = {"activation" : nn.LeakyReLU()}
     actor_kw_args["hidden_size"] = 128
@@ -260,7 +260,7 @@ def mountain_car_ppo(state_path,
     # Also, the extrinsic reward weight fraction is also very important
     # for good performance.
     #
-    run_ppo(env                = env,
+    run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
@@ -300,7 +300,7 @@ def mountain_car_continuous_ppo(state_path,
                                 test = False,
                                 num_test_runs = 1):
 
-    env = gym.make('MountainCarContinuous-v0')
+    env_generator = lambda : gym.make('MountainCarContinuous-v0')
 
     #
     # Extra args for the actor critic models.
@@ -325,7 +325,7 @@ def mountain_car_continuous_ppo(state_path,
     # can slow down learning at times. It's not by much (maybe
     # 10-50 iterations).
     #
-    run_ppo(env                = env,
+    run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 128,
@@ -368,7 +368,7 @@ def acrobot_ppo(state_path,
                 test = False,
                 num_test_runs = 1):
 
-    env = gym.make('Acrobot-v1')
+    env_generator = lambda : gym.make('Acrobot-v1')
 
     actor_kw_args = {}
     actor_kw_args["hidden_size"] = 64
@@ -384,7 +384,7 @@ def acrobot_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                = env,
+    run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
@@ -424,7 +424,7 @@ def lunar_lander_ppo(state_path,
                      test = False,
                      num_test_runs = 1):
 
-    env = gym.make('LunarLander-v2')
+    env_geneartor = gym.make('LunarLander-v2')
 
     #
     # Extra args for the actor critic models.
@@ -454,7 +454,7 @@ def lunar_lander_ppo(state_path,
     #
     ts_per_rollout = num_procs * 1024
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 128,
@@ -491,7 +491,7 @@ def lunar_lander_continuous_ppo(state_path,
                                 test = False,
                                 num_test_runs = 1):
 
-    env = gym.make('LunarLanderContinuous-v2')
+    env_generator = lambda : gym.make('LunarLanderContinuous-v2')
 
     #
     # Lunar lander observations are organized as follows:
@@ -527,7 +527,7 @@ def lunar_lander_continuous_ppo(state_path,
     #
     ts_per_rollout = num_procs * 1024
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             max_ts_per_ep       = 32,
@@ -565,7 +565,7 @@ def bipedal_walker_ppo(state_path,
                        test = False,
                        num_test_runs = 1):
 
-    env = gym.make('BipedalWalker-v3')
+    env_generator = lambda : gym.make('BipedalWalker-v3')
 
     #
     # The lidar observations are the last 10.
@@ -608,7 +608,7 @@ def bipedal_walker_ppo(state_path,
     # change learning, but it does help a bit. Clipping the bootstrap
     # reward to the same range seems to help with stability.
     #
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -650,7 +650,7 @@ def bipedal_walker_hardcore_ppo(state_path,
     # TODO: find optimal settings for this problem. It can take
     # a long time to train.
     #
-    env = gym.make('BipedalWalkerHardcore-v3')
+    env_generator = lambda : gym.make('BipedalWalkerHardcore-v3')
 
     #
     # The lidar observations are the last 10.
@@ -682,7 +682,7 @@ def bipedal_walker_hardcore_ppo(state_path,
         step_values  = [-1.,],
         ending_value = -10.)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -740,19 +740,19 @@ def assault_ram_ppo(state_path,
         #
         render = False
 
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Assault-ram-v0',
             repeat_action_probability = 0.0,
             frameskip = 1,
             render_mode='human')
     else:
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Assault-ram-v0',
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = AssaultRAMEnvWrapper(
-        env              = env,
+    wrapper_generator = lambda : AssaultRAMEnvWrapper(
+        env              = env_generator(),
         allow_life_loss  = test,
         hist_size        = 4,
         skip_k_frames    = 4)
@@ -772,7 +772,7 @@ def assault_ram_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                = wrapped_env,
+    run_ppo(env_generator      = wrapper_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
@@ -821,19 +821,19 @@ def assault_pixels_ppo(state_path,
         #
         render = False
 
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Assault-v0',
             repeat_action_probability = 0.0,
             frameskip = 1,
             render_mode='human')
     else:
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Assault-v0',
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = AssaultPixelsEnvWrapper(
-        env             = env,
+    wrapper_generator = lambda : AssaultPixelsEnvWrapper(
+        env             = env_generator(),
         allow_life_loss = test,
         hist_size       = 4,
         skip_k_frames   = 4)
@@ -850,7 +850,7 @@ def assault_pixels_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                  = wrapped_env,
+    run_ppo(env_generator        = wrapper_generator,
             random_seed          = random_seed,
             ac_network           = AtariPixelNetwork,
             actor_kw_args        = actor_kw_args,
@@ -893,19 +893,19 @@ def breakout_pixels_ppo(state_path,
         #
         render = False
 
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Breakout-v0',
             repeat_action_probability = 0.0,
             frameskip = 1,
             render_mode = 'human')
     else:
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Breakout-v0',
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = BreakoutPixelsEnvWrapper(
-        env              = env,
+    wrapper_generator = lambda : BreakoutPixelsEnvWrapper(
+        env              = env_generator(),
         allow_life_loss  = test,
         hist_size        = 4,
         skip_k_frames    = 4)
@@ -922,7 +922,7 @@ def breakout_pixels_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                  = wrapped_env,
+    run_ppo(env_generator        = wrapper_generator,
             random_seed          = random_seed,
             ac_network           = AtariPixelNetwork,
             actor_kw_args        = actor_kw_args,
@@ -965,19 +965,19 @@ def breakout_ram_ppo(state_path,
         #
         render = False
 
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Breakout-ram-v0',
             repeat_action_probability = 0.0,
             frameskip = 1,
             render_mode = 'human')
     else:
-        env = gym.make(
+        env_generator = lambda : gym.make(
             'Breakout-ram-v0',
             repeat_action_probability = 0.0,
             frameskip = 1)
 
-    wrapped_env = BreakoutRAMEnvWrapper(
-        env              = env,
+    wrapper_generator = lambda : BreakoutRAMEnvWrapper(
+        env              = env_generator(),
         allow_life_loss  = test,
         hist_size        = 4,
         skip_k_frames    = 4)
@@ -997,7 +997,7 @@ def breakout_ram_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                = wrapped_env,
+    run_ppo(env_generator      = wrapper_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
@@ -1038,9 +1038,9 @@ def inverted_pendulum_ppo(state_path,
                           test = False,
                           num_test_runs = 1):
 
-    env = gym.make('InvertedPendulum-v2')
+    env_generator = lambda : gym.make('InvertedPendulum-v2')
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             use_gae             = True,
@@ -1065,7 +1065,7 @@ def inverted_double_pendulum_ppo(state_path,
                                  test = False,
                                  num_test_runs = 1):
 
-    env = gym.make('InvertedDoublePendulum-v2')
+    env_generator = lambda : gym.make('InvertedDoublePendulum-v2')
 
     #
     # Pendulum observations are organized as follows:
@@ -1077,21 +1077,10 @@ def inverted_double_pendulum_ppo(state_path,
     actor_kw_args = {}
 
     actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["split_start"] = env.observation_space.shape[0] - 3
-
-    actor_kw_args["left_hidden_size"]  = 32
-    actor_kw_args["left_hidden_depth"] = 1
-    actor_kw_args["left_out_size"]     = 32
-
-    actor_kw_args["right_hidden_size"]  = 16
-    actor_kw_args["right_hidden_depth"] = 1
-    actor_kw_args["right_out_size"]     = 16
-
-    actor_kw_args["combined_hidden_size"]  = 64
-    actor_kw_args["combined_hidden_depth"] = 2
+    actor_kw_args["hidden_size"] = 64
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["combined_hidden_size"] = 128
+    critic_kw_args["hidden_size"] = 128
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1101,9 +1090,9 @@ def inverted_double_pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
-            ac_network          = SplitObsNetwork,
+            ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
@@ -1139,7 +1128,7 @@ def ant_ppo(state_path,
             test = False,
             num_test_runs = 1):
 
-    env = gym.make('Ant-v3')
+    env_generator = lambda : gym.make('Ant-v3')
 
     #
     # Ant observations are organized as follows:
@@ -1162,7 +1151,7 @@ def ant_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1200,7 +1189,7 @@ def humanoid_ppo(state_path,
                  test = False,
                  num_test_runs = 1):
 
-    env = gym.make('Humanoid-v3')
+    env_generator = lambda : gym.make('Humanoid-v3')
 
     #
     # Humanoid observations are a bit mysterious. See
@@ -1247,7 +1236,7 @@ def humanoid_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1285,7 +1274,7 @@ def humanoid_stand_up_ppo(state_path,
     #
     # NOTE: this is an UNSOVLED environment.
     #
-    env = gym.make('HumanoidStandup-v2')
+    env_generator = lambda : gym.make('HumanoidStandup-v2')
 
     #
     #    Positions: 22
@@ -1316,7 +1305,7 @@ def humanoid_stand_up_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1352,7 +1341,7 @@ def walker2d_ppo(state_path,
                  test = False,
                  num_test_runs = 1):
 
-    env = gym.make('Walker2d-v3')
+    env_generator = lambda : gym.make('Walker2d-v3')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.Tanh()
@@ -1373,7 +1362,7 @@ def walker2d_ppo(state_path,
     # arXiv:2006.05990v1 suggests that value normalization significantly hurts
     # performance in walker2d. I also find this to be the case.
     #
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1411,7 +1400,7 @@ def hopper_ppo(state_path,
                test = False,
                num_test_runs = 1):
 
-    env = gym.make('Hopper-v3')
+    env_generator = lambda : gym.make('Hopper-v3')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.Tanh()
@@ -1432,7 +1421,7 @@ def hopper_ppo(state_path,
     # I find that value normalization hurts the hopper environment training.
     # That may be a result of it's combination with other settings in here.
     #
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1470,7 +1459,7 @@ def half_cheetah_ppo(state_path,
                      test = False,
                      num_test_runs = 1):
 
-    env = gym.make('HalfCheetah-v3')
+    env_generator = lambda : gym.make('HalfCheetah-v3')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1490,7 +1479,7 @@ def half_cheetah_ppo(state_path,
     #
     # Normalizing values seems to stabilize results in this env.
     #
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
@@ -1526,7 +1515,7 @@ def swimmer_ppo(state_path,
                 test = False,
                 num_test_runs = 1):
 
-    env = gym.make('Swimmer-v3')
+    env_generator = lambda : gym.make('Swimmer-v3')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1543,7 +1532,7 @@ def swimmer_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
-    run_ppo(env                 = env,
+    run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
