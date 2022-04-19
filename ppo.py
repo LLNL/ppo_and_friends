@@ -513,8 +513,8 @@ class PPO(object):
                 test_mode    = test_mode,
                 **icm_kw_args)
 
-            self.test_mode_dependencies.append(self.icm)
-            self.pickle_safe_test_mode_dependencies.append(self.icm)
+            self.test_mode_dependencies.append(self.icm_model)
+            self.pickle_safe_test_mode_dependencies.append(self.icm_model)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -819,7 +819,11 @@ class PPO(object):
 
         while total_rollout_ts < self.ts_per_rollout:
 
-            for ep_ts in range(1, self.max_ts_per_ep + 1):
+            ep_ts = 0
+            while (ep_ts < self.max_ts_per_ep and
+                total_rollout_ts < self.ts_per_rollout):
+
+                ep_ts += 1
 
                 #
                 # We end if we've reached our timesteps per rollout limit.
@@ -973,6 +977,7 @@ class PPO(object):
                     ep_score           = 0
                     ep_rewards         = 0
                     total_episodes    += 1.
+                    break
 
                 elif (ep_ts == self.max_ts_per_ep or
                     total_rollout_ts == self.ts_per_rollout):
