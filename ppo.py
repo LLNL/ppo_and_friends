@@ -204,8 +204,14 @@ class PPO(object):
         #
         orig_ts        = ts_per_rollout
         ts_per_rollout = int(ts_per_rollout / num_procs)
-        if rank == 0:
-            ts_per_rollout += orig_ts % num_procs
+        if rank == 0 and (orig_ts % num_procs) > 0:
+            msg  = "WARNING: {} timesteps per rollout ".format(ts_per_rollout)
+            msg += "cannot be evenly distributed across "
+            msg += "{} processors. The timesteps per ".format(num_procs)
+            msg += "rollout have been adjusted for effecient distribution. "
+            msg += "The new timesteps per rollout is "
+            msg += "{}.".format(ts_per_rollout * num_procs)
+            rank_print(msg)
 
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
