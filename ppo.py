@@ -831,6 +831,7 @@ class PPO(object):
         ep_score           = np.zeros((env_batch_size, 1))
         total_ext_rewards  = np.zeros((env_batch_size, 1))
         total_intr_rewards = np.zeros((env_batch_size, 1))
+        ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
         #
         # Our bootstrap clip is a function of the iteration.
@@ -857,191 +858,303 @@ class PPO(object):
         #
         while total_rollout_ts < self.ts_per_rollout:
 
-            ep_ts = 0
-            while (ep_ts < self.max_ts_per_ep and
-                total_rollout_ts < self.ts_per_rollout):
+            ep_ts += 1
 
-                ep_ts += 1
+            if self.render:
+                self.env.render()
+
+            total_rollout_ts += env_batch_size
+            episode_lengths  += 1
+
+            if self.obs_augment:
+                #FIXME: handle obs augment
+                raw_action, action, log_prob = self.get_action(obs[0])
+            else:
+                raw_action, action, log_prob = self.get_action(obs)
+
+            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+            value = self.critic(t_obs)
+
+            if self.normalize_values:
+                value = self.value_normalizer.denormalize(value)
+
+            prev_obs = obs.copy()
+
+            # TODO: in obs aug case, the action will be a single action, but all return
+            # values will be batches (except for info).
+            obs, ext_reward, done, info = self.env.step(action)
+
+            if self.obs_augment:
+                batch_size = obs.shape[0]
+                action = np.tile(action, batch_size)
+                #FIXME: how should this be handled?
+                action = action.reshape((batch_size,))
+
+                lp_shape = log_prob.shape
+                log_prob = np.tile(log_prob.flatten(), batch_size)
+                log_prob = log_prob.reshape((batch_size,) + lp_shape)
+
+            value = value.detach().numpy()
+
+            #
+            # If any of our wrappers are altering the rewards, there should
+            # be an unaltered version in the info.
+            #
+            if "natural reward" in info[0]:
+                natural_reward = np.zeros((env_batch_size, 1))
+
+                for b_idx in range(env_batch_size):
+                    natural_reward[b_idx] = \
+                        info[b_idx]["natural reward"].copy()
+            else:
+                natural_reward = ext_reward.copy()
+
+            ext_reward *= self.ext_reward_weight
+
+            #
+            # If we're using the ICM, we need to do some extra work here.
+            # This amounts to adding "curiosity", aka intrinsic reward,
+            # to out extrinsic reward.
+            #
+            if self.using_icm:
+                batch_size = obs.shape[0]
+
+                intr_reward = self.get_intrinsic_reward(
+                    prev_obs,
+                    obs,
+                    action.reshape((batch_size, -1)))
+
+                reward = ext_reward + intr_reward
+            else:
+                reward = ext_reward
+
+            ep_obs     = obs.copy()
+            where_done = np.where(done)[0]
+            where_not_done = np.where(~done)[0]
+
+            if done.any():
+                term_key = "terminal observation"
+                for done_idx in where_done:
+                    ep_obs[done_idx] = info[done_idx][term_key]
+
+            #
+            # When using lstm networks, we need to save the hidden states
+            # encountered during the rollouts. These will later be used to
+            # initialize the hidden states when updating the models.
+            #
+            if self.using_lstm:
+
+                act_hb_shape = self.actor.get_zero_hidden_state(
+                        batch_size = 1,
+                        device     = self.device).shape
+                act_hb_shape = (env_batch_size,) + act_hb_shape
+                actor_hidden_states = np.zeros(act_hb_shape)
+
+                crit_hb_shape = self.critic.get_zero_hidden_state(
+                        batch_size = 1,
+                        device     = self.device).shape
+                crit_hb_shape = (env_batch_size,) + crit_hb_shape
+                critic_hidden_states = np.zeros(crit_hb_shape)
+
+                if done.any():
+                    actor_hidden_states[where_done] = \
+                        self.actor.get_zero_hidden_state(
+                            batch_size = 1,
+                            device     = self.device)
+
+                    critic_hidden_states[where_done] = \
+                        self.critic.get_zero_hidden_state(
+                            batch_size = 1,
+                            device     = self.device)
+
+                if (~done).any():
+                    where_not_done = np.where(not done)[0]
+
+                    actor_hidden_state[where_not_done]  = \
+                        self.actor.hidden_state.clone()
+
+                    critic_hidden_state[where_not_done] = \
+                        self.critic.hidden_state.clone()
+
+            else:
+                actor_hidden_state  = \
+                    np.array([None] * env_batch_size)
+
+                critic_hidden_state = \
+                    np.array([None] * env_batch_size)
+
+            for ei_idx in range(env_batch_size):
+                episode_infos[ei_idx].add_info(
+                    prev_obs[ei_idx],
+                    ep_obs[ei_idx],
+                    raw_action[ei_idx],
+                    action[ei_idx],
+                    value[ei_idx].item(),
+                    log_prob[ei_idx],
+                    reward[ei_idx].item(),
+                    actor_hidden_state[ei_idx],
+                    critic_hidden_state[ei_idx])
+
+            rollout_max_reward = max(rollout_max_reward, reward.max())
+            rollout_min_reward = min(rollout_min_reward, reward.min())
+            rollout_max_obs    = max(rollout_max_obs, obs.max())
+            rollout_min_obs    = min(rollout_min_obs, obs.min())
+
+            ep_rewards += reward
+            ep_score   += natural_reward
+
+            if done.any():
+
+                for done_idx in where_done:
+                    episode_infos[done_idx].end_episode(
+                        ending_ts      = episode_lengths[done_idx],
+                        terminal       = True,
+                        ending_value   = 0,
+                        ending_reward  = 0)
+
+                    dataset.add_episode(episode_infos[done_idx])
 
                 #
-                # We end if we've reached our timesteps per rollout limit.
+                # If we're using a dynamic bs clip, we clip to the min/max
+                # rewards from the episode. Otherwise, rely on the user
+                # provided range.
                 #
-                if ep_ts > self.ts_per_rollout:
-                    msg  = "ERROR: the episode timestep is > timesteps "
-                    msg += "per rollout. This is not allowable."
-                    msg += "episode timestep, max timesteps: {}, ".format(ep_ts)
-                    msg += "{}.".format(self.ts_per_rollout)
-                    rank_print(msg)
-                    comm.Abort()
+                if self.dynamic_bs_clip:
+                    for i, done_idx in enumerate(where_done):
+                        ep_min = min(episode_infos[done_idx].rewards)
+                        ep_max = max(episode_infos[done_idx].rewards)
 
-                if self.render:
-                    self.env.render()
-
-                total_rollout_ts += env_batch_size
-                episode_lengths  += 1
-
-                if self.obs_augment:
-                    raw_action, action, log_prob = self.get_action(obs[0])
+                        episode_infos[done_idx] = EpisodeInfo(
+                            starting_ts    = 0,
+                            use_gae        = self.use_gae,
+                            gamma          = self.gamma,
+                            lambd          = self.lambd,
+                            bootstrap_clip = (ep_min, ep_max))
                 else:
-                    raw_action, action, log_prob = self.get_action(obs)
+                    #
+                    # Our bootstrap clip is a function of the iteration.
+                    #
+                    iteration = self.status_dict["iteration"]
+                    bs_min    = self.bootstrap_clip[0](iteration)
+                    bs_max    = self.bootstrap_clip[1](iteration)
 
-                t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-                value = self.critic(t_obs)
+                    for i, done_idx in enumerate(where_done):
+                        episode_infos[done_idx] = EpisodeInfo(
+                            starting_ts    = 0,
+                            use_gae        = self.use_gae,
+                            gamma          = self.gamma,
+                            lambd          = self.lambd,
+                            bootstrap_clip = (bs_min, bs_max))
+
+                longest_run = max(longest_run,
+                    episode_lengths[where_done].max())
+
+                top_rollout_score = max(top_rollout_score,
+                    ep_score[where_done].max())
+
+                done_count = where_done.size
+
+                if self.using_icm:
+                    total_intr_rewards[where_done] += intr_reward[where_done]
+
+                total_ext_rewards[where_done] += ep_score[where_done]
+                total_rewards                 += ep_rewards[where_done].sum()
+                episode_lengths[where_done]    = 0
+                ep_score[where_done]           = 0
+                ep_rewards[where_done]         = 0
+                total_episodes                += done_count
+                ep_ts[where_done]              = 0
+
+            ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
+                where_not_done.size > 0)
+
+            if (ep_max_reached or total_rollout_ts >= self.ts_per_rollout):
+
+                if total_rollout_ts >= self.ts_per_rollout:
+                    where_maxed = np.arange(env_batch_size)
+                else:
+                    where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
+
+                where_maxed = np.setdiff1d(where_maxed, where_done)
+
+                t_obs = torch.tensor(obs[where_maxed],
+                    dtype=torch.float).to(self.device)
+
+                nxt_value = self.critic(t_obs)
 
                 if self.normalize_values:
-                    value = self.value_normalizer.denormalize(value)
+                    nxt_value = self.value_normalizer.denormalize(nxt_value)
 
-                prev_obs = obs.copy()
-
-                # TODO: the action will be a single action, but all return
-                # values will be batches (except for info).
-                obs, ext_reward, done, info = self.env.step(action)
-
-                if self.obs_augment:
-                    batch_size = obs.shape[0]
-                    action = np.tile(action, batch_size)
-                    #FIXME: how should this be handled?
-                    action = action.reshape((batch_size,))
-
-                    lp_shape = log_prob.shape
-                    log_prob = np.tile(log_prob.flatten(), batch_size)
-                    log_prob = log_prob.reshape((batch_size,) + lp_shape)
-
-                value = value.detach().numpy()
+                nxt_reward = nxt_value.detach().numpy()
 
                 #
-                # If any of our wrappers are altering the rewards, there should
-                # be an unaltered version in the info.
+                # Tricky business:
+                # Typically, we just use the result of our critic to
+                # bootstrap the expected reward. This is problematic
+                # with ICM because we can't really expect our critic to
+                # learn about "surprise". I dont' know of any perfect
+                # ways to handle this, but here are some ideas:
                 #
-                if "natural reward" in info[0]:
-                    natural_reward = np.zeros((env_batch_size, 1))
-
-                    for b_idx in range(env_batch_size):
-                        natural_reward[b_idx] = \
-                            info[b_idx]["natural reward"].copy()
-                else:
-                    natural_reward = ext_reward.copy()
-
-                ext_reward *= self.ext_reward_weight
-
+                #     1. Just use the value anyways. As long as the
+                #        max ts per episode is long enough, we'll
+                #        hopefully see enough intrinsic reward to
+                #        learn a good policy. In my experience, this
+                #        works, but it takes a bit longer to learn.
+                #     2. If we can clone the environment, we can take
+                #        an extra step with the clone to get the
+                #        intrinsic reward, and we can decide what to
+                #        do with this. Approaches that integrate this
+                #        reward tend to learn a bit more quickly.
                 #
-                # If we're using the ICM, we need to do some extra work here.
-                # This amounts to adding "curiosity", aka intrinsic reward,
-                # to out extrinsic reward.
+                # If we have this intrinsic reward from a clone step,
+                # we can hand wavily calcluate a "surprise" by taking
+                # the difference between the average intrinsic reward
+                # and the one we get. Adding that to the critic's
+                # output can act as an extra surprise bonus.
                 #
                 if self.using_icm:
-                    batch_size = obs.shape[0]
+                    if self.can_clone_env:
+                        if self.obs_augment:
+                            #FIXME: handle obs aug
+                            _, clone_action, _ = self.get_action(obs[0])
+                        else:
+                            _, clone_action, _ = \
+                                self.get_action(obs[where_maxed])
 
-                    intr_reward = self.get_intrinsic_reward(
-                        prev_obs,
-                        obs,
-                        action.reshape((batch_size, -1)))
+                        clone_prev_obs = obs[where_maxed].copy()
+                        cloned_env = deepcopy(self.env)
+                        clone_obs, _, _, _ = cloned_env.step(clone_action)
+                        del cloned_env
 
-                    reward = ext_reward + intr_reward
-                else:
-                    reward = ext_reward
+                        batch_size = obs.shape[0]
 
-                ep_obs     = obs.copy()
-                where_done = np.where(done)[0]
+                        if self.obs_augment:
+                            #FIXME handle obs aug
+                            clone_action = np.tile(clone_action, batch_size)
+                            clone_action = clone_action.reshape((batch_size, 1))
 
-                if done.any():
-                    term_key = "terminal observation"
-                    for done_idx in where_done:
-                        ep_obs[done_idx] = info[done_idx][term_key]
+                        intr_reward = self.get_intrinsic_reward(
+                            clone_prev_obs,
+                            clone_obs,
+                            clone_action.reshape((batch_size, -1)))
 
-                #
-                # When using lstm networks, we need to save the hidden states
-                # encountered during the rollouts. These will later be used to
-                # initialize the hidden states when updating the models.
-                #
-                if self.using_lstm:
+                    ism         = self.status_dict["intrinsic score avg"]
+                    surprise    = intr_reward - ism
+                    nxt_reward += surprise
 
-                    act_hb_shape = self.actor.get_zero_hidden_state(
-                            batch_size = 1,
-                            device     = self.device).shape
-                    act_hb_shape = (env_batch_size,) + act_hb_shape
-                    actor_hidden_states = np.zeros(act_hb_shape)
+                for idx, maxed_idx in enumerate(where_maxed):
+                    episode_infos[maxed_idx].end_episode(
+                        ending_ts      = episode_lengths[maxed_idx],
+                        terminal       = False,
+                        ending_value   = nxt_value[idx].item(),
+                        ending_reward  = nxt_reward[idx].item())
 
-                    crit_hb_shape = self.critic.get_zero_hidden_state(
-                            batch_size = 1,
-                            device     = self.device).shape
-                    crit_hb_shape = (env_batch_size,) + crit_hb_shape
-                    critic_hidden_states = np.zeros(crit_hb_shape)
+                    dataset.add_episode(episode_infos[maxed_idx])
 
-                    if done.any():
-                        actor_hidden_states[where_done] = \
-                            self.actor.get_zero_hidden_state(
-                                batch_size = 1,
-                                device     = self.device)
-
-                        critic_hidden_states[where_done] = \
-                            self.critic.get_zero_hidden_state(
-                                batch_size = 1,
-                                device     = self.device)
-
-                    if (~done).any():
-                        where_not_done = np.where(not done)[0]
-
-                        actor_hidden_state[where_not_done]  = \
-                            self.actor.hidden_state.clone()
-
-                        critic_hidden_state[where_not_done] = \
-                            self.critic.hidden_state.clone()
-
-                else:
-                    actor_hidden_state  = \
-                        np.array([None] * env_batch_size)
-
-                    critic_hidden_state = \
-                        np.array([None] * env_batch_size)
-
-                for ei_idx in range(env_batch_size):
-                    episode_infos[ei_idx].add_info(
-                        prev_obs[ei_idx],
-                        ep_obs[ei_idx],
-                        raw_action[ei_idx],
-                        action[ei_idx],
-                        value[ei_idx].item(),
-                        log_prob[ei_idx],
-                        reward[ei_idx].item(),
-                        actor_hidden_state[ei_idx],
-                        critic_hidden_state[ei_idx])
-
-                rollout_max_reward = max(rollout_max_reward, reward.max())
-                rollout_min_reward = min(rollout_min_reward, reward.min())
-                rollout_max_obs    = max(rollout_max_obs, obs.max())
-                rollout_min_obs    = min(rollout_min_obs, obs.min())
-
-                ep_rewards += reward
-                ep_score   += natural_reward
-
-                if done.any():
-
-                    for done_idx in where_done:
-                        episode_infos[done_idx].end_episode(
-                            ending_ts      = episode_lengths[done_idx],
-                            terminal       = True,
-                            ending_value   = 0,
-                            ending_reward  = 0)
-
-                        dataset.add_episode(episode_infos[done_idx])
-
-                    #
-                    # If we're using a dynamic bs clip, we clip to the min/max
-                    # rewards from the episode. Otherwise, rely on the user
-                    # provided range.
-                    #
                     if self.dynamic_bs_clip:
-                        for i, done_idx in enumerate(where_done):
-                            ep_min = min(episode_infos[done_idx].rewards)
-                            ep_max = max(episode_infos[done_idx].rewards)
-
-                            episode_infos[done_idx] = EpisodeInfo(
-                                starting_ts    = 0,
-                                use_gae        = self.use_gae,
-                                gamma          = self.gamma,
-                                lambd          = self.lambd,
-                                bootstrap_clip = (ep_min, ep_max))
+                        ep_min = min(episode_infos[maxed_idx].rewards)
+                        ep_max = max(episode_infos[maxed_idx].rewards)
+                        bs_clip_range = (ep_min, ep_max)
                     else:
                         #
                         # Our bootstrap clip is a function of the iteration.
@@ -1049,153 +1162,46 @@ class PPO(object):
                         iteration = self.status_dict["iteration"]
                         bs_min    = self.bootstrap_clip[0](iteration)
                         bs_max    = self.bootstrap_clip[1](iteration)
+                        bs_clip_range = (bs_min, bs_max)
 
-                        for i, done_idx in enumerate(where_done):
-                            episode_infos[done_idx] = EpisodeInfo(
-                                starting_ts    = 0,
-                                use_gae        = self.use_gae,
-                                gamma          = self.gamma,
-                                lambd          = self.lambd,
-                                bootstrap_clip = (bs_min, bs_max))
+                    episode_infos[maxed_idx] = EpisodeInfo(
+                        starting_ts    = episode_lengths[maxed_idx],
+                        use_gae        = self.use_gae,
+                        gamma          = self.gamma,
+                        lambd          = self.lambd,
+                        bootstrap_clip = bs_clip_range)
 
-                    longest_run = max(longest_run,
-                        episode_lengths[where_done].max())
+                if total_rollout_ts >= self.ts_per_rollout:
+                    #
+                    # ts_before_ep are the timesteps before the current
+                    # episode. We use this to calculate the average episode
+                    # length (before the current one). If we didn't finish
+                    # this episode, we can then calculate a rough estimate
+                    # of how far we were in the episode as a % of the avg.
+                    #
+                    ts_before_ep  = self.ts_per_rollout - episode_lengths.sum()
+                    current_total = total_episodes
+
+                    if current_total == 0:
+                        current_total = 1.0
+
+                    if ts_before_ep == 0:
+                        avg_ep_len == self.ts_per_rollout
+                    else:
+                        avg_ep_len = ts_before_ep / current_total
+
+                    if self.using_icm:
+                        total_intr_rewards += intr_reward
+
+                    ep_perc            = episode_lengths / avg_ep_len
+                    total_episodes    += ep_perc.sum()
+                    total_ext_rewards += ep_score
+                    total_rewards     += ep_rewards.sum()
 
                     top_rollout_score = max(top_rollout_score,
-                        ep_score[where_done].max())
+                        ep_score.max())
 
-                    done_count = where_done.size
-
-                    if self.using_icm:
-                        total_intr_rewards[where_done] += intr_reward[where_done]
-
-                    total_ext_rewards[where_done] += ep_score[where_done]
-                    total_rewards                 += ep_rewards[where_done].sum()
-                    episode_lengths[where_done]    = 0
-                    ep_score[where_done]           = 0
-                    ep_rewards[where_done]         = 0
-                    total_episodes                += done_count
-
-                elif (ep_ts >= self.max_ts_per_ep or
-                    total_rollout_ts >= self.ts_per_rollout):
-
-                    t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-                    nxt_value  = self.critic(t_obs)
-
-                    if self.normalize_values:
-                        nxt_value = self.value_normalizer.denormalize(nxt_value)
-
-                    nxt_reward = nxt_value.detach().numpy()
-
-                    #
-                    # Tricky business:
-                    # Typically, we just use the result of our critic to
-                    # bootstrap the expected reward. This is problematic
-                    # with ICM because we can't really expect our critic to
-                    # learn about "surprise". I dont' know of any perfect
-                    # ways to handle this, but here are some ideas:
-                    #
-                    #     1. Just use the value anyways. As long as the
-                    #        max ts per episode is long enough, we'll
-                    #        hopefully see enough intrinsic reward to
-                    #        learn a good policy. In my experience, this
-                    #        works, but it takes a bit longer to learn.
-                    #     2. If we can clone the environment, we can take
-                    #        an extra step with the clone to get the
-                    #        intrinsic reward, and we can decide what to
-                    #        do with this. Approaches that integrate this
-                    #        reward tend to learn a bit more quickly.
-                    #
-                    # If we have this intrinsic reward from a clone step,
-                    # we can hand wavily calcluate a "surprise" by taking
-                    # the difference between the average intrinsic reward
-                    # and the one we get. Adding that to the critic's
-                    # output can act as an extra surprise bonus.
-                    #
-                    if self.using_icm:
-                        if self.can_clone_env:
-                            if self.obs_augment:
-                                _, clone_action, _ = self.get_action(obs[0])
-                            else:
-                                _, clone_action, _ = self.get_action(obs)
-
-                            clone_prev_obs = obs.copy()
-                            cloned_env = deepcopy(self.env)
-                            clone_obs, _, _, _ = cloned_env.step(clone_action)
-                            del cloned_env
-
-                            batch_size = obs.shape[0]
-
-                            if self.obs_augment:
-                                clone_action = np.tile(clone_action, batch_size)
-                                clone_action = clone_action.reshape((batch_size, 1))
-
-                            intr_reward = self.get_intrinsic_reward(
-                                clone_prev_obs,
-                                clone_obs,
-                                clone_action.reshape((batch_size, -1)))
-
-                        ism         = self.status_dict["intrinsic score avg"]
-                        surprise    = intr_reward - ism
-                        nxt_reward += surprise
-
-                    for env_idx in range(env_batch_size):
-                        episode_infos[env_idx].end_episode(
-                            ending_ts      = episode_lengths[env_idx],
-                            terminal       = False,
-                            ending_value   = nxt_value[env_idx].item(),
-                            ending_reward  = nxt_reward[env_idx].item())
-
-                        dataset.add_episode(episode_infos[env_idx])
-
-                        if self.dynamic_bs_clip:
-                            ep_min = min(episode_infos[env_idx].rewards)
-                            ep_max = max(episode_infos[env_idx].rewards)
-                            bs_clip_range = (ep_min, ep_max)
-                        else:
-                            #
-                            # Our bootstrap clip is a function of the iteration.
-                            #
-                            iteration = self.status_dict["iteration"]
-                            bs_min    = self.bootstrap_clip[0](iteration)
-                            bs_max    = self.bootstrap_clip[1](iteration)
-                            bs_clip_range = (bs_min, bs_max)
-
-                        episode_infos[env_idx] = EpisodeInfo(
-                            starting_ts    = episode_lengths[env_idx],
-                            use_gae        = self.use_gae,
-                            gamma          = self.gamma,
-                            lambd          = self.lambd,
-                            bootstrap_clip = bs_clip_range)
-
-                    if total_rollout_ts == self.ts_per_rollout:
-                        #
-                        # ts_before_ep are the timesteps before the current
-                        # episode. We use this to calculate the average episode
-                        # length (before the current one). If we didn't finish
-                        # this episode, we can then calculate a rough estimate
-                        # of how far we were in the episode as a % of the avg.
-                        #
-                        ts_before_ep  = self.ts_per_rollout - episode_lengths
-                        current_total = total_episodes
-
-                        if current_total == 0:
-                            current_total = 1.0
-
-                        where_zero = np.where(ts_before_ep == 0.0)[0]
-                        avg_ep_len = ts_before_ep / current_total
-                        avg_ep_len[where_zero] = self.ts_per_rollout
-
-                        if self.using_icm:
-                            total_intr_rewards += intr_reward
-
-                        ep_perc            = episode_lengths / avg_ep_len
-                        total_episodes    += ep_perc.sum()
-                        total_ext_rewards += ep_score
-                        total_rewards     += ep_rewards.sum()
-
-                        top_rollout_score = max(top_rollout_score,
-                            ep_score.max())
+                ep_ts[where_maxed] = 0
 
             longest_run = max(longest_run,
                 episode_lengths.max())
@@ -1243,8 +1249,6 @@ class PPO(object):
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
 
-        # FIXME: extrinsic score is still funky with > 1 env per proc. Watch
-        # Cartpole before it stablizes; it goes above the settled average.
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
