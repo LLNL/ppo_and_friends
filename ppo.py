@@ -1189,23 +1189,18 @@ class PPO(object):
                     # this episode, we can then calculate a rough estimate
                     # of how far we were in the episode as a % of the avg.
                     #
-                    ts_before_ep  = self.ts_per_rollout - episode_lengths.sum()
-                    ts_before_ep  = max(ts_before_ep, 0)
-                    current_total = total_episodes
+                    combined_ep_len = episode_lengths.sum()
+                    ts_before_ep    = self.ts_per_rollout - combined_ep_len
+                    ts_before_ep    = max(ts_before_ep, 0)
+                    current_total   = total_episodes
 
                     if current_total == 0:
                         current_total = 1.0
 
                     if ts_before_ep == 0:
-                        avg_ep_len = self.ts_per_rollout
+                        avg_ep_len = combined_ep_len / env_batch_size
                     else:
                         avg_ep_len = ts_before_ep / current_total
-
-                    ##FIXME: ts before can be negative
-                    #print("")
-                    #print("TS BEFORE: {}".format(ts_before_ep))
-                    #print("EP LENGTHS: {}".format(episode_lengths))
-                    #print("AVG EP LEN: {}".format(avg_ep_len))#FIXME
 
                     ep_perc            = episode_lengths / avg_ep_len
                     total_episodes    += ep_perc.sum()
@@ -1250,8 +1245,6 @@ class PPO(object):
             rollout_min_obs)
         rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
 
-        #FIXME
-        #total_ext_rewards = total_ext_rewards.sum() / env_batch_size
         total_ext_rewards = total_ext_rewards.sum()
 
         longest_run       = comm.allreduce(longest_run, MPI.MAX)
@@ -1260,10 +1253,7 @@ class PPO(object):
         total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
         total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
 
-        #FIXME
-        #running_ext_score = total_ext_rewards / (total_episodes / env_batch_size)
         running_ext_score = total_ext_rewards / total_episodes
-
         running_score     = total_rewards / total_episodes
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
