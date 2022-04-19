@@ -1186,7 +1186,7 @@ class PPO(object):
                         current_total = 1.0
 
                     if ts_before_ep == 0:
-                        avg_ep_len == self.ts_per_rollout
+                        avg_ep_len = self.ts_per_rollout
                     else:
                         avg_ep_len = ts_before_ep / current_total
 
