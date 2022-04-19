@@ -1172,6 +1172,10 @@ class PPO(object):
                         bootstrap_clip = bs_clip_range)
 
                 if total_rollout_ts >= self.ts_per_rollout:
+
+                    if self.using_icm:
+                        total_intr_rewards += intr_reward
+
                     #
                     # ts_before_ep are the timesteps before the current
                     # episode. We use this to calculate the average episode
@@ -1180,6 +1184,7 @@ class PPO(object):
                     # of how far we were in the episode as a % of the avg.
                     #
                     ts_before_ep  = self.ts_per_rollout - episode_lengths.sum()
+                    ts_before_ep  = max(ts_before_ep, 0)
                     current_total = total_episodes
 
                     if current_total == 0:
@@ -1190,8 +1195,11 @@ class PPO(object):
                     else:
                         avg_ep_len = ts_before_ep / current_total
 
-                    if self.using_icm:
-                        total_intr_rewards += intr_reward
+                    ##FIXME: ts before can be negative
+                    #print("")
+                    #print("TS BEFORE: {}".format(ts_before_ep))
+                    #print("EP LENGTHS: {}".format(episode_lengths))
+                    #print("AVG EP LEN: {}".format(avg_ep_len))#FIXME
 
                     ep_perc            = episode_lengths / avg_ep_len
                     total_episodes    += ep_perc.sum()
@@ -1236,7 +1244,9 @@ class PPO(object):
             rollout_min_obs)
         rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
 
-        total_ext_rewards = total_ext_rewards.sum() / env_batch_size
+        #FIXME
+        #total_ext_rewards = total_ext_rewards.sum() / env_batch_size
+        total_ext_rewards = total_ext_rewards.sum()
 
         longest_run       = comm.allreduce(longest_run, MPI.MAX)
         total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
@@ -1244,7 +1254,10 @@ class PPO(object):
         total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
         total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
 
-        running_ext_score = total_ext_rewards / (total_episodes / env_batch_size)
+        #FIXME
+        #running_ext_score = total_ext_rewards / (total_episodes / env_batch_size)
+        running_ext_score = total_ext_rewards / total_episodes
+
         running_score     = total_rewards / total_episodes
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
