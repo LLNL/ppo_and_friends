@@ -264,7 +264,7 @@ def mountain_car_ppo(state_path,
     # We should probably explore this a bit more. MountainCarContinuous
     # doesn't seem to exhibit this behavior, so it's unlikely an issue
     # with ICM.
-    # Also, the extrinsic reward weight fraction is also very important
+    # Also, the extrinsic reward weight fraction is very important
     # for good performance.
     #
     run_ppo(env_generator      = env_generator,
