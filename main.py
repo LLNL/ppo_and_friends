@@ -133,7 +133,10 @@ if __name__ == "__main__":
     rank_print("Number of processors: {}".format(num_procs))
     rank_print("Number of environments per processor: {}".format(envs_per_proc))
 
-    #TODO: we can probably simplify this here.
+    #
+    # Good distribution for CartPole:
+    # 4 processors and 2 envs per processor takes ~20->30 iterations.
+    #
     if env_name == "CartPole":
         cartpole_ppo(
             random_seed   = random_seed,
@@ -186,6 +189,10 @@ if __name__ == "__main__":
             test          = test,
             num_test_runs = num_test_runs)
 
+    #
+    # Good distribution for MountainCar:
+    # 1 processor and 3 envs per processor takes about 100 iterations.
+    #
     elif env_name == "MountainCar":
         mountain_car_ppo(
             random_seed   = random_seed,
