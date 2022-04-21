@@ -968,6 +968,26 @@ class AugmentingEnvWrapper(IdentityWrapper):
     def step(self, action):
         """
             Take a single step in the environment using the given
+            action. If we're in test mode, we don't augment. Otherwise,
+            call the aug_step method.
+
+            NOTE: the action is expected to be a SINGLE action. This does
+            not currently support multiple environment instances.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation(s), reward(s), done(s), and info(s).
+        """
+        if self.test_mode:
+            return self.env.step(action)
+
+        return self.aug_step(action)
+
+    def aug_step(self, action):
+        """
+            Take a single step in the environment using the given
             action, allow the environment to augment the returned
             observation, and set up the return values as a batch.
 
@@ -1012,10 +1032,22 @@ class AugmentingEnvWrapper(IdentityWrapper):
 
     def reset(self):
         """
+            Reset the environment. If we're in test mode, we don't augment the
+            resulting observations. Otherwise, augment them before returning.
+
+            Returns:
+                The resulting observation(s).
+        """
+        if self.test_mode:
+            return self.env.reset()
+        return self.aug_reset()
+
+    def aug_reset(self):
+        """
             Reset the environment, and return a batch of augmented observations.
 
             Returns:
-                The resulting observation.
+                The resulting observations.
         """
         obs = self.env.reset()
 
