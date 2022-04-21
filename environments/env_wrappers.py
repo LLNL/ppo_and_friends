@@ -995,7 +995,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
             terminal_obs = self.env.augment_observation(terminal_obs)
 
             for i in range(batch_size):
-                i_info = info.copy()
+                i_info = info[0].copy()
                 i_info["terminal observation"] = terminal_obs[i].copy()
                 batch_infos[i] = i_info.copy()
         else:
