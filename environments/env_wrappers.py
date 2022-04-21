@@ -1006,7 +1006,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
 
         batch_rewards = batch_rewards.reshape((batch_size, 1))
         batch_dones   = batch_dones.reshape((batch_size, 1))
-        batch_infos   = batch_dones.reshape((batch_size))
+        batch_infos   = batch_infos.reshape((batch_size))
 
         return batch_obs, batch_rewards, batch_dones, batch_infos
 
