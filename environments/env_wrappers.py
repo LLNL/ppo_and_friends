@@ -987,10 +987,10 @@ class AugmentingEnvWrapper(IdentityWrapper):
         batch_obs  = self.env.augment_observation(obs)
         batch_size = batch_obs.shape[0]
 
-        batch_infos = np.array([None] * batch_size,
-            dtype=object)
-
         if "terminal observation" in info:
+            batch_infos = np.array([None] * batch_size,
+                dtype=object)
+
             terminal_obs = info["terminal observation"]
             terminal_obs = self.env.augment_observation(terminal_obs)
 
@@ -998,12 +998,15 @@ class AugmentingEnvWrapper(IdentityWrapper):
                 i_info = info.copy()
                 i_info["terminal observation"] = terminal_obs[i].copy()
                 batch_infos[i] = i_info.copy()
+        else:
+            batch_infos = np.tile(np.array((info,), batch_size))
 
         batch_rewards = np.tile(np.array((reward,)), batch_size)
         batch_dones   = np.tile(np.array((done,)), batch_size).astype(bool)
 
         batch_rewards = batch_rewards.reshape((batch_size, 1))
         batch_dones   = batch_dones.reshape((batch_size, 1))
+        batch_infos   = batch_dones.reshape((batch_size))
 
         return batch_obs, batch_rewards, batch_dones, batch_infos
 
