@@ -229,14 +229,17 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         # Environments are very inconsistent! Some of them require their
         # actions to be squeezed before they can be sent to the env.
         #
-        self.action_squeeze = need_action_squeeze(env_generator())
+        self.action_squeeze = need_action_squeeze(self.env)
 
         self.num_envs = num_envs
         self.envs     = np.array([None] * self.num_envs, dtype=object)
         self.iter_idx = 0
 
-        for i in range(self.num_envs):
-            self.envs[i] = env_generator()
+        if self.num_envs == 1:
+            self.envs[0] = self.env
+        else:
+            for i in range(self.num_envs):
+                self.envs[i] = env_generator()
 
     def set_random_seed(self, seed):
         """
