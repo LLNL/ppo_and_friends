@@ -933,9 +933,14 @@ class RewardClipper(GenericClipper):
         return np.clip(reward, min_value, max_value)
 
 
-#FIXME: fix when ready
 class AugmentingEnvWrapper(IdentityWrapper):
     """
+        This wrapper expects the environment to have a method named
+        'augment_observation' that can be utilized to augment an observation
+        to create a batch of obserations. Each instance of observation in the
+        batch will be coupled with an identical done and reward. This is to
+        help a policy learn that a particular augmentation does not affect
+        the learned policy.
     """
 
     def __init__(self,
@@ -945,7 +950,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
             Initialize the wrapper.
 
             Arguments:
-                env            The environment to wrap.
+                env   The environment to wrap.
         """
 
         super(AugmentingEnvWrapper, self).__init__(
@@ -966,6 +971,9 @@ class AugmentingEnvWrapper(IdentityWrapper):
             action, allow the environment to augment the returned
             observation, and set up the return values as a batch.
 
+            NOTE: the action is expected to be a SINGLE action. This does
+            not currently support multiple environment instances.
+
             Arguments:
                 action    The action to take.
 
@@ -976,22 +984,32 @@ class AugmentingEnvWrapper(IdentityWrapper):
         """
         obs, reward, done, info = self.env.step(action)
 
-        aug_obs_batch = self.env.augment_observation(obs)
-        batch_size    = aug_obs_batch.shape[0]
+        batch_obs  = self.env.augment_observation(obs)
+        batch_size = batch_obs.shape[0]
+
+        batch_infos = np.array([None] * self.num_envs,
+            dtype=object)
 
         if "terminal observation" in info:
             terminal_obs = info["terminal observation"]
             terminal_obs = self.env.augment_observation(terminal_obs)
-            info["terminal observation"] = terminal_obs
 
-        rewards = np.tile(np.array((reward,)), batch_size).reshape((batch_size, 1))
-        dones   = np.tile(np.array((done,)), batch_size).reshape((batch_size, 1))
+            for i in range(batch_size):
+                i_info = info.copy()
+                i_info["terminal observation"] = terminal_obs[i].copy()
+                batch_infos[i] = i_info.copy()
 
-        return aug_obs_batch, rewards, dones, info
+        batch_rewards = np.tile(np.array((reward,)), batch_size)
+        batch_dones   = np.tile(np.array((done,)), batch_size).astype(bool)
+
+        batch_rewards = batch_rewards.reshape((batch_size, 1))
+        batch_dones   = batch_dones.reshape((batch_size, 1))
+
+        return batch_obs, batch_rewards, batch_dones, batch_infos
 
     def reset(self):
         """
-            Reset the environment, and update the running stats.
+            Reset the environment, and return a batch of augmented observations.
 
             Returns:
                 The resulting observation.

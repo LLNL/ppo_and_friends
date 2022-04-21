@@ -748,7 +748,7 @@ class PPO(object):
                 dtype=torch.float).to(self.device)
 
         if len(action.shape) != 2:
-            action = action.unsqueeze(0)
+            action = action.unsqueeze(1)
 
         with torch.no_grad():
             intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
@@ -877,8 +877,7 @@ class PPO(object):
             episode_lengths  += 1
 
             if self.obs_augment:
-                #FIXME: handle obs augment
-                raw_action, action, log_prob = self.get_action(obs[0])
+                raw_action, action, log_prob = self.get_action(obs[0:1])
             else:
                 raw_action, action, log_prob = self.get_action(obs)
 
@@ -890,19 +889,26 @@ class PPO(object):
 
             prev_obs = obs.copy()
 
-            # TODO: in obs aug case, the action will be a single action, but all return
-            # values will be batches (except for info).
             obs, ext_reward, done, info = self.env.step(action)
 
+            #
+            # In the observational augment case, our action is a single action,
+            # but our return values are all batches. We need to tile the
+            # actions into batches as well.
+            #
             if self.obs_augment:
-                batch_size = obs.shape[0]
-                action = np.tile(action, batch_size)
-                #FIXME: how should this be handled?
-                action = action.reshape((batch_size,))
+                batch_size   = obs.shape[0]
 
-                lp_shape = log_prob.shape
-                log_prob = np.tile(log_prob.flatten(), batch_size)
-                log_prob = log_prob.reshape((batch_size,) + lp_shape)
+                action_shape = (batch_size,) + action.shape[1:]
+                action       = np.tile(action.flatten(), batch_size)
+                action       = action.reshape(action_shape)
+
+                raw_action   = np.tile(raw_action.flatten(), batch_size)
+                raw_action   = raw_action.reshape(action_shape)
+
+                lp_shape     = (batch_size,) + log_prob.shape[1:]
+                log_prob     = np.tile(log_prob.flatten(), batch_size)
+                log_prob     = log_prob.reshape(lp_shape)
 
             value = value.detach().cpu().numpy()
 
@@ -927,12 +933,10 @@ class PPO(object):
             # to out extrinsic reward.
             #
             if self.using_icm:
-                batch_size = obs.shape[0]
-
                 intr_reward = self.get_intrinsic_reward(
                     prev_obs,
                     obs,
-                    action.reshape((batch_size, -1)))
+                    action)
 
                 reward = ext_reward + intr_reward
             else:
@@ -955,13 +959,13 @@ class PPO(object):
             if self.using_lstm:
 
                 act_hb_shape = self.actor.get_zero_hidden_state(
-                        batch_size = 1,
+                        batch_size = env_batch_size,
                         device     = self.device).shape
                 act_hb_shape = (env_batch_size,) + act_hb_shape
                 actor_hidden_states = np.zeros(act_hb_shape)
 
                 crit_hb_shape = self.critic.get_zero_hidden_state(
-                        batch_size = 1,
+                        batch_size = env_batch_size,
                         device     = self.device).shape
                 crit_hb_shape = (env_batch_size,) + crit_hb_shape
                 critic_hidden_states = np.zeros(crit_hb_shape)
@@ -969,12 +973,12 @@ class PPO(object):
                 if done.any():
                     actor_hidden_states[where_done] = \
                         self.actor.get_zero_hidden_state(
-                            batch_size = 1,
+                            batch_size = env_batch_size,
                             device     = self.device)
 
                     critic_hidden_states[where_done] = \
                         self.critic.get_zero_hidden_state(
-                            batch_size = 1,
+                            batch_size = env_batch_size,
                             device     = self.device)
 
                 if (~done).any():
@@ -1126,8 +1130,7 @@ class PPO(object):
                 if self.using_icm:
                     if self.can_clone_env:
                         if self.obs_augment:
-                            #FIXME: handle obs aug
-                            _, clone_action, _ = self.get_action(obs[0])
+                            _, clone_action, _ = self.get_action(obs[0:1])
                         else:
                             _, clone_action, _ = self.get_action(obs)
 
@@ -1137,14 +1140,14 @@ class PPO(object):
                         del cloned_env
 
                         if self.obs_augment:
-                            #FIXME handle obs aug
-                            clone_action = np.tile(clone_action, env_batch_size)
-                            clone_action = clone_action.reshape((env_batch_size, 1))
+                            action_shape = (env_batch_size,) + clone_action.shape[1:]
+                            clone_action = np.tile(clone_action.flatten(), env_batch_size)
+                            clone_action = clone_action.reshape(action_shape)
 
                         intr_reward = self.get_intrinsic_reward(
                             clone_prev_obs,
                             clone_obs,
-                            clone_action.reshape((env_batch_size, 1)))
+                            clone_action)
 
                     ism         = self.status_dict["intrinsic score avg"]
                     surprise    = intr_reward[where_maxed] - ism
