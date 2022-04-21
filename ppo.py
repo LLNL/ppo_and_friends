@@ -438,18 +438,6 @@ class PPO(object):
             self.status_dict["last save"] = -1
 
         #
-        # Some methods (ICM) perform best if we can clone the environment,
-        # but not all environments support this.
-        #
-        try:
-            self.env.reset()
-            cloned_env = deepcopy(self.env)
-            cloned_env.step(cloned_env.action_space.sample())
-            self.can_clone_env = True
-        except:
-            self.can_clone_env = False
-
-        #
         # Initialize our networks: actor, critic, and possible ICM.
         #
         use_conv2d_setup = False
@@ -586,6 +574,22 @@ class PPO(object):
                     protocol=pickle.HIGHEST_PROTOCOL)
 
         comm.barrier()
+
+        #
+        # Some methods (ICM) perform best if we can clone the environment,
+        # but not all environments support this.
+        #
+        if test_mode:
+            self.can_clone_env = False
+        else:
+            try:
+                obs = self.env.reset()
+                _, action, _ = self.get_action(obs)
+                cloned_env   = deepcopy(self.env)
+                cloned_env.step(action)
+                self.can_clone_env = True
+            except:
+                self.can_clone_env = False
 
 
     def get_action(self, obs):
@@ -900,7 +904,7 @@ class PPO(object):
                 log_prob = np.tile(log_prob.flatten(), batch_size)
                 log_prob = log_prob.reshape((batch_size,) + lp_shape)
 
-            value = value.detach().numpy()
+            value = value.detach().cpu().numpy()
 
             #
             # If any of our wrappers are altering the rewards, there should
@@ -1091,7 +1095,7 @@ class PPO(object):
                 if self.normalize_values:
                     nxt_value = self.value_normalizer.denormalize(nxt_value)
 
-                nxt_reward = nxt_value.detach().numpy()
+                nxt_reward = nxt_value.detach().cpu().numpy()
 
                 #
                 # Tricky business:
@@ -1105,12 +1109,13 @@ class PPO(object):
                 #        max ts per episode is long enough, we'll
                 #        hopefully see enough intrinsic reward to
                 #        learn a good policy. In my experience, this
-                #        works, but it takes a bit longer to learn.
+                #        works, but the learned policies can be a bit
+                #        unstable.
                 #     2. If we can clone the environment, we can take
                 #        an extra step with the clone to get the
                 #        intrinsic reward, and we can decide what to
                 #        do with this. Approaches that integrate this
-                #        reward tend to learn a bit more quickly.
+                #        method tend to learn more stable policies.
                 #
                 # If we have this intrinsic reward from a clone step,
                 # we can hand wavily calcluate a "surprise" by taking
@@ -1124,28 +1129,25 @@ class PPO(object):
                             #FIXME: handle obs aug
                             _, clone_action, _ = self.get_action(obs[0])
                         else:
-                            _, clone_action, _ = \
-                                self.get_action(obs[where_maxed])
+                            _, clone_action, _ = self.get_action(obs)
 
-                        clone_prev_obs = obs[where_maxed].copy()
+                        clone_prev_obs = obs.copy()
                         cloned_env = deepcopy(self.env)
                         clone_obs, _, _, _ = cloned_env.step(clone_action)
                         del cloned_env
 
-                        batch_size = obs.shape[0]
-
                         if self.obs_augment:
                             #FIXME handle obs aug
-                            clone_action = np.tile(clone_action, batch_size)
-                            clone_action = clone_action.reshape((batch_size, 1))
+                            clone_action = np.tile(clone_action, env_batch_size)
+                            clone_action = clone_action.reshape((env_batch_size, 1))
 
                         intr_reward = self.get_intrinsic_reward(
                             clone_prev_obs,
                             clone_obs,
-                            clone_action.reshape((batch_size, -1)))
+                            clone_action.reshape((env_batch_size, 1)))
 
                     ism         = self.status_dict["intrinsic score avg"]
-                    surprise    = intr_reward - ism
+                    surprise    = intr_reward[where_maxed] - ism
                     nxt_reward += surprise
 
                 for idx, maxed_idx in enumerate(where_maxed):
@@ -1433,8 +1435,9 @@ class PPO(object):
                 rewards_tg = self.value_normalizer.normalize(rewards_tg)
 
             if obs.shape[0] == 1:
-                rank_print("Skipping batch of size 1")
-                rank_print("    obs shape: {}".format(obs.shape))
+                #FIXME: do we really want this?
+                #rank_print("Skipping batch of size 1")
+                #rank_print("    obs shape: {}".format(obs.shape))
                 continue
 
             #
