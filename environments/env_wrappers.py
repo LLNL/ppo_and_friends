@@ -987,7 +987,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
         batch_obs  = self.env.augment_observation(obs)
         batch_size = batch_obs.shape[0]
 
-        batch_infos = np.array([None] * self.num_envs,
+        batch_infos = np.array([None] * batch_size,
             dtype=object)
 
         if "terminal observation" in info:
