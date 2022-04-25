@@ -56,7 +56,7 @@ you can issue the following command:
 ```
 python main.py -e <env_name> --num_test_runs <num_test_runs> --render
 ```
-You can optionally omit the `--render` flag.
+You can optionally omit the `--render` or add the `--render_gif` flag.
 
 
 # Documentation
@@ -257,3 +257,8 @@ within 40 minutes or less.
 
 ### HumanoidStandup
 Who knows with this one...
+
+# GIFs
+
+## BipedalWalkerHardcore
+![](https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif)
