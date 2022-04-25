@@ -260,6 +260,11 @@ Who knows with this one...
 
 # GIFs
 
+## BipedalWalker
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
+
+**score: 326.2**
+
 ## BipedalWalkerHardcore
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
