@@ -966,6 +966,8 @@ class AugmentingEnvWrapper(IdentityWrapper):
             rank_print(msg)
             comm.Abort()
 
+        self.batch_size = self.aug_reset().shape[0]
+
     def step(self, action):
         """
             Take a single step in the environment using the given
@@ -1103,6 +1105,16 @@ class AugmentingEnvWrapper(IdentityWrapper):
             self.test_idx = np.random.randint(batch_size + 1)
 
         return aug_obs_batch[self.test_idx]
+
+    def get_batch_size(self):
+        """
+            If any wrapped classes define this method, try to get the batch size
+            from them. Otherwise, assume we have a single environment.
+
+            Returns:
+                Return our batch size.
+        """
+        return self.batch_size
 
     def supports_batched_environments(self):
         """
