@@ -194,17 +194,23 @@ to solve the environment.
 2 processors and 2 environments per processor works well here.
 
 ### BipedalWalker
-2 processors and 2 environments per processor will solve the environment
-in about 15 minutes. The environment is considered solved when the
-average score over 100 test runs is >= 300. This policy generally gets
+2 processors and 1 environments per processor will solve the environment
+in about 15->20 minutes. The environment is considered solved when the
+average score over 100 test runs is >= 300. This policy easily gets
 an average score >= 320.
 
 ### BipedalWalkerHardcore
-4 processors and 2 environments per processor works well. This is probably
+4 processors and 1 environments per processor works well. This is probably
 the most challenging solveable environment in this repo, and it takes a
-significant amount of time to reach a solved policy.
+significant amount of time to reach a solved policy. I generally see a solved
+policy around 4 hours or so of training (~6000->7000 iterations), but the
+policy can still be a bit brittle at this point. For example, testing the
+policy 4 times in a row with each test averaging over 100 test runs might
+result in 3 out of the 4 averages being >= 300. Longer training will result
+in a more stable policy.
 The environment is considered solved when the average score over 100 test
-runs is >= 300. This policy generally gets an average score >= 320.
+runs is >= 300. This policy generally gets an average score >= 320 once
+solved.
 
 ### All Atari pixel environments
 I recommend enabling the `--allow_mpi_gpu` flag for systems with GPUs. I
