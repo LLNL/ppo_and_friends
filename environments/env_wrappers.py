@@ -576,7 +576,7 @@ class ObservationNormalizer(IdentityWrapper):
         else:
             file_name = "RunningObsStats_{}.pkl".format(rank)
 
-        in_file   = os.path.join(path, file_name)
+        in_file = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
@@ -957,6 +957,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
             env,
             **kw_args)
 
+        self.test_idx = -1
         aug_func = getattr(env, "augment_observation", None)
 
         if type(aug_func) == type(None):
@@ -965,6 +966,8 @@ class AugmentingEnvWrapper(IdentityWrapper):
             rank_print(msg)
             comm.Abort()
 
+    # FIXME: when in test mode, still augment, but only return a single index.
+    # we'll need to keep track of a random index to use.
     def step(self, action):
         """
             Take a single step in the environment using the given
@@ -981,8 +984,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
                 The resulting observation(s), reward(s), done(s), and info(s).
         """
         if self.test_mode:
-            return self.env.step(action)
-
+            return self.aug_test_step(action)
         return self.aug_step(action)
 
     def aug_step(self, action):
@@ -1030,6 +1032,37 @@ class AugmentingEnvWrapper(IdentityWrapper):
 
         return batch_obs, batch_rewards, batch_dones, batch_infos
 
+    def aug_test_step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, allow the environment to augment the returned
+            observation. Since we're in test mode, we return a single
+            instance from the batch.
+
+            NOTE: the action is expected to be a SINGLE action. This does
+            not currently support multiple environment instances.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                Observation, reward, done, and info (possibly augmented).
+        """
+        obs, reward, done, info = self.env.step(action)
+
+        batch_obs  = self.env.augment_observation(obs)
+        batch_size = batch_obs.shape[0]
+
+        if self.test_idx < 0:
+            self.test_idx = np.random.randint(batch_size)
+
+        if "terminal observation" in info:
+            terminal_obs = info["terminal observation"]
+            terminal_obs = self.env.augment_observation(terminal_obs)
+            info["terminal observation"] = terminal_obs[self.test_idx].copy()
+
+        return batch_obs[self.test_idx], reward, done, info
+
     def reset(self):
         """
             Reset the environment. If we're in test mode, we don't augment the
@@ -1039,7 +1072,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
                 The resulting observation(s).
         """
         if self.test_mode:
-            return self.env.reset()
+            return self.aug_test_reset()
         return self.aug_reset()
 
     def aug_reset(self):
@@ -1054,6 +1087,24 @@ class AugmentingEnvWrapper(IdentityWrapper):
         aug_obs_batch = self.env.augment_observation(obs)
 
         return aug_obs_batch
+
+    def aug_test_reset(self):
+        """
+            Reset the environment, and return a single observations which may
+            or may not be augmented.
+
+            Returns:
+                The resulting observation (possibly augmented).
+        """
+        obs = self.env.reset()
+
+        aug_obs_batch = self.env.augment_observation(obs)
+        batch_size    = aug_obs_batch.shape[0]
+
+        if self.test_idx < 0:
+            self.test_idx = np.random.randint(batch_size)
+
+        return aug_obs_batch[self.test_idx]
 
     def supports_batched_environments(self):
         """
