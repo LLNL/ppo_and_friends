@@ -7,7 +7,7 @@ def save_frames_as_gif(
     frames,
     out_path,
     filename = 'test.gif',
-    fps      = 20):
+    fps      = 50):
     """
         Save numpy frames as a gif.
 
