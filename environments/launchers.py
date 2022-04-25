@@ -437,7 +437,7 @@ def lunar_lander_ppo(state_path,
                      test = False,
                      num_test_runs = 1):
 
-    env_geneartor = gym.make('LunarLander-v2')
+    env_generator = lambda : gym.make('LunarLander-v2')
 
     #
     # Extra args for the actor critic models.
@@ -707,17 +707,17 @@ def bipedal_walker_hardcore_ppo(state_path,
     # scores of 320+ over 100 test runs.
     #
     lr_dec = LinearStepMapper(
-        steps        = [7800,],
+        steps        = [3900,],
         step_values  = [0.0001,],
         ending_value = 0.00001)
 
     reward_clip_min = LinearStepMapper(
-        steps        = [8000,],
+        steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
 
     bs_clip_min = LinearStepMapper(
-        steps        = [8000,],
+        steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
 
@@ -1463,12 +1463,12 @@ def hopper_ppo(state_path,
     critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0003
-    min_lr = 0.0003
+    min_lr = 0.0001
 
-    lr_dec = LinearDecrementer(
-        max_iteration = 1.0,
-        max_value     = lr,
-        min_value     = min_lr)
+    lr_dec = LinearStepMapper(
+        steps        = [400,],
+        step_values  = [0.0003,],
+        ending_value = 0.0001)
 
     #
     # I find that value normalization hurts the hopper environment training.
@@ -1481,7 +1481,7 @@ def hopper_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1579,7 +1579,7 @@ def swimmer_ppo(state_path,
     actor_kw_args["hidden_size"] = 64
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_size"] = 128
+    critic_kw_args["hidden_size"] = 256
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1596,7 +1596,7 @@ def swimmer_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
