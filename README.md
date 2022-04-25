@@ -258,7 +258,7 @@ within 40 minutes or less.
 ### HumanoidStandup
 Who knows with this one...
 
-# GIFs
+# Resulting Policies
 
 ## BipedalWalker
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
