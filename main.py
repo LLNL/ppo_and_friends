@@ -132,7 +132,7 @@ if __name__ == "__main__":
     comm.barrier()
 
     if (torch.cuda.is_available() and
-        not test and 
+        not test and
         (num_procs == 1 or allow_mpi_gpu)):
 
         device = torch.device("cuda")
@@ -342,6 +342,7 @@ if __name__ == "__main__":
             test          = test,
             num_test_runs = num_test_runs)
 
+    #
     # Good distribution for BipedalWalker:
     # 4 processors and 1 env per processor can solve the environment in
     # 4 or so hours on my system.
