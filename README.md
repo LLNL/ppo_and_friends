@@ -262,3 +262,5 @@ Who knows with this one...
 
 ## BipedalWalkerHardcore
 ![](https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif)
+**score: 329.7**
+
