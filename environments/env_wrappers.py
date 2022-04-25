@@ -958,7 +958,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
             **kw_args)
 
         self.test_idx = -1
-        aug_func = getattr(env, "augment_observation", None)
+        aug_func      = getattr(env, "augment_observation", None)
 
         if type(aug_func) == type(None):
             msg  = "ERROR: env must define 'augment_observation' in order "
@@ -966,8 +966,6 @@ class AugmentingEnvWrapper(IdentityWrapper):
             rank_print(msg)
             comm.Abort()
 
-    # FIXME: when in test mode, still augment, but only return a single index.
-    # we'll need to keep track of a random index to use.
     def step(self, action):
         """
             Take a single step in the environment using the given
@@ -1102,7 +1100,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
         batch_size    = aug_obs_batch.shape[0]
 
         if self.test_idx < 0:
-            self.test_idx = np.random.randint(batch_size)
+            self.test_idx = np.random.randint(batch_size + 1)
 
         return aug_obs_batch[self.test_idx]
 
