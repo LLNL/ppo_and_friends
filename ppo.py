@@ -231,6 +231,15 @@ class PPO(object):
         if not test_mode:
             env.set_random_seed(random_seed)
 
+        #
+        # The second wrapper should always be the augmenter. This is because
+        # our environment should receive pre-normalized data for augmenting.
+        #
+        if obs_augment:
+            env = AugmentingEnvWrapper(
+                env,
+                test_mode = test_mode)
+
         self.save_env_info = False
 
         #
@@ -274,11 +283,6 @@ class PPO(object):
                 test_mode   = test_mode,
                 status_dict = self.status_dict,
                 clip_range  = reward_clip)
-
-        if obs_augment:
-            env = AugmentingEnvWrapper(
-                env,
-                test_mode = test_mode)
 
         #
         # When we toggle test mode on/off, we need to make sure to also
