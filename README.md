@@ -259,14 +259,25 @@ within 40 minutes or less.
 Who knows with this one...
 
 # Resulting Policies
+Policies can differ from one training to another, and the longer training
+sessions generally result in better policies. For the results demonstrated
+below, I trained for a moderate amount, which is usually just enough to
+see a decent policy. See the **Environment Setttings** section for details.
+
+## CartPole
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/CartPole.gif" width="300" height="200" />
+
+**test score: 200**
 
 ## BipedalWalker
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
 
-**score: 326.2**
+**test score: 326.2**
+**averge over 100 test runs: ~319**
 
 ## BipedalWalkerHardcore
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
-**score: 329.7**
+**test score: 329.7**
+**averge over 100 test runs: ~313**
 
