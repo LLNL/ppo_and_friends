@@ -360,6 +360,7 @@ def init_layer(layer,
         a bias constant.
 
         Arguments:
+            layer         The network layer.
             weight_std    The std weight.
             bias_const    The bias constants.
 
@@ -371,3 +372,27 @@ def init_layer(layer,
     nn.init.constant_(layer.bias, bias_const)
 
     return layer
+
+def init_net_parameters(net,
+                        weight_std = np.sqrt(2),
+                        bias_const = 0.0):
+    """
+        Orthogonally initialize a neural network using an std weight and
+        a bias constant.
+
+        Arguments:
+            net           The network.
+            weight_std    The std weight.
+            bias_const    The bias constants.
+
+        Returns:
+            The initialized network.
+    """
+
+    for name, param in net.named_parameters():
+        if 'weight' in name:
+            nn.init.orthogonal_(param, weight_std)
+        elif 'bias' in name:
+            nn.init.constant_(param, bias_const)
+
+    return net

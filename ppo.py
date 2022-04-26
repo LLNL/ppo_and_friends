@@ -8,14 +8,15 @@ from torch.optim import Adam
 from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
-from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
+from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.utils.misc import RunningStatNormalizer
-from ppo_and_friends.utils.decrementers import *
+from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.environments.vectorize import VectorizedEnv
+from ppo_and_friends.environments.env_wrappers import VectorizedEnv
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
+from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
 from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
@@ -32,10 +33,11 @@ num_procs = comm.Get_size()
 class PPO(object):
 
     def __init__(self,
-                 env,
+                 env_generator,
                  ac_network,
                  device,
                  random_seed,
+                 envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
                  actor_kw_args       = {},
@@ -73,15 +75,19 @@ class PPO(object):
                  save_best_only      = False,
                  pickle_class        = False,
                  use_soft_resets     = True,
+                 obs_augment         = False,
                  test_mode           = False):
         """
             Initialize the PPO trainer.
 
             Parameters:
-                 env                  The environment to learn from.
+                 env_generator        A function that creates instances of
+                                      the environment to learn from.
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
+                 envs_per_proc        The number of environment instances each
+                                      processor owns.
                  icm_network          The network to use for ICM applications.
                  icm_kw_args          Extra keyword args for the ICM network.
                  actor_kw_args        Extra keyword args for the actor
@@ -90,8 +96,9 @@ class PPO(object):
                                       network.
                  lr                   The initial learning rate.
                  min_lr               The minimum learning rate.
-                 lr_dec               A class that inherits from the Decrement
-                                      class located in utils/decrementers.py.
+                 lr_dec               A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
                                       This class has a decrement function that
                                       will be used to updated the learning rate.
                  max_ts_per_ep        The maximum timesteps to allow per
@@ -124,7 +131,9 @@ class PPO(object):
                                       specific range. Why is this? Well, our
                                       estimated reward (from our value network)
                                       might be way outside of the expected
-                                      range.
+                                      range. We also allow the range min/max
+                                      to be callables that take in the
+                                      current iteration.
                  dynamic_bs_clip      If set to True, bootstrap_clip will be
                                       used as the initial clip values, but all
                                       values thereafter will be taken from the
@@ -173,12 +182,21 @@ class PPO(object):
                                       be pickled and saved into the output
                                       directory after it's been initialized.
                  use_soft_resets      Use "soft resets" during rollouts.
+                 obs_augment          This is a funny option that can only be
+                                      enabled with environments that have a
+                                      "observation_augment" method defined.
+                                      When enabled, this method will be used to
+                                      augment observations into batches of
+                                      observations that all require the same
+                                      treatment (a single action).
                  test_mode            Most of this class is not used for
                                       testing, but some of its attributes are.
                                       Setting this to True will enable test
                                       mode.
         """
         set_torch_threads()
+        self.status_dict  = {}
+        self.status_dict["iteration"] = 0
 
         #
         # Divide the ts per rollout up among the processors. Let rank
@@ -186,24 +204,41 @@ class PPO(object):
         #
         orig_ts        = ts_per_rollout
         ts_per_rollout = int(ts_per_rollout / num_procs)
-        if rank == 0:
-            ts_per_rollout += orig_ts % num_procs
+        if rank == 0 and (orig_ts % num_procs) > 0:
+            msg  = "WARNING: {} timesteps per rollout ".format(ts_per_rollout)
+            msg += "cannot be evenly distributed across "
+            msg += "{} processors. The timesteps per ".format(num_procs)
+            msg += "rollout have been adjusted for effecient distribution. "
+            msg += "The new timesteps per rollout is "
+            msg += "{}.".format(ts_per_rollout * num_procs)
+            rank_print(msg)
 
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
+
+        #
+        # Vectorize our environment and add any requested wrappers.
+        #
+        env = VectorizedEnv(
+            env_generator = env_generator,
+            num_envs      = envs_per_proc,
+            test_mode     = test_mode)
 
         #
         # For reproducibility, we need to set the environment's random
         # seeds. Let's allow testing to be random.
         #
         if not test_mode:
-            env.action_space.seed(random_seed)
-            env.seed(random_seed)
+            env.set_random_seed(random_seed)
 
         #
-        # Vectorize our environment and add any requested wrappers.
+        # The second wrapper should always be the augmenter. This is because
+        # our environment should receive pre-normalized data for augmenting.
         #
-        env = VectorizedEnv(env)
+        if obs_augment:
+            env = AugmentingEnvWrapper(
+                env,
+                test_mode = test_mode)
 
         self.save_env_info = False
 
@@ -221,9 +256,10 @@ class PPO(object):
 
         if obs_clip != None and type(obs_clip) == tuple:
             env = ObservationClipper(
-                env        = env,
-                test_mode  = test_mode,
-                clip_range = obs_clip)
+                env         = env,
+                test_mode   = test_mode,
+                status_dict = self.status_dict,
+                clip_range  = obs_clip)
 
         #
         # There are multiple ways to go about normalizing values/rewards.
@@ -243,9 +279,10 @@ class PPO(object):
 
         if reward_clip != None and type(reward_clip) == tuple:
             env = RewardClipper(
-                env        = env,
-                test_mode  = test_mode,
-                clip_range = reward_clip)
+                env         = env,
+                test_mode   = test_mode,
+                status_dict = self.status_dict,
+                clip_range  = reward_clip)
 
         #
         # When we toggle test mode on/off, we need to make sure to also
@@ -284,12 +321,6 @@ class PPO(object):
         else:
             rank_print("Using {} actions.".format(action_dtype))
 
-        #
-        # Environments are very inconsistent! We need to check what shape
-        # they expect actions to be in.
-        #
-        self.action_squeeze = need_action_squeeze(env)
-
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(
                 max_iteration = 2000,
@@ -298,13 +329,46 @@ class PPO(object):
         else:
             self.lr_dec = lr_dec
 
+        #
+        # One or both of our bootstrap clip ends might be a function of
+        # our iteration.
+        # We turn them both into functions for sanity.
+        #
+        min_bs_callable  = None
+        max_bs_callable  = None
+        bs_clip_callable = False
+
+        if callable(bootstrap_clip[0]):
+            min_bs_callable  = bootstrap_clip[0]
+            bs_clip_callable = True
+        else:
+            min_bs_callable = lambda x : bootstrap_clip[0]
+
+        if callable(bootstrap_clip[1]):
+            max_bs_callable  = bootstrap_clip[1]
+            bs_clip_callable = True
+        else:
+            max_bs_callable = lambda x : bootstrap_clip[1]
+
+        callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
+
+        if bs_clip_callable and dynamic_bs_clip:
+            msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
+            msg += "and also set the bootstrap clip to be callables. This is "
+            msg += "redundant, and the dynamic clip will override the given "
+            msg += "functions."
+            rank_print(msg)
+
+        #
+        # Establish some class variables.
+        #
         self.env                 = env
         self.device              = device
         self.state_path          = state_path
         self.render              = render
         self.action_dtype        = action_dtype
         self.use_gae             = use_gae
-        self.use_icm             = use_icm
+        self.using_icm           = use_icm
         self.icm_beta            = icm_beta
         self.ext_reward_weight   = ext_reward_weight
         self.intr_reward_weight  = intr_reward_weight
@@ -318,7 +382,7 @@ class PPO(object):
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
         self.gradient_clip       = gradient_clip
-        self.bootstrap_clip      = bootstrap_clip
+        self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
         self.obs_shape           = env.observation_space.shape
@@ -331,15 +395,15 @@ class PPO(object):
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
+        self.obs_augment         = obs_augment
         self.test_mode           = test_mode
 
         #
         # Create a dictionary to track the status of training.
         #
-        max_int           = np.iinfo(np.int32).max
-        self.status_dict  = {}
-        self.status_dict["iteration"]            = 0
+        max_int = np.iinfo(np.int32).max
         self.status_dict["rollout time"]         = 0
+        self.status_dict["train time"]           = 0
         self.status_dict["running time"]         = 0
         self.status_dict["timesteps"]            = 0
         self.status_dict["longest run"]          = 0
@@ -378,24 +442,17 @@ class PPO(object):
             self.status_dict["last save"] = -1
 
         #
-        # Some methods (ICM) perform best if we can clone the environment,
-        # but not all environments support this.
-        #
-        try:
-            self.env.reset()
-            cloned_env = deepcopy(self.env)
-            cloned_env.step(cloned_env.action_space.sample())
-            self.can_clone_env = True
-        except:
-            self.can_clone_env = False
-
-        #
         # Initialize our networks: actor, critic, and possible ICM.
         #
         use_conv2d_setup = False
         for base in ac_network.__bases__:
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
+
+        self.using_lstm = False
+        for base in ac_network.__bases__:
+            if base.__name__ == "PPOLSTMNetwork":
+                self.using_lstm = True
 
         #
         # arXiv:2006.05990v1 suggests initializing the output layer
@@ -460,7 +517,7 @@ class PPO(object):
         sync_model_parameters(self.critic)
         comm.barrier()
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -469,8 +526,8 @@ class PPO(object):
                 test_mode    = test_mode,
                 **icm_kw_args)
 
-            self.test_mode_dependencies.append(self.icm)
-            self.pickle_safe_test_mode_dependencies.append(self.icm)
+            self.test_mode_dependencies.append(self.icm_model)
+            self.pickle_safe_test_mode_dependencies.append(self.icm_model)
 
             self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
@@ -500,7 +557,7 @@ class PPO(object):
         self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
         self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
 
@@ -522,6 +579,22 @@ class PPO(object):
 
         comm.barrier()
 
+        #
+        # Some methods (ICM) perform best if we can clone the environment,
+        # but not all environments support this.
+        #
+        if test_mode:
+            self.can_clone_env = False
+        else:
+            try:
+                obs = self.env.reset()
+                _, action, _ = self.get_action(obs)
+                cloned_env   = deepcopy(self.env)
+                cloned_env.step(action)
+                self.can_clone_env = True
+            except:
+                self.can_clone_env = False
+
 
     def get_action(self, obs):
         """
@@ -538,8 +611,13 @@ class PPO(object):
                 environment, and log_prob is the log probabilities from our
                 probability distribution.
         """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: get_action expects a batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-        t_obs = t_obs.unsqueeze(0)
 
         with torch.no_grad():
             action_pred = self.actor(t_obs)
@@ -555,8 +633,9 @@ class PPO(object):
         action, raw_action = self.actor.distribution.sample_distribution(dist)
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        if self.action_dtype == "discrete":
-            action = action.int().unsqueeze(0)
+        #FIXME: is this really needed anymore?
+        #if self.action_dtype == "discrete":
+        #    action = action.int().unsqueeze(0)
 
         action     = action.detach().numpy()
         raw_action = raw_action.detach().numpy()
@@ -606,7 +685,7 @@ class PPO(object):
         rank_print("Status Report:")
         for key in self.status_dict:
 
-            if key == "running time" or key == "rollout time":
+            if key in ["running time", "rollout time", "train time"]:
                 pretty_time = format_seconds(self.status_dict[key])
                 rank_print("    {}: {}".format(key, pretty_time))
             else:
@@ -634,7 +713,7 @@ class PPO(object):
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
 
-        if self.use_icm:
+        if self.using_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
@@ -652,27 +731,35 @@ class PPO(object):
                 obs         The current observation.
                 action      The action taken.
         """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: get_intrinsic_reward expects a batch of "
+            msg += "observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
 
         obs_1 = torch.tensor(prev_obs,
-            dtype=torch.float).to(self.device).unsqueeze(0)
+            dtype=torch.float).to(self.device)
         obs_2 = torch.tensor(obs,
-            dtype=torch.float).to(self.device).unsqueeze(0)
+            dtype=torch.float).to(self.device)
 
         if self.action_dtype == "discrete":
             action = torch.tensor(action,
-                dtype=torch.long).to(self.device).unsqueeze(0)
+                dtype=torch.long).to(self.device)
 
         elif self.action_dtype == "continuous":
             action = torch.tensor(action,
                 dtype=torch.float).to(self.device)
 
         if len(action.shape) != 2:
-            action = action.unsqueeze(0)
+            action = action.unsqueeze(1)
 
         with torch.no_grad():
             intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
-        intr_reward  = intr_reward.item()
+        batch_size   = obs.shape[0]
+        intr_reward  = intr_reward.detach().cpu().numpy()
+        intr_reward  = intr_reward.reshape((batch_size, -1))
         intr_reward *= self.intr_reward_weight
 
         return intr_reward
@@ -696,6 +783,8 @@ class PPO(object):
             Returns:
                 A PyTorch dataset containing our rollout.
         """
+        start_time = time.time()
+
         if self.env ==  None:
             msg  = "ERROR: unable to perform rollout due to the environment "
             msg += "being of type None. This is likey due to loading the "
@@ -703,26 +792,41 @@ class PPO(object):
             rank_print(msg)
             comm.Abort()
 
-        dataset            = PPODataset(self.device, self.action_dtype)
+        #
+        # When using lstm networks, we need to reset the hidden state
+        # for each rollout and pass our sequence length to our dataset.
+        #
+        sequence_length = 1
+        if self.using_lstm:
+            self.actor.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            self.critic.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            sequence_length = self.actor.sequence_length
+
+        dataset = PPODataset(
+            device          = self.device,
+            action_dtype    = self.action_dtype,
+            sequence_length = sequence_length)
+
         total_episodes     = 0.0
         total_rollout_ts   = 0
-        total_ext_rewards  = 0
         total_rewards      = 0
-        total_intr_rewards = 0
         top_rollout_score  = -np.finfo(np.float32).max
-        ep_rewards         = 0
         longest_run        = 0
         rollout_max_reward = -np.finfo(np.float32).max
         rollout_min_reward = np.finfo(np.float32).max
         rollout_max_obs    = -np.finfo(np.float32).max
         rollout_min_obs    = np.finfo(np.float32).max
-        episode_length     = 0
-        ep_score           = 0
 
         self.actor.eval()
         self.critic.eval()
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.eval()
 
         #
@@ -735,235 +839,398 @@ class PPO(object):
         else:
             obs = self.env.reset()
 
-        start_time = time.time()
+        env_batch_size     = obs.shape[0]
+        ep_rewards         = np.zeros((env_batch_size, 1))
+        episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
+        ep_score           = np.zeros((env_batch_size, 1))
+        total_ext_rewards  = np.zeros((env_batch_size, 1))
+        total_intr_rewards = np.zeros((env_batch_size, 1))
+        ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        while total_rollout_ts < self.ts_per_rollout:
+        #
+        # Our bootstrap clip is a function of the iteration.
+        #
+        iteration = self.status_dict["iteration"]
+        bs_min    = self.bootstrap_clip[0](iteration)
+        bs_max    = self.bootstrap_clip[1](iteration)
+        bs_clip_range = (bs_min, bs_max)
 
-            episode_info = EpisodeInfo(
+        episode_infos = np.array([None] * env_batch_size, dtype=object)
+
+        for ei_idx in range(env_batch_size):
+            episode_infos[ei_idx] = EpisodeInfo(
+                starting_ts    = 0,
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
                 lambd          = self.lambd,
-                bootstrap_clip = self.bootstrap_clip)
+                bootstrap_clip = bs_clip_range)
 
-            for ep_ts in range(1, self.max_ts_per_ep + 1):
+        #
+        # TODO: If we're using multiple environments, we can end up going over
+        # our requested limits here... We could get around this by truncating
+        # the batch when necessary.
+        #
+        while total_rollout_ts < self.ts_per_rollout:
 
-                #
-                # We end if we've reached our timesteps per rollout limit.
-                #
-                if ep_ts > self.ts_per_rollout:
-                    msg  = "ERROR: the episode timestep is > timesteps "
-                    msg += "per rollout. This is not allowable."
-                    msg += "episode timestep, max timesteps: {}, ".format(ep_ts)
-                    msg += "{}.".format(self.ts_per_rollout)
-                    rank_print(msg)
-                    comm.Abort()
+            ep_ts += 1
 
-                if self.render:
-                    self.env.render()
+            if self.render:
+                self.env.render()
 
-                total_rollout_ts += 1
-                episode_length   += 1
+            total_rollout_ts += env_batch_size
+            episode_lengths  += 1
+
+            if self.obs_augment:
+                raw_action, action, log_prob = self.get_action(obs[0:1])
+            else:
                 raw_action, action, log_prob = self.get_action(obs)
 
-                t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-                t_obs = t_obs.unsqueeze(0)
-                value = self.critic(t_obs)
+            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+            value = self.critic(t_obs)
+
+            if self.normalize_values:
+                value = self.value_normalizer.denormalize(value)
+
+            prev_obs = obs.copy()
+
+            obs, ext_reward, done, info = self.env.step(action)
+
+            #
+            # In the observational augment case, our action is a single action,
+            # but our return values are all batches. We need to tile the
+            # actions into batches as well.
+            #
+            if self.obs_augment:
+                batch_size   = obs.shape[0]
+
+                action_shape = (batch_size,) + action.shape[1:]
+                action       = np.tile(action.flatten(), batch_size)
+                action       = action.reshape(action_shape)
+
+                raw_action   = np.tile(raw_action.flatten(), batch_size)
+                raw_action   = raw_action.reshape(action_shape)
+
+                lp_shape     = (batch_size,) + log_prob.shape[1:]
+                log_prob     = np.tile(log_prob.flatten(), batch_size)
+                log_prob     = log_prob.reshape(lp_shape)
+
+            value = value.detach().cpu().numpy()
+
+            #
+            # If any of our wrappers are altering the rewards, there should
+            # be an unaltered version in the info.
+            #
+            if "natural reward" in info[0]:
+                natural_reward = np.zeros((env_batch_size, 1))
+
+                for b_idx in range(env_batch_size):
+                    natural_reward[b_idx] = \
+                        info[b_idx]["natural reward"].copy()
+            else:
+                natural_reward = ext_reward.copy()
+
+            ext_reward *= self.ext_reward_weight
+
+            #
+            # If we're using the ICM, we need to do some extra work here.
+            # This amounts to adding "curiosity", aka intrinsic reward,
+            # to out extrinsic reward.
+            #
+            if self.using_icm:
+                intr_reward = self.get_intrinsic_reward(
+                    prev_obs,
+                    obs,
+                    action)
+
+                reward = ext_reward + intr_reward
+            else:
+                reward = ext_reward
+
+            ep_obs     = obs.copy()
+            where_done = np.where(done)[0]
+            where_not_done = np.where(~done)[0]
+
+            if done.any():
+                term_key = "terminal observation"
+                for done_idx in where_done:
+                    ep_obs[done_idx] = info[done_idx][term_key]
+
+            #
+            # When using lstm networks, we need to save the hidden states
+            # encountered during the rollouts. These will later be used to
+            # initialize the hidden states when updating the models.
+            #
+            if self.using_lstm:
+
+                act_hb_shape = self.actor.get_zero_hidden_state(
+                        batch_size = env_batch_size,
+                        device     = self.device).shape
+                act_hb_shape = (env_batch_size,) + act_hb_shape
+                actor_hidden_states = np.zeros(act_hb_shape)
+
+                crit_hb_shape = self.critic.get_zero_hidden_state(
+                        batch_size = env_batch_size,
+                        device     = self.device).shape
+                crit_hb_shape = (env_batch_size,) + crit_hb_shape
+                critic_hidden_states = np.zeros(crit_hb_shape)
+
+                if done.any():
+                    actor_hidden_states[where_done] = \
+                        self.actor.get_zero_hidden_state(
+                            batch_size = env_batch_size,
+                            device     = self.device)
+
+                    critic_hidden_states[where_done] = \
+                        self.critic.get_zero_hidden_state(
+                            batch_size = env_batch_size,
+                            device     = self.device)
+
+                if (~done).any():
+                    where_not_done = np.where(not done)[0]
+
+                    actor_hidden_state[where_not_done]  = \
+                        self.actor.hidden_state.clone()
+
+                    critic_hidden_state[where_not_done] = \
+                        self.critic.hidden_state.clone()
+
+            else:
+                actor_hidden_state  = \
+                    np.array([None] * env_batch_size)
+
+                critic_hidden_state = \
+                    np.array([None] * env_batch_size)
+
+            for ei_idx in range(env_batch_size):
+                episode_infos[ei_idx].add_info(
+                    prev_obs[ei_idx],
+                    ep_obs[ei_idx],
+                    raw_action[ei_idx],
+                    action[ei_idx],
+                    value[ei_idx].item(),
+                    log_prob[ei_idx],
+                    reward[ei_idx].item(),
+                    actor_hidden_state[ei_idx],
+                    critic_hidden_state[ei_idx])
+
+            rollout_max_reward = max(rollout_max_reward, reward.max())
+            rollout_min_reward = min(rollout_min_reward, reward.min())
+            rollout_max_obs    = max(rollout_max_obs, obs.max())
+            rollout_min_obs    = min(rollout_min_obs, obs.min())
+
+            ep_rewards += reward
+            ep_score   += natural_reward
+
+            if done.any():
+
+                for done_idx in where_done:
+                    episode_infos[done_idx].end_episode(
+                        ending_ts      = episode_lengths[done_idx],
+                        terminal       = True,
+                        ending_value   = 0,
+                        ending_reward  = 0)
+
+                    dataset.add_episode(episode_infos[done_idx])
+
+                #
+                # If we're using a dynamic bs clip, we clip to the min/max
+                # rewards from the episode. Otherwise, rely on the user
+                # provided range.
+                #
+                if self.dynamic_bs_clip:
+                    for i, done_idx in enumerate(where_done):
+                        ep_min = min(episode_infos[done_idx].rewards)
+                        ep_max = max(episode_infos[done_idx].rewards)
+
+                        episode_infos[done_idx] = EpisodeInfo(
+                            starting_ts    = 0,
+                            use_gae        = self.use_gae,
+                            gamma          = self.gamma,
+                            lambd          = self.lambd,
+                            bootstrap_clip = (ep_min, ep_max))
+                else:
+                    #
+                    # Our bootstrap clip is a function of the iteration.
+                    #
+                    iteration = self.status_dict["iteration"]
+                    bs_min    = self.bootstrap_clip[0](iteration)
+                    bs_max    = self.bootstrap_clip[1](iteration)
+
+                    for i, done_idx in enumerate(where_done):
+                        episode_infos[done_idx] = EpisodeInfo(
+                            starting_ts    = 0,
+                            use_gae        = self.use_gae,
+                            gamma          = self.gamma,
+                            lambd          = self.lambd,
+                            bootstrap_clip = (bs_min, bs_max))
+
+                longest_run = max(longest_run,
+                    episode_lengths[where_done].max())
+
+                top_rollout_score = max(top_rollout_score,
+                    ep_score[where_done].max())
+
+                done_count = where_done.size
+
+                if self.using_icm:
+                    total_intr_rewards[where_done] += intr_reward[where_done]
+
+                total_ext_rewards[where_done] += ep_score[where_done]
+                total_rewards                 += ep_rewards[where_done].sum()
+                episode_lengths[where_done]    = 0
+                ep_score[where_done]           = 0
+                ep_rewards[where_done]         = 0
+                total_episodes                += done_count
+                ep_ts[where_done]              = 0
+
+            ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
+                where_not_done.size > 0)
+
+            if (ep_max_reached or total_rollout_ts >= self.ts_per_rollout):
+
+                if total_rollout_ts >= self.ts_per_rollout:
+                    where_maxed = np.arange(env_batch_size)
+                else:
+                    where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
+
+                where_maxed = np.setdiff1d(where_maxed, where_done)
+
+                t_obs = torch.tensor(obs[where_maxed],
+                    dtype=torch.float).to(self.device)
+
+                nxt_value = self.critic(t_obs)
 
                 if self.normalize_values:
-                    value = self.value_normalizer.denormalize(value)
+                    nxt_value = self.value_normalizer.denormalize(nxt_value)
 
-                prev_obs = obs.copy()
-
-                if self.action_squeeze:
-                    action = action.squeeze()
-
-                obs, ext_reward, done, info = self.env.step(action)
-
-                if action.size == 1:
-                    ep_action  = action.item()
-                    raw_action = raw_action.item()
-                else:
-                    ep_action = action
-
-                ep_value = value.item()
+                nxt_reward = nxt_value.detach().cpu().numpy()
 
                 #
-                # If any of our wrappers are altering the rewards, there should
-                # be an unaltered version in the info.
+                # Tricky business:
+                # Typically, we just use the result of our critic to
+                # bootstrap the expected reward. This is problematic
+                # with ICM because we can't really expect our critic to
+                # learn about "surprise". I dont' know of any perfect
+                # ways to handle this, but here are some ideas:
                 #
-                if "natural reward" in info:
-                    natural_reward = info["natural reward"]
-                else:
-                    natural_reward = ext_reward
-
-                ext_reward *= self.ext_reward_weight
-
+                #     1. Just use the value anyways. As long as the
+                #        max ts per episode is long enough, we'll
+                #        hopefully see enough intrinsic reward to
+                #        learn a good policy. In my experience, this
+                #        works, but the learned policies can be a bit
+                #        unstable.
+                #     2. If we can clone the environment, we can take
+                #        an extra step with the clone to get the
+                #        intrinsic reward, and we can decide what to
+                #        do with this. Approaches that integrate this
+                #        method tend to learn more stable policies.
                 #
-                # If we're using the ICM, we need to do some extra work here.
-                # This amounts to adding "curiosity", aka intrinsic reward,
-                # to out extrinsic reward.
+                # If we have this intrinsic reward from a clone step,
+                # we can hand wavily calcluate a "surprise" by taking
+                # the difference between the average intrinsic reward
+                # and the one we get. Adding that to the critic's
+                # output can act as an extra surprise bonus.
                 #
-                if self.use_icm:
-
-                    intr_reward = self.get_intrinsic_reward(
-                        prev_obs,
-                        obs,
-                        action)
-
-                    total_intr_rewards += intr_reward
-                    reward = ext_reward + intr_reward
-
-                else:
-                    reward = ext_reward
-
-                ep_obs = obs
-                if done:
-                    ep_obs = info["terminal observation"]
-
-                episode_info.add_info(
-                    prev_obs,
-                    ep_obs,
-                    raw_action,
-                    ep_action,
-                    ep_value,
-                    log_prob,
-                    reward)
-
-                rollout_max_reward = max(rollout_max_reward, reward)
-                rollout_min_reward = min(rollout_min_reward, reward)
-                rollout_max_obs    = max(rollout_max_obs, obs.max())
-                rollout_min_obs    = min(rollout_min_obs, obs.min())
-
-                ep_rewards += reward
-                ep_score   += natural_reward
-
-                if done:
-                    episode_info.end_episode(
-                        ending_value   = 0,
-                        ending_reward  = 0,
-                        episode_length = episode_length)
-
-                    dataset.add_episode(episode_info)
-
-                    if self.dynamic_bs_clip:
-                        ep_min_reward       = min(episode_info.rewards)
-                        ep_max_reward       = max(episode_info.rewards)
-                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
-
-                    episode_info = EpisodeInfo(
-                        use_gae        = self.use_gae,
-                        gamma          = self.gamma,
-                        lambd          = self.lambd,
-                        bootstrap_clip = self.bootstrap_clip)
-
-                    longest_run = max(longest_run, episode_length)
-
-                    total_ext_rewards += ep_score
-                    total_rewards     += ep_rewards
-                    top_rollout_score  = max(top_rollout_score, ep_score)
-                    episode_length     = 0
-                    ep_score           = 0
-                    ep_rewards         = 0
-                    total_episodes    += 1.
-
-                elif (ep_ts == self.max_ts_per_ep or
-                    total_rollout_ts == self.ts_per_rollout):
-
-                    t_obs      = torch.tensor(obs, dtype=torch.float).to(self.device)
-                    t_obs      = t_obs.unsqueeze(0)
-                    nxt_value  = self.critic(t_obs)
-
-                    if self.normalize_values:
-                        nxt_value = self.value_normalizer.denormalize(nxt_value)
-
-                    nxt_value  = nxt_value.item()
-                    nxt_reward = nxt_value
-
-                    #
-                    # Tricky business:
-                    # Typically, we just use the result of our critic to
-                    # bootstrap the expected reward. This is problematic
-                    # with ICM because we can't really expect our critic to
-                    # learn about "surprise". I dont' know of any perfect
-                    # ways to handle this, but here are some ideas:
-                    #
-                    #     1. Just use the value anyways. As long as the
-                    #        max ts per episode is long enough, we'll
-                    #        hopefully see enough intrinsic reward to
-                    #        learn a good policy. In my experience, this
-                    #        works, but it takes a bit longer to learn.
-                    #     2. If we can clone the environment, we can take
-                    #        an extra step with the clone to get the
-                    #        intrinsic reward, and we can decide what to
-                    #        do with this. Approaches that integrate this
-                    #        reward tend to learn a bit more quickly.
-                    #
-                    # If we have this intrinsic reward from a clone step,
-                    # we can hand wavily calcluate a "surprise" by taking
-                    # the difference between the average intrinsic reward
-                    # and the one we get. Adding that to the critic's
-                    # output can act as an extra surprise bonus.
-                    #
-                    if self.use_icm:
-                        if self.can_clone_env:
+                if self.using_icm:
+                    if self.can_clone_env:
+                        if self.obs_augment:
+                            _, clone_action, _ = self.get_action(obs[0:1])
+                        else:
                             _, clone_action, _ = self.get_action(obs)
 
-                            if self.action_squeeze:
-                                clone_action = clone_action.squeeze()
+                        clone_prev_obs = obs.copy()
+                        cloned_env = deepcopy(self.env)
+                        clone_obs, _, _, _ = cloned_env.step(clone_action)
+                        del cloned_env
 
-                            clone_prev_obs = obs.copy()
-                            cloned_env = deepcopy(self.env)
-                            clone_obs, _, _, _ = cloned_env.step(clone_action)
-                            del cloned_env
+                        if self.obs_augment:
+                            action_shape = (env_batch_size,) + clone_action.shape[1:]
+                            clone_action = np.tile(clone_action.flatten(), env_batch_size)
+                            clone_action = clone_action.reshape(action_shape)
 
-                            intr_reward = self.get_intrinsic_reward(
-                                clone_prev_obs,
-                                clone_obs,
-                                clone_action)
+                        intr_reward = self.get_intrinsic_reward(
+                            clone_prev_obs,
+                            clone_obs,
+                            clone_action)
 
-                        ism         = self.status_dict["intrinsic score avg"]
-                        surprise    = intr_reward - ism
-                        nxt_reward += surprise
+                    ism         = self.status_dict["intrinsic score avg"]
+                    surprise    = intr_reward[where_maxed] - ism
+                    nxt_reward += surprise
 
-                    episode_info.end_episode(
-                        ending_value   = nxt_value,
-                        ending_reward  = nxt_reward,
-                        episode_length = episode_length)
+                for idx, maxed_idx in enumerate(where_maxed):
+                    episode_infos[maxed_idx].end_episode(
+                        ending_ts      = episode_lengths[maxed_idx],
+                        terminal       = False,
+                        ending_value   = nxt_value[idx].item(),
+                        ending_reward  = nxt_reward[idx].item())
 
-                    dataset.add_episode(episode_info)
+                    dataset.add_episode(episode_infos[maxed_idx])
 
                     if self.dynamic_bs_clip:
-                        ep_min_reward       = min(episode_info.rewards)
-                        ep_max_reward       = max(episode_info.rewards)
-                        self.bootstrap_clip = (ep_min_reward, ep_max_reward)
+                        ep_min = min(episode_infos[maxed_idx].rewards)
+                        ep_max = max(episode_infos[maxed_idx].rewards)
+                        bs_clip_range = (ep_min, ep_max)
+                    else:
+                        #
+                        # Our bootstrap clip is a function of the iteration.
+                        #
+                        iteration = self.status_dict["iteration"]
+                        bs_min    = self.bootstrap_clip[0](iteration)
+                        bs_max    = self.bootstrap_clip[1](iteration)
+                        bs_clip_range = (bs_min, bs_max)
 
-                    episode_info = EpisodeInfo(
+                    episode_infos[maxed_idx] = EpisodeInfo(
+                        starting_ts    = episode_lengths[maxed_idx],
                         use_gae        = self.use_gae,
                         gamma          = self.gamma,
                         lambd          = self.lambd,
-                        bootstrap_clip = self.bootstrap_clip)
+                        bootstrap_clip = bs_clip_range)
 
-                    if total_rollout_ts == self.ts_per_rollout:
-                        ts_before_ep  = self.ts_per_rollout - episode_length
-                        current_total = total_episodes
+                if total_rollout_ts >= self.ts_per_rollout:
 
-                        if current_total == 0:
-                            current_total = 1.0
+                    if self.using_icm:
+                        total_intr_rewards += intr_reward
 
-                        if ts_before_ep == 0:
-                            avg_ep_len = self.ts_per_rollout
-                        else:
-                            avg_ep_len = ts_before_ep / current_total
+                    #
+                    # ts_before_ep are the timesteps before the current
+                    # episode. We use this to calculate the average episode
+                    # length (before the current one). If we didn't finish
+                    # this episode, we can then calculate a rough estimate
+                    # of how far we were in the episode as a % of the avg.
+                    #
+                    combined_ep_len = episode_lengths.sum()
+                    ts_before_ep    = self.ts_per_rollout - combined_ep_len
+                    ts_before_ep    = max(ts_before_ep, 0)
+                    current_total   = total_episodes
 
-                        ep_perc            = episode_length / avg_ep_len
-                        total_episodes    += ep_perc
-                        total_ext_rewards += ep_score
-                        total_rewards     += ep_rewards
+                    if current_total == 0:
+                        current_total = 1.0
 
-            longest_run = max(longest_run, episode_length)
+                    if ts_before_ep == 0:
+                        avg_ep_len = combined_ep_len / env_batch_size
+                    else:
+                        avg_ep_len = ts_before_ep / current_total
 
+                    ep_perc            = episode_lengths / avg_ep_len
+                    total_episodes    += ep_perc.sum()
+                    total_ext_rewards += ep_score
+                    total_rewards     += ep_rewards.sum()
+
+                    top_rollout_score = max(top_rollout_score,
+                        ep_score.max())
+
+                ep_ts[where_maxed] = 0
+
+            longest_run = max(longest_run,
+                episode_lengths.max())
+
+        #
+        # We didn't complete any episodes, so let's just take the top score from
+        # our incomplete episode's scores.
+        #
         if total_episodes <= 1.0:
-            top_rollout_score = max(top_rollout_score, ep_score)
+            top_rollout_score = max(top_rollout_score,
+                ep_score.max())
 
         #
         # Update our status dict.
@@ -986,6 +1253,8 @@ class PPO(object):
         rollout_min_obs = min(self.status_dict["obs range"][0],
             rollout_min_obs)
         rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
+
+        total_ext_rewards = total_ext_rewards.sum()
 
         longest_run       = comm.allreduce(longest_run, MPI.MAX)
         total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
@@ -1029,9 +1298,11 @@ class PPO(object):
                 self.status_dict["top window avg"] = \
                     self.status_dict["window avg"]
 
-        if self.use_icm:
+        if self.using_icm:
+            total_intr_rewards = total_intr_rewards.sum() / env_batch_size
             total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
-            ism = total_intr_rewards / total_episodes
+
+            ism = total_intr_rewards / (total_episodes/ env_batch_size)
             self.status_dict["intrinsic score avg"] = ism
 
         #
@@ -1057,7 +1328,6 @@ class PPO(object):
                                  Note that this is in addtion to however
                                  many timesteps were run during the last save.
         """
-
         start_time = time.time()
         ts_max     = self.status_dict["timesteps"] + num_timesteps
 
@@ -1075,16 +1345,23 @@ class PPO(object):
                 batch_size = self.batch_size,
                 shuffle    = True)
 
+            train_start_time = time.time()
+
             self.actor.train()
             self.critic.train()
 
-            if self.use_icm:
+            if self.using_icm:
                 self.icm_model.train()
 
-            # TODO: there is some evidence that re-computing advantages at
-            # each epoch can improve training performance. Let's try this
-            # out.
-            for i in range(self.epochs_per_iter):
+            for epoch_idx in range(self.epochs_per_iter):
+
+                #
+                # arXiv:2006.05990v1 suggests that re-computing the advantages
+                # before each new epoch helps mitigate issues that can arrise
+                # from "stale" advantages.
+                #
+                if epoch_idx > 0:
+                    data_loader.dataset.recalculate_advantages()
 
                 self._ppo_batch_train(data_loader)
 
@@ -1097,16 +1374,19 @@ class PPO(object):
                 if self.status_dict["kl avg"] > (1.5 * self.target_kl):
                     msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
                     msg += "has been reached. "
-                    msg += "Ending early (after {} epochs)".format(i + 1)
+                    msg += "Ending early (after "
+                    msg += "{} epochs)".format(epoch_idx + 1)
                     rank_print(msg)
                     break
 
-            if self.use_icm:
-                for _ in range(self.epochs_per_iter):
+                if self.using_icm:
                     self._icm_batch_train(data_loader)
 
+            now_time      = time.time()
+            training_time = (now_time - train_start_time)
+            self.status_dict["train time"] = now_time - train_start_time
 
-            running_time = (time.time() - iter_start_time)
+            running_time = (now_time - iter_start_time)
             self.status_dict["running time"] += running_time
             self.print_status()
 
@@ -1151,8 +1431,10 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for obs, _, raw_actions, _, advantages, log_probs, rewards_tg \
-            in data_loader:
+        for batch in data_loader:
+            obs, _, raw_actions, _, advantages, log_probs, \
+                rewards_tg, actor_hidden, critic_hidden, \
+                actor_cell, critic_cell, batch_idxs = batch
 
             torch.cuda.empty_cache()
 
@@ -1160,9 +1442,23 @@ class PPO(object):
                 rewards_tg = self.value_normalizer.normalize(rewards_tg)
 
             if obs.shape[0] == 1:
-                rank_print("Skipping batch of size 1")
-                rank_print("    obs shape: {}".format(obs.shape))
+                #FIXME: do we really want this?
+                #rank_print("Skipping batch of size 1")
+                #rank_print("    obs shape: {}".format(obs.shape))
                 continue
+
+            #
+            # In the case of lstm networks, we need to initialze our hidden
+            # states to those that developed during the rollout.
+            #
+            if self.using_lstm:
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
+
+                self.actor.hidden_state  = (actor_hidden, actor_cell)
+                self.critic.hidden_state = (critic_hidden, critic_cell)
 
             #
             # arXiv:2005.12729v1 suggests that normalizing advantages
@@ -1179,6 +1475,8 @@ class PPO(object):
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
             values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
+
+            data_loader.dataset.values[batch_idxs] = values
 
             #
             # The heart of PPO: arXiv:1707.06347v2
@@ -1231,9 +1529,6 @@ class PPO(object):
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            # TODO: should we add an option for value clipping? Research
-            # suggests this might not be that beneficial, but it might
-            # be nice to have it as an option...
             critic_loss        = nn.MSELoss()(values, rewards_tg)
             total_critic_loss += critic_loss.item()
 
@@ -1242,18 +1537,40 @@ class PPO(object):
             # have a positive effect on training.
             #
             self.actor_optim.zero_grad()
-            actor_loss.backward()
+            actor_loss.backward(retain_graph = self.using_lstm)
             mpi_avg_gradients(self.actor)
             nn.utils.clip_grad_norm_(self.actor.parameters(),
                 self.gradient_clip)
             self.actor_optim.step()
 
             self.critic_optim.zero_grad()
-            critic_loss.backward()
+            critic_loss.backward(retain_graph = self.using_lstm)
             mpi_avg_gradients(self.critic)
             nn.utils.clip_grad_norm_(self.critic.parameters(),
                 self.gradient_clip)
             self.critic_optim.step()
+
+            #
+            # The idea here is similar to re-computing advantages, but now
+            # we want to update the hidden states before the next epoch.
+            #
+            if self.using_lstm:
+                actor_hidden  = self.actor.hidden_state[0].detach().clone()
+                critic_hidden = self.critic.hidden_state[0].detach().clone()
+
+                actor_cell    = self.actor.hidden_state[1].detach().clone()
+                critic_cell   = self.critic.hidden_state[1].detach().clone()
+
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
+
+                data_loader.dataset.actor_hidden[batch_idxs]  = actor_hidden
+                data_loader.dataset.critic_hidden[batch_idxs] = critic_hidden
+
+                data_loader.dataset.actor_cell[batch_idxs]  = actor_cell
+                data_loader.dataset.critic_cell[batch_idxs] = critic_cell
 
             comm.barrier()
             counter += 1
@@ -1281,7 +1598,7 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, _, actions, _, _, _ in data_loader:
+        for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
@@ -1320,7 +1637,7 @@ class PPO(object):
         self.actor.save(self.state_path)
         self.critic.save(self.state_path)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.save(self.state_path)
 
         if self.save_env_info and self.env != None:
@@ -1344,7 +1661,7 @@ class PPO(object):
         self.actor.load(self.state_path)
         self.critic.load(self.state_path)
 
-        if self.use_icm:
+        if self.using_icm:
             self.icm_model.load(self.state_path)
 
         if self.save_env_info and self.env != None:
@@ -1390,6 +1707,7 @@ class PPO(object):
         state = self.__dict__.copy()
         del state["env"]
         del state["test_mode_dependencies"]
+        del state["bootstrap_clip"]
         return state
 
     def __setstate__(self, state):
@@ -1404,3 +1722,4 @@ class PPO(object):
         self.__dict__.update(state)
         self.env = None
         self.test_mode_dependencies = self.pickle_safe_test_mode_dependencies
+        self.bootstrap_clip = (None, None)

@@ -46,7 +46,7 @@ def sync_model_parameters(model):
         return
 
     for param in model.parameters():
-        param_data = param.data.numpy()
+        param_data = param.data.cpu().numpy()
         comm.Bcast(param_data, root = 0)
 
 def mpi_avg(data):
@@ -85,6 +85,14 @@ def mpi_avg_gradients(model):
         return
 
     for param in model.parameters():
-        param_grad    = param.grad.numpy()
+
+        #
+        # Some of the paramters in our LSTM networks don't
+        # have gradients.
+        #
+        if type(param.grad) == type(None):
+            continue
+
+        param_grad    = param.grad.cpu().numpy()
         avg_grad      = mpi_avg(param_grad)
         param_grad[:] = avg_grad[:]

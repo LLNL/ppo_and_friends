@@ -90,7 +90,12 @@ def test_policy(ppo,
 
     if render_gif:
         print("Attempting to create gif..")
+
+        out_path = os.path.join(ppo.state_path, "GIF")
+        if not os.path.exists(out_path):
+            os.mkdir(out_path)
+
         save_frames_as_gif(
             frames   = gif_frames,
-            out_path = os.path.join(ppo.state_path, "GIF"),
+            out_path = out_path,
             filename = "test.gif")
