@@ -319,6 +319,11 @@ see a decent policy. See the **Environment Setttings** section for details.
 - **test score: 329.7**
 - **averge over 100 test runs: ~313**
 
+## BreakoutRAM
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BreakoutRAM.gif" width="300" height="200" />
+
+- **test score: N/A**: I cut off the test at 500 steps for this gif.
+
 ## InvertedPendulum
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/InvertedPendulum.gif" width="300" height="200" />
 
