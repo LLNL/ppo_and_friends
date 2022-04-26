@@ -239,15 +239,18 @@ a few minutes.
 10 minutes of training.
 
 ### Walker2d
-2 processors and 2 environments per processor works well.
-10 minutes of training.
+Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
+They will learn to run a bit beyond the max trajectory length very well,
+but they often stumble afterwards. For this reason, I recommend using no
+more than 2 processors and training with a single environment per processor.
+This will result in a solved policy fairly quickly.
 
 ### Hopper
-Hopper is oddly sensitive to the trajectory lengths. It will learn to run a bit
-beyond the max trajectory length very well, but it stumbles afterwards. For
-this reason, I recommend using no more than 2 processors and training with
-a single environment per processor. This will result in a solved policy fairly
-quickly.
+Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
+They will learn to run a bit beyond the max trajectory length very well,
+but they often stumble afterwards. For this reason, I recommend using no
+more than 2 processors and training with a single environment per processor.
+This will result in a solved policy fairly quickly.
 
 ### Swimmer
 2 processors and 2 environments per processor works very well.
@@ -316,3 +319,22 @@ see a decent policy. See the **Environment Setttings** section for details.
 - **test score: 329.7**
 - **averge over 100 test runs: ~313**
 
+## InvertedPendulum
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/InvertedPendulum.gif" width="300" height="200" />
+
+- **test score: 1000**
+
+## InvertedDoublePendulum
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/InvertedDoublePendulum.gif" width="300" height="200" />
+
+- **test score: 9318.5**
+
+## Ant
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Ant.gif" width="300" height="200" />
+
+- **test score: 3651.3**
+
+## Walker2d
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Walker2d.gif" width="300" height="200" />
+
+- **test score: 3470.3**
