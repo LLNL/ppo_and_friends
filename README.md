@@ -142,7 +142,7 @@ to stack up? Well, this likely depends on the environment. In this case,
 our observations are simple enough that we can *augment* a single observation
 to obtain a batch of observations corresponding to different directions.
 We can get away with this because *the reward trajectories will be identical
-regardless of direction*. In other words, we can cheat the system and,
+regardless of direction*. In other words, we can cheat the system, and,
 instead of waiting for the environment to crank out a bunch of directions,
 we can take a short cut by artificially generating those directions and
 their trajectories from a single observation.
