@@ -341,8 +341,8 @@ class PixelHistEnvWrapper(AtariPixels):
 
         return self.frame_cache, reward, done, info
 
-    def render(self):
-        self.env.render()
+    def render(self, **kwargs):
+        return self.env.render(**kwargs)
 
 
 class RAMHistEnvWrapper(AtariEnvWrapper):
@@ -404,8 +404,8 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
 
         return self.ram_cache.copy(), reward, done, info
 
-    def render(self):
-        self.env.render()
+    def render(self, **kwargs):
+        return self.env.render(**kwargs)
 
 ################################################################################
 #                       Atari Breakout Wrapper                                 #
