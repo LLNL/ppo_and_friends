@@ -174,7 +174,8 @@ I remembered to record.
 policy will be learned ~20->30 iterations, which takes a matter of seconds.
 
 ### Pendulum
-2 processors and 2 environments per processor works well here.
+2 processors and 2 environments per processor works well here. I see an
+excellent policy after ~7->12 minutes of training.
 
 ### Acrobot
 2 procssors and 1 environment per processor will learn a good policy in
@@ -188,10 +189,12 @@ to solve the environment.
 2 processors and 3 environments per processor works well here.
 
 ### LunarLander
-2 processors and 2 environments per processor works well here.
+2 processors and 2 environments per processor works well here. I see an
+excellent policy in under 2 minutes (~400 iterations).
 
 ### LunarLanderContinuous
-2 processors and 2 environments per processor works well here.
+2 processors and 2 environments per processor works well here. I see an
+excellent policy in under 5 minutes (~100 iterations).
 
 ### BipedalWalker
 2 processors and 1 environments per processor will solve the environment
@@ -268,6 +271,36 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/CartPole.gif" width="300" height="200" />
 
 - **test score: 200**
+
+## Pendulum
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Pendulum.gif" width="300" height="200" />
+
+- **test score: -241.6**
+
+## Acrobot
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Acrobot.gif" width="300" height="200" />
+
+- **test score: -82**
+
+## MountainCar
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/MountainCar.gif" width="300" height="200" />
+
+- **test score: -144**
+
+## MountainCarContinuous
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/MountainCarContinuous.gif" width="300" height="200" />
+
+- **test score: 94.6**
+
+## LunarLander
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/LunarLander.gif" width="300" height="200" />
+
+- **test score: 259.4**
+
+## LunarLanderContinuous
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/LunarLanderContinuous.gif" width="300" height="200" />
+
+- **test score: 281.7**
 
 ## BipedalWalker
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
