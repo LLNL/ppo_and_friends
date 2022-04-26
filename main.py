@@ -69,8 +69,6 @@ if __name__ == "__main__":
                  "LunarLanderContinuous",
                  "BipedalWalker",
                  "BipedalWalkerHardcore",
-                 "AssaultRAM",
-                 "AssaultPixels",
                  "BreakoutPixels",
                  "BreakoutRAM",
                  "InvertedPendulum",
@@ -271,32 +269,6 @@ if __name__ == "__main__":
     # BreakoutPixels. Similar settings worked well for BreakoutRAM, but
     # you don't need to use the --allow_mpi_gpu flag.
     #
-    elif env_name == "AssaultRAM":
-        assault_ram_ppo(
-            random_seed   = random_seed,
-            state_path    = state_path,
-            load_state    = load_state,
-            render        = render,
-            render_gif    = render_gif,
-            num_timesteps = num_timesteps,
-            device        = device,
-            envs_per_proc = envs_per_proc,
-            test          = test,
-            num_test_runs = num_test_runs)
-
-    elif env_name == "AssaultPixels":
-        assault_pixels_ppo(
-            random_seed   = random_seed,
-            state_path    = state_path,
-            load_state    = load_state,
-            render        = render,
-            render_gif    = render_gif,
-            num_timesteps = num_timesteps,
-            device        = device,
-            envs_per_proc = envs_per_proc,
-            test          = test,
-            num_test_runs = num_test_runs)
-
     elif env_name == "BreakoutPixels":
         breakout_pixels_ppo(
             random_seed   = random_seed,

@@ -145,10 +145,6 @@ environments that do not provide definitions of success, I wing it.
 Currently, the only "unsolved" environment in this repository is the
 HumanoidStandup environment.
 
-The Atari game "Assault" is also an odd one; the `UP` action appears to
-have been replaced with a `NOOP`, which limits how much progress you can
-make in the game.
-
 If any environment is performing poorly, I'd suggest trying a different seed.
 If that doesn't work, feel free to open a ticket.
 Of course, different systems will also result in different performance.
