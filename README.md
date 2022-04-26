@@ -337,4 +337,24 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## Walker2d
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Walker2d.gif" width="300" height="200" />
 
-- **test score: 3470.3**
+- **test score: 3530.0**
+
+## Hopper
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Hopper.gif" width="300" height="200" />
+
+- **test score: 3211.0**
+
+## Swimmer
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Swimmer.gif" width="300" height="200" />
+
+- **test score: 131.3**
+
+## HalfCheetah
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/HalfCheetah.gif" width="300" height="200" />
+
+- **test score: 4157.9**
+
+## Humanoid
+<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Humanoid.gif" width="300" height="200" />
+
+- **test score: 6330.9**
