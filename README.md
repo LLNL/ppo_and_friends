@@ -312,93 +312,93 @@ below, I trained for a moderate amount, which is usually just enough to
 see a decent policy. See the **Environment Setttings** section for details.
 
 ## CartPole
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/CartPole.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/CartPole.gif" width="300" height="200" />
 
 - **test score: 200**
 
 ## Pendulum
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Pendulum.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Pendulum.gif" width="300" height="200" />
 
 - **test score: -241.6**
 
 ## Acrobot
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Acrobot.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Acrobot.gif" width="300" height="200" />
 
 - **test score: -82**
 
 ## MountainCar
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/MountainCar.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCar.gif" width="300" height="200" />
 
 - **test score: -144**
 
 ## MountainCarContinuous
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/MountainCarContinuous.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCarContinuous.gif" width="300" height="200" />
 
 - **test score: 94.6**
 
 ## LunarLander
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/LunarLander.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/LunarLander.gif" width="300" height="200" />
 
 - **test score: 259.4**
 
 ## LunarLanderContinuous
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/LunarLanderContinuous.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/LunarLanderContinuous.gif" width="300" height="200" />
 
 - **test score: 281.7**
 
 ## BipedalWalker
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalker.gif" width="300" height="200" />
 
 - **test score: 326.2**
 - **averge over 100 test runs: ~319**
 
 ## BipedalWalkerHardcore
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
 - **test score: 329.7**
 - **averge over 100 test runs: ~313**
 
 ## BreakoutRAM
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BreakoutRAM.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BreakoutRAM.gif" width="300" height="200" />
 
 - **test score: N/A**: I cut off the test at 500 steps for this gif.
 
 ## InvertedPendulum
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/InvertedPendulum.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/InvertedPendulum.gif" width="300" height="200" />
 
 - **test score: 1000**
 
 ## InvertedDoublePendulum
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/InvertedDoublePendulum.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/InvertedDoublePendulum.gif" width="300" height="200" />
 
 - **test score: 9318.5**
 
 ## Ant
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Ant.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Ant.gif" width="300" height="200" />
 
 - **test score: 3651.3**
 
 ## Walker2d
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Walker2d.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Walker2d.gif" width="300" height="200" />
 
 - **test score: 3530.0**
 
 ## Hopper
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Hopper.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Hopper.gif" width="300" height="200" />
 
 - **test score: 3211.0**
 
 ## Swimmer
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Swimmer.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Swimmer.gif" width="300" height="200" />
 
 - **test score: 131.3**
 
 ## HalfCheetah
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/HalfCheetah.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/HalfCheetah.gif" width="300" height="200" />
 
 - **test score: 4157.9**
 
 ## Humanoid
-<img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/Humanoid.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Humanoid.gif" width="300" height="200" />
 
 - **test score: 6330.9**
