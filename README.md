@@ -267,17 +267,17 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## CartPole
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/CartPole.gif" width="300" height="200" />
 
-**test score: 200**
+- **test score: 200**
 
 ## BipedalWalker
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalker.gif" width="300" height="200" />
 
-**test score: 326.2**
-**averge over 100 test runs: ~319**
+- **test score: 326.2**
+- **averge over 100 test runs: ~319**
 
 ## BipedalWalkerHardcore
 <img src="https://github.com/aowen87/ppo_and_friends/blob/env_augment/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
-**test score: 329.7**
-**averge over 100 test runs: ~313**
+- **test score: 329.7**
+- **averge over 100 test runs: ~313**
 
