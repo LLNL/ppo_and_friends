@@ -130,7 +130,9 @@ pip install autorom[accept-rom-license]
 ```
 
 Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
-that can help with some of these issues.
+that can help with some of these issues. For testing with the `--render` flag,
+you'll need to set the `LD_PRELOAD` path (see the above bash file). For running,
+with the `--render_gif` flag, you'll need to unset the `LD_PRELOAD` path.
 
 **Performance**
 
