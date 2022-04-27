@@ -210,7 +210,7 @@ I've found some general settings that tend to work well. I've outlined
 them below. I've included rough timing information for environments that
 I remembered to record.
 
-### Cart Pole
+### CartPole
 4 processors and 2 environments per processor works well here. An excellent
 policy will be learned ~20->30 iterations, which takes a matter of seconds.
 
@@ -315,6 +315,7 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/CartPole.gif" width="300" height="200" />
 
 - **test score: 200**
+- **average over 100 test runs: 200**
 
 ## Pendulum
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Pendulum.gif" width="300" height="200" />
