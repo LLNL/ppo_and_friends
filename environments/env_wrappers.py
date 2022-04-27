@@ -621,7 +621,11 @@ class RewardNormalizer(IdentityWrapper):
         # if so, we need to be able to correlate a running reward with
         # each environment instance.
         #
-        self.batch_size     = self.get_batch_size()
+        if self.test_mode:
+            self.batch_size = 1
+        else:
+            self.batch_size = self.get_batch_size()
+
         self.running_reward = np.zeros(self.batch_size)
 
     def step(self, action):
