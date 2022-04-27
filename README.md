@@ -223,7 +223,7 @@ excellent policy after ~7->12 minutes of training.
 roughly 30 seconds to a minute.
 
 ### MountainCar
-2 processors and 3 environments per processor takes about 6 minutes
+2 processors and 3 environments per processor takes about 6-10 minutes
 to solve the environment.
 
 ### MountainCarContinuous
@@ -329,7 +329,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## MountainCar
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCar.gif" width="300" height="200" />
 
-- **test score: -144**
+- **test score: -108**
+- **average over 100 test runs: -105.1**
 
 ## MountainCarContinuous
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCarContinuous.gif" width="300" height="200" />
