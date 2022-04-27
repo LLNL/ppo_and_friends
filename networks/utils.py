@@ -235,22 +235,9 @@ class GaussianDistribution(nn.Module):
             Returns:
                 The refined sample.
         """
+        sample = torch.tanh(sample)
+
         if self.dist_min != -1.0 or self.dist_max != 1.0:
-
-            #
-            # NOTE:
-            # The humanoid env is the only one (so far) that requires an
-            # enforced range.
-            # In this env, sending the sample through tanh before enforcing a
-            # range results in improved performance. However, I've found that
-            # there are some envs that perform much worse when the sample is
-            # sent through tanh during testing, and others that seem to be
-            # unaffected. Given this, I'm only using tanh if a range is
-            # enforced. Let's keep an eye on this.
-            #
-            if testing:
-                sample = torch.tanh(sample)
-
             sample = self._enforce_sample_range(sample)
 
         return sample
@@ -272,8 +259,7 @@ class GaussianDistribution(nn.Module):
                 A tuple of form (tanh_sample, raw_sample).
         """
         sample      = dist.sample()
-        tanh_sample = torch.tanh(sample)
-        refined     = self.refine_sample(tanh_sample)
+        refined     = self.refine_sample(sample)
 
         return refined, sample
 
