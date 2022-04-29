@@ -339,6 +339,7 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCarContinuous.gif" width="300" height="200" />
 
 - **test score: 94.6**
+- **average over 100 test runs: 92.0**
 
 ## LunarLander
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/LunarLander.gif" width="300" height="200" />
