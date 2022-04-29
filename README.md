@@ -274,8 +274,10 @@ roughly 10 seconds of training.
 a few minutes.
 
 ### Ant
-2 processors and 2 environments per processor learns a excellent policy within
-10 minutes of training.
+4 processors and 1 environment per processor learns a a great policy within
+10 minutes of training. In order to solve the environment, you need to reach
+an average score >= 6000 over 100 test runs. To accomplish this, I trained
+for ~1.5 hours.
 
 ### Walker2d
 Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
