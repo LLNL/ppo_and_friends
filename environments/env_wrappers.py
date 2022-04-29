@@ -285,7 +285,12 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        if self.action_squeeze:
+            env_action = action.squeeze()
+        else:
+            env_action = action
+
+        obs, reward, done, info = self.env.step(env_action)
 
         #
         # HACK: some environments are buggy and don't follow their

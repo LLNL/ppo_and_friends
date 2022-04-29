@@ -1,5 +1,5 @@
 import torch
-from ppo_and_friends.utils.misc import get_action_dtype, need_action_squeeze
+from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
@@ -23,8 +23,7 @@ def test_policy(ppo,
     policy = ppo.actor
     render = ppo.render
 
-    action_dtype   = get_action_dtype(env)
-    action_squeeze = need_action_squeeze(env)
+    action_dtype = get_action_dtype(env)
 
     max_int     = np.iinfo(np.int32).max
     num_steps   = 0
@@ -61,9 +60,6 @@ def test_policy(ppo,
                 action = torch.argmax(action, axis=-1).numpy()
             else:
                 action = action.numpy()
-
-            if action_squeeze:
-                action = action.squeeze()
 
             obs, reward, done, info = env.step(action)
 
