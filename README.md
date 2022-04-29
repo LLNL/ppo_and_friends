@@ -185,8 +185,13 @@ success comes from the environment itself. BipedalWalker, for instance, defines
 success as reaching an average score >= 300 over 100 test iterations. For
 environments that do not provide definitions of success, I wing it.
 
-Currently, the only "unsolved" environment in this repository is the
-HumanoidStandup environment.
+Open-AI refers to environments that don't have a definition for "solved"
+as unsolved environments. I think this is a bit missleading, as these
+environments often have distinct goals that can be accomplished. For instance,
+Pendulum is an unsolved environment, but we also know what the goal is, and
+we can accomplish that goal very easily with RL. Currently, the only
+environment in this repositroy that I haven't seen accomplish it's goal
+is HumanoidStandup.
 
 If any environment is performing poorly, I'd suggest trying a different seed.
 If that doesn't work, feel free to open a ticket.
