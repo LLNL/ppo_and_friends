@@ -352,13 +352,13 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalker.gif" width="300" height="200" />
 
 - **test score: 326.2**
-- **averge over 100 test runs: ~319**
+- **average over 100 test runs: ~319**
 
 ## BipedalWalkerHardcore
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
 - **test score: 329.7**
-- **averge over 100 test runs: ~313**
+- **average over 100 test runs: ~313**
 
 ## BreakoutRAM
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BreakoutRAM.gif" width="300" height="200" />
@@ -378,7 +378,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## Ant
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Ant.gif" width="300" height="200" />
 
-- **test score: 3651.3**
+- **test score: 6106.2**
+- **average over 100 test runs: 6298.3**
 
 ## Walker2d
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Walker2d.gif" width="300" height="200" />
