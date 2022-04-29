@@ -210,7 +210,7 @@ I've found some general settings that tend to work well. I've outlined
 them below. I've included rough timing information for environments that
 I remembered to record.
 
-### Cart Pole
+### CartPole
 4 processors and 2 environments per processor works well here. An excellent
 policy will be learned ~20->30 iterations, which takes a matter of seconds.
 
@@ -223,7 +223,7 @@ excellent policy after ~7->12 minutes of training.
 roughly 30 seconds to a minute.
 
 ### MountainCar
-2 processors and 3 environments per processor takes about 6 minutes
+2 processors and 3 environments per processor takes about 6-10 minutes
 to solve the environment.
 
 ### MountainCarContinuous
@@ -274,8 +274,10 @@ roughly 10 seconds of training.
 a few minutes.
 
 ### Ant
-2 processors and 2 environments per processor learns a excellent policy within
-10 minutes of training.
+4 processors and 1 environment per processor learns a a great policy within
+10 minutes of training. In order to solve the environment, you need to reach
+an average score >= 6000 over 100 test runs. To accomplish this, I trained
+for ~1.5 hours.
 
 ### Walker2d
 Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
@@ -315,6 +317,7 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/CartPole.gif" width="300" height="200" />
 
 - **test score: 200**
+- **average over 100 test runs: 200**
 
 ## Pendulum
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Pendulum.gif" width="300" height="200" />
@@ -329,7 +332,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## MountainCar
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCar.gif" width="300" height="200" />
 
-- **test score: -144**
+- **test score: -108**
+- **average over 100 test runs: -105.1**
 
 ## MountainCarContinuous
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MountainCarContinuous.gif" width="300" height="200" />
@@ -350,13 +354,13 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalker.gif" width="300" height="200" />
 
 - **test score: 326.2**
-- **averge over 100 test runs: ~319**
+- **average over 100 test runs: ~319**
 
 ## BipedalWalkerHardcore
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BipedalWalkerHardcore.gif" width="300" height="200" />
 
 - **test score: 329.7**
-- **averge over 100 test runs: ~313**
+- **average over 100 test runs: ~313**
 
 ## BreakoutRAM
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/BreakoutRAM.gif" width="300" height="200" />
@@ -376,7 +380,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## Ant
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Ant.gif" width="300" height="200" />
 
-- **test score: 3651.3**
+- **test score: 6106.2**
+- **average over 100 test runs: 6298.3**
 
 ## Walker2d
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Walker2d.gif" width="300" height="200" />

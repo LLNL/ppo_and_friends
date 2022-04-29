@@ -633,10 +633,6 @@ class PPO(object):
         action, raw_action = self.actor.distribution.sample_distribution(dist)
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        #FIXME: is this really needed anymore?
-        #if self.action_dtype == "discrete":
-        #    action = action.int().unsqueeze(0)
-
         action     = action.detach().numpy()
         raw_action = raw_action.detach().numpy()
 
@@ -1442,9 +1438,6 @@ class PPO(object):
                 rewards_tg = self.value_normalizer.normalize(rewards_tg)
 
             if obs.shape[0] == 1:
-                #FIXME: do we really want this?
-                #rank_print("Skipping batch of size 1")
-                #rank_print("    obs shape: {}".format(obs.shape))
                 continue
 
             #

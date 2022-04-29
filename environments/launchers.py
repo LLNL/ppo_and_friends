@@ -250,12 +250,12 @@ def mountain_car_ppo(state_path,
     critic_kw_args["hidden_size"] = 128
 
     lr     = 0.0003
-    min_lr = 0.0003
+    min_lr = 0.0001
 
-    lr_dec = LinearDecrementer(
-        max_iteration = 1,
-        max_value     = lr,
-        min_value     = min_lr)
+    lr_dec = LinearStepMapper(
+        steps        = [200,],
+        step_values  = [0.0003,],
+        ending_value = 0.0001)
 
     #
     # NOTE: This environment performs dramatically  better when
@@ -1025,7 +1025,7 @@ def ant_ppo(state_path,
     #    Contact forces: 84
     #
     actor_kw_args = {}
-    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["activation"]  = nn.Tanh()
     actor_kw_args["hidden_size"] = 128
 
     critic_kw_args = actor_kw_args.copy()
@@ -1046,14 +1046,13 @@ def ant_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = 2048,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
             obs_clip            = (-30., 30.),
             reward_clip         = (-10., 10.),
             bootstrap_clip      = (-10., 10.),
-            entropy_weight      = 0.0,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
