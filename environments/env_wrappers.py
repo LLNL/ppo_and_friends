@@ -1063,7 +1063,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
         batch_size = batch_obs.shape[0]
 
         if self.test_idx < 0:
-            self.test_idx = np.random.randint(batch_size)
+            self.test_idx = np.random.randint(0, batch_size)
 
         if "terminal observation" in info:
             terminal_obs = info["terminal observation"]
@@ -1111,7 +1111,7 @@ class AugmentingEnvWrapper(IdentityWrapper):
         batch_size    = aug_obs_batch.shape[0]
 
         if self.test_idx < 0:
-            self.test_idx = np.random.randint(batch_size + 1)
+            self.test_idx = np.random.randint(0, batch_size)
 
         return aug_obs_batch[self.test_idx]
 
