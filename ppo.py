@@ -217,7 +217,8 @@ class PPO(object):
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
         #
-        # Vectorize our environment and add any requested wrappers.
+        # Vectorize our environment and add any requested wrappers. Note that
+        # order matters!
         #
         env = VectorizedEnv(
             env_generator = env_generator,
@@ -242,10 +243,6 @@ class PPO(object):
 
         self.save_env_info = False
 
-        #
-        # Let's wrap our environment in the requested wrappers. Note that
-        # order matters!
-        #
         if normalize_obs:
             env = ObservationNormalizer(
                 env          = env,
