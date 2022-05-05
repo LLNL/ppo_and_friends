@@ -1,6 +1,5 @@
 import torch
 from ppo_and_friends.utils.misc import get_action_dtype
-from ppo_and_friends.environments.env_wrappers import ObservationNormalizer
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
