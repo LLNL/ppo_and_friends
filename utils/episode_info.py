@@ -131,8 +131,10 @@ class EpisodeInfo(object):
                  value,
                  log_prob,
                  reward,
-                 actor_hidden_state  = None,
-                 critic_hidden_state = None):
+                 actor_hidden  = np.empty(0),
+                 actor_cell    = np.empty(0),
+                 critic_hidden = np.empty(0),
+                 critic_cell   = np.empty(0)):
         """
             Add info from a single step in an episode. These should be
             added consecutively, in the order they are encountered.
@@ -149,9 +151,13 @@ class EpisodeInfo(object):
                 log_prob             The log probability calculated at this
                                      step.
                 reward               The reward received at this step.
-                actor_hidden_state   The hidden state of the actor iff the
+                actor_hidden         The hidden state of the actor iff the
                                      actor is an lstm.
-                critic_hidden_state  The hidden state of the critic iff the
+                actor_cell           The cell state of the actor iff the
+                                     actor is an lstm.
+                critic_hidden        The hidden state of the critic iff the
+                                     critic is an lstm.
+                critic_cell          The cell state of the critic iff the
                                      critic is an lstm.
         """
 
@@ -169,10 +175,14 @@ class EpisodeInfo(object):
         self.log_probs.append(log_prob)
         self.rewards.append(reward)
 
-        if ((type(actor_hidden_state) != type(None) or
-             type(critic_hidden_state) != type(None)) and
-            (type(actor_hidden_state) == type(None) or
-             type(critic_hidden_state) == type(None))):
+        ac_hidden_check = np.array(
+            (len(actor_hidden),
+             len(actor_cell),
+             len(critic_hidden),
+             len(critic_cell))).astype(np.int32)
+
+        if ( (ac_hidden_check > 0).any() and
+             (ac_hidden_check == 0).any() ):
 
             msg  = "ERROR: if hidden state is provided for either the actor "
             msg += "or the critic, both most be provided, but we received "
@@ -180,21 +190,21 @@ class EpisodeInfo(object):
             rank_print(msg)
             comm.Abort()
 
-        if type(actor_hidden_state) != type(None):
+        if len(actor_hidden) > 0:
 
             self.has_hidden_states = True
 
             self.actor_hidden.append(
-                actor_hidden_state[0].detach().cpu().numpy())
+                actor_hidden.detach().cpu().numpy())
 
             self.critic_hidden.append(
-                critic_hidden_state[0].detach().cpu().numpy())
+                critic_hidden.detach().cpu().numpy())
 
             self.actor_cell.append(
-                actor_hidden_state[1].detach().cpu().numpy())
+                actor_cell.detach().cpu().numpy())
 
             self.critic_cell.append(
-                critic_hidden_state[1].detach().cpu().numpy())
+                critic_cell.detach().cpu().numpy())
 
     def compute_advantages(self):
         """
