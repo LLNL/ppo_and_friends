@@ -259,7 +259,7 @@ class PPO(object):
                 clip_range  = obs_clip)
 
         #
-        # There are multiple ways to go about normalizing values/rewards.
+        # There are multiple ways to go about normalizing rewards.
         # The approach in arXiv:2006.05990v1 is to normalize before
         # sending targets to the critic and then de-normalize when predicting.
         # We're taking the OpenAI approach of normalizing the rewards straight
