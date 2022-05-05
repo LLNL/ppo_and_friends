@@ -986,9 +986,13 @@ class PPO(object):
                         critic_zero_cell[:, where_done, :]
 
             else:
-                tmp_shape = (1, env_batch_size, 1)
+                empty_shape = (0, env_batch_size, 0)
+
                 actor_hidden, actor_cell, critic_hidden, critic_cell  = \
-                    np.array([None] * env_batch_size).reshape(tmp_shape)
+                    (np.empty(empty_shape),
+                     np.empty(empty_shape),
+                     np.empty(empty_shape),
+                     np.empty(empty_shape))
 
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
