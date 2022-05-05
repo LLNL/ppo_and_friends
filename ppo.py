@@ -956,44 +956,39 @@ class PPO(object):
             #
             if self.using_lstm:
 
-                act_hb_shape = self.actor.get_zero_hidden_state(
-                        batch_size = env_batch_size,
-                        device     = self.device).shape
-                act_hb_shape = (env_batch_size,) + act_hb_shape
-                actor_hidden_states = np.zeros(act_hb_shape)
+                actor_hidden  = self.actor.hidden_state[0].clone()
+                actor_cell    = self.actor.hidden_state[1].clone()
 
-                crit_hb_shape = self.critic.get_zero_hidden_state(
-                        batch_size = env_batch_size,
-                        device     = self.device).shape
-                crit_hb_shape = (env_batch_size,) + crit_hb_shape
-                critic_hidden_states = np.zeros(crit_hb_shape)
+                critic_hidden = self.critic.hidden_state[0].clone()
+                critic_cell   = self.critic.hidden_state[1].clone()
 
                 if done.any():
-                    actor_hidden_states[where_done] = \
+                    actor_zero_hidden, actor_zero_cell = \
                         self.actor.get_zero_hidden_state(
                             batch_size = env_batch_size,
                             device     = self.device)
 
-                    critic_hidden_states[where_done] = \
+                    actor_hidden[:, where_done, :] = \
+                        actor_zero_hidden[:, where_done, :]
+
+                    actor_cell[:, where_done, :] = \
+                        actor_zero_cell[:, where_done, :]
+
+                    critic_zero_hidden, critic_zero_cell = \
                         self.critic.get_zero_hidden_state(
                             batch_size = env_batch_size,
                             device     = self.device)
 
-                if (~done).any():
-                    where_not_done = np.where(not done)[0]
+                    critic_hidden[:, where_done, :] = \
+                        critic_zero_hidden[:, where_done, :]
 
-                    actor_hidden_state[where_not_done]  = \
-                        self.actor.hidden_state.clone()
-
-                    critic_hidden_state[where_not_done] = \
-                        self.critic.hidden_state.clone()
+                    critic_cell[:, where_done, :] = \
+                        critic_zero_cell[:, where_done, :]
 
             else:
-                actor_hidden_state  = \
-                    np.array([None] * env_batch_size)
-
-                critic_hidden_state = \
-                    np.array([None] * env_batch_size)
+                tmp_shape = (1, env_batch_size, 1)
+                actor_hidden, actor_cell, critic_hidden, critic_cell  = \
+                    np.array([None] * env_batch_size).reshape(tmp_shape)
 
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
@@ -1004,8 +999,10 @@ class PPO(object):
                     value[ei_idx].item(),
                     log_prob[ei_idx],
                     reward[ei_idx].item(),
-                    actor_hidden_state[ei_idx],
-                    critic_hidden_state[ei_idx])
+                    actor_hidden[:, [ei_idx], :],
+                    actor_cell[:, [ei_idx], :],
+                    critic_hidden[:, [ei_idx], :],
+                    critic_cell[:, [ei_idx], :])
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
