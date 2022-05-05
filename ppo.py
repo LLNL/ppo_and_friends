@@ -439,7 +439,7 @@ class PPO(object):
             self.status_dict["last save"] = -1
 
         #
-        # Initialize our networks: actor, critic, and possible ICM.
+        # Initialize our networks: actor, critic, and possibly ICM.
         #
         use_conv2d_setup = False
         for base in ac_network.__bases__:
