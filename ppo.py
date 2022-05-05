@@ -199,8 +199,8 @@ class PPO(object):
         self.status_dict["iteration"] = 0
 
         #
-        # Divide the ts per rollout up among the processors. Let rank
-        # 0 take any excess.
+        # Divide the ts per rollout up among the processors. Make an adjustment
+        # if needed.
         #
         orig_ts        = ts_per_rollout
         ts_per_rollout = int(ts_per_rollout / num_procs)
