@@ -861,6 +861,8 @@ class PPO(object):
         # TODO: If we're using multiple environments, we can end up going over
         # our requested limits here... We could get around this by truncating
         # the batch when necessary.
+        # UPDATE: is this still true? We've made some changes that may have
+        # had an effect on this.
         #
         while total_rollout_ts < self.ts_per_rollout:
 
