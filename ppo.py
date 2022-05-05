@@ -1689,9 +1689,9 @@ class PPO(object):
 
     def __getstate__(self):
         """
-            Override the getstate method for pickling. We want everything
-            but the environment since we can't guarantee that the env can
-            be pickled.
+            Override the getstate method for pickling. We only want to keep
+            things that won't upset pickle. The environment is something
+            that we can't guarantee can be pickled.
 
             Returns:
                 The state dictionary minus the environment.
@@ -1704,9 +1704,7 @@ class PPO(object):
 
     def __setstate__(self, state):
         """
-            Override the setstate method for pickling. We want everything
-            but the environment since we can't guarantee that the env can
-            be pickled.
+            Override the setstate method for pickling.
 
             Arguments:
                 The state loaded from a pickled PPO object.
