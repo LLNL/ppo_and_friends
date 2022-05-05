@@ -757,7 +757,6 @@ class PPO(object):
 
         return intr_reward
 
-
     def rollout(self):
         """
             Create a "rollout" of episodes. This system uses "fixed-length
