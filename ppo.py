@@ -592,7 +592,6 @@ class PPO(object):
             except:
                 self.can_clone_env = False
 
-
     def get_action(self, obs):
         """
             Given an observation from our environment, determine what the
