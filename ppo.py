@@ -13,7 +13,7 @@ from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.environments.env_wrappers import VectorizedEnv
+from ppo_and_friends.environments.env_wrappers import VectorizedEnv, MultiAgentWrapper
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
