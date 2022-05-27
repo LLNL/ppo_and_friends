@@ -32,11 +32,14 @@ num_procs = comm.Get_size()
 
 class PPO(object):
 
+    # FIXME: we should probably restrict the envs per proc to 1
+    # for MAPPO until we work out the details.
     def __init__(self,
                  env_generator,
                  ac_network,
                  device,
                  random_seed,
+                 is_multi_agent      = False,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
@@ -86,6 +89,8 @@ class PPO(object):
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
+                 is_multi_agent       Does our environment contain multiple
+                                      agents? If so, enable MAPPO algorithm.
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
@@ -216,14 +221,25 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
+        if is_multi_agent and envs_per_proc > 1:
+            msg  = "WARNING: envs_per_proc > 1 is not currently supported "
+            msg += "for multi-agent environments. Setting envs_per_proc to 1."
+            rank_print(msg)
+            envs_per_proc = 1
+
         #
         # Vectorize our environment and add any requested wrappers. Note that
         # order matters!
         #
-        env = VectorizedEnv(
-            env_generator = env_generator,
-            num_envs      = envs_per_proc,
-            test_mode     = test_mode)
+        if is_multi_agent:
+            env = MultiAgentWrapper(
+                env_generator = env_generator,
+                test_mode     = test_mode)
+        else:
+            env = VectorizedEnv(
+                env_generator = env_generator,
+                num_envs      = envs_per_proc,
+                test_mode     = test_mode)
 
         #
         # For reproducibility, we need to set the environment's random
@@ -304,8 +320,9 @@ class PPO(object):
             rank_print(msg)
             comm.Abort()
 
-        if (issubclass(act_type, MultiBinary) or
-            issubclass(act_type, MultiDiscrete)):
+        if ((issubclass(act_type, MultiBinary) or
+             issubclass(act_type, MultiDiscrete)) and
+             (not is_multi_agent)):
             msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
             msg += "may not be fully supported. Use at your own risk."
             rank_print(msg)
@@ -361,6 +378,7 @@ class PPO(object):
         #
         self.env                 = env
         self.device              = device
+        self.is_multi_agent      = is_multi_agent
         self.state_path          = state_path
         self.render              = render
         self.action_dtype        = action_dtype
@@ -775,6 +793,12 @@ class PPO(object):
             Returns:
                 A PyTorch dataset containing our rollout.
         """
+        #
+        # TODO: support MAPPO. For starters, we'll need to send global
+        # observation information to the critic. We should probably
+        # allow for a critic obs mask to remove redundant information
+        # when needed.
+        #
         start_time = time.time()
 
         if self.env ==  None:
@@ -826,6 +850,7 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
+        # FIXME: Multi-agent envs will return obs and global_obs.
         if self.use_soft_resets:
             obs = self.env.soft_reset()
         else:
@@ -910,6 +935,8 @@ class PPO(object):
 
             value = value.detach().cpu().numpy()
 
+            # FIXME: we probably don't want a batch of infos when using MAPPO,
+            # right?
             #
             # If any of our wrappers are altering the rewards, there should
             # be an unaltered version in the info.
@@ -944,6 +971,7 @@ class PPO(object):
             where_done = np.where(done)[0]
             where_not_done = np.where(~done)[0]
 
+            # FIXME: batch info becomes single in MAPPO.
             if done.any():
                 term_key = "terminal observation"
                 for done_idx in where_done:

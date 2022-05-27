@@ -193,7 +193,6 @@ class IdentityWrapper(object):
         else:
             return 1
 
-
 class VectorizedEnv(IdentityWrapper, Iterable):
     """
         Wrapper for "vectorizing" environments. As far as I can tell, this
@@ -462,6 +461,174 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 Return our batch size.
         """
         return len(self)
+
+
+class MultiAgentWrapper(IdentityWrapper):
+    """
+        A wrapper for multi-agent environments. This design follows the
+        suggestions outlined in arXiv:2103.01955v2.
+    """
+
+    def __init__(self,
+                 env_generator,
+                 need_agent_ids = True,
+                 **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env             The environment to wrap.
+                need_agent_ids  Do we need to explicitly add the agent
+                                ids to their observations? Assume yes.
+        """
+        super(MultiAgentWrapper, self).__init__(
+            env_generator(),
+            **kw_args)
+
+        self.need_agent_ids = need_agent_ids
+        self.num_agents     = np.stack(self.reset(), axis=0).shape[0]
+        self.agent_ids      = np.arange(self.num_agents)
+
+    def get_feature_pruned_global_state(self, obs):
+        """
+            From arXiv:2103.01955v2, cacluate the "Feature-Pruned
+            Agent-Specific Global State". By default, we assume that
+            the environment doesn't offer extra information, which leads
+            us to actually caculating the "Concatenation of Local Observations".
+            We can create sub-classes of this implementation to handle
+            environments that do offer global state info.
+
+            Arguments:
+                obs    The refined agent observations.
+
+            Returns:
+                The global state to be fed to the critic.
+        """
+        #
+        # TODO: This could get pretty memory intensive, and it feels a bit
+        # ridiculous to use a batch of copies. This is going off of the
+        # implementation in arXiv:2103.01955v2. Maybe we can do better.
+        #
+        obs = obs.flatten()
+        obs = np.tile(obs, self.num_agents).reshape((self.num_agents, -1))
+        return obs
+
+    def _refine_obs(self, obs):
+        """
+        """
+        obs = np.stack(obs, axis=0)
+
+        if self.need_agent_ids:
+            obs = np.concatenate((self.agent_ids, obs), axis=1)
+
+        return obs
+
+    def _refine_dones(self, agents_done, obs):
+        """
+        """
+        agents_done = np.array(agents_done)
+
+        #
+        # We assume that our environment is done only when all agents
+        # are done. If some, but not all, agents are done, we death mask
+        # the observations that have died early.
+        #
+        all_done = False
+        if agents_done.all():
+            dones = np.ones(self.num_agents).astype(bool)
+            all_done = True
+        else:
+            obs[agents_done, 1:] = 0.0
+            dones = np.zeros(self.num_agents).astype(bool)
+
+        dones = dones.reshape((-1, 1))
+        return dones, all_done
+
+    def step(self, actions):
+        """
+            Arguments:
+                actions    The actions to take.
+
+            Returns:
+        """
+        #
+        # Our first/test environment expects the actions to be contained in
+        # a tuple. We may need to support more formats in the future.
+        #
+        tup_actions = tuple(actions[i] for i in range(self.num_agents))
+
+        obs, rewards, agents_done, global_info = self.env.step(actions)
+
+        obs     = self._refine_obs(obs)
+        rewards = np.stack(np.array(rewards), axis=0)
+        dones, all_done = self.refine_dones(agents_done, obs)
+
+        if all_done:
+            info["terminal observation"] = obs.copy()
+            obs, global_obs = self.reset()
+            global_info["global state"] = global_obs
+        else:
+            global_info["global state"] = \
+                self.get_feature_pruned_global_state(obs)
+
+        #
+        # Create an array of references so that we don't use up memory.
+        #
+        infos = np.array([global_info] * self.num_agents, dtype=object)
+
+        self.obs_cache = obs.copy()
+
+        return obs, rewards, dones, infos
+
+    def reset(self):
+        """
+            Reset the environment. If we're in test mode, we don't augment the
+            resulting observations. Otherwise, augment them before returning.
+
+            Returns:
+                The local and global observations.
+        """
+        obs = self.env.reset()
+        obs = self._refine_obs(obs)
+        global_state = self.get_feature_pruned_global_state(obs)
+
+        return obs, global_state
+
+    def soft_reset(self):
+        """
+            Perform a "soft reset". This results in only performing the reset
+            if the environment hasn't been reset since being created. This can
+            allow us to start a new rollout from a previous rollout that ended
+            near later in the environments timesteps.
+
+            Returns:
+                The local and global observations.
+        """
+        if self.need_hard_reset or self.obs_cache == None:
+            return self.reset()
+
+        global_state = self.get_feature_pruned_global_state(self.obs_cache)
+        return self.obs_cache, global_state
+
+    def get_batch_size(self):
+        """
+            If any wrapped classes define this method, try to get the batch size
+            from them. Otherwise, assume we have a single environment.
+
+            Returns:
+                Return our batch size.
+        """
+        return self.num_agents
+
+    def supports_batched_environments(self):
+        """
+            Determine whether or not our wrapped environment supports
+            batched environments.
+
+            Return:
+                True.
+        """
+        return True
 
 
 class ObservationNormalizer(IdentityWrapper):
