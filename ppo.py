@@ -32,8 +32,6 @@ num_procs = comm.Get_size()
 
 class PPO(object):
 
-    # FIXME: we should probably restrict the envs per proc to 1
-    # for MAPPO until we work out the details.
     def __init__(self,
                  env_generator,
                  ac_network,
@@ -228,8 +226,9 @@ class PPO(object):
             envs_per_proc = 1
 
         #
-        # Vectorize our environment and add any requested wrappers. Note that
-        # order matters!
+        # Begin adding wrappers. Order matters!
+        # The first wrapper will always be either a standard vectorization
+        # or a multi-agent wrapper. We currently don't support combining them.
         #
         if is_multi_agent:
             env = MultiAgentWrapper(
@@ -653,6 +652,7 @@ class PPO(object):
 
         return raw_action, action, log_prob.detach()
 
+    #FIXME: we'll need to pass the global observations in for the critic here
     def evaluate(self, batch_obs, batch_actions):
         """
             Given a batch of observations, use our critic to approximate
@@ -729,6 +729,7 @@ class PPO(object):
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
 
+    #FIXME: we'll probably want to use the global observations here.
     def get_intrinsic_reward(self,
                              prev_obs,
                              obs,
@@ -793,12 +794,6 @@ class PPO(object):
             Returns:
                 A PyTorch dataset containing our rollout.
         """
-        #
-        # TODO: support MAPPO. For starters, we'll need to send global
-        # observation information to the critic. We should probably
-        # allow for a critic obs mask to remove redundant information
-        # when needed.
-        #
         start_time = time.time()
 
         if self.env ==  None:
@@ -850,11 +845,19 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
-        # FIXME: Multi-agent envs will return obs and global_obs.
         if self.use_soft_resets:
-            obs = self.env.soft_reset()
+            initial_reset_func = self.env.soft_reset
         else:
-            obs = self.env.reset()
+            initial_reset_func = self.env.reset
+
+        # FIXME: maybe we should call this "critic_obs" so that it
+        # is less confusing when we're in single agent environments.
+        if self.is_multi_agent:
+            obs, global_obs = initial_reset_func()
+        else:
+            #FIXME: we could also just have global_obs as a reference
+            obs = initial_reset_func()
+            global_obs = np.empty(()).astype(np.float32)
 
         env_batch_size     = obs.shape[0]
         ep_rewards         = np.zeros((env_batch_size, 1))
@@ -904,15 +907,27 @@ class PPO(object):
             else:
                 raw_action, action, log_prob = self.get_action(obs)
 
-            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-            value = self.critic(t_obs)
+            if self.is_multi_agent:
+                c_obs = torch.tensor(global_obs,
+                    dtype=torch.float).to(self.device)
+            else:
+                c_obs = torch.tensor(obs,
+                    dtype=torch.float).to(self.device)
+
+            value = self.critic(c_obs)
 
             if self.normalize_values:
                 value = self.value_normalizer.denormalize(value)
 
             prev_obs = obs.copy()
+            prev_global_obs = global_obs.copy()
 
             obs, ext_reward, done, info = self.env.step(action)
+
+            if self.is_multi_agent:
+                # FIXME: do we want to keep this structure? If so, document.
+                # FIXME: do we need to copy?
+                global_obs = info[0]["global state"].copy()
 
             #
             # In the observational augment case, our action is a single action,
@@ -935,8 +950,6 @@ class PPO(object):
 
             value = value.detach().cpu().numpy()
 
-            # FIXME: we probably don't want a batch of infos when using MAPPO,
-            # right?
             #
             # If any of our wrappers are altering the rewards, there should
             # be an unaltered version in the info.
@@ -971,7 +984,6 @@ class PPO(object):
             where_done = np.where(done)[0]
             where_not_done = np.where(~done)[0]
 
-            # FIXME: batch info becomes single in MAPPO.
             if done.any():
                 term_key = "terminal observation"
                 for done_idx in where_done:
@@ -981,6 +993,7 @@ class PPO(object):
             # When using lstm networks, we need to save the hidden states
             # encountered during the rollouts. These will later be used to
             # initialize the hidden states when updating the models.
+            # Note that we pass in empty arrays when not using lstm networks.
             #
             if self.using_lstm:
 
@@ -1022,6 +1035,8 @@ class PPO(object):
                      np.empty(empty_shape),
                      np.empty(empty_shape))
 
+            # FIXME: I believe we need to store the global obs during
+            # multi-agent training.
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
                     prev_obs[ei_idx],
@@ -1118,10 +1133,14 @@ class PPO(object):
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
 
-                t_obs = torch.tensor(obs[where_maxed],
-                    dtype=torch.float).to(self.device)
+                if self.is_multi_agent:
+                    c_obs = torch.tensor(global_obs[where_maxed],
+                        dtype=torch.float).to(self.device)
+                else:
+                    c_obs = torch.tensor(obs[where_maxed],
+                        dtype=torch.float).to(self.device)
 
-                nxt_value = self.critic(t_obs)
+                nxt_value = self.critic(c_obs)
 
                 if self.normalize_values:
                     nxt_value = self.value_normalizer.denormalize(nxt_value)
@@ -1494,6 +1513,8 @@ class PPO(object):
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
+            #FIXME: need global observations for critic. I guess these will need
+            # to be stored in the episode infos.
             values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
 
             data_loader.dataset.values[batch_idxs] = values
