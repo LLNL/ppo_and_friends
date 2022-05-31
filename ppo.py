@@ -652,17 +652,17 @@ class PPO(object):
 
         return raw_action, action, log_prob.detach()
 
-    #FIXME: we'll need to pass the global observations in for the critic here
-    def evaluate(self, batch_obs, batch_actions):
+    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
         """
             Given a batch of observations, use our critic to approximate
             the expected return values. Also use a batch of corresponding
             actions to retrieve some other useful information.
 
             Arguments:
-                batch_obs      A batch of observations.
-                batch_actions  A batch of actions corresponding to the batch of
-                               observations.
+                batch_critic_obs   A batch of observations for the critic.
+                batch_obs          A batch of standard observations.
+                batch_actions      A batch of actions corresponding to the batch of
+                                   observations.
 
             Returns:
                 A tuple of form (values, log_probs, entropies) s.t. values are
@@ -670,7 +670,7 @@ class PPO(object):
                 from our probability distribution, and entropies are the
                 entropies from our distribution.
         """
-        values = self.critic(batch_obs).squeeze()
+        values = self.critic(batch_critic_obs).squeeze()
 
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
@@ -850,16 +850,15 @@ class PPO(object):
         else:
             initial_reset_func = self.env.reset
 
-        # FIXME: maybe we should call this "critic_obs" so that it
-        # is less confusing when we're in single agent environments.
         if self.is_multi_agent:
             obs, global_obs = initial_reset_func()
+            env_batch_size  = obs.shape[0]
         else:
-            #FIXME: we could also just have global_obs as a reference
-            obs = initial_reset_func()
-            global_obs = np.empty(()).astype(np.float32)
+            obs            = initial_reset_func()
+            env_batch_size = obs.shape[0]
+            empty_shape    = (env_batch_size, 0)
+            global_obs     = np.empty(empty_shape).astype(np.float32)
 
-        env_batch_size     = obs.shape[0]
         ep_rewards         = np.zeros((env_batch_size, 1))
         episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
         ep_score           = np.zeros((env_batch_size, 1))
@@ -1035,21 +1034,20 @@ class PPO(object):
                      np.empty(empty_shape),
                      np.empty(empty_shape))
 
-            # FIXME: I believe we need to store the global obs during
-            # multi-agent training.
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
-                    prev_obs[ei_idx],
-                    ep_obs[ei_idx],
-                    raw_action[ei_idx],
-                    action[ei_idx],
-                    value[ei_idx].item(),
-                    log_prob[ei_idx],
-                    reward[ei_idx].item(),
-                    actor_hidden[:, [ei_idx], :],
-                    actor_cell[:, [ei_idx], :],
-                    critic_hidden[:, [ei_idx], :],
-                    critic_cell[:, [ei_idx], :])
+                    observation        = prev_obs[ei_idx],
+                    next_observation   = ep_obs[ei_idx],
+                    raw_action         = raw_action[ei_idx],
+                    action             = action[ei_idx],
+                    value              = value[ei_idx].item(),
+                    log_prob           = log_prob[ei_idx],
+                    reward             = reward[ei_idx].item(),
+                    global_observation = global_obs[ei_idx],
+                    actor_hidden       = actor_hidden[:, [ei_idx], :],
+                    actor_cell         = actor_cell[:, [ei_idx], :],
+                    critic_hidden      = critic_hidden[:, [ei_idx], :],
+                    critic_cell        = critic_cell[:, [ei_idx], :])
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
@@ -1473,10 +1471,10 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for batch in data_loader:
-            obs, _, raw_actions, _, advantages, log_probs, \
+        for batch_data in data_loader:
+            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell, batch_idxs = batch
+                actor_cell, critic_cell, batch_idxs = batch_data
 
             torch.cuda.empty_cache()
 
@@ -1513,9 +1511,10 @@ class PPO(object):
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-            #FIXME: need global observations for critic. I guess these will need
-            # to be stored in the episode infos.
-            values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
+            values, curr_log_probs, entropy = self.evaluate(
+                critic_obs,
+                obs,
+                raw_actions)
 
             data_loader.dataset.values[batch_idxs] = values
 
@@ -1639,7 +1638,9 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
+        # TODO: for multi-agent ICM, we may want to use the global
+        # observations.
+        for _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
