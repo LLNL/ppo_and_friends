@@ -24,6 +24,7 @@ def run_ppo(env_generator,
             ac_network,
             device,
             random_seed,
+            is_multi_agent      = False,
             envs_per_proc       = 1,
             icm_network         = ICM,
             batch_size          = 256,
@@ -72,6 +73,7 @@ def run_ppo(env_generator,
               ac_network         = ac_network,
               icm_network        = icm_network,
               device             = device,
+              is_multi_agent     = is_multi_agent,
               random_seed        = random_seed,
               batch_size         = batch_size,
               envs_per_proc      = envs_per_proc,
@@ -1439,6 +1441,67 @@ def swimmer_ppo(state_path,
             batch_size          = 512,
             max_ts_per_ep       = 32,
             ts_per_rollout      = 2048,
+            use_gae             = True,
+            normalize_obs       = True,
+            normalize_rewards   = True,
+            obs_clip            = (-10., 10.),
+            reward_clip         = (-10., 10.),
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            render_gif          = render_gif,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            envs_per_proc       = envs_per_proc,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+
+###############################################################################
+#                              Multi-Agent                                    #
+###############################################################################
+
+def robot_warehouse_tiny(
+    state_path,
+    load_state,
+    render,
+    render_gif,
+    num_timesteps,
+    device,
+    envs_per_proc,
+    random_seed,
+    test = False,
+    num_test_runs = 1):
+
+    env_generator = lambda : gym.make('rware-tiny-3ag-v1')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 64
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.0001
+    min_lr = 0.0001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 1.0,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    run_ppo(env_generator       = env_generator,
+            random_seed         = random_seed,
+            ac_network          = FeedForwardNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 512,
+            max_ts_per_ep       = 32,
+            ts_per_rollout      = 2048,
+            is_multi_agent      = True,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,

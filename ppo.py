@@ -252,6 +252,12 @@ class PPO(object):
         # our environment should receive pre-normalized data for augmenting.
         #
         if obs_augment:
+            if is_multi_agent:
+                msg  = "ERROR: observation augmentations are not currently "
+                msg += "supported within multi-agent environments."
+                rank_print(msg)
+                comm.Abort()
+
             env = AugmentingEnvWrapper(
                 env,
                 test_mode = test_mode)
@@ -303,16 +309,48 @@ class PPO(object):
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
 
-        act_type = type(env.action_space)
+        #
+        # In multi-agent settings, the action and observation spaces will be
+        # tuples containing individual spaces for each agent.
+        #
+        # FIXME: let's take care of this in the env wrapper.
+        if is_multi_agent:
+            action_space  = None
+            act_type      = None
+            prev_act_type = None
 
+            for a_s in env.action_space:
+                if act_type == None:
+                    action_space  = a_s
+                    act_type      = type(a_s)
+                    prev_act_type = type(a_s)
+                if prev_act_type != act_type:
+                    msg  = "ERROR: mixed action types in multi-agent "
+                    msg += "environments is not currently supported. "
+                    msg += "Found types "
+                    msg += "{} and {}.".format(act_type, prev_act_type)
+                    rank_print(msg)
+                    comm.Abort()
+                else:
+                    action_space  = a_s
+                    prev_act_type = act_type
+                    act_type      = type(a_s)
+        else:
+            action_space = env.action_space
+            act_type     = type(env.action_space)
+
+        #
+        # FIXME: act_dim could be different for each agent. In those cases,
+        # we need to pad in the wrapper. So, let's take the largest dimension.
+        #
         if (issubclass(act_type, Box) or
             issubclass(act_type, MultiBinary) or
             issubclass(act_type, MultiDiscrete)):
 
-            self.act_dim = env.action_space.shape
+            self.act_dim = action_space.shape
 
         elif issubclass(act_type, Discrete):
-            self.act_dim = env.action_space.n
+            self.act_dim = action_space.n
 
         else:
             msg = "ERROR: unsupported action space {}".format(env.action_space)
@@ -399,7 +437,6 @@ class PPO(object):
         self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
-        self.obs_shape           = env.observation_space.shape
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_best_only      = save_best_only
         self.mean_window_size    = mean_window_size 
@@ -411,6 +448,7 @@ class PPO(object):
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
+        self.obs_shape           = self.env.observation_space.shape
 
         #
         # Create a dictionary to track the status of training.

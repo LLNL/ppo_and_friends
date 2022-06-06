@@ -9,6 +9,8 @@ import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import need_action_squeeze
 from collections.abc import Iterable
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gym.spaces.tuple import Tuple as gym_tuple
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -486,8 +488,99 @@ class MultiAgentWrapper(IdentityWrapper):
             **kw_args)
 
         self.need_agent_ids = need_agent_ids
-        self.num_agents     = np.stack(self.reset(), axis=0).shape[0]
-        self.agent_ids      = np.arange(self.num_agents)
+        self.num_agents     = len(self.env.observation_space)
+        self.agent_ids      = np.arange(self.num_agents).reshape((-1, 1))
+        self._update_observation_space(self.env.observation_space)
+
+    def _update_observation_space(self, obs_space):
+        """
+        """
+        new_obs_space = []
+
+        not_supported_msg  = "ERROR: {} is not currently supported "
+        not_supported_msg += "as an observation space in multi-agent "
+        not_supported_msg += "environments."
+
+        #
+        # First, ensure that each agent has the same type of space.
+        #
+        obs_type      = None
+        prev_obs_type = None
+        dtype         = None
+        prev_dtype    = None
+        for space in self.env.observation_space:
+            if obs_type == None:
+                obs_type      = type(space)
+                prev_obs_type = type(space)
+
+                dtype         = space.dtype
+                prev_dtype    = space.dtype
+
+            if prev_obs_type != obs_type:
+                msg  = "ERROR: mixed observation types in multi-agent "
+                msg += "environments is not currently supported. "
+                msg += "Found types "
+                msg += "{} and {}.".format(obs_type, prev_obs_type)
+                rank_print(msg)
+                comm.Abort()
+            elif prev_dtype != dtype:
+                msg  = "ERROR: mixed observation dtypes in multi-agent "
+                msg += "environments is not currently supported. "
+                msg += "Found types "
+                msg += "{} and {}.".format(prev_dtype, dtype)
+                rank_print(msg)
+                comm.Abort()
+            else:
+                prev_obs_type = obs_type
+                obs_type      = type(space)
+
+                prev_dtype    = dtype
+                dtype         = space.dtype
+
+        #
+        # Next, we need handle cases where agents have different observation
+        # spaces. We want to homogenize things, so we pad all of the spaces
+        # to be identical.
+        #
+        # NOTE: we're assuming all observations are flattened.
+        #
+        low   = np.empty(0, dtype = np.float32)
+        high  = np.empty(0, dtype = np.float32)
+        count = 0
+
+        for space in self.env.observation_space:
+            if obs_type == Box:
+                diff  = space.shape[0] - low.size
+                count = max(count, space.shape[0])
+
+                low   = np.pad(low, (0, diff))
+                high  = np.pad(high, (0, diff))
+
+                high  = np.maximum(high, space.high)
+                low   = np.minimum(low, space.low)
+
+            elif obs_type == Discrete:
+                count = max(count, space.n)
+
+            else:
+                rank_print(not_supported_msg.format(space))
+                comm.Abort()
+
+        if obs_type == Box:
+            low   = np.concatenate((low, (np.inf,)))
+            high  = np.concatenate((high, (np.inf,)))
+            shape = (count + 1,)
+
+            new_space = Box(
+                low   = low,
+                high  = high,
+                shape = shape,
+                dtype = dtype)
+
+        elif obs_type == Discrete:
+            new_space = Discrete(count + 1)
+
+        self.observation_space = new_space
 
     def get_feature_pruned_global_state(self, obs):
         """
@@ -697,9 +790,20 @@ class ObservationNormalizer(IdentityWrapper):
         """
         obs = self.env.reset()
 
+        #
+        # In our multi-agent case, the global state is returned along
+        # with the local observation.
+        #
+        is_multi_agent = False
+        if type(obs) == type(tuple()):
+            is_multi_agent = True
+            obs, global_state = obs
+
         if self.update_stats:
             self.running_stats.update(obs)
 
+        if is_multi_agent:
+            return (obs, global_state)
         return obs
 
     def normalize(self, obs):
@@ -1026,7 +1130,22 @@ class ObservationClipper(GenericClipper):
             Returns:
                 The resulting observation.
         """
-        return self._clip(self.env.reset())
+        obs = self.env.reset()
+
+        #
+        # In our multi-agent case, the global state is returned along
+        # with the local observation.
+        #
+        is_multi_agent = False
+        if type(obs) == type(tuple()):
+            is_multi_agent = True
+            obs, global_state = obs
+
+        obs = self._clip(obs)
+
+        if is_multi_agent:
+            return (obs, global_state)
+        return obs
 
     def _clip(self, obs):
         """
@@ -1109,6 +1228,7 @@ class RewardClipper(GenericClipper):
         return np.clip(reward, min_value, max_value)
 
 
+# TODO: support multi-agent environments.
 class AugmentingEnvWrapper(IdentityWrapper):
     """
         This wrapper expects the environment to have a method named
