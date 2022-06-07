@@ -309,35 +309,8 @@ class PPO(object):
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
 
-        #
-        # In multi-agent settings, the action and observation spaces will be
-        # tuples containing individual spaces for each agent.
-        #
-        # FIXME: let's take care of this in the env wrapper.
-        if is_multi_agent:
-            action_space  = None
-            act_type      = None
-            prev_act_type = None
-
-            for a_s in env.action_space:
-                if act_type == None:
-                    action_space  = a_s
-                    act_type      = type(a_s)
-                    prev_act_type = type(a_s)
-                if prev_act_type != act_type:
-                    msg  = "ERROR: mixed action types in multi-agent "
-                    msg += "environments is not currently supported. "
-                    msg += "Found types "
-                    msg += "{} and {}.".format(act_type, prev_act_type)
-                    rank_print(msg)
-                    comm.Abort()
-                else:
-                    action_space  = a_s
-                    prev_act_type = act_type
-                    act_type      = type(a_s)
-        else:
-            action_space = env.action_space
-            act_type     = type(env.action_space)
+        action_space = env.action_space
+        act_type     = type(env.action_space)
 
         #
         # FIXME: act_dim could be different for each agent. In those cases,
@@ -448,7 +421,17 @@ class PPO(object):
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
-        self.obs_shape           = self.env.observation_space.shape
+        self.actor_obs_shape     = self.env.observation_space.shape
+
+        #
+        # In multi-agent settings, the critic receives a "global state". In
+        # single-agent settings, the critic receives the same observation
+        # as the actor.
+        #
+        if is_multi_agent:
+            self.critic_obs_shape = self.env.get_global_state_space().shape
+        else:
+            self.critic_obs_shape = self.actor_obs_shape
 
         #
         # Create a dictionary to track the status of training.
@@ -516,7 +499,13 @@ class PPO(object):
         # where I got 1.0 from... I'll try to track that down.
         #
         if use_conv2d_setup:
-            obs_dim = self.obs_shape
+            if is_multi_agent:
+                msg  = "ERROR: use of conv2d models with multi-agent "
+                msg += "environments is not currently supported."
+                rank_prink(msg)
+                comm.Abort()
+
+            obs_dim = self.actor_obs_shape
 
             self.actor = ac_network(
                 name         = "actor", 
@@ -537,11 +526,12 @@ class PPO(object):
                 **critic_kw_args)
 
         else:
-            obs_dim = self.obs_shape[0]
+            actor_obs_dim  = self.actor_obs_shape[0]
+            critic_obs_dim = self.critic_obs_shape[0]
 
             self.actor = ac_network(
                 name         = "actor", 
-                in_dim       = obs_dim, 
+                in_dim       = actor_obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_dtype = action_dtype,
@@ -550,7 +540,7 @@ class PPO(object):
 
             self.critic = ac_network(
                 name         = "critic", 
-                in_dim       = obs_dim, 
+                in_dim       = critic_obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_dtype = action_dtype,
@@ -570,6 +560,8 @@ class PPO(object):
         comm.barrier()
 
         if self.using_icm:
+            # TODO: I think we'll want to eventually update the icm
+            # model to use the global state.
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
