@@ -303,6 +303,17 @@ class PPO(object):
                 clip_range  = reward_clip)
 
         #
+        # Funny business: we're taking over our "environments per processor"
+        # code when using multi-agent environments. Each agent is basically
+        # thought of as an environment instance. As a result, our timesteps
+        # will be divided by the number of agents during the rollout, which
+        # is what we want when env_per_processor > 1, but it's not what we
+        # want when num_agents > 1.
+        #
+        if is_multi_agent:
+            ts_per_rollout *= env.get_num_agents()
+
+        #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
         #
@@ -312,10 +323,6 @@ class PPO(object):
         action_space = env.action_space
         act_type     = type(env.action_space)
 
-        #
-        # FIXME: act_dim could be different for each agent. In those cases,
-        # we need to pad in the wrapper. So, let's take the largest dimension.
-        #
         if (issubclass(act_type, Box) or
             issubclass(act_type, MultiBinary) or
             issubclass(act_type, MultiDiscrete)):
@@ -560,8 +567,7 @@ class PPO(object):
         comm.barrier()
 
         if self.using_icm:
-            # TODO: I think we'll want to eventually update the icm
-            # model to use the global state.
+            obs_dim = self.critic_obs_shape[0]
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -639,6 +645,9 @@ class PPO(object):
             except:
                 self.can_clone_env = False
 
+        if self.using_icm:
+            rank_print("Can clone environment: {}".format(self.can_clone_env))
+
 
     def get_action(self, obs):
         """
@@ -700,8 +709,7 @@ class PPO(object):
                 from our probability distribution, and entropies are the
                 entropies from our distribution.
         """
-        values = self.critic(batch_critic_obs).squeeze()
-
+        values      = self.critic(batch_critic_obs).squeeze()
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
@@ -948,14 +956,18 @@ class PPO(object):
             if self.normalize_values:
                 value = self.value_normalizer.denormalize(value)
 
-            prev_obs = obs.copy()
+            prev_obs        = obs.copy()
             prev_global_obs = global_obs.copy()
 
             obs, ext_reward, done, info = self.env.step(action)
 
             if self.is_multi_agent:
-                # FIXME: do we want to keep this structure? If so, document.
-                # FIXME: do we need to copy?
+                #
+                # When we're learning from a multi-agent environment, we
+                # feed a "global state" to the critic. This is called
+                # Centralized Training Decentralized Execution (CTDE).
+                # arXiv:2006.07869v4
+                #
                 global_obs = info[0]["global state"].copy()
 
             #
@@ -1000,9 +1012,16 @@ class PPO(object):
             # to out extrinsic reward.
             #
             if self.using_icm:
+                if self.is_multi_agent:
+                    intr_prev_obs = prev_global_obs
+                    intr_obs      = global_obs
+                else:
+                    intr_prev_obs = prev_obs
+                    intr_obs      = obs
+
                 intr_reward = self.get_intrinsic_reward(
-                    prev_obs,
-                    obs,
+                    intr_prev_obs,
+                    intr_obs,
                     action)
 
                 reward = ext_reward + intr_reward
@@ -1066,18 +1085,19 @@ class PPO(object):
 
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
-                    observation        = prev_obs[ei_idx],
-                    next_observation   = ep_obs[ei_idx],
-                    raw_action         = raw_action[ei_idx],
-                    action             = action[ei_idx],
-                    value              = value[ei_idx].item(),
-                    log_prob           = log_prob[ei_idx],
-                    reward             = reward[ei_idx].item(),
-                    global_observation = global_obs[ei_idx],
-                    actor_hidden       = actor_hidden[:, [ei_idx], :],
-                    actor_cell         = actor_cell[:, [ei_idx], :],
-                    critic_hidden      = critic_hidden[:, [ei_idx], :],
-                    critic_cell        = critic_cell[:, [ei_idx], :])
+                    global_observation      = prev_global_obs[ei_idx],
+                    next_global_observation = global_obs[ei_idx],
+                    observation             = prev_obs[ei_idx],
+                    next_observation        = ep_obs[ei_idx],
+                    raw_action              = raw_action[ei_idx],
+                    action                  = action[ei_idx],
+                    value                   = value[ei_idx].item(),
+                    log_prob                = log_prob[ei_idx],
+                    reward                  = reward[ei_idx].item(),
+                    actor_hidden            = actor_hidden[:, [ei_idx], :],
+                    actor_cell              = actor_cell[:, [ei_idx], :],
+                    critic_hidden           = critic_hidden[:, [ei_idx], :],
+                    critic_cell             = critic_cell[:, [ei_idx], :])
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
@@ -1210,7 +1230,7 @@ class PPO(object):
 
                         clone_prev_obs = obs.copy()
                         cloned_env = deepcopy(self.env)
-                        clone_obs, _, _, _ = cloned_env.step(clone_action)
+                        clone_obs, _, _, clone_info = cloned_env.step(clone_action)
                         del cloned_env
 
                         if self.obs_augment:
@@ -1218,9 +1238,16 @@ class PPO(object):
                             clone_action = np.tile(clone_action.flatten(), env_batch_size)
                             clone_action = clone_action.reshape(action_shape)
 
+                        if is_multi_agent:
+                            clone_intr_prev_obs = global_obs.copy()
+                            clone_intr_obs      = info[0]["global state"].copy()
+                        else:
+                            clone_intr_prev_obs = clone_prev_obs
+                            clone_intr_obs      = clone_obs
+
                         intr_reward = self.get_intrinsic_reward(
-                            clone_prev_obs,
-                            clone_obs,
+                            clone_intr_prev_obs,
+                            clone_intr_obs,
                             clone_action)
 
                     ism         = self.status_dict["intrinsic score avg"]
@@ -1502,7 +1529,7 @@ class PPO(object):
         counter           = 0
 
         for batch_data in data_loader:
-            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
+            critic_obs, _, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
                 actor_cell, critic_cell, batch_idxs = batch_data
 
@@ -1668,14 +1695,16 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        # TODO: for multi-agent ICM, we may want to use the global
-        # observations.
-        for _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
+        for batch_data in data_loader:
+
+            glob_obs, next_glob_obs, _, _, _, actions, _, _, _, _, _, _, _, _ =\
+                batch_data
+
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
 
-            _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
+            _, inv_loss, f_loss = self.icm_model(glob_obs, next_glob_obs, actions)
 
             icm_loss = (((1.0 - self.icm_beta) * f_loss) +
                 (self.icm_beta * inv_loss))
