@@ -83,8 +83,13 @@ def test_policy(ppo,
             ep_score += score
             total_score += score
 
+        #
+        # For multi-agent environments, we report the average score per
+        # agent. There are other options we could try instead. For coop
+        # games, we could sum the scores. Adversarial games get tricky...
+        #
         if is_multi_agent:
-            refined_score = ep_score.sum()
+            refined_score = ep_score.mean()
         else:
             refined_score = ep_score
 
@@ -92,7 +97,7 @@ def test_policy(ppo,
         max_score = max(max_score, refined_score)
 
     if is_multi_agent:
-        total_score = total_score.sum()
+        total_score = total_score.mean()
 
     print("Ran env {} times.".format(num_test_runs))
     print("Ran {} total time steps.".format(num_steps))
