@@ -567,7 +567,7 @@ class PPO(object):
         comm.barrier()
 
         if self.using_icm:
-            obs_dim = self.critic_obs_shape[0]
+            obs_dim = self.actor_obs_shape[0]
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -1012,16 +1012,9 @@ class PPO(object):
             # to out extrinsic reward.
             #
             if self.using_icm:
-                if self.is_multi_agent:
-                    intr_prev_obs = prev_global_obs
-                    intr_obs      = global_obs
-                else:
-                    intr_prev_obs = prev_obs
-                    intr_obs      = obs
-
                 intr_reward = self.get_intrinsic_reward(
-                    intr_prev_obs,
-                    intr_obs,
+                    prev_obs,
+                    obs,
                     action)
 
                 reward = ext_reward + intr_reward
@@ -1086,7 +1079,6 @@ class PPO(object):
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
                     global_observation      = prev_global_obs[ei_idx],
-                    next_global_observation = global_obs[ei_idx],
                     observation             = prev_obs[ei_idx],
                     next_observation        = ep_obs[ei_idx],
                     raw_action              = raw_action[ei_idx],
@@ -1238,16 +1230,9 @@ class PPO(object):
                             clone_action = np.tile(clone_action.flatten(), env_batch_size)
                             clone_action = clone_action.reshape(action_shape)
 
-                        if is_multi_agent:
-                            clone_intr_prev_obs = global_obs.copy()
-                            clone_intr_obs      = info[0]["global state"].copy()
-                        else:
-                            clone_intr_prev_obs = clone_prev_obs
-                            clone_intr_obs      = clone_obs
-
                         intr_reward = self.get_intrinsic_reward(
-                            clone_intr_prev_obs,
-                            clone_intr_obs,
+                            clone_prev_obs,
+                            clone_obs,
                             clone_action)
 
                     ism         = self.status_dict["intrinsic score avg"]
@@ -1529,7 +1514,7 @@ class PPO(object):
         counter           = 0
 
         for batch_data in data_loader:
-            critic_obs, _, obs, _, raw_actions, _, advantages, log_probs, \
+            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
                 actor_cell, critic_cell, batch_idxs = batch_data
 
@@ -1697,14 +1682,14 @@ class PPO(object):
 
         for batch_data in data_loader:
 
-            glob_obs, next_glob_obs, _, _, _, actions, _, _, _, _, _, _, _, _ =\
+            _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
                 batch_data
 
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)
 
-            _, inv_loss, f_loss = self.icm_model(glob_obs, next_glob_obs, actions)
+            _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
 
             icm_loss = (((1.0 - self.icm_beta) * f_loss) +
                 (self.icm_beta * inv_loss))

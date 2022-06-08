@@ -38,7 +38,6 @@ class EpisodeInfo(object):
         self.lambd                    = lambd
         self.bootstrap_clip           = bootstrap_clip
         self.global_observations      = []
-        self.next_global_observations = []
         self.observations             = []
         self.next_observations        = []
         self.actions                  = []
@@ -134,12 +133,11 @@ class EpisodeInfo(object):
                  value,
                  log_prob,
                  reward,
-                 global_observation      = np.empty(0),
-                 next_global_observation = np.empty(0),
-                 actor_hidden            = np.empty(0),
-                 actor_cell              = np.empty(0),
-                 critic_hidden           = np.empty(0),
-                 critic_cell             = np.empty(0)):
+                 global_observation = np.empty(0),
+                 actor_hidden       = np.empty(0),
+                 actor_cell         = np.empty(0),
+                 critic_hidden      = np.empty(0),
+                 critic_cell        = np.empty(0)):
         """
             Add info from a single step in an episode. These should be
             added consecutively, in the order they are encountered.
@@ -159,9 +157,6 @@ class EpisodeInfo(object):
                 reward                   The reward received at this step.
                 global_observation       The global observation used in multi-
                                          agent environments eliciting our
-                                         action.
-                next_global_observation  The global observation used in multi-
-                                         agent environments resulting from our
                                          action.
                 actor_hidden             The hidden state of the actor iff the
                                          actor is an lstm.
@@ -188,16 +183,8 @@ class EpisodeInfo(object):
         self.rewards.append(reward)
 
         if global_observation.size > 0:
-
-            if next_global_observation.size == 0:
-                msg  = "ERROR: global observation is non empty, but "
-                msg += "next global observation is empty."
-                rank_print(msg)
-                comm.Abort()
-
             self.has_global_obs = True
             self.global_observations.append(global_observation)
-            self.next_global_observations.append(next_global_observation)
 
         ac_hidden_check = np.array(
             (len(actor_hidden),
@@ -324,7 +311,6 @@ class PPODataset(Dataset):
         self.actions                   = None
         self.raw_actions               = None
         self.global_observations       = None
-        self.next_global_observations  = None
         self.observations              = None
         self.next_observations         = None
         self.rewards_to_go             = None
@@ -401,7 +387,6 @@ class PPODataset(Dataset):
         self.actions                  = []
         self.raw_actions              = []
         self.global_observations      = []
-        self.next_global_observations = []
         self.observations             = []
         self.next_observations        = []
         self.rewards_to_go            = []
@@ -451,8 +436,6 @@ class PPODataset(Dataset):
 
             if self.build_global_obs:
                 self.global_observations.extend(ep.global_observations)
-                self.next_global_observations.extend(
-                    ep.next_global_observations)
 
             if self.build_terminal_mask:
                 cur_ts += ep.length
@@ -494,7 +477,6 @@ class PPODataset(Dataset):
         self.actions                  = np.array(self.actions)
         self.raw_actions              = np.array(self.raw_actions)
         self.global_observations      = np.array(self.global_observations)
-        self.next_global_observations = np.array(self.next_global_observations)
         self.observations             = np.array(self.observations)
         self.next_observations        = np.array(self.next_observations)
         self.rewards_to_go            = np.array(self.rewards_to_go)
@@ -554,12 +536,8 @@ class PPODataset(Dataset):
         if self.build_global_obs:
             self.global_observations = torch.tensor(self.global_observations,
                 dtype=torch.float).to(self.device)
-            self.next_global_observations = torch.tensor(
-                self.next_global_observations,
-                dtype=torch.float).to(self.device)
         else:
-            self.global_observations      = self.observations
-            self.next_global_observations = self.next_observations
+            self.global_observations = self.observations
 
         self.log_probs = torch.tensor(self.log_probs,
             dtype=torch.float).to(self.device)
@@ -604,7 +582,6 @@ class PPODataset(Dataset):
         #
         if self.sequence_length == 1:
             return (self.global_observations[idx],
-                    self.next_global_observations[idx],
                     self.observations[idx],
                     self.next_observations[idx],
                     self.raw_actions[idx],
@@ -626,10 +603,9 @@ class PPODataset(Dataset):
         start = idx - (self.sequence_length - 1)
         stop  = idx + 1
 
-        glob_obs_seq     = self.global_observations[start : stop].clone()
-        nxt_glob_obs_seq = self.next_global_observations[start : stop].clone()
-        obs_seq          = self.observations[start : stop].clone()
-        nxt_obs_seq      = self.next_observations[start : stop].clone()
+        glob_obs_seq = self.global_observations[start : stop].clone()
+        obs_seq      = self.observations[start : stop].clone()
+        nxt_obs_seq  = self.next_observations[start : stop].clone()
 
         #
         # Once we hit a terminal state, all subsequent observations
@@ -641,7 +617,6 @@ class PPODataset(Dataset):
         nxt_obs_seq[term_mask] = 0.0
 
         return (glob_obs_seq,
-                nxt_glob_obs_seq,
                 obs_seq,
                 nxt_obs_seq,
                 self.raw_actions[idx],
