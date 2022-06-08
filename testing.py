@@ -84,7 +84,7 @@ def test_policy(ppo,
             total_score += score
 
         if is_multi_agent:
-            refined_score = ep_score.mean()
+            refined_score = ep_score.sum()
         else:
             refined_score = ep_score
 
@@ -92,7 +92,7 @@ def test_policy(ppo,
         max_score = max(max_score, refined_score)
 
     if is_multi_agent:
-        total_score = total_score.mean()
+        total_score = total_score.sum()
 
     print("Ran env {} times.".format(num_test_runs))
     print("Ran {} total time steps.".format(num_steps))
