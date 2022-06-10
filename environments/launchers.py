@@ -1480,10 +1480,10 @@ def robot_warehouse_tiny(
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
-    actor_kw_args["hidden_size"] = 64
+    actor_kw_args["hidden_size"] = 256
 
     critic_kw_args = actor_kw_args.copy()
-    critic_kw_args["hidden_size"] = 256
+    critic_kw_args["hidden_size"] = 512
 
     lr     = 0.0001
     min_lr = 0.0001
@@ -1493,25 +1493,35 @@ def robot_warehouse_tiny(
         max_value     = lr,
         min_value     = min_lr)
 
+    #
+    # This is a very sparse reward environment, and there are series of
+    # complex actions that must occur in between rewards. Because of this,
+    # using a large maximum timesteps per episode results in faster learning.
+    # arXiv:2103.01955v2 suggests using smaller epoch counts for complex
+    # environments and large batch sizes (single batches if possible).
+    # Because of the sparse rewards, I've also increased the entropy
+    # weight to incentivize exploration. We could also experiment with
+    # using ICM here. I've disabled rewards and observation normalization
+    # and clipping, mainly because they aren't mentioned in arXiv:2103.01955v2,
+    # but it might be worth experimenting with them.
+    #
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             actor_kw_args       = actor_kw_args,
             critic_kw_args      = critic_kw_args,
             batch_size          = 10000,
-            epochs_per_iter     = 1,
-            max_ts_per_ep       = 32,
+            epochs_per_iter     = 5,
+            max_ts_per_ep       = 512,
             ts_per_rollout      = 2048,
             is_multi_agent      = True,
             use_gae             = True,
-            normalize_obs       = True,
-            normalize_rewards   = True,
+            normalize_values    = True,
+            normalize_obs       = False,
+            normalize_rewards   = False,
             obs_clip            = None,
             reward_clip         = None,
-
-            use_icm             = True,
-            intr_reward_weight  = 0.1,
-
+            entropy_weight      = 0.05,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
