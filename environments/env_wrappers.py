@@ -522,11 +522,11 @@ class MultiAgentWrapper(IdentityWrapper):
 
         self.global_state_space = None
 
-        self.observation_space  = self._get_refined_space(
+        self.observation_space, _ = self._get_refined_space(
             multi_agent_space = self.env.observation_space,
             add_ids           = True)
 
-        self.action_space       = self._get_refined_space(
+        self.action_space, self.num_actions = self._get_refined_space(
             multi_agent_space = self.env.action_space,
             add_ids           = False)
 
@@ -573,7 +573,9 @@ class MultiAgentWrapper(IdentityWrapper):
                                      for this.
 
             Returns:
-                A single space representing all agents.
+                A tuple containing a single space representing all agents as
+                the first element and the size of the space as the second
+                element.
         """
         #
         # First, ensure that each agent has the same type of space.
@@ -616,7 +618,8 @@ class MultiAgentWrapper(IdentityWrapper):
         # We want to homogenize things, so we pad all of the spaces
         # to be identical.
         #
-        # NOTE: we're assuming all dimensions are flattened.
+        # TODO: we're assuming all dimensions are flattened. In the future,
+        # we may want to support multi-dimensional spaces.
         #
         low   = np.empty(0, dtype = np.float32)
         high  = np.empty(0, dtype = np.float32)
@@ -647,23 +650,27 @@ class MultiAgentWrapper(IdentityWrapper):
             if add_ids:
                 low   = np.concatenate((low, (0,)))
                 high  = np.concatenate((high, (np.inf,)))
+                size  = count + 1
                 shape = (count + 1,)
             else:
-                shape = (count,)
+                size  = count
+
+            shape = (size,)
 
             new_space = Box(
                 low   = low,
                 high  = high,
-                shape = shape,
+                shape = (size,),
                 dtype = dtype)
 
         elif space_type == Discrete:
+            size = 1
             if add_ids:
                 new_space = Discrete(count + 1)
             else:
                 new_space = Discrete(count)
 
-        return new_space
+        return (new_space, size)
 
     def _construct_global_state_space(self):
         """
@@ -738,12 +745,18 @@ class MultiAgentWrapper(IdentityWrapper):
             Returns:
                 The refined multi-agent observations.
         """
-        # TODO: add zero padding for observations that are smaller than
-        # our observation space.
         obs = np.stack(obs, axis=0)
 
         if self.need_agent_ids:
             obs = np.concatenate((self.agent_ids, obs), axis=1)
+
+        #
+        # It's possible for agents to have differing observation space sizes.
+        # In those cases, we zero pad for congruity.
+        #
+        size_diff = self.observation_space.shape[0] - obs.shape[-1]
+        if size_diff > 0:
+            obs = np.pad(obs, ((0, 0), (0, size_diff)))
 
         return obs
 
@@ -790,7 +803,13 @@ class MultiAgentWrapper(IdentityWrapper):
             Returns:
                 observations, rewards, dones, and info.
         """
-        # TODO: zero pad actions that are less than our action space.
+        #
+        # It's possible for agents to have differing action space sizes.
+        # In those cases, we zero pad for congruity.
+        #
+        size_diff = self.num_actions - int(actions.size / self.num_agents)
+        if size_diff > 0:
+            actions = np.pad(actions, ((0, 0), (0, size_diff)))
 
         #
         # Our first/test environment expects the actions to be contained in
