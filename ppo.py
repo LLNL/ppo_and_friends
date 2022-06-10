@@ -46,6 +46,9 @@ class PPO(object):
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
+                 entropy_weight      = 0.01,
+                 min_entropy_weight  = 0.01,
+                 entropy_dec         = None,
                  max_ts_per_ep       = 64,
                  batch_size          = 256,
                  ts_per_rollout      = 2048,
@@ -61,7 +64,6 @@ class PPO(object):
                  icm_beta            = 0.8,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
-                 entropy_weight      = 0.01,
                  target_kl           = 0.015,
                  mean_window_size    = 100,
                  normalize_adv       = True,
@@ -104,6 +106,12 @@ class PPO(object):
                                       utils/iteration_mappers.py.
                                       This class has a decrement function that
                                       will be used to updated the learning rate.
+                 entropy_dec          A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
+                                      This class has a decrement function that
+                                      will be used to updated the entropy
+                                      weight.
                  max_ts_per_ep        The maximum timesteps to allow per
                                       episode.
                  batch_size           The batch size to use when training/
@@ -354,11 +362,19 @@ class PPO(object):
 
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(
-                max_iteration = 2000,
+                max_iteration = 1,
                 max_value     = lr,
                 min_value     = min_lr)
         else:
             self.lr_dec = lr_dec
+
+        if entropy_dec == None:
+            self.entropy_dec = LinearDecrementer(
+                max_iteration = 1,
+                max_value     = entropy_weight,
+                min_value     = min_entropy_weight)
+        else:
+            self.entropy_dec = entropy_dec
 
         #
         # One or both of our bootstrap clip ends might be a function of
@@ -417,6 +433,7 @@ class PPO(object):
         self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
+        self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_best_only      = save_best_only
         self.mean_window_size    = mean_window_size 
@@ -460,6 +477,7 @@ class PPO(object):
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
+        self.status_dict["entropy weight"]       = self.entropy_weight
         self.status_dict["reward range"]         = (max_int, -max_int)
         self.status_dict["obs range"]            = (max_int, -max_int)
 
@@ -745,7 +763,7 @@ class PPO(object):
     def update_learning_rate(self,
                              iteration):
         """
-            Update the learning rate. This relies on the rl_dec function,
+            Update the learning rate. This relies on the lr_dec function,
             which expects an iteration and returns an updated learning rate.
 
             Arguments:
@@ -757,17 +775,23 @@ class PPO(object):
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
 
-        self.lr = self.lr_dec(iteration)
-
-        update_optimizer_lr(self.actor_optim, self.lr)
-        update_optimizer_lr(self.critic_optim, self.lr)
-
         if self.using_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
 
-    #FIXME: we'll probably want to use the global observations here.
+    def update_entropy_weight(self,
+                              iteration):
+        """
+            Update the entropy weight. This relies on the entropy_dec function,
+            which expects an iteration and returns an updated entropy weight.
+
+            Arguments:
+                iteration    The current iteration of training.
+        """
+        self.entropy_weight = self.entropy_dec(iteration)
+        self.status_dict["entropy weight"] = self.entropy_weight
+
     def get_intrinsic_reward(self,
                              prev_obs,
                              obs,
@@ -1421,6 +1445,7 @@ class PPO(object):
             self.status_dict["iteration"] += 1
 
             self.update_learning_rate(self.status_dict["iteration"])
+            self.update_entropy_weight(self.status_dict["iteration"])
 
             data_loader = DataLoader(
                 dataset,

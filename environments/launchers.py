@@ -34,6 +34,9 @@ def run_ppo(env_generator,
             lr                  = 3e-4,
             min_lr              = 1e-4,
             lr_dec              = None,
+            entropy_weight      = 0.01,
+            min_entropy_weight  = 0.01,
+            entropy_dec         = None,
             max_ts_per_ep       = 200,
             use_gae             = True,
             use_icm             = False,
@@ -41,7 +44,6 @@ def run_ppo(env_generator,
             icm_beta            = 0.8,
             ext_reward_weight   = 1.0,
             intr_reward_weight  = 1.0,
-            entropy_weight      = 0.01,
             actor_kw_args       = {},
             critic_kw_args      = {},
             icm_kw_args         = {},
@@ -89,6 +91,8 @@ def run_ppo(env_generator,
               ext_reward_weight  = ext_reward_weight,
               intr_reward_weight = intr_reward_weight,
               entropy_weight     = entropy_weight,
+              min_entropy_weight = min_entropy_weight,
+              entropy_dec        = entropy_dec,
               icm_kw_args        = icm_kw_args,
               actor_kw_args      = actor_kw_args,
               critic_kw_args     = critic_kw_args,
@@ -1493,6 +1497,14 @@ def robot_warehouse_tiny(
         max_value     = lr,
         min_value     = min_lr)
 
+    entropy_weight     = 0.05
+    min_entropy_weight = 0.01
+
+    entropy_dec = LinearDecrementer(
+        max_iteration = 5000,
+        max_value     = entropy_weight,
+        min_value     = min_entropy_weight)
+
     #
     # This is a very sparse reward environment, and there are series of
     # complex actions that must occur in between rewards. Because of this,
@@ -1521,7 +1533,9 @@ def robot_warehouse_tiny(
             normalize_rewards   = False,
             obs_clip            = None,
             reward_clip         = None,
-            entropy_weight      = 0.05,
+            entropy_weight      = entropy_weight,
+            min_entropy_weight  = min_entropy_weight,
+            entropy_dec         = entropy_dec,
             lr_dec              = lr_dec,
             lr                  = lr,
             min_lr              = min_lr,
