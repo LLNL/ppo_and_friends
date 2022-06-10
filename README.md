@@ -170,8 +170,12 @@ When the `is_multi_agent` flag is used, MAPPO will be utilized for training.
 This implemenation of MAPPO comes from the suggestsions outlined in
 arXiv:2103.01955v2 and arXiv:2006.07869v4.
 
-I've currently only tested cooperative environments, but I plan to soon
-test competitive and mixed environments as well.
+### Caveats
+1. I've currently only tested cooperative environments, but I plan to soon
+   test competitive and mixed environments as well.
+2. Our current implementation only supports flat observation spaces (Discrete
+   and Box).
+
 
 # Tips And Tricks
 
