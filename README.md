@@ -430,6 +430,6 @@ see a decent policy. See the **Environment Setttings** section for details.
 - **test score: 6330.9**
 
 ## RobotWarehouseTiny
-<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/RobotWarehouseTiny.gif.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/mappo/gifs/RobotWarehouseTiny.gif.gif" width="300" height="200" />
 
 - **test score (averaged across all agents): 8.7**
