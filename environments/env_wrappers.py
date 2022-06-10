@@ -543,6 +543,10 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def get_global_state_space(self):
         """
+            Get the global state space.
+
+            Returns:
+                self.global_state_space
         """
         return self.global_state_space
 
@@ -550,6 +554,26 @@ class MultiAgentWrapper(IdentityWrapper):
                            multi_agent_space,
                            add_ids = False):
         """
+            Given a multi-agent space (action, observation, etc.) consisting
+            of tuples of spaces, construct a single space to represent the
+            entire environment.
+
+            Some things to note:
+              1. In environmens with mixed sized spaces, it's assumed that we
+                 will be zero padding the lesser sized spaces. Therefore, the
+                 returned space will match the maximum sized space.
+              2. Mixing space types is not currently supported.
+              3. Discrete and Box are the only two currently supported spaces.
+
+            Arguments:
+                multi_agent_space    The reference space. This should consist
+                                     of tuples of spaces.
+                add_ids              Will the agent ids be appended to this
+                                     space? If so, expand the size to account
+                                     for this.
+
+            Returns:
+                A single space representing all agents.
         """
         #
         # First, ensure that each agent has the same type of space.
@@ -643,11 +667,13 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def _construct_global_state_space(self):
         """
+            Construct the global state space. See arXiv:2103.01955v2.
+            By deafult, we concatenate all local observations to represent
+            the global state.
+
+            NOTE: this method should only be called AFTER
+            _update_observation_space is called.
         """
-        #
-        # NOTE: this method should only be called AFTER
-        # _update_observation_space is called.
-        #
         obs_type = type(self.observation_space)
 
         if obs_type == Box:
@@ -704,7 +730,16 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def _refine_obs(self, obs):
         """
+            Refine our multi-agent observations.
+
+            Arguments:
+                The multi-agent observations.
+
+            Returns:
+                The refined multi-agent observations.
         """
+        # TODO: add zero padding for observations that are smaller than
+        # our observation space.
         obs = np.stack(obs, axis=0)
 
         if self.need_agent_ids:
@@ -714,6 +749,18 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def _refine_dones(self, agents_done, obs):
         """
+            Refine our done array. Also, perform death masking when
+            appropriate. See arXiv:2103.01955v2 for information on
+            death masking.
+
+            Arguments:
+                agents_done    The done array.
+                obs            The agent observations.
+
+            Returns:
+                The refined done array as well as a single boolean
+                representing whether or not the entire environment is
+                done.
         """
         agents_done = np.array(agents_done)
 
@@ -735,11 +782,16 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def step(self, actions):
         """
+            Take a step in our multi-agent environment.
+
             Arguments:
-                actions    The actions to take.
+                actions    The actions for each agent to take.
 
             Returns:
+                observations, rewards, dones, and info.
         """
+        # TODO: zero pad actions that are less than our action space.
+
         #
         # Our first/test environment expects the actions to be contained in
         # a tuple. We may need to support more formats in the future.
