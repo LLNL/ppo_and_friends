@@ -1497,11 +1497,11 @@ def robot_warehouse_tiny(
         max_value     = lr,
         min_value     = min_lr)
 
-    entropy_weight     = 0.05
+    entropy_weight     = 0.03
     min_entropy_weight = 0.01
 
     entropy_dec = LinearDecrementer(
-        max_iteration = 5000,
+        max_iteration = 2000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
 
