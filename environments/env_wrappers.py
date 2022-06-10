@@ -1382,7 +1382,6 @@ class RewardClipper(GenericClipper):
         return np.clip(reward, min_value, max_value)
 
 
-# TODO: support multi-agent environments.
 class AugmentingEnvWrapper(IdentityWrapper):
     """
         This wrapper expects the environment to have a method named
