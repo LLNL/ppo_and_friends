@@ -330,6 +330,7 @@ Who knows with this one...
 ### RobotWarehouseTiny
 4 processors works well. This environment has very sparse rewards, so it
 can take a while for the agents to explore enough to reach a good policy.
+In the example gif below, agents were trained for a little less than 5 hours.
 
 # Resulting Policies
 Policies can differ from one training to another, and the longer training
@@ -436,4 +437,4 @@ see a decent policy. See the **Environment Setttings** section for details.
 ## RobotWarehouseTiny
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/RobotWarehouseTiny.gif" width="300" height="200" />
 
-- **test score (averaged across all agents): 8.7**
+- **test score (averaged across all agents): 11.0**
