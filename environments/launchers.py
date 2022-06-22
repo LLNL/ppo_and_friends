@@ -1489,19 +1489,19 @@ def robot_warehouse_tiny(
     critic_kw_args = actor_kw_args.copy()
     critic_kw_args["hidden_size"] = 512
 
-    lr     = 0.0001
-    min_lr = 0.0001
+    lr     = 0.001
+    min_lr = 0.00001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 1.0,
+        max_iteration = 4000,
         max_value     = lr,
         min_value     = min_lr)
 
-    entropy_weight     = 0.03
+    entropy_weight     = 0.05
     min_entropy_weight = 0.01
 
     entropy_dec = LinearDecrementer(
-        max_iteration = 2000,
+        max_iteration = 4000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
 
@@ -1514,8 +1514,9 @@ def robot_warehouse_tiny(
     # Because of the sparse rewards, I've also increased the entropy
     # weight to incentivize exploration. We could also experiment with
     # using ICM here. I've disabled rewards and observation normalization
-    # and clipping, mainly because they aren't mentioned in arXiv:2103.01955v2,
-    # but it might be worth experimenting with them.
+    # and clipping, mainly because they aren't mentioned in arXiv:2103.01955v2.
+    # I've noticed that performance tends to go down a bit when these
+    # normalizations are enabled.
     #
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
@@ -1530,8 +1531,8 @@ def robot_warehouse_tiny(
             use_gae             = True,
             normalize_values    = True,
             normalize_obs       = False,
-            normalize_rewards   = False,
             obs_clip            = None,
+            normalize_rewards   = False,
             reward_clip         = None,
             entropy_weight      = entropy_weight,
             min_entropy_weight  = min_entropy_weight,
