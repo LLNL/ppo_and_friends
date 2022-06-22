@@ -1468,7 +1468,7 @@ def swimmer_ppo(state_path,
 #                              Multi-Agent                                    #
 ###############################################################################
 
-def robot_warehouse_tiny(
+def robot_warehouse(
     state_path,
     load_state,
     render,
@@ -1477,10 +1477,26 @@ def robot_warehouse_tiny(
     device,
     envs_per_proc,
     random_seed,
-    test = False,
+    size,
+    test          = False,
     num_test_runs = 1):
 
-    env_generator = lambda : gym.make('rware-tiny-3ag-v1')
+    avail_sizes = ["tiny", "small", "medium"]
+
+    if size not in avail_sizes:
+        msg  = "ERROR: robot warehouse size must be one of the following: "
+        msg += "{}".format(avail_sizes)
+        rank_print(msg)
+        comm.barrier()
+        comm.Abort()
+
+    #FIXME: we may need different settings for each one, but let's try this.
+    if size == "tiny":
+        env_generator = lambda : gym.make('rware-tiny-3ag-v1')
+    elif size == "small":
+        env_generator = lambda : gym.make('rware-small-4ag-v1')
+    elif size == "medium":
+        env_generator = lambda : gym.make('rware-medium-6ag-v1')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
