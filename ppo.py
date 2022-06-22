@@ -666,7 +666,6 @@ class PPO(object):
         if self.using_icm:
             rank_print("Can clone environment: {}".format(self.can_clone_env))
 
-
     def get_action(self, obs):
         """
             Given an observation from our environment, determine what the

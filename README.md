@@ -3,12 +3,12 @@
 PPO and Friends is a PyTorch implementation of Proximal Policy Optimation
 along with various extra optimizations and add-ons (freinds).
 
-While this project supports many of OpenAI's gym environments, the goal
-is to be somewhat independent of gym. Because of this, you'll sometimes see
-situations where utilities that gym provides have been ignored in favor of
-creating our own, often simplified (or sometimes more complicated...), versions
-of these utilities. This is largely to support custom environments that might
-not follow the standard rules that gym enforces.
+While this project is intended to be compatible with OpenAI's gym environments
+and interfaces, you'll occasionally see situtations where utilities that gym
+(or stable baselines) provides have been ignored in favor of creating our
+own versions of these utilities. These choices are made to more easily handle
+environments and/or algorithms that don't follow the standard rules and
+assumptions enforced by existing frameworks.
 
 # Our Friends
 
