@@ -1506,6 +1506,7 @@ def robot_warehouse_tiny(
         min_value     = min_entropy_weight)
 
     #
+    # This environment comes from arXiv:2006.07869v4.
     # This is a very sparse reward environment, and there are series of
     # complex actions that must occur in between rewards. Because of this,
     # using a large maximum timesteps per episode results in faster learning.
