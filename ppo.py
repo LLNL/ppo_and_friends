@@ -13,7 +13,7 @@ from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.environments.env_wrappers import VectorizedEnv
+from ppo_and_friends.environments.env_wrappers import VectorizedEnv, MultiAgentWrapper
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
@@ -37,6 +37,7 @@ class PPO(object):
                  ac_network,
                  device,
                  random_seed,
+                 is_multi_agent      = False,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
@@ -45,6 +46,9 @@ class PPO(object):
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
+                 entropy_weight      = 0.01,
+                 min_entropy_weight  = 0.01,
+                 entropy_dec         = None,
                  max_ts_per_ep       = 64,
                  batch_size          = 256,
                  ts_per_rollout      = 2048,
@@ -60,7 +64,6 @@ class PPO(object):
                  icm_beta            = 0.8,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
-                 entropy_weight      = 0.01,
                  target_kl           = 0.015,
                  mean_window_size    = 100,
                  normalize_adv       = True,
@@ -86,6 +89,8 @@ class PPO(object):
                  ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
+                 is_multi_agent       Does our environment contain multiple
+                                      agents? If so, enable MAPPO algorithm.
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
@@ -101,6 +106,12 @@ class PPO(object):
                                       utils/iteration_mappers.py.
                                       This class has a decrement function that
                                       will be used to updated the learning rate.
+                 entropy_dec          A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
+                                      This class has a decrement function that
+                                      will be used to updated the entropy
+                                      weight.
                  max_ts_per_ep        The maximum timesteps to allow per
                                       episode.
                  batch_size           The batch size to use when training/
@@ -216,14 +227,26 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
+        if is_multi_agent and envs_per_proc > 1:
+            msg  = "WARNING: envs_per_proc > 1 is not currently supported "
+            msg += "for multi-agent environments. Setting envs_per_proc to 1."
+            rank_print(msg)
+            envs_per_proc = 1
+
         #
-        # Vectorize our environment and add any requested wrappers. Note that
-        # order matters!
+        # Begin adding wrappers. Order matters!
+        # The first wrapper will always be either a standard vectorization
+        # or a multi-agent wrapper. We currently don't support combining them.
         #
-        env = VectorizedEnv(
-            env_generator = env_generator,
-            num_envs      = envs_per_proc,
-            test_mode     = test_mode)
+        if is_multi_agent:
+            env = MultiAgentWrapper(
+                env_generator = env_generator,
+                test_mode     = test_mode)
+        else:
+            env = VectorizedEnv(
+                env_generator = env_generator,
+                num_envs      = envs_per_proc,
+                test_mode     = test_mode)
 
         #
         # For reproducibility, we need to set the environment's random
@@ -237,6 +260,12 @@ class PPO(object):
         # our environment should receive pre-normalized data for augmenting.
         #
         if obs_augment:
+            if is_multi_agent:
+                msg  = "ERROR: observation augmentations are not currently "
+                msg += "supported within multi-agent environments."
+                rank_print(msg)
+                comm.Abort()
+
             env = AugmentingEnvWrapper(
                 env,
                 test_mode = test_mode)
@@ -282,30 +311,43 @@ class PPO(object):
                 clip_range  = reward_clip)
 
         #
+        # Funny business: we're taking over our "environments per processor"
+        # code when using multi-agent environments. Each agent is basically
+        # thought of as an environment instance. As a result, our timesteps
+        # will be divided by the number of agents during the rollout, which
+        # is what we want when env_per_processor > 1, but it's not what we
+        # want when num_agents > 1.
+        #
+        if is_multi_agent:
+            ts_per_rollout *= env.get_num_agents()
+
+        #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
         #
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
 
-        act_type = type(env.action_space)
+        action_space = env.action_space
+        act_type     = type(env.action_space)
 
         if (issubclass(act_type, Box) or
             issubclass(act_type, MultiBinary) or
             issubclass(act_type, MultiDiscrete)):
 
-            self.act_dim = env.action_space.shape
+            self.act_dim = action_space.shape
 
         elif issubclass(act_type, Discrete):
-            self.act_dim = env.action_space.n
+            self.act_dim = action_space.n
 
         else:
             msg = "ERROR: unsupported action space {}".format(env.action_space)
             rank_print(msg)
             comm.Abort()
 
-        if (issubclass(act_type, MultiBinary) or
-            issubclass(act_type, MultiDiscrete)):
+        if ((issubclass(act_type, MultiBinary) or
+             issubclass(act_type, MultiDiscrete)) and
+             (not is_multi_agent)):
             msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
             msg += "may not be fully supported. Use at your own risk."
             rank_print(msg)
@@ -320,11 +362,19 @@ class PPO(object):
 
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(
-                max_iteration = 2000,
+                max_iteration = 1,
                 max_value     = lr,
                 min_value     = min_lr)
         else:
             self.lr_dec = lr_dec
+
+        if entropy_dec == None:
+            self.entropy_dec = LinearDecrementer(
+                max_iteration = 1,
+                max_value     = entropy_weight,
+                min_value     = min_entropy_weight)
+        else:
+            self.entropy_dec = entropy_dec
 
         #
         # One or both of our bootstrap clip ends might be a function of
@@ -361,6 +411,7 @@ class PPO(object):
         #
         self.env                 = env
         self.device              = device
+        self.is_multi_agent      = is_multi_agent
         self.state_path          = state_path
         self.render              = render
         self.action_dtype        = action_dtype
@@ -382,7 +433,7 @@ class PPO(object):
         self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
-        self.obs_shape           = env.observation_space.shape
+        self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_best_only      = save_best_only
         self.mean_window_size    = mean_window_size 
@@ -394,6 +445,17 @@ class PPO(object):
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
+        self.actor_obs_shape     = self.env.observation_space.shape
+
+        #
+        # In multi-agent settings, the critic receives a "global state". In
+        # single-agent settings, the critic receives the same observation
+        # as the actor.
+        #
+        if is_multi_agent:
+            self.critic_obs_shape = self.env.get_global_state_space().shape
+        else:
+            self.critic_obs_shape = self.actor_obs_shape
 
         #
         # Create a dictionary to track the status of training.
@@ -415,6 +477,7 @@ class PPO(object):
         self.status_dict["critic loss"]          = 0
         self.status_dict["kl avg"]               = 0
         self.status_dict["lr"]                   = self.lr
+        self.status_dict["entropy weight"]       = self.entropy_weight
         self.status_dict["reward range"]         = (max_int, -max_int)
         self.status_dict["obs range"]            = (max_int, -max_int)
 
@@ -461,7 +524,13 @@ class PPO(object):
         # where I got 1.0 from... I'll try to track that down.
         #
         if use_conv2d_setup:
-            obs_dim = self.obs_shape
+            if is_multi_agent:
+                msg  = "ERROR: use of conv2d models with multi-agent "
+                msg += "environments is not currently supported."
+                rank_prink(msg)
+                comm.Abort()
+
+            obs_dim = self.actor_obs_shape
 
             self.actor = ac_network(
                 name         = "actor", 
@@ -482,11 +551,12 @@ class PPO(object):
                 **critic_kw_args)
 
         else:
-            obs_dim = self.obs_shape[0]
+            actor_obs_dim  = self.actor_obs_shape[0]
+            critic_obs_dim = self.critic_obs_shape[0]
 
             self.actor = ac_network(
                 name         = "actor", 
-                in_dim       = obs_dim, 
+                in_dim       = actor_obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_dtype = action_dtype,
@@ -495,7 +565,7 @@ class PPO(object):
 
             self.critic = ac_network(
                 name         = "critic", 
-                in_dim       = obs_dim, 
+                in_dim       = critic_obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_dtype = action_dtype,
@@ -515,6 +585,7 @@ class PPO(object):
         comm.barrier()
 
         if self.using_icm:
+            obs_dim = self.actor_obs_shape[0]
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -592,6 +663,9 @@ class PPO(object):
             except:
                 self.can_clone_env = False
 
+        if self.using_icm:
+            rank_print("Can clone environment: {}".format(self.can_clone_env))
+
     def get_action(self, obs):
         """
             Given an observation from our environment, determine what the
@@ -634,16 +708,17 @@ class PPO(object):
 
         return raw_action, action, log_prob.detach()
 
-    def evaluate(self, batch_obs, batch_actions):
+    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
         """
             Given a batch of observations, use our critic to approximate
             the expected return values. Also use a batch of corresponding
             actions to retrieve some other useful information.
 
             Arguments:
-                batch_obs      A batch of observations.
-                batch_actions  A batch of actions corresponding to the batch of
-                               observations.
+                batch_critic_obs   A batch of observations for the critic.
+                batch_obs          A batch of standard observations.
+                batch_actions      A batch of actions corresponding to the batch of
+                                   observations.
 
             Returns:
                 A tuple of form (values, log_probs, entropies) s.t. values are
@@ -651,8 +726,7 @@ class PPO(object):
                 from our probability distribution, and entropies are the
                 entropies from our distribution.
         """
-        values = self.critic(batch_obs).squeeze()
-
+        values      = self.critic(batch_critic_obs).squeeze()
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
@@ -688,7 +762,7 @@ class PPO(object):
     def update_learning_rate(self,
                              iteration):
         """
-            Update the learning rate. This relies on the rl_dec function,
+            Update the learning rate. This relies on the lr_dec function,
             which expects an iteration and returns an updated learning rate.
 
             Arguments:
@@ -700,15 +774,22 @@ class PPO(object):
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
 
-        self.lr = self.lr_dec(iteration)
-
-        update_optimizer_lr(self.actor_optim, self.lr)
-        update_optimizer_lr(self.critic_optim, self.lr)
-
         if self.using_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
+
+    def update_entropy_weight(self,
+                              iteration):
+        """
+            Update the entropy weight. This relies on the entropy_dec function,
+            which expects an iteration and returns an updated entropy weight.
+
+            Arguments:
+                iteration    The current iteration of training.
+        """
+        self.entropy_weight = self.entropy_dec(iteration)
+        self.status_dict["entropy weight"] = self.entropy_weight
 
     def get_intrinsic_reward(self,
                              prev_obs,
@@ -826,11 +907,19 @@ class PPO(object):
         # more intelligently.
         #
         if self.use_soft_resets:
-            obs = self.env.soft_reset()
+            initial_reset_func = self.env.soft_reset
         else:
-            obs = self.env.reset()
+            initial_reset_func = self.env.reset
 
-        env_batch_size     = obs.shape[0]
+        if self.is_multi_agent:
+            obs, global_obs = initial_reset_func()
+            env_batch_size  = obs.shape[0]
+        else:
+            obs            = initial_reset_func()
+            env_batch_size = obs.shape[0]
+            empty_shape    = (env_batch_size, 0)
+            global_obs     = np.empty(empty_shape).astype(np.float32)
+
         ep_rewards         = np.zeros((env_batch_size, 1))
         episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
         ep_score           = np.zeros((env_batch_size, 1))
@@ -878,15 +967,31 @@ class PPO(object):
             else:
                 raw_action, action, log_prob = self.get_action(obs)
 
-            t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-            value = self.critic(t_obs)
+            if self.is_multi_agent:
+                c_obs = torch.tensor(global_obs,
+                    dtype=torch.float).to(self.device)
+            else:
+                c_obs = torch.tensor(obs,
+                    dtype=torch.float).to(self.device)
+
+            value = self.critic(c_obs)
 
             if self.normalize_values:
                 value = self.value_normalizer.denormalize(value)
 
-            prev_obs = obs.copy()
+            prev_obs        = obs.copy()
+            prev_global_obs = global_obs.copy()
 
             obs, ext_reward, done, info = self.env.step(action)
+
+            if self.is_multi_agent:
+                #
+                # When we're learning from a multi-agent environment, we
+                # feed a "global state" to the critic. This is called
+                # Centralized Training Decentralized Execution (CTDE).
+                # arXiv:2006.07869v4
+                #
+                global_obs = info[0]["global state"].copy()
 
             #
             # In the observational augment case, our action is a single action,
@@ -952,6 +1057,7 @@ class PPO(object):
             # When using lstm networks, we need to save the hidden states
             # encountered during the rollouts. These will later be used to
             # initialize the hidden states when updating the models.
+            # Note that we pass in empty arrays when not using lstm networks.
             #
             if self.using_lstm:
 
@@ -995,17 +1101,18 @@ class PPO(object):
 
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
-                    prev_obs[ei_idx],
-                    ep_obs[ei_idx],
-                    raw_action[ei_idx],
-                    action[ei_idx],
-                    value[ei_idx].item(),
-                    log_prob[ei_idx],
-                    reward[ei_idx].item(),
-                    actor_hidden[:, [ei_idx], :],
-                    actor_cell[:, [ei_idx], :],
-                    critic_hidden[:, [ei_idx], :],
-                    critic_cell[:, [ei_idx], :])
+                    global_observation      = prev_global_obs[ei_idx],
+                    observation             = prev_obs[ei_idx],
+                    next_observation        = ep_obs[ei_idx],
+                    raw_action              = raw_action[ei_idx],
+                    action                  = action[ei_idx],
+                    value                   = value[ei_idx].item(),
+                    log_prob                = log_prob[ei_idx],
+                    reward                  = reward[ei_idx].item(),
+                    actor_hidden            = actor_hidden[:, [ei_idx], :],
+                    actor_cell              = actor_cell[:, [ei_idx], :],
+                    critic_hidden           = critic_hidden[:, [ei_idx], :],
+                    critic_cell             = critic_cell[:, [ei_idx], :])
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
@@ -1089,10 +1196,14 @@ class PPO(object):
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
 
-                t_obs = torch.tensor(obs[where_maxed],
-                    dtype=torch.float).to(self.device)
+                if self.is_multi_agent:
+                    c_obs = torch.tensor(global_obs[where_maxed],
+                        dtype=torch.float).to(self.device)
+                else:
+                    c_obs = torch.tensor(obs[where_maxed],
+                        dtype=torch.float).to(self.device)
 
-                nxt_value = self.critic(t_obs)
+                nxt_value = self.critic(c_obs)
 
                 if self.normalize_values:
                     nxt_value = self.value_normalizer.denormalize(nxt_value)
@@ -1134,7 +1245,7 @@ class PPO(object):
 
                         clone_prev_obs = obs.copy()
                         cloned_env = deepcopy(self.env)
-                        clone_obs, _, _, _ = cloned_env.step(clone_action)
+                        clone_obs, _, _, clone_info = cloned_env.step(clone_action)
                         del cloned_env
 
                         if self.obs_augment:
@@ -1333,6 +1444,7 @@ class PPO(object):
             self.status_dict["iteration"] += 1
 
             self.update_learning_rate(self.status_dict["iteration"])
+            self.update_entropy_weight(self.status_dict["iteration"])
 
             data_loader = DataLoader(
                 dataset,
@@ -1425,10 +1537,10 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for batch in data_loader:
-            obs, _, raw_actions, _, advantages, log_probs, \
+        for batch_data in data_loader:
+            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell, batch_idxs = batch
+                actor_cell, critic_cell, batch_idxs = batch_data
 
             torch.cuda.empty_cache()
 
@@ -1465,7 +1577,10 @@ class PPO(object):
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-            values, curr_log_probs, entropy = self.evaluate(obs, raw_actions)
+            values, curr_log_probs, entropy = self.evaluate(
+                critic_obs,
+                obs,
+                raw_actions)
 
             data_loader.dataset.values[batch_idxs] = values
 
@@ -1589,7 +1704,11 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for obs, next_obs, _, actions, _, _, _, _, _, _, _, _ in data_loader:
+        for batch_data in data_loader:
+
+            _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
+                batch_data
+
             torch.cuda.empty_cache()
 
             actions = actions.unsqueeze(1)

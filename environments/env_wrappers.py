@@ -9,6 +9,8 @@ import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import need_action_squeeze
 from collections.abc import Iterable
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gym.spaces.tuple import Tuple as gym_tuple
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -44,6 +46,36 @@ class IdentityWrapper(object):
 
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
+
+    def get_num_agents(self):
+        """
+            Get the number of agents in this environment.
+
+            Returns:
+                The number of agents in the environment.
+        """
+        get_num_agents = getattr(self.env, "get_num_agents", None)
+
+        if callable(get_num_agents):
+            return get_num_agents()
+        return 1
+
+    def get_global_state_space(self):
+        """
+            Get the global state space. This is specific to multi-agent
+            environments. In single agent environments, we just return
+            the observation space.
+
+            Returns:
+                If available, the global state space is returned. Otherwise,
+                the observation space is returned.
+        """
+        get_global_state_space = getattr(self.env,
+            "get_global_state_space", None)
+
+        if callable(get_global_state_space):
+            return get_global_state_space()
+        return self.observation_space
 
     def set_random_seed(self, seed):
         """
@@ -192,7 +224,6 @@ class IdentityWrapper(object):
             return batch_size_getter()
         else:
             return 1
-
 
 class VectorizedEnv(IdentityWrapper, Iterable):
     """
@@ -455,13 +486,415 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
     def get_batch_size(self):
         """
-            If any wrapped classes define this method, try to get the batch size
-            from them. Otherwise, assume we have a single environment.
+            Get the batch size.
 
             Returns:
                 Return our batch size.
         """
         return len(self)
+
+
+class MultiAgentWrapper(IdentityWrapper):
+    """
+        A wrapper for multi-agent environments. This design follows the
+        suggestions outlined in arXiv:2103.01955v2.
+    """
+
+    def __init__(self,
+                 env_generator,
+                 need_agent_ids = True,
+                 **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env             The environment to wrap.
+                need_agent_ids  Do we need to explicitly add the agent
+                                ids to their observations? Assume yes.
+        """
+        super(MultiAgentWrapper, self).__init__(
+            env_generator(),
+            **kw_args)
+
+        self.need_agent_ids     = need_agent_ids
+        self.num_agents         = len(self.env.observation_space)
+        self.agent_ids          = np.arange(self.num_agents).reshape((-1, 1))
+
+        self.global_state_space = None
+
+        self.observation_space, _ = self._get_refined_space(
+            multi_agent_space = self.env.observation_space,
+            add_ids           = True)
+
+        self.action_space, self.num_actions = self._get_refined_space(
+            multi_agent_space = self.env.action_space,
+            add_ids           = False)
+
+        self._construct_global_state_space()
+
+    def get_num_agents(self):
+        """
+            Get the number of agents in this environment.
+
+            Returns:
+                The number of agents in the environment.
+        """
+        return self.num_agents
+
+    def get_global_state_space(self):
+        """
+            Get the global state space.
+
+            Returns:
+                self.global_state_space
+        """
+        return self.global_state_space
+
+    def _get_refined_space(self,
+                           multi_agent_space,
+                           add_ids = False):
+        """
+            Given a multi-agent space (action, observation, etc.) consisting
+            of tuples of spaces, construct a single space to represent the
+            entire environment.
+
+            Some things to note:
+              1. In environmens with mixed sized spaces, it's assumed that we
+                 will be zero padding the lesser sized spaces. Therefore, the
+                 returned space will match the maximum sized space.
+              2. Mixing space types is not currently supported.
+              3. Discrete and Box are the only two currently supported spaces.
+
+            Arguments:
+                multi_agent_space    The reference space. This should consist
+                                     of tuples of spaces.
+                add_ids              Will the agent ids be appended to this
+                                     space? If so, expand the size to account
+                                     for this.
+
+            Returns:
+                A tuple containing a single space representing all agents as
+                the first element and the size of the space as the second
+                element.
+        """
+        #
+        # First, ensure that each agent has the same type of space.
+        #
+        space_type      = None
+        prev_space_type = None
+        dtype           = None
+        prev_dtype      = None
+        for space in multi_agent_space:
+            if space_type == None:
+                space_type      = type(space)
+                prev_space_type = type(space)
+
+                dtype         = space.dtype
+                prev_dtype    = space.dtype
+
+            if prev_space_type != space_type:
+                msg  = "ERROR: mixed space types in multi-agent "
+                msg += "environments is not currently supported. "
+                msg += "Found types "
+                msg += "{} and {}.".format(space_type, prev_space_type)
+                rank_print(msg)
+                comm.Abort()
+            elif prev_dtype != dtype:
+                msg  = "ERROR: mixed space dtypes in multi-agent "
+                msg += "environments is not currently supported. "
+                msg += "Found types "
+                msg += "{} and {}.".format(prev_dtype, dtype)
+                rank_print(msg)
+                comm.Abort()
+            else:
+                prev_space_type = space_type
+                space_type      = type(space)
+
+                prev_dtype    = dtype
+                dtype         = space.dtype
+
+        #
+        # Next, we need handle cases where agents have different spaces
+        # We want to homogenize things, so we pad all of the spaces
+        # to be identical.
+        #
+        # TODO: we're assuming all dimensions are flattened. In the future,
+        # we may want to support multi-dimensional spaces.
+        #
+        low   = np.empty(0, dtype = np.float32)
+        high  = np.empty(0, dtype = np.float32)
+        count = 0
+
+        for space in multi_agent_space:
+            if space_type == Box:
+                diff  = space.shape[0] - low.size
+                count = max(count, space.shape[0])
+
+                low   = np.pad(low, (0, diff))
+                high  = np.pad(high, (0, diff))
+
+                high  = np.maximum(high, space.high)
+                low   = np.minimum(low, space.low)
+
+            elif space_type == Discrete:
+                count = max(count, space.n)
+
+            else:
+                not_supported_msg  = "ERROR: {} is not currently supported "
+                not_supported_msg += "as an observation space in multi-agent "
+                not_supported_msg += "environments."
+                rank_print(not_supported_msg.format(space))
+                comm.Abort()
+
+        if space_type == Box:
+            if add_ids:
+                low   = np.concatenate((low, (0,)))
+                high  = np.concatenate((high, (np.inf,)))
+                size  = count + 1
+                shape = (count + 1,)
+            else:
+                size  = count
+
+            shape = (size,)
+
+            new_space = Box(
+                low   = low,
+                high  = high,
+                shape = (size,),
+                dtype = dtype)
+
+        elif space_type == Discrete:
+            size = 1
+            if add_ids:
+                new_space = Discrete(count + 1)
+            else:
+                new_space = Discrete(count)
+
+        return (new_space, size)
+
+    def _construct_global_state_space(self):
+        """
+            Construct the global state space. See arXiv:2103.01955v2.
+            By deafult, we concatenate all local observations to represent
+            the global state.
+
+            NOTE: this method should only be called AFTER
+            _update_observation_space is called.
+        """
+        obs_type = type(self.observation_space)
+
+        if obs_type == Box:
+            low   = np.tile(self.observation_space.low, self.num_agents)
+            high  = np.tile(self.observation_space.high, self.num_agents)
+            shape = (self.observation_space.shape[0] * self.num_agents,)
+
+            global_state_space = Box(
+                low   = low,
+                high  = high,
+                shape = shape,
+                dtype = self.observation_space.dtype)
+
+        elif obs_type == Discrete:
+            global_state_space = Discrete(
+                self.observation_space.n * self.num_agents)
+        else:
+            not_supported_msg  = "ERROR: {} is not currently supported "
+            not_supported_msg += "as an observation space in multi-agent "
+            not_supported_msg += "environments."
+            rank_print(not_supported_msg.format(self.observation_space))
+            comm.Abort()
+
+        self.global_state_space = global_state_space
+
+    def get_feature_pruned_global_state(self, obs):
+        """
+            From arXiv:2103.01955v2, cacluate the "Feature-Pruned
+            Agent-Specific Global State". By default, we assume that
+            the environment doesn't offer extra information, which leads
+            us to actually caculating the "Concatenation of Local Observations".
+            We can create sub-classes of this implementation to handle
+            environments that do offer global state info.
+
+            Arguments:
+                obs    The refined agent observations.
+
+            Returns:
+                The global state to be fed to the critic.
+        """
+        #
+        # TODO: This could get pretty memory intensive, and it feels a bit
+        # ridiculous to use a batch of copies. This is going off of the
+        # implementation in arXiv:2103.01955v2. Maybe we can do better.
+        #
+        # Our observation is currently in the shape (num_agents, obs), so
+        # it's really a batch of observtaions. The global state is really
+        # just this batch concatenated as a single observation. Each agent
+        # needs a copy of it, so we just tile them.
+        #
+        obs = obs.flatten()
+        obs = np.tile(obs, self.num_agents).reshape((self.num_agents, -1))
+        return obs
+
+    def _refine_obs(self, obs):
+        """
+            Refine our multi-agent observations.
+
+            Arguments:
+                The multi-agent observations.
+
+            Returns:
+                The refined multi-agent observations.
+        """
+        obs = np.stack(obs, axis=0)
+
+        if self.need_agent_ids:
+            obs = np.concatenate((self.agent_ids, obs), axis=1)
+
+        #
+        # It's possible for agents to have differing observation space sizes.
+        # In those cases, we zero pad for congruity.
+        #
+        size_diff = self.observation_space.shape[0] - obs.shape[-1]
+        if size_diff > 0:
+            obs = np.pad(obs, ((0, 0), (0, size_diff)))
+
+        return obs
+
+    def _refine_dones(self, agents_done, obs):
+        """
+            Refine our done array. Also, perform death masking when
+            appropriate. See arXiv:2103.01955v2 for information on
+            death masking.
+
+            Arguments:
+                agents_done    The done array.
+                obs            The agent observations.
+
+            Returns:
+                The refined done array as well as a single boolean
+                representing whether or not the entire environment is
+                done.
+        """
+        agents_done = np.array(agents_done)
+
+        #
+        # We assume that our environment is done only when all agents
+        # are done. If some, but not all, agents are done, we death mask
+        # the observations that have died early.
+        #
+        all_done = False
+        if agents_done.all():
+            dones = np.ones(self.num_agents).astype(bool)
+            all_done = True
+        else:
+            obs[agents_done, 1:] = 0.0
+            dones = np.zeros(self.num_agents).astype(bool)
+
+        dones = dones.reshape((-1, 1))
+        return dones, all_done
+
+    def step(self, actions):
+        """
+            Take a step in our multi-agent environment.
+
+            Arguments:
+                actions    The actions for each agent to take.
+
+            Returns:
+                observations, rewards, dones, and info.
+        """
+        #
+        # It's possible for agents to have differing action space sizes.
+        # In those cases, we zero pad for congruity.
+        #
+        size_diff = self.num_actions - int(actions.size / self.num_agents)
+        if size_diff > 0:
+            actions = np.pad(actions, ((0, 0), (0, size_diff)))
+
+        #
+        # Our first/test environment expects the actions to be contained in
+        # a tuple. We may need to support more formats in the future.
+        #
+        tup_actions = tuple(actions[i] for i in range(self.num_agents))
+
+        obs, rewards, agents_done, global_info = self.env.step(actions)
+
+        obs     = self._refine_obs(obs)
+        rewards = np.stack(np.array(rewards), axis=0).reshape((-1, 1))
+        dones, all_done = self._refine_dones(agents_done, obs)
+
+        if all_done:
+            terminal_obs = obs.copy()
+            obs, global_obs = self.reset()
+            global_info["global state"] = global_obs
+        else:
+            global_info["global state"] = \
+                self.get_feature_pruned_global_state(obs)
+
+        #
+        # Create an array of references so that we don't use up memory.
+        #
+        infos = np.array([global_info] * self.num_agents, dtype=object)
+
+        #
+        # Lastly, each agent needs its own terminal observation.
+        #
+        if all_done:
+            for i in range(self.num_agents):
+                infos[i]["terminal observation"] = terminal_obs[i].copy()
+
+        self.obs_cache = obs.copy()
+
+        return obs, rewards, dones, infos
+
+    def reset(self):
+        """
+            Reset the environment. If we're in test mode, we don't augment the
+            resulting observations. Otherwise, augment them before returning.
+
+            Returns:
+                The local and global observations.
+        """
+        obs = self.env.reset()
+        obs = self._refine_obs(obs)
+        global_state = self.get_feature_pruned_global_state(obs)
+
+        return obs, global_state
+
+    def soft_reset(self):
+        """
+            Perform a "soft reset". This results in only performing the reset
+            if the environment hasn't been reset since being created. This can
+            allow us to start a new rollout from a previous rollout that ended
+            near later in the environments timesteps.
+
+            Returns:
+                The local and global observations.
+        """
+        if self.need_hard_reset or self.obs_cache == None:
+            return self.reset()
+
+        global_state = self.get_feature_pruned_global_state(self.obs_cache)
+        return self.obs_cache, global_state
+
+    def get_batch_size(self):
+        """
+            Get the batch size.
+
+            Returns:
+                Return our batch size.
+        """
+        return self.num_agents
+
+    def supports_batched_environments(self):
+        """
+            Determine whether or not our wrapped environment supports
+            batched environments.
+
+            Return:
+                True.
+        """
+        return True
 
 
 class ObservationNormalizer(IdentityWrapper):
@@ -530,9 +963,20 @@ class ObservationNormalizer(IdentityWrapper):
         """
         obs = self.env.reset()
 
+        #
+        # In our multi-agent case, the global state is returned along
+        # with the local observation.
+        #
+        is_multi_agent = False
+        if type(obs) == type(tuple()):
+            is_multi_agent = True
+            obs, global_state = obs
+
         if self.update_stats:
             self.running_stats.update(obs)
 
+        if is_multi_agent:
+            return (obs, global_state)
         return obs
 
     def normalize(self, obs):
@@ -626,7 +1070,7 @@ class RewardNormalizer(IdentityWrapper):
         # if so, we need to be able to correlate a running reward with
         # each environment instance.
         #
-        if self.test_mode:
+        if self.test_mode and self.get_num_agents() == 1:
             self.batch_size = 1
         else:
             self.batch_size = self.get_batch_size()
@@ -859,7 +1303,22 @@ class ObservationClipper(GenericClipper):
             Returns:
                 The resulting observation.
         """
-        return self._clip(self.env.reset())
+        obs = self.env.reset()
+
+        #
+        # In our multi-agent case, the global state is returned along
+        # with the local observation.
+        #
+        is_multi_agent = False
+        if type(obs) == type(tuple()):
+            is_multi_agent = True
+            obs, global_state = obs
+
+        obs = self._clip(obs)
+
+        if is_multi_agent:
+            return (obs, global_state)
+        return obs
 
     def _clip(self, obs):
         """

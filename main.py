@@ -7,6 +7,7 @@ from ppo_and_friends.environments.launchers import *
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 import shutil
+import rware
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -79,7 +80,8 @@ if __name__ == "__main__":
                  "Swimmer",
                  "HalfCheetah",
                  "HumanoidStandup",
-                 "Humanoid"])
+                 "Humanoid",
+                 "RobotWarehouseTiny"])
 
     args              = parser.parse_args()
     test              = args.test
@@ -479,6 +481,19 @@ if __name__ == "__main__":
 
     elif env_name == "HumanoidStandup":
         humanoid_stand_up_ppo(
+            random_seed   = random_seed,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            render_gif    = render_gif,
+            num_timesteps = num_timesteps,
+            device        = device,
+            envs_per_proc = envs_per_proc,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "RobotWarehouseTiny":
+        robot_warehouse_tiny(
             random_seed   = random_seed,
             state_path    = state_path,
             load_state    = load_state,

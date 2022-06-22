@@ -17,7 +17,7 @@ dependencies = [
     'matplotlib',
     'opencv-python',
     'pygame',
-    'gym',
+    'gym==0.21',
     'box2d-py',
     'numpy',
     'mpi4py',

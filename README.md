@@ -15,6 +15,7 @@ assumptions enforced by existing frameworks.
 Some of our friends:
 
 * Intrinsic Curiosity Module (ICM)
+* Multi Agent Proximal Policy Optimization (MAPPO)
 * Generalized Advantage Estimations (GAE)
 * LSTM integration into PPO algorithm
 * Gradient, reward, bootstrap, and observation clipping
@@ -118,6 +119,7 @@ Some things to note:
    processor is only collecting 32 timesteps per rollout, the highest
    score any of them could ever achieve would be 32. Therefore, a reported
    score around 32 might actually signal a converged policy.
+4. The `envs_per_proc` flag is currently disabled for multi-agent environments.
 
 # Observational Augmentations
 
@@ -161,6 +163,19 @@ duplicated, except that it might contain augmented terminal observations.
 **NOTE:** we don't currently prohibit the use of multiple environments per
 processor in conjunction with `aug_observation`, but it is untested and
 should be used with caution and consideration.
+
+# MAPPO
+
+When the `is_multi_agent` flag is used, MAPPO will be utilized for training.
+This implemenation of MAPPO comes from the suggestsions outlined in
+arXiv:2103.01955v2 and arXiv:2006.07869v4.
+
+### Caveats
+1. I've currently only tested cooperative environments, but I plan to soon
+   test competitive and mixed environments as well.
+2. Our current implementation only supports flat observation spaces (Discrete
+   and Box).
+
 
 # Tips And Tricks
 
@@ -312,6 +327,11 @@ within 40 minutes or less.
 ### HumanoidStandup
 Who knows with this one...
 
+### RobotWarehouseTiny
+4 processors works well. This environment has very sparse rewards, so it
+can take a while for the agents to explore enough to reach a good policy.
+In the example gif below, agents were trained for a little less than 5 hours.
+
 # Resulting Policies
 Policies can differ from one training to another, and the longer training
 sessions generally result in better policies. For the results demonstrated
@@ -413,3 +433,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/Humanoid.gif" width="300" height="200" />
 
 - **test score: 6330.9**
+
+## RobotWarehouseTiny
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/RobotWarehouseTiny.gif" width="300" height="200" />
+
+- **test score (averaged across all agents): 11.0**

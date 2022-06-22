@@ -30,6 +30,13 @@ def test_policy(ppo,
     min_score   = max_int
     max_score   = -max_int
 
+    is_multi_agent = env.get_num_agents() > 1
+
+    if is_multi_agent:
+        obs_filter = lambda x : x[0]
+    else:
+        obs_filter = lambda x: x
+
     if render_gif:
         gif_frames = []
 
@@ -37,7 +44,7 @@ def test_policy(ppo,
 
     for _ in range(num_test_runs):
 
-        obs      = env.reset()
+        obs      = obs_filter(env.reset())
         done     = False
         ep_score = 0
 
@@ -50,7 +57,10 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render(mode = "rgb_array"))
 
-            obs = torch.tensor(obs, dtype=torch.float).to(device).unsqueeze(0)
+            obs = torch.tensor(obs, dtype=torch.float).to(device)
+
+            if not is_multi_agent:
+                obs = obs.unsqueeze(0)
 
             with torch.no_grad():
                 action = policy.get_result(obs).detach().cpu()
@@ -62,6 +72,9 @@ def test_policy(ppo,
 
             obs, reward, done, info = env.step(action)
 
+            if is_multi_agent:
+                done = done.all()
+
             if "natural reward" in info:
                 score = info["natural reward"]
             else:
@@ -70,8 +83,21 @@ def test_policy(ppo,
             ep_score += score
             total_score += score
 
-        min_score = min(min_score, ep_score)
-        max_score = max(max_score, ep_score)
+        #
+        # For multi-agent environments, we report the average score per
+        # agent. There are other options we could try instead. For coop
+        # games, we could sum the scores. Adversarial games get tricky...
+        #
+        if is_multi_agent:
+            refined_score = ep_score.mean()
+        else:
+            refined_score = ep_score
+
+        min_score = min(min_score, refined_score)
+        max_score = max(max_score, refined_score)
+
+    if is_multi_agent:
+        total_score = total_score.mean()
 
     print("Ran env {} times.".format(num_test_runs))
     print("Ran {} total time steps.".format(num_steps))
