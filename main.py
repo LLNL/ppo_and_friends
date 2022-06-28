@@ -495,8 +495,7 @@ if __name__ == "__main__":
             num_test_runs = num_test_runs)
 
     elif env_name == "RobotWarehouseTiny":
-        robot_warehouse(
-            size          = "tiny",
+        robot_warehouse_tiny(
             random_seed   = random_seed,
             state_path    = state_path,
             load_state    = load_state,
@@ -509,22 +508,7 @@ if __name__ == "__main__":
             num_test_runs = num_test_runs)
 
     elif env_name == "RobotWarehouseSmall":
-        robot_warehouse(
-            size          = "small",
-            random_seed   = random_seed,
-            state_path    = state_path,
-            load_state    = load_state,
-            render        = render,
-            render_gif    = render_gif,
-            num_timesteps = num_timesteps,
-            device        = device,
-            envs_per_proc = envs_per_proc,
-            test          = test,
-            num_test_runs = num_test_runs)
-
-    elif env_name == "RobotWarehouseMedium":
-        robot_warehouse(
-            size          = "medium",
+        robot_warehouse_small(
             random_seed   = random_seed,
             state_path    = state_path,
             load_state    = load_state,
