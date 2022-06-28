@@ -1468,7 +1468,7 @@ def swimmer_ppo(state_path,
 #                              Multi-Agent                                    #
 ###############################################################################
 
-def robot_warehouse(
+def robot_warehouse_tiny(
     state_path,
     load_state,
     render,
@@ -1477,26 +1477,10 @@ def robot_warehouse(
     device,
     envs_per_proc,
     random_seed,
-    size,
     test          = False,
     num_test_runs = 1):
 
-    avail_sizes = ["tiny", "small", "medium"]
-
-    if size not in avail_sizes:
-        msg  = "ERROR: robot warehouse size must be one of the following: "
-        msg += "{}".format(avail_sizes)
-        rank_print(msg)
-        comm.barrier()
-        comm.Abort()
-
-    #FIXME: we may need different settings for each one, but let's try this.
-    if size == "tiny":
-        env_generator = lambda : gym.make('rware-tiny-3ag-v1')
-    elif size == "small":
-        env_generator = lambda : gym.make('rware-small-4ag-v1')
-    elif size == "medium":
-        env_generator = lambda : gym.make('rware-medium-6ag-v1')
+    env_generator = lambda : gym.make('rware-tiny-3ag-v1')
 
     actor_kw_args = {}
     actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1543,6 +1527,96 @@ def robot_warehouse(
             epochs_per_iter     = 5,
             max_ts_per_ep       = 512,
             ts_per_rollout      = 2048,
+            is_multi_agent      = True,
+            use_gae             = True,
+            normalize_values    = True,
+            normalize_obs       = False,
+            obs_clip            = None,
+            normalize_rewards   = False,
+            reward_clip         = None,
+            entropy_weight      = entropy_weight,
+            min_entropy_weight  = min_entropy_weight,
+            entropy_dec         = entropy_dec,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            render_gif          = render_gif,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            envs_per_proc       = envs_per_proc,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+def robot_warehouse_small(
+    state_path,
+    load_state,
+    render,
+    render_gif,
+    num_timesteps,
+    device,
+    envs_per_proc,
+    random_seed,
+    test          = False,
+    num_test_runs = 1):
+
+    env_generator = lambda : gym.make('rware-small-4ag-v1')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 256
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 512
+
+    lr     = 0.001
+    min_lr = 0.00001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 6000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    entropy_weight     = 0.05
+    min_entropy_weight = 0.01
+
+    entropy_dec = LinearDecrementer(
+        max_iteration = 6000,
+        max_value     = entropy_weight,
+        min_value     = min_entropy_weight)
+
+    #
+    # Each rank has 4 agents, which will be interpreted as individual
+    # environments, so (internally) we multiply our ts_per_rollout by
+    # the number of agents. We want each rank to see ~4 episodes =>
+    # num_ranks * 4 * 512.
+    #
+    ts_per_rollout = comm.size * 4 * 512
+
+    #
+    # This is a very sparse reward environment, and there are series of
+    # complex actions that must occur in between rewards. Because of this,
+    # using a large maximum timesteps per episode results in faster learning.
+    # arXiv:2103.01955v2 suggests using smaller epoch counts for complex
+    # environments and large batch sizes (single batches if possible).
+    # Because of the sparse rewards, I've also increased the entropy
+    # weight to incentivize exploration. We could also experiment with
+    # using ICM here. I've disabled rewards and observation normalization
+    # and clipping, mainly because they aren't mentioned in arXiv:2103.01955v2.
+    # I've noticed that performance tends to go down a bit when these
+    # normalizations are enabled.
+    #
+    run_ppo(env_generator       = env_generator,
+            random_seed         = random_seed,
+            ac_network          = FeedForwardNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 10000,
+            epochs_per_iter     = 5,
+            max_ts_per_ep       = 512,
+            ts_per_rollout      = ts_per_rollout,
             is_multi_agent      = True,
             use_gae             = True,
             normalize_values    = True,
