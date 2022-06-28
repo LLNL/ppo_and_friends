@@ -1504,6 +1504,13 @@ def robot_warehouse_tiny(
         max_iteration = 4000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
+    #
+    # Each rank has 3 agents, which will be interpreted as individual
+    # environments, so (internally) we multiply our ts_per_rollout by
+    # the number of agents. We want each rank to see ~2 episodes =>
+    # num_ranks * 2 * 512.
+    #
+    ts_per_rollout = comm.size * 2 * 512
 
     #
     # This is a very sparse reward environment, and there are series of
@@ -1526,7 +1533,7 @@ def robot_warehouse_tiny(
             batch_size          = 10000,
             epochs_per_iter     = 5,
             max_ts_per_ep       = 512,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             is_multi_agent      = True,
             use_gae             = True,
             normalize_values    = True,
