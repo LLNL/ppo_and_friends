@@ -1122,6 +1122,16 @@ class PPO(object):
             ep_rewards += reward
             ep_score   += natural_reward
 
+            #
+            # Episode end cases.
+            #  1. An episode has reached a "done" state.
+            #  2. An episode has reached the maximum allowable timesteps.
+            #  3. TODO: An episode has reached a non-terminal done state.
+            #
+            # Case 1.
+            # We handle any episodes that have reached a terminal done state.
+            # In these cases, the environment cannot proceed any further.
+            #
             if done.any():
 
                 for done_idx in where_done:
@@ -1184,6 +1194,13 @@ class PPO(object):
                 total_episodes                += done_count
                 ep_ts[where_done]              = 0
 
+            #
+            # Case 2.
+            # We handle episodes that have reached or exceeded the maximum
+            # number of timesteps allowed, but they haven't yet reached a
+            # terminal done state. Since the environment can continue, we
+            # can take this into consideration when calculating the reward.
+            #
             ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
                 where_not_done.size > 0)
 
