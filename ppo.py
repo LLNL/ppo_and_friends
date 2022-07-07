@@ -1126,7 +1126,7 @@ class PPO(object):
             # Episode end cases.
             #  1. An episode has reached a "done" state.
             #  2. An episode has reached the maximum allowable timesteps.
-            #  3. TODO: An episode has reached a non-terminal done state.
+            #  3. An episode has reached a non-terminal done state.
             #
             # Case 1.
             # We handle any episodes that have reached a terminal done state.
