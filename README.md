@@ -121,7 +121,9 @@ Some things to note:
    score around 32 might actually signal a converged policy.
 4. The `envs_per_proc` flag is currently disabled for multi-agent environments.
 
-# Observational Augmentations
+# Other Features
+
+## Observational Augmentations
 
 ### What are observational augmentations?
 Imagine we have a 3D environment where we
@@ -163,6 +165,20 @@ duplicated, except that it might contain augmented terminal observations.
 **NOTE:** we don't currently prohibit the use of multiple environments per
 processor in conjunction with `aug_observation`, but it is untested and
 should be used with caution and consideration.
+
+## Non-Terminal Done States
+
+### What is a non-terminal done state?
+A non-terminal done state is when an environment needs to be reset, but it
+hasn't technically reached a "terminal" state. This is type of
+done state is treated exactly the same as how we treat reaching our maximum
+allowable timesteps per episode; the episode has not reached a terminal state,
+but we're ending the trajectory.
+
+### How to use non-terminal done states
+For custom environments, you can add "non-terminal done" as an entry in the
+info dictionary. When True, this will trigger the current trajectory to end
+in a non-terminal state.
 
 # MAPPO
 
