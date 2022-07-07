@@ -1209,8 +1209,8 @@ class PPO(object):
 
             have_non_terminal_dones = False
             for b_idx in range(env_batch_size):
-                if ("non-terminal done" in info and
-                    info["non-terminal done"]:
+                if ("non-terminal done" in info[b_idx] and
+                    info[b_idx]["non-terminal done"]):
                     have_non_terminal_dones = True
 
             if (ep_max_reached or
@@ -1225,9 +1225,9 @@ class PPO(object):
 
                 if have_non_terminal_dones:
                     for b_idx in range(env_batch_size):
-                        if "non-terminal done" in info:
+                        if "non-terminal done" in info[b_idx]:
                             non_terminal_dones[b_idx] = \
-                                info["non-terminal done"]
+                                info[b_idx]["non-terminal done"]
 
                 where_non_terminal = np.where(non_terminal_dones)[0]
 
