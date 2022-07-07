@@ -1195,16 +1195,48 @@ class PPO(object):
                 ep_ts[where_done]              = 0
 
             #
-            # Case 2.
+            # Cases 2 and 3.
             # We handle episodes that have reached or exceeded the maximum
             # number of timesteps allowed, but they haven't yet reached a
-            # terminal done state. Since the environment can continue, we
-            # can take this into consideration when calculating the reward.
+            # terminal done state. This is also very similar to reaching
+            # an environment triggered non-terminal done state, so we handle
+            # them at the same time (identically).
+            # Since the environment can continue, we can take this into
+            # consideration when calculating the reward.
             #
             ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
                 where_not_done.size > 0)
 
-            if (ep_max_reached or total_rollout_ts >= self.ts_per_rollout):
+            have_non_terminal_dones = False
+            for b_idx in range(env_batch_size):
+                if ("non-terminal done" in info and
+                    info["non-terminal done"]:
+                    have_non_terminal_dones = True
+
+            if (ep_max_reached or
+                total_rollout_ts >= self.ts_per_rollout or
+                have_non_terminal_dones):
+
+                #
+                # First, let's find out if we have any non-terminal done
+                # states and which environments have them.
+                #
+                non_terminal_dones = np.zeros(env_batch_size).astype(bool)
+
+                if have_non_terminal_dones:
+                    for b_idx in range(env_batch_size):
+                        if "non-terminal done" in info:
+                            non_terminal_dones[b_idx] = \
+                                info["non-terminal done"]
+
+                where_non_terminal = np.where(non_terminal_dones)[0]
+
+                #
+                # We shouldn't ever encounter this, but let's guard against it
+                # just in case.
+                #
+                where_non_terminal = np.setdiff1d(
+                    where_non_terminal, where_done)
 
                 if total_rollout_ts >= self.ts_per_rollout:
                     where_maxed = np.arange(env_batch_size)
@@ -1212,6 +1244,7 @@ class PPO(object):
                     where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
+                where_maxed = np.concatenate((where_maxed, where_non_terminal))
 
                 if self.is_multi_agent:
                     c_obs = torch.tensor(global_obs[where_maxed],
@@ -1232,7 +1265,7 @@ class PPO(object):
                 # Typically, we just use the result of our critic to
                 # bootstrap the expected reward. This is problematic
                 # with ICM because we can't really expect our critic to
-                # learn about "surprise". I dont' know of any perfect
+                # learn about "surprise". I don't know of any perfect
                 # ways to handle this, but here are some ideas:
                 #
                 #     1. Just use the value anyways. As long as the
