@@ -190,6 +190,15 @@ class RunningStatNormalizer(object):
 
         in_file = os.path.join(path, f_name)
 
+        #
+        # There are cases where we initially train using X ranks, and we
+        # later want to continue training using (X+k) ranks. In these cases,
+        # let's copy rank 0's info to all ranks > X.
+        #
+        if not os.path.exists(in_file):
+            f_name  = "{}_stats_0.pkl".format(self.name)
+            in_file = os.path.join(path, f_name)
+
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
 

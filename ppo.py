@@ -1852,6 +1852,15 @@ class PPO(object):
 
         state_file = os.path.join(self.state_path, file_name)
 
+        #
+        # There are cases where we initially train using X ranks, and we
+        # later want to continue training using (X+k) ranks. In these cases,
+        # let's copy rank 0's info to all ranks > X.
+        #
+        if not os.path.exists(state_file):
+            file_name  = "state_0.pickle"
+            state_file = os.path.join(self.state_path, file_name)
+
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
 

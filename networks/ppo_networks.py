@@ -47,7 +47,17 @@ class PPONetwork(nn.Module):
         else:
             f_name = "{}_{}.model".format(self.name, rank)
 
-        in_f   = os.path.join(path, f_name)
+        in_f = os.path.join(path, f_name)
+
+        #
+        # There are cases where we initially train using X ranks, and we
+        # later want to continue training using (X+k) ranks. In these cases,
+        # let's copy rank 0's network to all ranks > X.
+        #
+        if not os.path.exists(in_f):
+            f_name = "{}_0.model".format(self.name)
+            in_f   = os.path.join(path, f_name)
+
         self.load_state_dict(torch.load(in_f))
 
 
