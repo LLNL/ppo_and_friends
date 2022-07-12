@@ -259,6 +259,7 @@ def mountain_car_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [200,],
         step_values  = [0.0003,],
         ending_value = 0.0001)
@@ -713,16 +714,19 @@ def bipedal_walker_hardcore_ppo(state_path,
     # scores of 320+ over 100 test runs.
     #
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [3900,],
         step_values  = [0.0001,],
         ending_value = 0.00001)
 
     reward_clip_min = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
 
     bs_clip_min = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
@@ -1314,6 +1318,7 @@ def hopper_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [400,],
         step_values  = [0.0003,],
         ending_value = 0.0001)
@@ -1493,7 +1498,7 @@ def robot_warehouse_tiny(
     min_lr = 0.00001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_timestep  = 40000000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -1501,7 +1506,7 @@ def robot_warehouse_tiny(
     min_entropy_weight = 0.01
 
     entropy_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_timestep  = 40000000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
     #
