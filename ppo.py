@@ -315,11 +315,14 @@ class PPO(object):
         # code when using multi-agent environments. Each agent is basically
         # thought of as an environment instance. As a result, our timesteps
         # will be divided by the number of agents during the rollout, which
-        # is what we want when env_per_processor > 1, but it's not what we
+        # is what we want when envs_per_proc > 1, but it's not what we
         # want when num_agents > 1.
         #
         if is_multi_agent:
             ts_per_rollout *= env.get_num_agents()
+            self.num_agents = env.get_num_agents()
+        else:
+            self.num_agents = 1
 
         #
         # When we toggle test mode on/off, we need to make sure to also
@@ -1425,11 +1428,11 @@ class PPO(object):
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
-        self.status_dict["total episodes"]     += total_episodes
-        self.status_dict["longest run"]         = longest_run
-        self.status_dict["reward range"]        = rw_range
-        self.status_dict["obs range"]           = obs_range
-        self.status_dict["timesteps"]          += total_rollout_ts
+        self.status_dict["total episodes"] += total_episodes / self.num_agents
+        self.status_dict["longest run"]     = longest_run
+        self.status_dict["reward range"]    = rw_range
+        self.status_dict["obs range"]       = obs_range
+        self.status_dict["timesteps"]      += total_rollout_ts
 
         #
         # Update our score cache and the window mean when appropriate.

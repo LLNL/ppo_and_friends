@@ -502,7 +502,8 @@ class MultiAgentWrapper(IdentityWrapper):
 
     def __init__(self,
                  env_generator,
-                 need_agent_ids = True,
+                 need_agent_ids   = True,
+                 use_global_state = True,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -520,6 +521,7 @@ class MultiAgentWrapper(IdentityWrapper):
         self.num_agents         = len(self.env.observation_space)
         self.agent_ids          = np.arange(self.num_agents).reshape((-1, 1))
 
+        self.use_global_state   = use_global_state
         self.global_state_space = None
 
         self.observation_space, _ = self._get_refined_space(
@@ -681,6 +683,13 @@ class MultiAgentWrapper(IdentityWrapper):
             NOTE: this method should only be called AFTER
             _update_observation_space is called.
         """
+        #
+        # If we're not using the global state space approach, each agent's
+        # critic update receives its own observations only.
+        #
+        if not self.use_global_state:
+            self.global_state_space = self.observation_space
+
         obs_type = type(self.observation_space)
 
         if obs_type == Box:
@@ -721,6 +730,13 @@ class MultiAgentWrapper(IdentityWrapper):
             Returns:
                 The global state to be fed to the critic.
         """
+        #
+        # If we're not using the global state space approach, each agent's
+        # critic update receives its own observations only.
+        #
+        if not self.use_global_state:
+            return obs
+
         #
         # TODO: This could get pretty memory intensive, and it feels a bit
         # ridiculous to use a batch of copies. This is going off of the
