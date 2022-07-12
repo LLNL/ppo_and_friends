@@ -763,7 +763,8 @@ class PPO(object):
         rank_print("--------------------------------------------------------")
 
     def update_learning_rate(self,
-                             iteration):
+                             iteration,
+                             timestep):
         """
             Update the learning rate. This relies on the lr_dec function,
             which expects an iteration and returns an updated learning rate.
@@ -772,7 +773,9 @@ class PPO(object):
                 iteration    The current iteration of training.
         """
 
-        self.lr = self.lr_dec(iteration)
+        self.lr = self.lr_dec(
+            iteration = iteration,
+            timestep  = timestep)
 
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
@@ -783,7 +786,8 @@ class PPO(object):
         self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
 
     def update_entropy_weight(self,
-                              iteration):
+                              iteration,
+                              timestep):
         """
             Update the entropy weight. This relies on the entropy_dec function,
             which expects an iteration and returns an updated entropy weight.
@@ -791,7 +795,10 @@ class PPO(object):
             Arguments:
                 iteration    The current iteration of training.
         """
-        self.entropy_weight = self.entropy_dec(iteration)
+        self.entropy_weight = self.entropy_dec(
+            iteration = iteration,
+            timestep  = timestep)
+
         self.status_dict["entropy weight"] = self.entropy_weight
 
     def get_intrinsic_reward(self,
@@ -1496,8 +1503,13 @@ class PPO(object):
 
             self.status_dict["iteration"] += 1
 
-            self.update_learning_rate(self.status_dict["iteration"])
-            self.update_entropy_weight(self.status_dict["iteration"])
+            self.update_learning_rate(
+                self.status_dict["iteration"],
+                self.status_dict["timesteps"])
+
+            self.update_entropy_weight(
+                self.status_dict["iteration"],
+                self.status_dict["timesteps"])
 
             data_loader = DataLoader(
                 dataset,

@@ -28,7 +28,7 @@ def run_ppo(env_generator,
             envs_per_proc       = 1,
             icm_network         = ICM,
             batch_size          = 256,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = num_procs * 1024,
             epochs_per_iter     = 10,
             target_kl           = 100.,
             lr                  = 3e-4,
@@ -155,12 +155,15 @@ def cartpole_ppo(state_path,
         max_value      = lr,
         min_value      = min_lr)
 
+    ts_per_rollout = num_procs * 256
+
     run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             batch_size         = 256,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             ac_network         = FeedForwardNetwork,
+            ts_per_rollout     = ts_per_rollout,
             max_ts_per_ep      = 32,
             use_gae            = True,
             normalize_obs      = True,
@@ -210,12 +213,15 @@ def pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             max_ts_per_ep      = 32,
+            ts_per_rollout     = ts_per_rollout,
             use_gae            = True,
             normalize_obs      = True,
             normalize_rewards  = True,
@@ -259,6 +265,7 @@ def mountain_car_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [200,],
         step_values  = [0.0003,],
         ending_value = 0.0001)
@@ -280,7 +287,6 @@ def mountain_car_ppo(state_path,
             critic_kw_args     = critic_kw_args,
             dynamic_bs_clip    = True,
             max_ts_per_ep      = 200,
-            ts_per_rollout     = 2048,
             ext_reward_weight  = 1./100.,
             lr_dec             = lr_dec,
             lr                 = lr,
@@ -344,7 +350,6 @@ def mountain_car_continuous_ppo(state_path,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 128,
-            ts_per_rollout     = 2048,
             batch_size         = 512,
             lr_dec             = lr_dec,
             lr                 = lr,
@@ -401,11 +406,13 @@ def acrobot_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator      = env_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             max_ts_per_ep      = 32,
-            ts_per_rollout     = 1024,
+            ts_per_rollout     = ts_per_rollout,
             lr_dec             = lr_dec,
             lr                 = lr,
             min_lr             = min_lr,
@@ -626,6 +633,8 @@ def bipedal_walker_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     #
     # Thresholding the reward to a low of -1 doesn't drastically
     # change learning, but it does help a bit. Clipping the bootstrap
@@ -638,7 +647,7 @@ def bipedal_walker_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_adv       = True,
             normalize_obs       = True,
@@ -713,19 +722,24 @@ def bipedal_walker_hardcore_ppo(state_path,
     # scores of 320+ over 100 test runs.
     #
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [3900,],
         step_values  = [0.0001,],
         ending_value = 0.00001)
 
     reward_clip_min = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
 
     bs_clip_min = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [4000,],
         step_values  = [-1.,],
         ending_value = -10.)
+
+    ts_per_rollout = num_procs * 512
 
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
@@ -734,7 +748,7 @@ def bipedal_walker_hardcore_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -808,13 +822,15 @@ def breakout_pixels_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator        = wrapper_generator,
             random_seed          = random_seed,
             ac_network           = AtariPixelNetwork,
             actor_kw_args        = actor_kw_args,
             critic_kw_args       = critic_kw_args,
             batch_size           = 512,
-            ts_per_rollout       = 2048,
+            ts_per_rollout       = ts_per_rollout,
             max_ts_per_ep        = 64,
             epochs_per_iter      = 30,
             reward_clip          = (-1., 1.),
@@ -885,13 +901,15 @@ def breakout_ram_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator      = wrapper_generator,
             random_seed        = random_seed,
             ac_network         = FeedForwardNetwork,
             actor_kw_args      = actor_kw_args,
             critic_kw_args     = critic_kw_args,
             batch_size         = 512,
-            ts_per_rollout     = 2048,
+            ts_per_rollout     = ts_per_rollout,
             max_ts_per_ep      = 64,
             use_gae            = True,
             epochs_per_iter    = 30,
@@ -930,11 +948,14 @@ def inverted_pendulum_ppo(state_path,
 
     env_generator = lambda : gym.make('InvertedPendulum-v2')
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
             use_gae             = True,
             use_icm             = False,
+            ts_per_rollout      = ts_per_rollout,
             state_path          = state_path,
             load_state          = load_state,
             render              = render,
@@ -982,6 +1003,8 @@ def inverted_double_pendulum_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -989,7 +1012,7 @@ def inverted_double_pendulum_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1045,6 +1068,8 @@ def ant_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1052,7 +1077,7 @@ def ant_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 64,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1131,6 +1156,8 @@ def humanoid_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1138,7 +1165,7 @@ def humanoid_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1202,6 +1229,8 @@ def humanoid_stand_up_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1209,7 +1238,7 @@ def humanoid_stand_up_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1257,6 +1286,8 @@ def walker2d_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 1024
+
     #
     # arXiv:2006.05990v1 suggests that value normalization significantly hurts
     # performance in walker2d. I also find this to be the case.
@@ -1268,7 +1299,7 @@ def walker2d_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1314,9 +1345,12 @@ def hopper_ppo(state_path,
     min_lr = 0.0001
 
     lr_dec = LinearStepMapper(
+        step_type    = "iteration",
         steps        = [400,],
         step_values  = [0.0003,],
         ending_value = 0.0001)
+
+    ts_per_rollout = num_procs * 1024
 
     #
     # I find that value normalization hurts the hopper environment training.
@@ -1329,7 +1363,7 @@ def hopper_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 16,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1379,6 +1413,8 @@ def half_cheetah_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 512
+
     #
     # Normalizing values seems to stabilize results in this env.
     #
@@ -1389,7 +1425,7 @@ def half_cheetah_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 1024,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1437,6 +1473,8 @@ def swimmer_ppo(state_path,
         max_value     = lr,
         min_value     = min_lr)
 
+    ts_per_rollout = num_procs * 1024
+
     run_ppo(env_generator       = env_generator,
             random_seed         = random_seed,
             ac_network          = FeedForwardNetwork,
@@ -1444,7 +1482,7 @@ def swimmer_ppo(state_path,
             critic_kw_args      = critic_kw_args,
             batch_size          = 512,
             max_ts_per_ep       = 32,
-            ts_per_rollout      = 2048,
+            ts_per_rollout      = ts_per_rollout,
             use_gae             = True,
             normalize_obs       = True,
             normalize_rewards   = True,
@@ -1493,7 +1531,7 @@ def robot_warehouse_tiny(
     min_lr = 0.00001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_timestep  = 40000000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -1501,7 +1539,7 @@ def robot_warehouse_tiny(
     min_entropy_weight = 0.01
 
     entropy_dec = LinearDecrementer(
-        max_iteration = 4000,
+        max_timestep  = 40000000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
     #
@@ -1510,7 +1548,7 @@ def robot_warehouse_tiny(
     # the number of agents. We want each rank to see ~2 episodes =>
     # num_ranks * 2 * 512.
     #
-    ts_per_rollout = comm.size * 2 * 512
+    ts_per_rollout = num_procs * 2 * 512
 
     #
     # This environment comes from arXiv:2006.07869v4.
@@ -1601,7 +1639,7 @@ def robot_warehouse_small(
     # the number of agents. We want each rank to see ~4 episodes =>
     # num_ranks * 4 * 512.
     #
-    ts_per_rollout = comm.size * 4 * 512
+    ts_per_rollout = num_procs * 4 * 512
 
     #
     # This is a very sparse reward environment, and there are series of
