@@ -518,12 +518,12 @@ class MultiAgentWrapper(IdentityWrapper):
             env_generator(),
             **kw_args)
 
-        self.need_agent_ids     = need_agent_ids
-        self.num_agents         = len(self.env.observation_space)
-        self.agent_ids          = np.arange(self.num_agents).reshape((-1, 1))
+        self.need_agent_ids = need_agent_ids
+        self.num_agents     = len(self.env.observation_space)
+        self.agent_ids      = np.arange(self.num_agents).reshape((-1, 1))
 
         if normalize_ids:
-            self.agent_ids /= self.num_agents
+            self.agent_ids = self.agent_ids / self.num_agents
 
         self.use_global_state   = use_global_state
         self.global_state_space = None
