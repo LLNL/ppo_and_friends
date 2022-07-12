@@ -504,6 +504,7 @@ class MultiAgentWrapper(IdentityWrapper):
                  env_generator,
                  need_agent_ids   = True,
                  use_global_state = True,
+                 normalize_ids    = True,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -520,6 +521,9 @@ class MultiAgentWrapper(IdentityWrapper):
         self.need_agent_ids     = need_agent_ids
         self.num_agents         = len(self.env.observation_space)
         self.agent_ids          = np.arange(self.num_agents).reshape((-1, 1))
+
+        if normalize_ids:
+            self.agent_ids /= self.num_agents
 
         self.use_global_state   = use_global_state
         self.global_state_space = None
@@ -1043,6 +1047,15 @@ class ObservationNormalizer(IdentityWrapper):
 
         in_file = os.path.join(path, file_name)
 
+        #
+        # There are cases where we initially train using X ranks, and we
+        # later want to continue training using (X+k) ranks. In these cases,
+        # let's copy rank 0's info to all ranks > X.
+        #
+        if not os.path.exists(in_file):
+            file_name = "RunningObsStats_0.pkl"
+            in_file   = os.path.join(path, file_name)
+
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
 
@@ -1184,6 +1197,15 @@ class RewardNormalizer(IdentityWrapper):
             file_name = "RunningRewardsStats_{}.pkl".format(rank)
 
         in_file = os.path.join(path, file_name)
+
+        #
+        # There are cases where we initially train using X ranks, and we
+        # later want to continue training using (X+k) ranks. In these cases,
+        # let's copy rank 0's info to all ranks > X.
+        #
+        if not os.path.exists(in_file):
+            file_name = "RunningRewardsStats_0.pkl"
+            in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
             self.running_stats = pickle.load(fh)
