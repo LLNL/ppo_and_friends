@@ -38,6 +38,7 @@ class PPO(object):
                  device,
                  random_seed,
                  is_multi_agent      = False,
+                 add_agent_ids       = False,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
@@ -91,6 +92,9 @@ class PPO(object):
                  random_seed          A random seed to use.
                  is_multi_agent       Does our environment contain multiple
                                       agents? If so, enable MAPPO algorithm.
+                 add_agent_ids        Optionally add agent ids to the
+                                      observations. This is only valid when
+                                      is_multi_agent == True.
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
@@ -233,6 +237,12 @@ class PPO(object):
             rank_print(msg)
             envs_per_proc = 1
 
+        if is_multi_agent and add_agent_ids:
+            msg  = "WARNING: add_agent_ids is only valid when is_multi_agent "
+            msg += "is True. Disregarding."
+            rank_print(msg)
+            add_agent_ids = False
+
         #
         # Begin adding wrappers. Order matters!
         # The first wrapper will always be either a standard vectorization
@@ -240,8 +250,9 @@ class PPO(object):
         #
         if is_multi_agent:
             env = MultiAgentWrapper(
-                env_generator = env_generator,
-                test_mode     = test_mode)
+                env_generator  = env_generator,
+                need_agent_ids = add_agent_ids,
+                test_mode      = test_mode)
         else:
             env = VectorizedEnv(
                 env_generator = env_generator,

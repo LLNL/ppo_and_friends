@@ -25,6 +25,7 @@ def run_ppo(env_generator,
             device,
             random_seed,
             is_multi_agent      = False,
+            add_agent_ids       = False,
             envs_per_proc       = 1,
             icm_network         = ICM,
             batch_size          = 256,
@@ -76,6 +77,7 @@ def run_ppo(env_generator,
               icm_network        = icm_network,
               device             = device,
               is_multi_agent     = is_multi_agent,
+              add_agent_ids      = add_agent_ids,
               random_seed        = random_seed,
               batch_size         = batch_size,
               envs_per_proc      = envs_per_proc,
@@ -1636,10 +1638,11 @@ def robot_warehouse_small(
     #
     # Each rank has 4 agents, which will be interpreted as individual
     # environments, so (internally) we multiply our ts_per_rollout by
-    # the number of agents. We want each rank to see ~4 episodes =>
-    # num_ranks * 4 * 512.
+    # the number of agents. We want each rank to see ~E episodes =>
+    # num_ranks * E * 512.
     #
-    ts_per_rollout = num_procs * 4 * 512
+    E = 2
+    ts_per_rollout = num_procs * E * 512
 
     #
     # This is a very sparse reward environment, and there are series of
