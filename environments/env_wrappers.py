@@ -530,7 +530,7 @@ class MultiAgentWrapper(IdentityWrapper):
 
         self.observation_space, _ = self._get_refined_space(
             multi_agent_space = self.env.observation_space,
-            add_ids           = True)
+            add_ids           = need_agent_ids)
 
         self.action_space, self.num_actions = self._get_refined_space(
             multi_agent_space = self.env.action_space,
@@ -837,7 +837,19 @@ class MultiAgentWrapper(IdentityWrapper):
         #
         tup_actions = tuple(actions[i] for i in range(self.num_agents))
 
-        obs, rewards, agents_done, global_info = self.env.step(actions)
+        obs, rewards, agents_done, info = self.env.step(actions)
+
+        #
+        # Info can come back int two forms:
+        #   1. It's a dictionary containing global information.
+        #   2. It's an iterable containing num_agent dictionaries,
+        #      each of which contains info for its assocated agent.
+        #
+        info_is_global = False
+        if type(info) == dict:
+            info_is_global = True
+        else:
+            info = np.concatenate(info)
 
         obs     = self._refine_obs(obs)
         rewards = np.stack(np.array(rewards), axis=0).reshape((-1, 1))
@@ -846,15 +858,28 @@ class MultiAgentWrapper(IdentityWrapper):
         if all_done:
             terminal_obs = obs.copy()
             obs, global_obs = self.reset()
-            global_info["global state"] = global_obs
+
+            if info_is_global:
+                info["global state"] = global_obs
+            else:
+                for i in range(info.size):
+                    info[i]["global state"] = global_obs
+
         else:
-            global_info["global state"] = \
-                self.get_feature_pruned_global_state(obs)
+            if info_is_global:
+                info["global state"] = \
+                    self.get_feature_pruned_global_state(obs)
+            else:
+                for i in range(info.size):
+                    info[i]["global state"] = \
+                        self.get_feature_pruned_global_state(obs)
 
         #
+        # If our info is global, we need to convert it to local.
         # Create an array of references so that we don't use up memory.
         #
-        infos = np.array([global_info] * self.num_agents, dtype=object)
+        if info_is_global:
+            infos = np.array([info] * self.num_agents, dtype=object)
 
         #
         # Lastly, each agent needs its own terminal observation.

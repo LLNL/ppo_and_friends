@@ -82,8 +82,7 @@ if __name__ == "__main__":
                  "HumanoidStandup",
                  "Humanoid",
                  "RobotWarehouseTiny",
-                 "RobotWarehouseSmall",
-                 "RobotWarehouseMedium"])
+                 "RobotWarehouseSmall",])
 
     args              = parser.parse_args()
     test              = args.test
