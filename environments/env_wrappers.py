@@ -530,7 +530,7 @@ class MultiAgentWrapper(IdentityWrapper):
 
         self.observation_space, _ = self._get_refined_space(
             multi_agent_space = self.env.observation_space,
-            add_ids           = True)
+            add_ids           = need_agent_ids)
 
         self.action_space, self.num_actions = self._get_refined_space(
             multi_agent_space = self.env.action_space,
