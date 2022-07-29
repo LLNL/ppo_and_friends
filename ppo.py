@@ -237,7 +237,7 @@ class PPO(object):
             rank_print(msg)
             envs_per_proc = 1
 
-        if is_multi_agent and add_agent_ids:
+        if not is_multi_agent and add_agent_ids:
             msg  = "WARNING: add_agent_ids is only valid when is_multi_agent "
             msg += "is True. Disregarding."
             rank_print(msg)
