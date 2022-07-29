@@ -624,6 +624,8 @@ class PPO(object):
                 msg += "to load state."
                 rank_print(msg)
             else:
+                rank_print("Loading state from {}".format(state_path))
+
                 #
                 # Let's ensure backwards compatibility with previous commits.
                 #
