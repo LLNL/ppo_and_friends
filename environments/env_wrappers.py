@@ -849,7 +849,7 @@ class MultiAgentWrapper(IdentityWrapper):
         if type(info) == dict:
             info_is_global = True
         else:
-            info = np.concatenate(info)
+            info = np.array(info).astype(object)
 
         obs     = self._refine_obs(obs)
         rewards = np.stack(np.array(rewards), axis=0).reshape((-1, 1))
