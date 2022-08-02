@@ -866,13 +866,12 @@ class MultiAgentWrapper(IdentityWrapper):
                     info[i]["global state"] = global_obs
 
         else:
+            global_state = self.get_feature_pruned_global_state(obs)
             if info_is_global:
-                info["global state"] = \
-                    self.get_feature_pruned_global_state(obs)
+                info["global state"] = global_state
             else:
                 for i in range(info.size):
-                    info[i]["global state"] = \
-                        self.get_feature_pruned_global_state(obs)
+                    info[i]["global state"] = global_state
 
         #
         # If our info is global, we need to convert it to local.
