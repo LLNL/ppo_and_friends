@@ -1256,13 +1256,6 @@ class PPO(object):
                 total_rollout_ts >= self.ts_per_rollout or
                 have_non_terminal_dones):
 
-                #
-                # We shouldn't ever encounter this, but let's guard against it
-                # just in case.
-                #
-                where_non_terminal = np.setdiff1d(
-                    where_non_terminal, where_done)
-
                 if total_rollout_ts >= self.ts_per_rollout:
                     where_maxed = np.arange(env_batch_size)
                 else:
@@ -1270,6 +1263,7 @@ class PPO(object):
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
+                where_maxed = np.unique(where_maxed)
 
                 if self.is_multi_agent:
                     c_obs = torch.tensor(global_obs[where_maxed],
