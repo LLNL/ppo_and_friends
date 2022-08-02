@@ -38,7 +38,6 @@ class PPO(object):
                  device,
                  random_seed,
                  is_multi_agent      = False,
-                 apply_ts_per_agent  = True,
                  add_agent_ids       = False,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
@@ -93,9 +92,6 @@ class PPO(object):
                  random_seed          A random seed to use.
                  is_multi_agent       Does our environment contain multiple
                                       agents? If so, enable MAPPO algorithm.
-                 apply_ts_per_agent   If True, ts_per_rollout will be the cap
-                                      for each agent. This results in
-                                      ts_per_rollout *= number_of_agents.
                  add_agent_ids        Optionally add agent ids to the
                                       observations. This is only valid when
                                       is_multi_agent == True.
@@ -334,8 +330,7 @@ class PPO(object):
         # want when num_agents > 1.
         #
         if is_multi_agent:
-            if apply_ts_per_agent:
-                ts_per_rollout *= env.get_num_agents()
+            ts_per_rollout *= env.get_num_agents()
             self.num_agents = env.get_num_agents()
         else:
             self.num_agents = 1
