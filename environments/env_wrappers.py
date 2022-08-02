@@ -893,7 +893,8 @@ class MultiAgentWrapper(IdentityWrapper):
                 info[i]["terminal observation"] = terminal_obs[i].copy()
 
         elif not self.death_mask:
-            where_done = np.where(dones)
+            where_done = np.where(dones)[0]
+
             for d_idx in where_done:
                 info[d_idx]["terminal observation"] = \
                    obs[d_idx].copy()
