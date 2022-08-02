@@ -39,6 +39,7 @@ class PPO(object):
                  random_seed,
                  is_multi_agent      = False,
                  add_agent_ids       = False,
+                 death_mask          = True,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
@@ -95,6 +96,8 @@ class PPO(object):
                  add_agent_ids        Optionally add agent ids to the
                                       observations. This is only valid when
                                       is_multi_agent == True.
+                 death_mask           Should we perform death masking in multi-
+                                      agent environments?
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
@@ -252,6 +255,7 @@ class PPO(object):
             env = MultiAgentWrapper(
                 env_generator  = env_generator,
                 need_agent_ids = add_agent_ids,
+                death_mask     = death_mask,
                 test_mode      = test_mode)
         else:
             env = VectorizedEnv(
@@ -1007,6 +1011,24 @@ class PPO(object):
 
             obs, ext_reward, done, info = self.env.step(action)
 
+            #
+            # Non-terminal dones are interesting cases. We need to
+            # first find them and then set any corresponding "dones"
+            # in the done array to false. This is because we treat
+            # these non-terminal done states as needing to end without
+            # entering a terminal state.
+            #
+            non_terminal_dones = np.zeros(env_batch_size).astype(bool)
+
+            for b_idx in range(env_batch_size):
+                if "non-terminal done" in info[b_idx]:
+                    non_terminal_dones[b_idx] = \
+                        info[b_idx]["non-terminal done"]
+
+            have_non_terminal_dones  = non_terminal_dones.any()
+            where_non_terminal       = np.where(non_terminal_dones)[0]
+            done[where_non_terminal] = False
+
             if self.is_multi_agent:
                 #
                 # When we're learning from a multi-agent environment, we
@@ -1230,36 +1252,9 @@ class PPO(object):
             ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
                 where_not_done.size > 0)
 
-            have_non_terminal_dones = False
-            for b_idx in range(env_batch_size):
-                if ("non-terminal done" in info[b_idx] and
-                    info[b_idx]["non-terminal done"]):
-                    have_non_terminal_dones = True
-
             if (ep_max_reached or
                 total_rollout_ts >= self.ts_per_rollout or
                 have_non_terminal_dones):
-
-                #
-                # First, let's find out if we have any non-terminal done
-                # states and which environments have them.
-                #
-                non_terminal_dones = np.zeros(env_batch_size).astype(bool)
-
-                if have_non_terminal_dones:
-                    for b_idx in range(env_batch_size):
-                        if "non-terminal done" in info[b_idx]:
-                            non_terminal_dones[b_idx] = \
-                                info[b_idx]["non-terminal done"]
-
-                where_non_terminal = np.where(non_terminal_dones)[0]
-
-                #
-                # We shouldn't ever encounter this, but let's guard against it
-                # just in case.
-                #
-                where_non_terminal = np.setdiff1d(
-                    where_non_terminal, where_done)
 
                 if total_rollout_ts >= self.ts_per_rollout:
                     where_maxed = np.arange(env_batch_size)
@@ -1268,6 +1263,7 @@ class PPO(object):
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
+                where_maxed = np.unique(where_maxed)
 
                 if self.is_multi_agent:
                     c_obs = torch.tensor(global_obs[where_maxed],

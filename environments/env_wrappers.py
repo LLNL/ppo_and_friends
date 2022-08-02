@@ -505,14 +505,19 @@ class MultiAgentWrapper(IdentityWrapper):
                  need_agent_ids   = True,
                  use_global_state = True,
                  normalize_ids    = True,
+                 death_mask       = True,
                  **kw_args):
         """
             Initialize the wrapper.
 
             Arguments:
-                env             The environment to wrap.
-                need_agent_ids  Do we need to explicitly add the agent
-                                ids to their observations? Assume yes.
+                env               The environment to wrap.
+                need_agent_ids    Do we need to explicitly add the agent
+                                  ids to their observations? Assume yes.
+                use_global_state  Send a global state to the critic.
+                normalize_ids     If we're explicitly adding ids, should
+                                  we first normalize them?
+                death_mask        Should we perform death masking?
         """
         super(MultiAgentWrapper, self).__init__(
             env_generator(),
@@ -527,6 +532,7 @@ class MultiAgentWrapper(IdentityWrapper):
 
         self.use_global_state   = use_global_state
         self.global_state_space = None
+        self.death_mask         = death_mask
 
         self.observation_space, _ = self._get_refined_space(
             multi_agent_space = self.env.observation_space,
@@ -799,19 +805,18 @@ class MultiAgentWrapper(IdentityWrapper):
 
         #
         # We assume that our environment is done only when all agents
-        # are done. If some, but not all, agents are done, we death mask
-        # the observations that have died early.
+        # are done. If death masking is enabled and some but not all
+        # agents have died, we need to apply the mask.
         #
         all_done = False
         if agents_done.all():
-            dones = np.ones(self.num_agents).astype(bool)
             all_done = True
-        else:
+        elif self.death_mask:
             obs[agents_done, 1:] = 0.0
-            dones = np.zeros(self.num_agents).astype(bool)
+            agents_done = np.zeros(self.num_agents).astype(bool)
 
-        dones = dones.reshape((-1, 1))
-        return dones, all_done
+        agents_done = agents_done.reshape((-1, 1))
+        return agents_done, all_done
 
     def step(self, actions):
         """
@@ -866,31 +871,36 @@ class MultiAgentWrapper(IdentityWrapper):
                     info[i]["global state"] = global_obs
 
         else:
+            global_state = self.get_feature_pruned_global_state(obs)
             if info_is_global:
-                info["global state"] = \
-                    self.get_feature_pruned_global_state(obs)
+                info["global state"] = global_state
             else:
                 for i in range(info.size):
-                    info[i]["global state"] = \
-                        self.get_feature_pruned_global_state(obs)
+                    info[i]["global state"] = global_state
 
         #
         # If our info is global, we need to convert it to local.
         # Create an array of references so that we don't use up memory.
         #
         if info_is_global:
-            infos = np.array([info] * self.num_agents, dtype=object)
+            info = np.array([info] * self.num_agents, dtype=object)
 
         #
         # Lastly, each agent needs its own terminal observation.
         #
         if all_done:
             for i in range(self.num_agents):
-                infos[i]["terminal observation"] = terminal_obs[i].copy()
+                info[i]["terminal observation"] = terminal_obs[i].copy()
+
+        elif not self.death_mask:
+            where_done = np.where(dones)
+            for d_idx in where_done:
+                info[d_idx]["terminal observation"] = \
+                   obs[d_idx].copy()
 
         self.obs_cache = obs.copy()
 
-        return obs, rewards, dones, infos
+        return obs, rewards, dones, info
 
     def reset(self):
         """
