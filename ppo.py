@@ -1011,6 +1011,24 @@ class PPO(object):
 
             obs, ext_reward, done, info = self.env.step(action)
 
+            #
+            # Non-terminal dones are interesting cases. We need to
+            # first find them and then set any corresponding "dones"
+            # in the done array to false. This is because we treat
+            # these non-terminal done states as needing to end without
+            # entering a terminal state.
+            #
+            non_terminal_dones = np.zeros(env_batch_size).astype(bool)
+
+            for b_idx in range(env_batch_size):
+                if "non-terminal done" in info[b_idx]:
+                    non_terminal_dones[b_idx] = \
+                        info[b_idx]["non-terminal done"]
+
+            have_non_terminal_dones  = non_terminal_dones.any()
+            where_non_terminal       = np.where(non_terminal_dones)[0]
+            done[where_non_terminal] = False
+
             if self.is_multi_agent:
                 #
                 # When we're learning from a multi-agent environment, we
@@ -1234,29 +1252,9 @@ class PPO(object):
             ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
                 where_not_done.size > 0)
 
-            have_non_terminal_dones = False
-            for b_idx in range(env_batch_size):
-                if ("non-terminal done" in info[b_idx] and
-                    info[b_idx]["non-terminal done"]):
-                    have_non_terminal_dones = True
-
             if (ep_max_reached or
                 total_rollout_ts >= self.ts_per_rollout or
                 have_non_terminal_dones):
-
-                #
-                # First, let's find out if we have any non-terminal done
-                # states and which environments have them.
-                #
-                non_terminal_dones = np.zeros(env_batch_size).astype(bool)
-
-                if have_non_terminal_dones:
-                    for b_idx in range(env_batch_size):
-                        if "non-terminal done" in info[b_idx]:
-                            non_terminal_dones[b_idx] = \
-                                info[b_idx]["non-terminal done"]
-
-                where_non_terminal = np.where(non_terminal_dones)[0]
 
                 #
                 # We shouldn't ever encounter this, but let's guard against it
