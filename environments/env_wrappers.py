@@ -878,18 +878,18 @@ class MultiAgentWrapper(IdentityWrapper):
         # Create an array of references so that we don't use up memory.
         #
         if info_is_global:
-            infos = np.array([info] * self.num_agents, dtype=object)
+            info = np.array([info] * self.num_agents, dtype=object)
 
         #
         # Lastly, each agent needs its own terminal observation.
         #
         if all_done:
             for i in range(self.num_agents):
-                infos[i]["terminal observation"] = terminal_obs[i].copy()
+                info[i]["terminal observation"] = terminal_obs[i].copy()
 
         self.obs_cache = obs.copy()
 
-        return obs, rewards, dones, infos
+        return obs, rewards, dones, info
 
     def reset(self):
         """
