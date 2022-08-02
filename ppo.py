@@ -39,6 +39,7 @@ class PPO(object):
                  random_seed,
                  is_multi_agent      = False,
                  add_agent_ids       = False,
+                 death_mask          = True,
                  envs_per_proc       = 1,
                  icm_network         = ICM,
                  icm_kw_args         = {},
@@ -95,6 +96,8 @@ class PPO(object):
                  add_agent_ids        Optionally add agent ids to the
                                       observations. This is only valid when
                                       is_multi_agent == True.
+                 death_mask           Should we perform death masking in multi-
+                                      agent environments?
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
@@ -252,6 +255,7 @@ class PPO(object):
             env = MultiAgentWrapper(
                 env_generator  = env_generator,
                 need_agent_ids = add_agent_ids,
+                death_mask     = death_mask,
                 test_mode      = test_mode)
         else:
             env = VectorizedEnv(
