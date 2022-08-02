@@ -892,6 +892,12 @@ class MultiAgentWrapper(IdentityWrapper):
             for i in range(self.num_agents):
                 info[i]["terminal observation"] = terminal_obs[i].copy()
 
+        elif not self.death_mask:
+            where_done = np.where(dones)
+            for d_idx in where_done:
+                info[d_idx]["terminal observation"] = \
+                   obs[d_idx].copy()
+
         self.obs_cache = obs.copy()
 
         return obs, rewards, dones, info
