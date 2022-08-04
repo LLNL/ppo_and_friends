@@ -900,6 +900,7 @@ class MultiAgentWrapper(IdentityWrapper):
                    obs[d_idx].copy()
 
         self.obs_cache = obs.copy()
+        self.need_hard_reset = False
 
         return obs, rewards, dones, info
 
