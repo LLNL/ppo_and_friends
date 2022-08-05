@@ -125,7 +125,7 @@ class IdentityWrapper(object):
             Returns:
                 An observation.
         """
-        if self.need_hard_reset or self.obs_cache == None:
+        if self.need_hard_reset or type(self.obs_cache) == type(None):
 
             #
             # Perform a recursive call on all wrapped environments to check
@@ -939,7 +939,7 @@ class MultiAgentWrapper(IdentityWrapper):
             Returns:
                 The local and global observations.
         """
-        if self.need_hard_reset or self.obs_cache == None:
+        if self.need_hard_reset or type(self.obs_cache) == type(None):
             return self.reset()
 
         global_state = self.get_feature_pruned_global_state(self.obs_cache)
