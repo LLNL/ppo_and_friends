@@ -126,7 +126,18 @@ class IdentityWrapper(object):
                 An observation.
         """
         if self.need_hard_reset or self.obs_cache == None:
+
+            #
+            # Perform a recursive call on all wrapped environments to check
+            # for an ability to soft reset.
+            #
+            soft_reset = getattr(self.env, "soft_reset", None)
+
+            if callable(soft_reset):
+                return soft_reset()
+
             return self.reset()
+
         return self.obs_cache
 
     def render(self, **kw_args):
