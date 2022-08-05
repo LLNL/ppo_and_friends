@@ -267,7 +267,7 @@ to solve the environment.
 
 ### LunarLander
 2 processors and 2 environments per processor works well here. I see an
-excellent policy in under 2 minutes (~400 iterations).
+excellent policy in under 5 minutes (~100 iterations).
 
 ### LunarLanderContinuous
 2 processors and 2 environments per processor works well here. I see an
