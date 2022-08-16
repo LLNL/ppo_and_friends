@@ -222,9 +222,10 @@ class EpisodeInfo(object):
         """
             Compute our advantages using either a standard formula or GAE.
         """
-        del self.advantages
-        gc.collect()
-
+        #
+        # TODO: we should have an option to pass in a container to
+        # put advantages into. This would save on some space.
+        #
         if self.use_gae:
             padded_values = np.concatenate((self.values, (self.ending_value,)))
             padded_values = padded_values.astype(np.float32)
