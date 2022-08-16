@@ -1,4 +1,5 @@
 import numpy as np
+import gc
 from torch.utils.data import Dataset
 import sys
 import torch
@@ -221,6 +222,9 @@ class EpisodeInfo(object):
         """
             Compute our advantages using either a standard formula or GAE.
         """
+        del self.advantages
+        gc.collect()
+
         if self.use_gae:
             padded_values = np.concatenate((self.values, (self.ending_value,)))
             padded_values = padded_values.astype(np.float32)
