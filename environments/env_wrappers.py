@@ -759,18 +759,17 @@ class MultiAgentWrapper(IdentityWrapper):
             return obs
 
         #
-        # TODO: This could get pretty memory intensive, and it feels a bit
-        # ridiculous to use a batch of copies. This is going off of the
-        # implementation in arXiv:2103.01955v2. Maybe we can do better.
-        #
         # Our observation is currently in the shape (num_agents, obs), so
         # it's really a batch of observtaions. The global state is really
         # just this batch concatenated as a single observation. Each agent
-        # needs a copy of it, so we just tile them.
+        # needs a copy of it, so we just tile them. Instead of actually making
+        # copies, we can use broadcast_to to create references to the same
+        # memory location.
         #
-        obs = obs.flatten()
-        obs = np.tile(obs, self.num_agents).reshape((self.num_agents, -1))
-        return obs
+        global_obs = obs.flatten()
+        obs_size   = global_obs.size
+        global_obs = np.broadcast_to(global_obs, (self.num_agents, obs_size))
+        return global_obs
 
     def _refine_obs(self, obs):
         """

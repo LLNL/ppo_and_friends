@@ -1,4 +1,5 @@
 import sys
+import gc
 import pickle
 import numpy as np
 import os
@@ -1561,6 +1562,13 @@ class PPO(object):
 
                 if self.using_icm:
                     self._icm_batch_train(data_loader)
+
+            #
+            # We don't want to hange on to this memory as we loop back around.
+            #
+            del dataset
+            del data_loader
+            gc.collect()
 
             now_time      = time.time()
             training_time = (now_time - train_start_time)
