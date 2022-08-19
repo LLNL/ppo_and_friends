@@ -759,6 +759,17 @@ class MultiAgentWrapper(IdentityWrapper):
             return obs
 
         #
+        # If our wrapped environment has its own implementation, rely
+        # on that. Otherwise, we'll just concatenate all of the agents
+        # together.
+        #
+        pruned_from_env = getattr(self.env,
+            "get_feature_pruned_global_state", None)
+
+        if callable(pruned_from_env):
+            return pruned_from_env(obs)
+
+        #
         # Our observation is currently in the shape (num_agents, obs), so
         # it's really a batch of observtaions. The global state is really
         # just this batch concatenated as a single observation. Each agent
