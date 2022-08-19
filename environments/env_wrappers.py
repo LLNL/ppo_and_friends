@@ -710,6 +710,11 @@ class MultiAgentWrapper(IdentityWrapper):
         #
         if not self.use_global_state:
             self.global_state_space = self.observation_space
+            return
+
+        elif hasattr(self.env, "global_state_space"):
+            self.global_state_space = self.env.global_state_space
+            return
 
         obs_type = type(self.observation_space)
 
