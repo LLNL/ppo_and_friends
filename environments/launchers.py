@@ -1723,10 +1723,10 @@ def level_based_foraging(
     critic_kw_args["hidden_size"] = 256
 
     lr     = 0.001
-    min_lr = 0.00001
+    min_lr = 0.0001
 
     lr_dec = LinearDecrementer(
-        max_iteration = 6000,
+        max_iteration = 2000,
         max_value     = lr,
         min_value     = min_lr)
 
@@ -1734,7 +1734,7 @@ def level_based_foraging(
     min_entropy_weight = 0.01
 
     entropy_dec = LinearDecrementer(
-        max_iteration = 6000,
+        max_iteration = 2000,
         max_value     = entropy_weight,
         min_value     = min_entropy_weight)
 
