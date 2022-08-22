@@ -483,6 +483,6 @@ see a decent policy. See the **Environment Setttings** section for details.
 - **highest test score (max across all agents): 0.33**
 
 ## PressurePlate
-<img src="https://github.com/aowen87/ppo_and_friends/blob/add_pressure_plate/gifs/PressurePlate.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/PressurePlate.gif" width="300" height="200" />
 
 - **test score (averaged across all agents): -19.27**
