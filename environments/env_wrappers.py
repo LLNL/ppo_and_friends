@@ -1051,7 +1051,7 @@ class ObservationNormalizer(IdentityWrapper):
         # with the local observation.
         #
         is_multi_agent = False
-        if type(obs) == type(tuple()):
+        if type(obs) == tuple  or type(obs) == list:
             is_multi_agent = True
             obs, global_state = obs
 
