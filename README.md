@@ -471,7 +471,7 @@ see a decent policy. See the **Environment Setttings** section for details.
 - **test score (averaged across all agents): 11.0**
 
 ## LevelBasedForaging
-<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/LevelBasedForaging.gif" width="300" height="200" />
+<img src="https://github.com/aowen87/ppo_and_friends/blob/add_lbforaging/gifs/LevelBasedForaging.gif" width="300" height="200" />
 
 - **test score (averaged across all agents): 0.25**
 - **highest test score (max across all agents): 0.33**
