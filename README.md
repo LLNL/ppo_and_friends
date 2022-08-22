@@ -363,6 +363,12 @@ uses 3 players, an 8x8 grid, 2 food sources, and each agent is aware of
 the entire grid. 4 procesors works well with this environment, and a good
 policy can be learned in under 10 minutes.
 
+### PressurePlate
+This environment allows configuration of the number of players. This
+configuration uses 4 players. 4 procesors works well with this
+environment. I trained for ~15 minutes before testing, at which point
+the environment was solved.
+
 # Resulting Policies
 Policies can differ from one training to another, and the longer training
 sessions generally result in better policies. For the results demonstrated
@@ -475,3 +481,8 @@ see a decent policy. See the **Environment Setttings** section for details.
 
 - **test score (averaged across all agents): 0.25**
 - **highest test score (max across all agents): 0.33**
+
+## PressurePlate
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/PressurePlate.gif" width="300" height="200" />
+
+- **test score (averaged across all agents): -19.27**

@@ -82,7 +82,8 @@ if __name__ == "__main__":
                  "Humanoid",
                  "RobotWarehouseTiny",
                  "RobotWarehouseSmall",
-                 "LevelBasedForaging",])
+                 "LevelBasedForaging",
+                 "PressurePlate",])
 
     args              = parser.parse_args()
     test              = args.test
@@ -521,6 +522,19 @@ if __name__ == "__main__":
 
     elif env_name == "LevelBasedForaging":
         level_based_foraging(
+            random_seed   = random_seed,
+            state_path    = state_path,
+            load_state    = load_state,
+            render        = render,
+            render_gif    = render_gif,
+            num_timesteps = num_timesteps,
+            device        = device,
+            envs_per_proc = envs_per_proc,
+            test          = test,
+            num_test_runs = num_test_runs)
+
+    elif env_name == "PressurePlate":
+        pressure_plate(
             random_seed   = random_seed,
             state_path    = state_path,
             load_state    = load_state,
