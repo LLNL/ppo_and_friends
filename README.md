@@ -344,9 +344,24 @@ within 40 minutes or less.
 Who knows with this one...
 
 ### RobotWarehouseTiny
+There are many configuration options for the robot warehouse. This one
+uses 3 agents in a "tiny" warehouse.
 4 processors works well. This environment has very sparse rewards, so it
 can take a while for the agents to explore enough to reach a good policy.
 In the example gif below, agents were trained for a little less than 5 hours.
+
+### RobotWarehouseSmall
+There are many configuration options for the robot warehouse. This one
+uses 4 agents in a "small" warehouse.
+This is the same as RobotWarehouseTiny, except that it is slightly larger. The
+complexity of the environment is increased with the increase in size, so
+learning takes longer.
+
+### LevelBasedForaging
+There are many configuration options for this environment. This configuration
+uses 3 players, an 8x8 grid, 2 food sources, and each agent is aware of
+the entire grid. 4 procesors works well with this environment, and a good
+policy can be learned in under 10 minutes.
 
 # Resulting Policies
 Policies can differ from one training to another, and the longer training
@@ -454,3 +469,9 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/RobotWarehouseTiny.gif" width="300" height="200" />
 
 - **test score (averaged across all agents): 11.0**
+
+## LevelBasedForaging
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/LevelBasedForaging.gif" width="300" height="200" />
+
+- **test score (averaged across all agents): 0.25**
+- **highest test score (max across all agents): 0.33**

@@ -1012,6 +1012,8 @@ class PPO(object):
 
             obs, ext_reward, done, info = self.env.step(action)
 
+            ext_reward = np.float32(ext_reward)
+
             #
             # Non-terminal dones are interesting cases. We need to
             # first find them and then set any corresponding "dones"

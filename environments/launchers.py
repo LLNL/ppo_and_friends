@@ -3,6 +3,8 @@
     that initialize training for a specific environment.
 """
 import gym
+import lbforaging
+import rware
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
@@ -1648,7 +1650,7 @@ def robot_warehouse_small(
     # Each rank has 4 agents, which will be interpreted as individual
     # environments, so (internally) we multiply our ts_per_rollout by
     # the number of agents. We want each rank to see ~E episodes =>
-    # num_ranks * E * 512.
+    # num_ranks * E * <max epsiode length>.
     #
     E = 2
     ts_per_rollout = num_procs * E * 512
@@ -1674,6 +1676,85 @@ def robot_warehouse_small(
             batch_size          = 10000,
             epochs_per_iter     = 5,
             max_ts_per_ep       = 512,
+            ts_per_rollout      = ts_per_rollout,
+            is_multi_agent      = True,
+            add_agent_ids       = True,
+            use_gae             = True,
+            normalize_values    = True,
+            normalize_obs       = False,
+            obs_clip            = None,
+            normalize_rewards   = False,
+            reward_clip         = None,
+            entropy_weight      = entropy_weight,
+            min_entropy_weight  = min_entropy_weight,
+            entropy_dec         = entropy_dec,
+            lr_dec              = lr_dec,
+            lr                  = lr,
+            min_lr              = min_lr,
+            state_path          = state_path,
+            load_state          = load_state,
+            render              = render,
+            render_gif          = render_gif,
+            num_timesteps       = num_timesteps,
+            device              = device,
+            envs_per_proc       = envs_per_proc,
+            test                = test,
+            num_test_runs       = num_test_runs)
+
+def level_based_foraging(
+    state_path,
+    load_state,
+    render,
+    render_gif,
+    num_timesteps,
+    device,
+    envs_per_proc,
+    random_seed,
+    test          = False,
+    num_test_runs = 1):
+
+    env_generator = lambda : gym.make('Foraging-8x8-3p-2f-v2')
+
+    actor_kw_args = {}
+    actor_kw_args["activation"]  = nn.LeakyReLU()
+    actor_kw_args["hidden_size"] = 128
+
+    critic_kw_args = actor_kw_args.copy()
+    critic_kw_args["hidden_size"] = 256
+
+    lr     = 0.001
+    min_lr = 0.00001
+
+    lr_dec = LinearDecrementer(
+        max_iteration = 6000,
+        max_value     = lr,
+        min_value     = min_lr)
+
+    entropy_weight     = 0.05
+    min_entropy_weight = 0.01
+
+    entropy_dec = LinearDecrementer(
+        max_iteration = 6000,
+        max_value     = entropy_weight,
+        min_value     = min_entropy_weight)
+
+    #
+    # Each rank has 4 agents, which will be interpreted as individual
+    # environments, so (internally) we multiply our ts_per_rollout by
+    # the number of agents. We want each rank to see ~E episodes =>
+    # num_ranks * E * <max epsiode length>.
+    #
+    E = 8
+    ts_per_rollout = num_procs * E * 50
+
+    run_ppo(env_generator       = env_generator,
+            random_seed         = random_seed,
+            ac_network          = FeedForwardNetwork,
+            actor_kw_args       = actor_kw_args,
+            critic_kw_args      = critic_kw_args,
+            batch_size          = 10000,
+            epochs_per_iter     = 5,
+            max_ts_per_ep       = 16,
             ts_per_rollout      = ts_per_rollout,
             is_multi_agent      = True,
             add_agent_ids       = True,

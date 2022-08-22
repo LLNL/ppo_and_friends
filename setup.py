@@ -15,6 +15,7 @@ dependencies = [
     'mujoco-py<2.2,>=2.1',
     'pillow',
     'rware',
+    'lbforaging',
     'matplotlib',
     'opencv-python',
     'pygame',
@@ -24,6 +25,7 @@ dependencies = [
     'mpi4py',
     'moviepy',
     'torch>=1.10.2',
+    'swig',
 ]
 
 setup(name             = "ppo_and_friends",
