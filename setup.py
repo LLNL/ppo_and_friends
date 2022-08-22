@@ -24,6 +24,7 @@ dependencies = [
     'mpi4py',
     'moviepy',
     'torch>=1.10.2',
+    'swig',
 ]
 
 setup(name             = "ppo_and_friends",
