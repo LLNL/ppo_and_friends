@@ -15,6 +15,7 @@ dependencies = [
     'mujoco-py<2.2,>=2.1',
     'pillow',
     'rware',
+    'lbforaging',
     'matplotlib',
     'opencv-python',
     'pygame',
