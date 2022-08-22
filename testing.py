@@ -72,6 +72,8 @@ def test_policy(ppo,
 
             obs, reward, done, info = env.step(action)
 
+            reward = np.float32(reward)
+
             if is_multi_agent:
                 done = done.all()
 
