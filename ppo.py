@@ -408,13 +408,13 @@ class PPO(object):
             min_bs_callable  = bootstrap_clip[0]
             bs_clip_callable = True
         else:
-            min_bs_callable = lambda x : bootstrap_clip[0]
+            min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
 
         if callable(bootstrap_clip[1]):
             max_bs_callable  = bootstrap_clip[1]
             bs_clip_callable = True
         else:
-            max_bs_callable = lambda x : bootstrap_clip[1]
+            max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
 
         callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
 
@@ -780,6 +780,32 @@ class PPO(object):
 
         rank_print("--------------------------------------------------------")
 
+    def get_bs_clip_range(self, ep_rewards):
+        """
+            Get the current bootstrap clip range.
+
+            Returns:
+                A tuple containing the min and max values for the bootstrap
+                clip.
+        """
+        if self.dynamic_bs_clip and ep_rewards is not None:
+            bs_min = min(ep_rewards)
+            bs_max = max(ep_rewards)
+
+        else:
+            iteration = self.status_dict["iteration"]
+            timestep  = self.status_dict["timesteps"]
+
+            bs_min = self.bootstrap_clip[0](
+                iteration = iteration,
+                timestep  = timestep)
+
+            bs_max = self.bootstrap_clip[1](
+                iteration = iteration,
+                timestep  = timestep)
+
+        return (bs_min, bs_max)
+
     def update_learning_rate(self,
                              iteration,
                              timestep):
@@ -955,14 +981,7 @@ class PPO(object):
         total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        #
-        # Our bootstrap clip is a function of the iteration.
-        #
-        iteration = self.status_dict["iteration"]
-        bs_min    = self.bootstrap_clip[0](iteration)
-        bs_max    = self.bootstrap_clip[1](iteration)
-        bs_clip_range = (bs_min, bs_max)
-
+        bs_clip_range = self.get_bs_clip_range(None)
         episode_infos = np.array([None] * env_batch_size, dtype=object)
 
         for ei_idx in range(env_batch_size):
@@ -1196,32 +1215,16 @@ class PPO(object):
                 # rewards from the episode. Otherwise, rely on the user
                 # provided range.
                 #
-                if self.dynamic_bs_clip:
-                    for i, done_idx in enumerate(where_done):
-                        ep_min = min(episode_infos[done_idx].rewards)
-                        ep_max = max(episode_infos[done_idx].rewards)
+                for i, done_idx in enumerate(where_done):
+                    bs_min, bs_max = self.get_bs_clip_range(
+                        episode_infos[done_idx].rewards)
 
-                        episode_infos[done_idx] = EpisodeInfo(
-                            starting_ts    = 0,
-                            use_gae        = self.use_gae,
-                            gamma          = self.gamma,
-                            lambd          = self.lambd,
-                            bootstrap_clip = (ep_min, ep_max))
-                else:
-                    #
-                    # Our bootstrap clip is a function of the iteration.
-                    #
-                    iteration = self.status_dict["iteration"]
-                    bs_min    = self.bootstrap_clip[0](iteration)
-                    bs_max    = self.bootstrap_clip[1](iteration)
-
-                    for i, done_idx in enumerate(where_done):
-                        episode_infos[done_idx] = EpisodeInfo(
-                            starting_ts    = 0,
-                            use_gae        = self.use_gae,
-                            gamma          = self.gamma,
-                            lambd          = self.lambd,
-                            bootstrap_clip = (bs_min, bs_max))
+                    episode_infos[done_idx] = EpisodeInfo(
+                        starting_ts    = 0,
+                        use_gae        = self.use_gae,
+                        gamma          = self.gamma,
+                        lambd          = self.lambd,
+                        bootstrap_clip = (bs_min, bs_max))
 
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
@@ -1343,18 +1346,8 @@ class PPO(object):
 
                     dataset.add_episode(episode_infos[maxed_idx])
 
-                    if self.dynamic_bs_clip:
-                        ep_min = min(episode_infos[maxed_idx].rewards)
-                        ep_max = max(episode_infos[maxed_idx].rewards)
-                        bs_clip_range = (ep_min, ep_max)
-                    else:
-                        #
-                        # Our bootstrap clip is a function of the iteration.
-                        #
-                        iteration = self.status_dict["iteration"]
-                        bs_min    = self.bootstrap_clip[0](iteration)
-                        bs_max    = self.bootstrap_clip[1](iteration)
-                        bs_clip_range = (bs_min, bs_max)
+                    bs_clip_range = self.get_bs_clip_range(
+                        episode_infos[maxed_idx].rewards)
 
                     episode_infos[maxed_idx] = EpisodeInfo(
                         starting_ts    = episode_lengths[maxed_idx],

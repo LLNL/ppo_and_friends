@@ -1304,21 +1304,17 @@ class GenericClipper(IdentityWrapper):
 
         min_callable = None
         max_callable = None
-
-        self.need_iteration = False
-        self.status_dict    = status_dict
+        self.status_dict = status_dict
 
         if callable(clip_range[0]):
             min_callable = clip_range[0]
-            self.need_iteration = True
         else:
-            min_callable = lambda x : clip_range[0]
+            min_callable = lambda *args, **kwargs : clip_range[0]
 
         if callable(clip_range[1]):
             max_callable = clip_range[1]
-            self.need_iteration = True
         else:
-            max_callable = lambda x : clip_range[1]
+            max_callable = lambda *args, **kwargs : clip_range[1]
 
         self.clip_range = (min_callable, max_callable)
 
@@ -1329,19 +1325,12 @@ class GenericClipper(IdentityWrapper):
             Returns:
                 A tuple containing the clip range as (min, max).
         """
-        if self.need_iteration:
-            if "iteration" not in self.status_dict:
-                msg  = "ERROR: clipper requires 'iteration' from the status "
-                msg += "dictionary, but it's not there. "
-                msg += "\nstatus_dict: \n{}".format(self.status_dict)
-                rank_print(msg)
-                comm.Abort()
-
-            min_value = self.clip_range[0](self.status_dict["iteration"])
-            max_value = self.clip_range[1](self.status_dict["iteration"])
-        else:
-            min_value = self.clip_range[0](None)
-            max_value = self.clip_range[1](None)
+        min_value = self.clip_range[0](
+            iteration = self.status_dict["iteration"],
+            timestep  = self.status_dict["timesteps"])
+        max_value = self.clip_range[1](
+            iteration = self.status_dict["iteration"],
+            timestep  = self.status_dict["timesteps"])
 
         return (min_value, max_value)
 
