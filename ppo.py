@@ -784,6 +784,10 @@ class PPO(object):
         """
             Get the current bootstrap clip range.
 
+            Arguments:
+                ep_rewards    A numpy array containing the rewards for
+                              this episode.
+
             Returns:
                 A tuple containing the min and max values for the bootstrap
                 clip.
