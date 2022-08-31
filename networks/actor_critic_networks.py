@@ -18,14 +18,13 @@ num_procs = comm.Get_size()
 
 class FeedForwardNetwork(PPOActorCriticNetwork):
 
-    #TODO: let's allow varying hidden sizes.
     def __init__(self,
                  in_dim,
                  out_dim,
                  out_init     = None,
                  activation   = nn.ReLU(),
                  hidden_size  = 128,
-                 hidden_depth = 2,
+                 hidden_depth = 3,
                  is_embedded  = False,
                  **kw_args):
         """
@@ -41,11 +40,16 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
                 out_init        A std weight to apply to the output layer.
                 activation      The activation function to use on the output
                                 of hidden layers.
-                hidden_size     The number of output neurons for each hidden
-                                layer. Note that this can be set to 0, resulting
-                                in only an input and output layer.
-                hidden_depth    The number of hidden layers. Note that this
-                                does NOT include the input and output layers.
+                hidden_size     Can either be an int or list of ints. If an int,
+                                all layers will be this size. Otherwise, a list
+                                designates the size for each layer. Note that
+                                the hidden_depth argument is ignored if this
+                                argument is a list and the depth is instead
+                                taken from the length of the list. Note that
+                                this argument can be set to 0 or an empty list,
+                                resulting in only an input and output layer.
+                hidden_depth    The number of hidden layers. Note that this is
+                                ignored if hidden_size is a list.
                 is_embedded     If True, this network will be treated as being
                                 embedded in a large network, and the output
                                 from the output layer will be sent through
@@ -69,44 +73,56 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         self.activation = activation
 
-        if hidden_size == 0 and hidden_depth != 0:
-            msg  = "ERROR: hidden_size must be 0 if hidden_depth is 0, "
-            msg += "but received "
-            msg += "hidden_size of {} ".format(hidden_size)
-            msg += "and hidden_depth of {}.".format(hidden_depth)
-            rank_print(msg)
-            comm.Abort()
+        if type(hidden_size) != list:
 
-        elif hidden_size != 0:
+            if ((hidden_size == 0 and hidden_depth != 0) or
+                (hidden_size != 0 and hidden_depth == 0)):
 
-            self.input_layer = init_layer(nn.Linear(in_dim, hidden_size))
+                msg  = "ERROR: if either hidden_size or hidden_depth "
+                msg += "is 0, both must be 0,"
+                msg += "but received "
+                msg += "hidden_size of {} ".format(hidden_size)
+                msg += "and hidden_depth of {}.".format(hidden_depth)
+                rank_print(msg)
+                comm.Abort()
+
+            hidden_size = [hidden_size] * hidden_depth
+        else:
+            hidden_depth = len(hidden_size)
+
+
+        if len(hidden_size) != 0:
+
+            self.input_layer = init_layer(nn.Linear(in_dim, hidden_size[0]))
 
             hidden_layer_list = []
-            for _ in range(hidden_depth):
+
+            for i in range(hidden_depth - 1):
                 hidden_layer_list.append(init_layer(
                     nn.Linear(
-                        hidden_size,
-                        hidden_size)))
+                        hidden_size[i],
+                        hidden_size[i + 1])))
 
                 hidden_layer_list.append(self.activation)
 
             #
-            # This is a funny edge case. We allow users to set the hidden size
-            # > 0 while having the hidden depth == 0. This is a funny way of
-            # setting the output/input dimentions of a 2 layer network that
-            # has no hidden layers.
+            # This our our 2-layer network case. Technically, we have
+            # a single hidden layer, but realistically it's included in
+            # our input and output layers.
             #
-            if hidden_depth == 0:
+            if (hidden_depth - 1) == 0:
                 self.have_hidden   = False
                 self.two_layer_net = True
 
             self.hidden_layers = nn.Sequential(*hidden_layer_list)
 
             if out_init != None:
-                self.output_layer = init_layer(nn.Linear(hidden_size, out_size),
-                    weight_std=out_init)
+                self.output_layer = init_layer(
+                    nn.Linear(hidden_size[-1], out_size),
+                        weight_std=out_init)
             else:
-                self.output_layer = init_layer(nn.Linear(hidden_size, out_size))
+                self.output_layer = init_layer(
+                    nn.Linear(hidden_size[-1], out_size))
         else:
             self.input_layer = None
             self.have_hidden = False
@@ -155,13 +171,13 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
                  out_dim,
                  out_init,
                  left_hidden_size      = 64,
-                 left_hidden_depth     = 2,
+                 left_hidden_depth     = 3,
                  left_out_size         = 64,
                  right_hidden_size     = 64,
-                 right_hidden_depth    = 2,
+                 right_hidden_depth    = 3,
                  right_out_size        = 64,
                  combined_hidden_size  = 128,
-                 combined_hidden_depth = 1,
+                 combined_hidden_depth = 2,
                  activation            = nn.ReLU(),
                  **kw_args):
         """
@@ -190,17 +206,13 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
                                    be set to 0, resulting in only an input and
                                    output layer.
              left_hidden_depth     The number of hidden layers in the left
-                                   network. Note that this does NOT include the
-                                   input and output layers.
+                                   network.
              left_out_size         The number of output neurons for the left
                                    network.
              right_hidden_size     The number of output neurons for each hidden
-                                   layer of the right network. Note that this
-                                   can be set to 0, resulting in only an input
-                                   and output layer.
+                                   layer of the right network.
              right_hidden_depth    The number of hidden layers in the right
-                                   network. Note that this does NOT include the
-                                   input and output layers.
+                                   network.
              right_out_size        The number of output neurons for the right
                                    network.
 
@@ -209,9 +221,7 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
                                    can be set to 0, resulting in only an input
                                    and output layer.
              combined_hidden_depth The number of hidden layers in the right
-                                   network. Note that this does NOT include the
-                                   input and output layers.
-
+                                   network.
              activation            The activation function to use on the output
                                    of hidden layers.
         """
@@ -399,7 +409,7 @@ class LSTMNetwork(PPOLSTMNetwork):
                  lstm_hidden_size  = 128,
                  num_lstm_layers   = 1,
                  ff_hidden_size    = 128,
-                 ff_hidden_depth   = 0,
+                 ff_hidden_depth   = 1,
                  **kw_args):
         """
             A class defining an LSTM centered network.
