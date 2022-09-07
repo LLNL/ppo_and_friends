@@ -34,10 +34,10 @@ def set_torch_threads():
     fair_num_threads = max(int(torch.get_num_threads() / num_procs), 1)
     torch.set_num_threads(fair_num_threads)
 
-def sync_model_parameters(model):
+def broadcast_model_parameters(model):
     """
-        This allows us to sync all model parameters to be exactly
-        like the 0th processor.
+        This function broadcasts the model parameters from rank 0 to
+        all other ranks.
 
         Arguments:
             model    The model whose parameters should be synced.

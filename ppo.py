@@ -18,7 +18,7 @@ from ppo_and_friends.environments.env_wrappers import VectorizedEnv, MultiAgentW
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
-from ppo_and_friends.utils.mpi_utils import sync_model_parameters, mpi_avg_gradients
+from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
@@ -46,6 +46,7 @@ class PPO(object):
                  icm_kw_args         = {},
                  actor_kw_args       = {},
                  critic_kw_args      = {},
+                 shared_param_path   = "",
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
@@ -599,8 +600,8 @@ class PPO(object):
         self.pickle_safe_test_mode_dependencies.append(self.actor)
         self.pickle_safe_test_mode_dependencies.append(self.critic)
 
-        sync_model_parameters(self.actor)
-        sync_model_parameters(self.critic)
+        broadcast_model_parameters(self.actor)
+        broadcast_model_parameters(self.critic)
         comm.barrier()
 
         if self.using_icm:
@@ -620,7 +621,7 @@ class PPO(object):
             self.status_dict["icm loss"] = 0
             self.status_dict["intrinsic score avg"] = 0
 
-            sync_model_parameters(self.icm_model)
+            broadcast_model_parameters(self.icm_model)
             comm.barrier()
 
         if load_state:
