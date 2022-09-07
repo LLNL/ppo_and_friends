@@ -7,7 +7,6 @@ from ppo_and_friends.environments.launchers import *
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 import shutil
-import rware
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -88,7 +87,9 @@ if __name__ == "__main__":
                  "HumanoidStandUp",
                  "Humanoid",
                  "RobotWarehouseTiny",
-                 "RobotWarehouseSmall",])
+                 "RobotWarehouseSmall",
+                 "LevelBasedForaging",
+                 "PressurePlate",])
 
     args              = parser.parse_args()
     test              = args.test

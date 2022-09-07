@@ -4,6 +4,9 @@
 """
 import gym
 from abc import ABC, abstractmethod
+import lbforaging
+import pressureplate
+import rware
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
@@ -1352,4 +1355,129 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
+                     **self.kw_launch_args)
+
+
+class LevelBasedForagingLauncher(EnvironmentLauncher):
+
+    def launch(self):
+
+        env_generator = lambda : gym.make('Foraging-8x8-3p-2f-v2')
+
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 128
+
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 256
+
+        lr     = 0.001
+        min_lr = 0.0001
+
+        lr_dec = LinearDecrementer(
+            max_iteration = 2000,
+            max_value     = lr,
+            min_value     = min_lr)
+
+        entropy_weight     = 0.05
+        min_entropy_weight = 0.01
+
+        entropy_dec = LinearDecrementer(
+            max_iteration = 2000,
+            max_value     = entropy_weight,
+            min_value     = min_entropy_weight)
+
+        #
+        # Each rank has 3 agents, which will be interpreted as individual
+        # environments, so (internally) we multiply our ts_per_rollout by
+        # the number of agents. We want each rank to see ~E episodes =>
+        # num_ranks * E * <max epsiode length>.
+        #
+        E = 8
+        ts_per_rollout = num_procs * E * 50
+
+        self.run_ppo(env_generator       = env_generator,
+                     ac_network          = FeedForwardNetwork,
+                     actor_kw_args       = actor_kw_args,
+                     critic_kw_args      = critic_kw_args,
+                     batch_size          = 10000,
+                     epochs_per_iter     = 5,
+                     max_ts_per_ep       = 16,
+                     ts_per_rollout      = ts_per_rollout,
+                     is_multi_agent      = True,
+                     add_agent_ids       = True,
+                     use_gae             = True,
+                     normalize_values    = True,
+                     normalize_obs       = False,
+                     obs_clip            = None,
+                     normalize_rewards   = False,
+                     reward_clip         = None,
+                     entropy_weight      = entropy_weight,
+                     min_entropy_weight  = min_entropy_weight,
+                     entropy_dec         = entropy_dec,
+                     lr_dec              = lr_dec,
+                     lr                  = lr,
+                     min_lr              = min_lr,
+                     **self.kw_launch_args)
+
+
+class PressurePlateLauncher(EnvironmentLauncher):
+
+    def launch(self):
+        env_generator = lambda : gym.make('pressureplate-linear-4p-v0')
+    
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 128
+    
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 256
+    
+        lr     = 0.001
+        min_lr = 0.0001
+    
+        lr_dec = LinearDecrementer(
+            max_iteration = 2000,
+            max_value     = lr,
+            min_value     = min_lr)
+    
+        entropy_weight     = 0.05
+        min_entropy_weight = 0.01
+    
+        entropy_dec = LinearDecrementer(
+            max_iteration = 2000,
+            max_value     = entropy_weight,
+            min_value     = min_entropy_weight)
+    
+        #
+        # Each rank has 4 agents, which will be interpreted as individual
+        # environments, so (internally) we multiply our ts_per_rollout by
+        # the number of agents. We want each rank to see ~E episodes =>
+        # num_ranks * E * <max epsiode length>.
+        #
+        E = 8
+        ts_per_rollout = num_procs * E * 64
+    
+        self.run_ppo(env_generator       = env_generator,
+                     ac_network          = FeedForwardNetwork,
+                     actor_kw_args       = actor_kw_args,
+                     critic_kw_args      = critic_kw_args,
+                     batch_size          = 10000,
+                     epochs_per_iter     = 5,
+                     max_ts_per_ep       = 16,
+                     ts_per_rollout      = ts_per_rollout,
+                     is_multi_agent      = True,
+                     add_agent_ids       = True,
+                     use_gae             = True,
+                     normalize_values    = True,
+                     normalize_obs       = False,
+                     obs_clip            = None,
+                     normalize_rewards   = False,
+                     reward_clip         = None,
+                     entropy_weight      = entropy_weight,
+                     min_entropy_weight  = min_entropy_weight,
+                     entropy_dec         = entropy_dec,
+                     lr_dec              = lr_dec,
+                     lr                  = lr,
+                     min_lr              = min_lr,
                      **self.kw_launch_args)
