@@ -5,7 +5,6 @@
 import gym
 from abc import ABC, abstractmethod
 import lbforaging
-import pressureplate
 import rware
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
@@ -14,11 +13,18 @@ from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
+from ppo_and_friends.utils.mpi_utils import rank_print
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
-from mpi4py import MPI
 
+try:
+    import pressureplate
+    HAVE_PRESSURE_PLATE = True
+except:
+    HAVE_PRESSURE_PLATE = False
+
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
@@ -1424,6 +1430,12 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
 class PressurePlateLauncher(EnvironmentLauncher):
 
     def launch(self):
+        if not HAVE_PRESSURE_PLATE:
+            msg  = "ERROR: unable to import the pressureplate environment. "
+            msg += "This environment is installed from its git repository."
+            rank_print(msg)
+            comm.Abort()
+
         env_generator = lambda : gym.make('pressureplate-linear-4p-v0')
     
         actor_kw_args = {}
