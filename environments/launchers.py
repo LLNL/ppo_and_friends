@@ -688,7 +688,7 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
 
         wrapper_generator = lambda : BreakoutPixelsEnvWrapper(
             env              = env_generator(),
-            allow_life_loss  = test,
+            allow_life_loss  = self.kw_launch_args["test"],
             hist_size        = 4,
             skip_k_frames    = 4)
 
@@ -748,7 +748,7 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
     
         wrapper_generator = lambda : BreakoutRAMEnvWrapper(
             env              = env_generator(),
-            allow_life_loss  = test,
+            allow_life_loss  = self.kw_launch_args["test"],
             hist_size        = 4,
             skip_k_frames    = 4)
     
@@ -1032,7 +1032,7 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
-class Walker2D(EnvironmentLauncher):
+class Walker2DLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : gym.make('Walker2d-v3')
