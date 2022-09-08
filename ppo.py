@@ -46,7 +46,6 @@ class PPO(object):
                  icm_kw_args         = {},
                  actor_kw_args       = {},
                  critic_kw_args      = {},
-                 shared_param_path   = "",
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,

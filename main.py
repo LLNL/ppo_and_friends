@@ -58,12 +58,6 @@ if __name__ == "__main__":
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    parser.add_argument("--shared_param_paths", default=[], nargs="+",
-        type=str,
-        help="Optional paths to parameters that are shared between "
-        "concurrent trainings. The parameters must have the same actor/critic "
-        "architecture as the current training environment.")
-
     parser.add_argument("--environment", "-e", type=str, required=True,
         help="Which environment should we train or test?",
         choices=["CartPole",
@@ -104,7 +98,6 @@ if __name__ == "__main__":
     force_determinism  = args.force_deterministic
     envs_per_proc      = args.envs_per_proc
     allow_mpi_gpu      = args.allow_mpi_gpu
-    shared_param_paths = args.shared_param_paths
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -159,16 +152,15 @@ if __name__ == "__main__":
     launcher_class = getattr(sys.modules[__name__], class_name)
 
     launcher = launcher_class(
-        random_seed       = random_seed,
-        state_path        = state_path,
-        load_state        = load_state,
-        render            = render,
-        render_gif        = render_gif,
-        num_timesteps     = num_timesteps,
-        device            = device,
-        envs_per_proc     = envs_per_proc,
-        shared_param_path = shared_param_paths,
-        test              = test,
-        num_test_runs     = num_test_runs)
+        random_seed        = random_seed,
+        state_path         = state_path,
+        load_state         = load_state,
+        render             = render,
+        render_gif         = render_gif,
+        num_timesteps      = num_timesteps,
+        device             = device,
+        envs_per_proc      = envs_per_proc,
+        test               = test,
+        num_test_runs      = num_test_runs)
 
     launcher.launch()

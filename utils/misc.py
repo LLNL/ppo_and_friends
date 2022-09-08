@@ -226,28 +226,3 @@ def format_seconds(seconds):
             output_unit = "hours"
 
     return "{:.2f} {}".format(output_time, output_unit)
-
-
-def sync_model_gradients(model_1, model_2):
-    """
-    """
-    param_1   = tuple(model_1.parameters())
-    param_2   = tuple(model_2.parameters())
-    param_len = len(param_1)
-
-    assert param_len == len(param_2)
-
-    for i in range(param_len):
-
-        #
-        # Some of the paramters in our LSTM networks don't
-        # have gradients.
-        #
-        if type(param_1[i].grad) == type(None):
-            continue
-
-        param_1_grad    = param_1[i].grad.cpu.numpy()
-        param_2_grad    = param_2[i].grad.cpu.numpy()
-        avg_grad        = (param_1_grad + param_2_grad) / 2.0
-        param_1_grad[:] = avg_grad[:]
-        param_2_grad[:] = avg_grad[:]
