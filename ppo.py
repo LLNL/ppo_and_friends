@@ -458,6 +458,7 @@ class PPO(object):
         self.mean_window_size    = mean_window_size 
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
+        self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
         self.score_cache         = np.zeros(0)
         self.lr                  = lr
@@ -1412,20 +1413,30 @@ class PPO(object):
         top_score = max(top_rollout_score, self.status_dict["top score"])
         top_score = comm.allreduce(top_score, MPI.MAX)
 
-        rollout_max_reward = max(self.status_dict["reward range"][1],
-            rollout_max_reward)
-        rollout_max_reward = comm.allreduce(rollout_max_reward, MPI.MAX)
+        #
+        # If we're normalizing, we don't really want to keep track
+        # of the largest and smallest ever seen, because our range will
+        # fluctuate with normalization. When we aren't normalizing, the
+        # the global range is accurate and useful.
+        #
+        if not self.normalize_rewards:
+            rollout_max_reward = max(self.status_dict["reward range"][1],
+                rollout_max_reward)
 
-        rollout_min_reward = min(self.status_dict["reward range"][0],
-            rollout_min_reward)
+            rollout_min_reward = min(self.status_dict["reward range"][0],
+                rollout_min_reward)
+
+        rollout_max_reward = comm.allreduce(rollout_max_reward, MPI.MAX)
         rollout_min_reward = comm.allreduce(rollout_min_reward, MPI.MIN)
 
-        rollout_max_obs = max(self.status_dict["obs range"][1],
-            rollout_max_obs)
-        rollout_max_obs = comm.allreduce(rollout_max_obs, MPI.MAX)
+        if not self.normalize_obs:
+            rollout_max_obs = max(self.status_dict["obs range"][1],
+                rollout_max_obs)
 
-        rollout_min_obs = min(self.status_dict["obs range"][0],
-            rollout_min_obs)
+            rollout_min_obs = min(self.status_dict["obs range"][0],
+                rollout_min_obs)
+
+        rollout_max_obs = comm.allreduce(rollout_max_obs, MPI.MAX)
         rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
 
         total_ext_rewards = total_ext_rewards.sum()
