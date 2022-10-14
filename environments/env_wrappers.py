@@ -505,6 +505,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         return len(self)
 
 
+# FIXME: need to handle dictionaries mapping agents to
+# spaces.
 class MultiAgentWrapper(IdentityWrapper):
     """
         A wrapper for multi-agent environments. This design follows the

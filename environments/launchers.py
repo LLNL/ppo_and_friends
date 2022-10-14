@@ -1149,7 +1149,7 @@ class HalfCheetahLauncher(EnvironmentLauncher):
         #
         # Normalizing values seems to stabilize results in this env.
         #
-        self.run_ppo(env_generator      = env_generator,
+        self.run_ppo(env_generator = env_generator,
                 ac_network         = FeedForwardNetwork,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,

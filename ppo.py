@@ -965,6 +965,7 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
+        # FIXME: why not have soft-resets triggered by the env wrapper?
         if self.use_soft_resets:
             initial_reset_func = self.env.soft_reset
         else:
@@ -1531,6 +1532,11 @@ class PPO(object):
                 self.status_dict["iteration"],
                 self.status_dict["timesteps"])
 
+            #
+            # FIXME: we may need a separate data loader for each class
+            # of agents that have taken actions. This is because the
+            # observation and action shapes could differ.
+            #
             data_loader = DataLoader(
                 dataset,
                 batch_size = self.batch_size,
@@ -1629,6 +1635,10 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
+        #
+        # FIXME: how do we handle batch data for classes of agents?
+        # Maybe we have a different loader for each class?
+        #
         for batch_data in data_loader:
             critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
@@ -1733,6 +1743,9 @@ class PPO(object):
             #
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
+            #
+            # FIXME: I think each class of actor would need its own
+            # optimizer and loss. They would also need their own critics.
             #
             self.actor_optim.zero_grad()
             actor_loss.backward(retain_graph = self.using_lstm)
