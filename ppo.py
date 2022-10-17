@@ -5,15 +5,16 @@ import numpy as np
 import os
 from copy import deepcopy
 import torch
-from torch.optim import Adam
+from torch.optim import Adam#FIXME
 from torch import nn
 from torch.utils.data import DataLoader
-from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
+from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset#FIXME: remove
 from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
-from ppo_and_friends.networks.icm import ICM
+from ppo_and_friends.policies.agent_policy import AgentPolicy
+from ppo_and_friends.networks.icm import ICM#FIXME: remove
 from ppo_and_friends.environments.env_wrappers import VectorizedEnv, MultiAgentWrapper
 from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
@@ -252,6 +253,8 @@ class PPO(object):
         # The first wrapper will always be either a standard vectorization
         # or a multi-agent wrapper. We currently don't support combining them.
         #
+        # TODO: let's support vectorizing multi-agent environments.
+        #
         if is_multi_agent:
             env = MultiAgentWrapper(
                 env_generator  = env_generator,
@@ -327,6 +330,9 @@ class PPO(object):
                 clip_range  = reward_clip)
 
         #
+        # FIXME: If we vectorize multi-agent environments, we'll need to
+        # change this here.
+        #
         # Funny business: we're taking over our "environments per processor"
         # code when using multi-agent environments. Each agent is basically
         # thought of as an environment instance. As a result, our timesteps
@@ -347,37 +353,12 @@ class PPO(object):
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
 
+        #
+        # FIXME: we need to handle multiple agent classes with
+        # different action spaces. I think we want the observation
+        # spaces to remain consistent, though.
+        #
         action_space = env.action_space
-        act_type     = type(env.action_space)
-
-        if (issubclass(act_type, Box) or
-            issubclass(act_type, MultiBinary) or
-            issubclass(act_type, MultiDiscrete)):
-
-            self.act_dim = action_space.shape
-
-        elif issubclass(act_type, Discrete):
-            self.act_dim = action_space.n
-
-        else:
-            msg = "ERROR: unsupported action space {}".format(env.action_space)
-            rank_print(msg)
-            comm.Abort()
-
-        if ((issubclass(act_type, MultiBinary) or
-             issubclass(act_type, MultiDiscrete)) and
-             (not is_multi_agent)):
-            msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
-            msg += "may not be fully supported. Use at your own risk."
-            rank_print(msg)
-
-        action_dtype = get_action_dtype(env)
-
-        if action_dtype == "unknown":
-            rank_print("ERROR: unknown action type!")
-            comm.Abort()
-        else:
-            rank_print("Using {} actions.".format(action_dtype))
 
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(
@@ -424,6 +405,8 @@ class PPO(object):
             msg += "redundant, and the dynamic clip will override the given "
             msg += "functions."
             rank_print(msg)
+
+        action_dtype = get_action_dtype(action_space)
 
         #
         # Establish some class variables.
@@ -534,95 +517,36 @@ class PPO(object):
             if base.__name__ == "PPOLSTMNetwork":
                 self.using_lstm = True
 
+        # FIXME: we'll need different networks for each class of agents.
+        # This is where we can create Policy classes for each policy type.
+        # We'll also have a policy mapping function taht maps agent ids
+        # to their respective policies.
         #
-        # arXiv:2006.05990v1 suggests initializing the output layer
-        # of the actor network with a weight that's ~100x smaller
-        # than the rest of the layers. We initialize layers with a
-        # value near 1.0 by default, so we set the last layer to
-        # 0.01. The same paper also suggests that the last layer of
-        # the value network doesn't matter so much. I can't remember
-        # where I got 1.0 from... I'll try to track that down.
-        #
-        if use_conv2d_setup:
-            if is_multi_agent:
-                msg  = "ERROR: use of conv2d models with multi-agent "
-                msg += "environments is not currently supported."
-                rank_prink(msg)
-                comm.Abort()
-
-            obs_dim = self.actor_obs_shape
-
-            self.actor = ac_network(
-                name         = "actor", 
-                in_shape     = obs_dim,
-                out_dim      = self.act_dim, 
-                out_init     = 0.01,
-                action_dtype = action_dtype,
-                test_mode    = test_mode,
-                **actor_kw_args)
-
-            self.critic = ac_network(
-                name         = "critic", 
-                in_shape     = obs_dim,
-                out_dim      = 1,
-                out_init     = 1.0,
-                action_dtype = action_dtype,
-                test_mode    = test_mode,
-                **critic_kw_args)
-
+        if is_multi_agent:
+            critic_obs_space = self.env.get_global_state_space()
         else:
-            actor_obs_dim  = self.actor_obs_shape[0]
-            critic_obs_dim = self.critic_obs_shape[0]
+            critic_obs_space = env.observation_space
 
-            self.actor = ac_network(
-                name         = "actor", 
-                in_dim       = actor_obs_dim,
-                out_dim      = self.act_dim, 
-                out_init     = 0.01,
-                action_dtype = action_dtype,
-                test_mode    = test_mode,
-                **actor_kw_args)
+        self.policy = AgentPolicy(
+            action_space             = action_space,
+            actor_observation_space  = env.observation_space,
+            critic_observation_space = critic_obs_space,
+            ac_network               = ac_network,
+            icm_network              = icm_network,
+            actor_kw_args            = actor_kw_args,
+            critic_kw_args           = critic_kw_args,
+            icm_kw_args              = icm_kw_args,
+            lr                       = lr,
+            enable_icm               = use_icm,
+            device                   = device,
+            test_mode                = test_mode)
 
-            self.critic = ac_network(
-                name         = "critic", 
-                in_dim       = critic_obs_dim,
-                out_dim      = 1,
-                out_init     = 1.0,
-                action_dtype = action_dtype,
-                test_mode    = test_mode,
-                **critic_kw_args)
-
-        self.actor  = self.actor.to(device)
-        self.critic = self.critic.to(device)
-
-        self.test_mode_dependencies.append(self.actor)
-        self.test_mode_dependencies.append(self.critic)
-        self.pickle_safe_test_mode_dependencies.append(self.actor)
-        self.pickle_safe_test_mode_dependencies.append(self.critic)
-
-        broadcast_model_parameters(self.actor)
-        broadcast_model_parameters(self.critic)
-        comm.barrier()
+        self.test_mode_dependencies.append(self.policy)
+        self.pickle_safe_test_mode_dependencies.append(self.policy)
 
         if self.using_icm:
-            obs_dim = self.actor_obs_shape[0]
-            self.icm_model = icm_network(
-                name         = "icm",
-                obs_dim      = obs_dim,
-                act_dim      = self.act_dim,
-                action_dtype = self.action_dtype,
-                test_mode    = test_mode,
-                **icm_kw_args)
-
-            self.test_mode_dependencies.append(self.icm_model)
-            self.pickle_safe_test_mode_dependencies.append(self.icm_model)
-
-            self.icm_model.to(device)
             self.status_dict["icm loss"] = 0
             self.status_dict["intrinsic score avg"] = 0
-
-            broadcast_model_parameters(self.icm_model)
-            comm.barrier()
 
         if load_state:
             if not os.path.exists(state_path):
@@ -643,13 +567,6 @@ class PPO(object):
 
                 self.lr= min(self.status_dict["lr"], self.lr)
                 self.status_dict["lr"] = self.lr
-
-        self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
-        self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
-
-        if self.using_icm:
-            self.icm_optim = Adam(self.icm_model.parameters(),
-                lr=lr, eps=1e-5)
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -678,7 +595,7 @@ class PPO(object):
         else:
             try:
                 obs = self.env.reset()
-                _, action, _ = self.get_action(obs)
+                _, action, _ = self.policy.get_action(obs)
                 cloned_env   = deepcopy(self.env)
                 cloned_env.step(action)
                 self.can_clone_env = True
@@ -688,82 +605,92 @@ class PPO(object):
         if self.using_icm:
             rank_print("Can clone environment: {}".format(self.can_clone_env))
 
-    def get_action(self, obs):
-        """
-            Given an observation from our environment, determine what the
-            action should be.
+    ## FIXME: we'll need to somehow get actions for classes of agents.
+    ## Should we create an Agent class that keeps track of these things?
+    ## Each agent class would have its own "get_action" and "evaluate"
+    ## methods.
+    #def get_action(self, obs):
+    #    """
+    #        Given an observation from our environment, determine what the
+    #        action should be.
 
-            Arguments:
-                obs    The environment observation.
+    #        Arguments:
+    #            obs    The environment observation.
 
-            Returns:
-                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-                is the distribution sample before any "squashing" takes place,
-                "action" is the the action value that should be fed to the
-                environment, and log_prob is the log probabilities from our
-                probability distribution.
-        """
-        if len(obs.shape) < 2:
-            msg  = "ERROR: get_action expects a batch of observations but "
-            msg += "instead received shape {}.".format(obs.shape)
-            rank_print(msg)
-            comm.Abort()
+    #        Returns:
+    #            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+    #            is the distribution sample before any "squashing" takes place,
+    #            "action" is the the action value that should be fed to the
+    #            environment, and log_prob is the log probabilities from our
+    #            probability distribution.
+    #    """
+    #    if len(obs.shape) < 2:
+    #        msg  = "ERROR: get_action expects a batch of observations but "
+    #        msg += "instead received shape {}.".format(obs.shape)
+    #        rank_print(msg)
+    #        comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+    #    t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
-        with torch.no_grad():
-            action_pred = self.actor(t_obs)
+    #    with torch.no_grad():
+    #        action_pred = self.actor(t_obs)
 
-        action_pred = action_pred.cpu().detach()
-        dist        = self.actor.distribution.get_distribution(action_pred)
+    #    action_pred = action_pred.cpu().detach()
+    #    dist        = self.actor.distribution.get_distribution(action_pred)
 
-        #
-        # Our distribution gives us two potentially distinct actions, one of
-        # which is guaranteed to be a raw sample from the distribution. The
-        # other might be altered in some way (usually to enforce a range).
-        #
-        action, raw_action = self.actor.distribution.sample_distribution(dist)
-        log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+    #    #
+    #    # Our distribution gives us two potentially distinct actions, one of
+    #    # which is guaranteed to be a raw sample from the distribution. The
+    #    # other might be altered in some way (usually to enforce a range).
+    #    #
+    #    # FIXME: We're going to potentially have multiple actors and critics
+    #    # (one for each class of agent).
+    #    #
+    #    action, raw_action = self.actor.distribution.sample_distribution(dist)
+    #    log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        action     = action.detach().numpy()
-        raw_action = raw_action.detach().numpy()
+    #    action     = action.detach().numpy()
+    #    raw_action = raw_action.detach().numpy()
 
-        return raw_action, action, log_prob.detach()
+    #    return raw_action, action, log_prob.detach()
 
-    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
-        """
-            Given a batch of observations, use our critic to approximate
-            the expected return values. Also use a batch of corresponding
-            actions to retrieve some other useful information.
+    ##
+    ## FIXME: need to handle classes of agents.
+    ##
+    #def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
+    #    """
+    #        Given a batch of observations, use our critic to approximate
+    #        the expected return values. Also use a batch of corresponding
+    #        actions to retrieve some other useful information.
 
-            Arguments:
-                batch_critic_obs   A batch of observations for the critic.
-                batch_obs          A batch of standard observations.
-                batch_actions      A batch of actions corresponding to the batch of
-                                   observations.
+    #        Arguments:
+    #            batch_critic_obs   A batch of observations for the critic.
+    #            batch_obs          A batch of standard observations.
+    #            batch_actions      A batch of actions corresponding to the batch of
+    #                               observations.
 
-            Returns:
-                A tuple of form (values, log_probs, entropies) s.t. values are
-                the critic predicted value, log_probs are the log probabilities
-                from our probability distribution, and entropies are the
-                entropies from our distribution.
-        """
-        values      = self.critic(batch_critic_obs).squeeze()
-        action_pred = self.actor(batch_obs).cpu()
-        dist        = self.actor.distribution.get_distribution(action_pred)
+    #        Returns:
+    #            A tuple of form (values, log_probs, entropies) s.t. values are
+    #            the critic predicted value, log_probs are the log probabilities
+    #            from our probability distribution, and entropies are the
+    #            entropies from our distribution.
+    #    """
+    #    values      = self.critic(batch_critic_obs).squeeze()
+    #    action_pred = self.actor(batch_obs).cpu()
+    #    dist        = self.actor.distribution.get_distribution(action_pred)
 
-        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
+    #    if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+    #        log_probs = self.actor.distribution.get_log_probs(
+    #            dist,
+    #            batch_actions.unsqueeze(1).cpu())
+    #    else:
+    #        log_probs = self.actor.distribution.get_log_probs(
+    #            dist,
+    #            batch_actions.cpu())
 
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+    #    entropy = self.actor.distribution.get_entropy(dist, action_pred)
 
-        return values, log_probs.to(self.device), entropy.to(self.device)
+    #    return values, log_probs.to(self.device), entropy.to(self.device)
 
     def print_status(self):
         """
@@ -826,13 +753,14 @@ class PPO(object):
             iteration = iteration,
             timestep  = timestep)
 
-        update_optimizer_lr(self.actor_optim, self.lr)
-        update_optimizer_lr(self.critic_optim, self.lr)
+        #FIXME:
+        update_optimizer_lr(self.policy.actor_optim, self.lr)
+        update_optimizer_lr(self.policy.critic_optim, self.lr)
 
         if self.using_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
-        self.status_dict["lr"] = self.actor_optim.param_groups[0]["lr"]
+        self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
 
     def update_entropy_weight(self,
                               iteration,
@@ -850,6 +778,7 @@ class PPO(object):
 
         self.status_dict["entropy weight"] = self.entropy_weight
 
+    #FIXME: handle classes of agents.
     def get_intrinsic_reward(self,
                              prev_obs,
                              obs,
@@ -886,8 +815,9 @@ class PPO(object):
         if len(action.shape) != 2:
             action = action.unsqueeze(1)
 
+        #FIXME
         with torch.no_grad():
-            intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+            intr_reward, _, _ = self.policy.icm_model(obs_1, obs_2, action)
 
         batch_size   = obs.shape[0]
         intr_reward  = intr_reward.detach().cpu().numpy()
@@ -929,16 +859,21 @@ class PPO(object):
         #
         sequence_length = 1
         if self.using_lstm:
-            self.actor.reset_hidden_state(
+            self.policy.actor.reset_hidden_state(
                 batch_size = 1,
                 device     = self.device)
 
-            self.critic.reset_hidden_state(
+            #FIXME
+            self.policy.critic.reset_hidden_state(
                 batch_size = 1,
                 device     = self.device)
 
-            sequence_length = self.actor.sequence_length
+            sequence_length = self.policy.actor.sequence_length
 
+        #
+        # FIXME: should each policy instance have its owne
+        # PPODataset?
+        #
         dataset = PPODataset(
             device          = self.device,
             action_dtype    = self.action_dtype,
@@ -954,8 +889,9 @@ class PPO(object):
         rollout_max_obs    = -np.finfo(np.float32).max
         rollout_min_obs    = np.finfo(np.float32).max
 
-        self.actor.eval()
-        self.critic.eval()
+        #FIXME
+        self.policy.actor.eval()
+        self.policy.critic.eval()
 
         if self.using_icm:
             self.icm_model.eval()
@@ -965,12 +901,27 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
-        # FIXME: why not have soft-resets triggered by the env wrapper?
         if self.use_soft_resets:
             initial_reset_func = self.env.soft_reset
         else:
             initial_reset_func = self.env.reset
 
+        #
+        # FIXME: In the single agent case, env_batch_size is the number
+        # environments per processor (vectorized environment). In the
+        # multi-agent case, env_batch_size is the number of agents in
+        # the environment.
+        # In the refactored MA setting, agents don't need to all step
+        # at once. We'll also have a dictionary mapping agents to their
+        # observations. Since there might be situations where only a
+        # single agent acts, we might want to revisit vectorizing the
+        # multi-agent environments.
+        #
+        # ALSO, our env_batch_size might not be adhered to when agents
+        # aren't stepping in sync... How do we handle that case?
+        # Maybe we keep track of the max number of agents that could
+        # step at one time...
+        #
         if self.is_multi_agent:
             obs, global_obs = initial_reset_func()
             env_batch_size  = obs.shape[0]
@@ -990,6 +941,15 @@ class PPO(object):
         bs_clip_range = self.get_bs_clip_range(None)
         episode_infos = np.array([None] * env_batch_size, dtype=object)
 
+        # FIXME: I think we'll need a separate episode_infos for
+        # each class of agent (they might have different action
+        # spaces).
+        # Maybe each policy tracks its own episode infos?
+        # One complication here is that we can have different agents
+        # acting at different steps. Sooo, we won't know the number
+        # agents for each step ahead of time...
+        # That should be okay, though, right? Do we use append instead?
+        #
         for ei_idx in range(env_batch_size):
             episode_infos[ei_idx] = EpisodeInfo(
                 starting_ts    = 0,
@@ -1012,13 +972,17 @@ class PPO(object):
             if self.render:
                 self.env.render()
 
+            #
+            # FIXME: total_rollout_ts is wrong in the multi-agent case.
+            # This should be divided by the number of agents that acted.
+            #
             total_rollout_ts += env_batch_size
             episode_lengths  += 1
 
             if self.obs_augment:
-                raw_action, action, log_prob = self.get_action(obs[0:1])
+                raw_action, action, log_prob = self.policy.get_action(obs[0:1])
             else:
-                raw_action, action, log_prob = self.get_action(obs)
+                raw_action, action, log_prob = self.policy.get_action(obs)
 
             if self.is_multi_agent:
                 c_obs = torch.tensor(global_obs,
@@ -1027,7 +991,8 @@ class PPO(object):
                 c_obs = torch.tensor(obs,
                     dtype=torch.float).to(self.device)
 
-            value = self.critic(c_obs)
+            #FIXME
+            value = self.policy.critic(c_obs)
 
             if self.normalize_values:
                 value = self.value_normalizer.denormalize(value)
@@ -1035,6 +1000,7 @@ class PPO(object):
             prev_obs        = obs.copy()
             prev_global_obs = global_obs.copy()
 
+            #FIXME: these will be dictionaries
             obs, ext_reward, done, info = self.env.step(action)
 
             ext_reward = np.float32(ext_reward)
@@ -1132,17 +1098,19 @@ class PPO(object):
             # initialize the hidden states when updating the models.
             # Note that we pass in empty arrays when not using lstm networks.
             #
+            #FIXME: handled by the policy classes?
             if self.using_lstm:
 
-                actor_hidden  = self.actor.hidden_state[0].clone()
-                actor_cell    = self.actor.hidden_state[1].clone()
+                #FIXME
+                actor_hidden  = self.policy.actor.hidden_state[0].clone()
+                actor_cell    = self.policy.actor.hidden_state[1].clone()
 
-                critic_hidden = self.critic.hidden_state[0].clone()
-                critic_cell   = self.critic.hidden_state[1].clone()
+                critic_hidden = self.policy.critic.hidden_state[0].clone()
+                critic_cell   = self.policy.critic.hidden_state[1].clone()
 
                 if done.any():
                     actor_zero_hidden, actor_zero_cell = \
-                        self.actor.get_zero_hidden_state(
+                        self.policy.actor.get_zero_hidden_state(
                             batch_size = env_batch_size,
                             device     = self.device)
 
@@ -1153,7 +1121,7 @@ class PPO(object):
                         actor_zero_cell[:, where_done, :]
 
                     critic_zero_hidden, critic_zero_cell = \
-                        self.critic.get_zero_hidden_state(
+                        self.policy.critic.get_zero_hidden_state(
                             batch_size = env_batch_size,
                             device     = self.device)
 
@@ -1284,7 +1252,8 @@ class PPO(object):
                     c_obs = torch.tensor(obs[where_maxed],
                         dtype=torch.float).to(self.device)
 
-                nxt_value = self.critic(c_obs)
+                #FIXME
+                nxt_value = self.policy.critic(c_obs)
 
                 if self.normalize_values:
                     nxt_value = self.value_normalizer.denormalize(nxt_value)
@@ -1320,9 +1289,9 @@ class PPO(object):
                 if self.using_icm:
                     if self.can_clone_env:
                         if self.obs_augment:
-                            _, clone_action, _ = self.get_action(obs[0:1])
+                            _, clone_action, _ = self.policy.get_action(obs[0:1])
                         else:
-                            _, clone_action, _ = self.get_action(obs)
+                            _, clone_action, _ = self.policy.get_action(obs)
 
                         clone_prev_obs = obs.copy()
                         cloned_env = deepcopy(self.env)
@@ -1544,8 +1513,9 @@ class PPO(object):
 
             train_start_time = time.time()
 
-            self.actor.train()
-            self.critic.train()
+            #FIXME
+            self.policy.actor.train()
+            self.policy.critic.train()
 
             if self.using_icm:
                 self.icm_model.train()
@@ -1638,6 +1608,7 @@ class PPO(object):
         #
         # FIXME: how do we handle batch data for classes of agents?
         # Maybe we have a different loader for each class?
+        # Maybe the policy class owns the data loader??
         #
         for batch_data in data_loader:
             critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
@@ -1662,8 +1633,9 @@ class PPO(object):
                 critic_hidden = torch.transpose(critic_hidden, 0, 1)
                 critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                self.actor.hidden_state  = (actor_hidden, actor_cell)
-                self.critic.hidden_state = (critic_hidden, critic_cell)
+                #FIXME
+                self.policy.actor.hidden_state  = (actor_hidden, actor_cell)
+                self.policy.critic.hidden_state = (critic_hidden, critic_cell)
 
             #
             # arXiv:2005.12729v1 suggests that normalizing advantages
@@ -1679,7 +1651,7 @@ class PPO(object):
 
                 advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-            values, curr_log_probs, entropy = self.evaluate(
+            values, curr_log_probs, entropy = self.policy.evaluate(
                 critic_obs,
                 obs,
                 raw_actions)
@@ -1719,7 +1691,8 @@ class PPO(object):
                 rank_print("actions min, max: {}, {}".format(
                     act_min, act_max))
 
-                std = nn.functional.softplus(self.actor.distribution.log_std)
+                #FIXME
+                std = nn.functional.softplus(self.policy.actor.distribution.log_std)
                 rank_print("actor std: {}".format(std))
 
                 comm.Abort()
@@ -1747,30 +1720,31 @@ class PPO(object):
             # FIXME: I think each class of actor would need its own
             # optimizer and loss. They would also need their own critics.
             #
-            self.actor_optim.zero_grad()
+            #FIXME
+            self.policy.actor_optim.zero_grad()
             actor_loss.backward(retain_graph = self.using_lstm)
-            mpi_avg_gradients(self.actor)
-            nn.utils.clip_grad_norm_(self.actor.parameters(),
+            mpi_avg_gradients(self.policy.actor)
+            nn.utils.clip_grad_norm_(self.policy.actor.parameters(),
                 self.gradient_clip)
-            self.actor_optim.step()
+            self.policy.actor_optim.step()
 
-            self.critic_optim.zero_grad()
+            self.policy.critic_optim.zero_grad()
             critic_loss.backward(retain_graph = self.using_lstm)
-            mpi_avg_gradients(self.critic)
-            nn.utils.clip_grad_norm_(self.critic.parameters(),
+            mpi_avg_gradients(self.policy.critic)
+            nn.utils.clip_grad_norm_(self.policy.critic.parameters(),
                 self.gradient_clip)
-            self.critic_optim.step()
+            self.policy.critic_optim.step()
 
             #
             # The idea here is similar to re-computing advantages, but now
             # we want to update the hidden states before the next epoch.
             #
             if self.using_lstm:
-                actor_hidden  = self.actor.hidden_state[0].detach().clone()
-                critic_hidden = self.critic.hidden_state[0].detach().clone()
+                actor_hidden  = self.policy.actor.hidden_state[0].detach().clone()
+                critic_hidden = self.policy.critic.hidden_state[0].detach().clone()
 
-                actor_cell    = self.actor.hidden_state[1].detach().clone()
-                critic_cell   = self.critic.hidden_state[1].detach().clone()
+                actor_cell    = self.policy.actor.hidden_state[1].detach().clone()
+                critic_cell   = self.policy.critic.hidden_state[1].detach().clone()
 
                 actor_hidden  = torch.transpose(actor_hidden, 0, 1)
                 actor_cell    = torch.transpose(actor_cell, 0, 1)
@@ -1838,6 +1812,7 @@ class PPO(object):
         self.status_dict["icm loss"] = total_icm_loss / counter
 
 
+    # FIXME: save and load will need to save/load policies.
     def save(self):
         """
             Save all information required for a restart.
@@ -1849,8 +1824,9 @@ class PPO(object):
 
         comm.barrier()
 
-        self.actor.save(self.state_path)
-        self.critic.save(self.state_path)
+        #FIXME: add save methods to the policy
+        self.policy.actor.save(self.state_path)
+        self.policy.critic.save(self.state_path)
 
         if self.using_icm:
             self.icm_model.save(self.state_path)
@@ -1873,8 +1849,9 @@ class PPO(object):
         """
             Load all information required for a restart.
         """
-        self.actor.load(self.state_path)
-        self.critic.load(self.state_path)
+        #FIXME add load methods to the policy
+        self.policy.actor.load(self.state_path)
+        self.policy.critic.load(self.state_path)
 
         if self.using_icm:
             self.icm_model.load(self.state_path)

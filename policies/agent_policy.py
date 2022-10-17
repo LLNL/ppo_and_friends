@@ -1,9 +1,12 @@
 import numpy as np
 import torch
+from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -18,6 +21,10 @@ class AgentPolicy():
                  critic_observation_space,
                  ac_network,
                  icm_network,
+                 actor_kw_args,
+                 critic_kw_args,
+                 icm_kw_args,
+                 lr,
                  device,
                  enable_icm  = False,
                  test_mode   = False):
@@ -30,7 +37,7 @@ class AgentPolicy():
         self.device           = device
         self.test_mode        = test_mode
 
-        act_type = type(env.action_space)
+        act_type = type(action_space)
 
         if (issubclass(act_type, Box) or
             issubclass(act_type, MultiBinary) or
@@ -53,25 +60,39 @@ class AgentPolicy():
             msg += "may not be fully supported. Use at your own risk."
             rank_print(msg)
 
+        self.action_dtype = get_action_dtype(self.action_space)
+
+        if self.action_dtype == "unknown":
+            rank_print("ERROR: unknown action type!")
+            comm.Abort()
+        else:
+            rank_print("Using {} actions.".format(self.action_dtype))
+
+
         self._initialize_networks(
-            ac_network   = ac_network,
-            enable_icm   = enable_icm,
-            icm_network  = icm_network)
+            ac_network     = ac_network,
+            enable_icm     = enable_icm,
+            icm_network    = icm_network,
+            actor_kw_args  = actor_kw_args,
+            critic_kw_args = critic_kw_args,
+            icm_kw_args    = icm_kw_args)
+
+        self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
+        self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
+
+        if self.enable_icm:
+            self.icm_optim = Adam(self.icm_model.parameters(),
+                lr=lr, eps=1e-5)
 
     def _initialize_networks(self,
                              ac_network, 
                              enable_icm,
-                             icm_network):
+                             icm_network,
+                             actor_kw_args,
+                             critic_kw_args,
+                             icm_kw_args):
         """
         """
-        action_dtype = get_action_dtype(self.action_space)
-
-        if action_dtype == "unknown":
-            rank_print("ERROR: unknown action type!")
-            comm.Abort()
-        else:
-            rank_print("Using {} actions.".format(action_dtype))
-
         #
         # Initialize our networks: actor, critic, and possibly ICM.
         #
@@ -102,7 +123,7 @@ class AgentPolicy():
                 in_shape     = obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                action_dtype = action_dtype,
+                action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **actor_kw_args)
 
@@ -111,7 +132,7 @@ class AgentPolicy():
                 in_shape     = obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
-                action_dtype = action_dtype,
+                action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **critic_kw_args)
 
@@ -124,7 +145,7 @@ class AgentPolicy():
                 in_dim       = actor_obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
-                action_dtype = action_dtype,
+                action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **actor_kw_args)
 
@@ -133,7 +154,7 @@ class AgentPolicy():
                 in_dim       = critic_obs_dim,
                 out_dim      = 1,
                 out_init     = 1.0,
-                action_dtype = action_dtype,
+                action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **critic_kw_args)
 
@@ -150,7 +171,7 @@ class AgentPolicy():
                 name         = "icm",
                 obs_dim      = obs_dim,
                 act_dim      = self.act_dim,
-                action_dtype = action_dtype,
+                action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 
