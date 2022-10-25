@@ -74,6 +74,11 @@ def need_action_squeeze(env):
         rank_print(msg)
         comm.Abort()
 
+    #
+    # Reset the soft_resets.
+    #
+    env.need_hard_reset = True
+
     return need_action_squeeze
 
 
