@@ -14,10 +14,10 @@ from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.icm import ICM
-from ppo_and_friends.environments.env_wrappers import VectorizedEnv, MultiAgentWrapper
-from ppo_and_friends.environments.env_wrappers import ObservationNormalizer, ObservationClipper
-from ppo_and_friends.environments.env_wrappers import RewardNormalizer, RewardClipper
-from ppo_and_friends.environments.env_wrappers import AugmentingEnvWrapper
+from ppo_and_friends.environments.general_wrappers import VectorizedEnv, MultiAgentWrapper
+from ppo_and_friends.environments.filter_wrappers import ObservationNormalizer, ObservationClipper
+from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, RewardClipper
+from ppo_and_friends.environments.filter_wrappers import ObservationAugmentingWrapper
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
@@ -282,7 +282,7 @@ class PPO(object):
                 rank_print(msg)
                 comm.Abort()
 
-            env = AugmentingEnvWrapper(
+            env = ObservationAugmentingWrapper(
                 env,
                 test_mode = test_mode)
 
