@@ -96,7 +96,6 @@ class EnvironmentLauncher(ABC):
                 num_timesteps       = 1,
                 test                = False,
                 pickle_class        = False,
-                use_soft_resets     = True,
                 obs_augment         = False,
                 num_test_runs       = 1):
 
@@ -430,7 +429,6 @@ class LunarLanderLauncher(EnvironmentLauncher):
                      max_ts_per_ep       = 128,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
-                     use_soft_resets     = True,
                      use_gae             = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
@@ -494,7 +492,6 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
                      use_gae             = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
-                     use_soft_resets     = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
                      bootstrap_clip      = (-10., 10.),
@@ -560,7 +557,6 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
                      batch_size          = 512,
                      max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
-                     use_soft_resets     = True,
                      use_gae             = True,
                      normalize_adv       = True,
                      normalize_obs       = True,
@@ -654,7 +650,6 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
                      lr_dec              = lr_dec,
                      lr                  = lr,
                      min_lr              = min_lr,
-                     use_soft_resets     = True,
                      **self.kw_launch_args)
 
 
@@ -718,7 +713,6 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
                      lr_dec               = lr_dec,
                      lr                   = lr,
                      min_lr               = min_lr,
-                     use_soft_resets      = True,
                      use_gae              = True,
                      **self.kw_launch_args)
 
@@ -774,7 +768,6 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
                      batch_size         = 512,
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 64,
-                     use_soft_resets    = True,
                      use_gae            = True,
                      epochs_per_iter    = 30,
                      reward_clip        = (-1., 1.),
@@ -1018,7 +1011,6 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
                      batch_size         = 512,
                      max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
-                     use_soft_resets    = True,
                      use_gae            = True,
                      normalize_obs      = True,
                      normalize_rewards  = True,
