@@ -33,9 +33,9 @@ def test_policy(ppo,
     is_multi_agent = env.get_num_agents() > 1
 
     if is_multi_agent:
-        obs_filter = lambda x : x[0]
+        reset_filter = lambda x : x[0]
     else:
-        obs_filter = lambda x: x
+        reset_filter = lambda x: x
 
     if render_gif:
         gif_frames = []
@@ -44,7 +44,7 @@ def test_policy(ppo,
 
     for _ in range(num_test_runs):
 
-        obs      = obs_filter(env.reset())
+        obs      = reset_filter(env.reset())
         done     = False
         ep_score = 0
 
