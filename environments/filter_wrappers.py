@@ -36,12 +36,12 @@ class ObservationFilter(IdentityWrapper, ABC):
         return
 
     @abstractmethod
-    def _filter_local_observation(self, obs_cache):
+    def _filter_local_observation(self, obs):
         """
-            Perform the local filtering on the observation cache.
+            Perform the local filtering on the local observation.
 
             Arguments:
-                obs_cache    The observation cache to filter.
+                obs    The local observation to filter.
 
             Returns:
                 The filtered observation.
