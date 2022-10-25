@@ -506,7 +506,22 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
 
 # FIXME: need to handle dictionaries mapping agents to
-# spaces.
+# spaces. Also, the done needs an "all" key.
+#
+# This class should probably only be used for classic Gym
+# environments.
+#
+# For Abmarl, we will want to have a simpler wrapper that
+# can handle things like global observations. I think
+# Abmarl's wrapper inherits from RLlib, so we can check
+# for that.
+#
+# Is it possible for agents sharing the same policy to have
+# different spaces? I don't think so... Even if they're on
+# the same team, they will need separate policies.
+# NOTE: a policies global observation CAN contain mixed
+# spaces, so flatten_space will need to be used there.
+#
 class MultiAgentWrapper(IdentityWrapper):
     """
         A wrapper for multi-agent environments. This design follows the
@@ -547,6 +562,8 @@ class MultiAgentWrapper(IdentityWrapper):
         self.global_state_space = None
         self.death_mask         = death_mask
 
+        # FIXME: I think our observation and action spaces will need to
+        # be dictionaries mapping agents to their spaces.
         self.observation_space, _ = self._get_refined_space(
             multi_agent_space = self.env.observation_space,
             add_ids           = need_agent_ids)
@@ -575,6 +592,11 @@ class MultiAgentWrapper(IdentityWrapper):
         """
         return self.global_state_space
 
+    # FIXME: we will still need this for the global observation
+    # space, but I think we should probably use the class that
+    # Abmarl uses to combine these things. It's a Gym function.
+    # => gym.spaces.flatten_space. Note that the agent spaces dict
+    # must be a gym Dict, which is ordered.
     def _get_refined_space(self,
                            multi_agent_space,
                            add_ids = False):
@@ -697,6 +719,9 @@ class MultiAgentWrapper(IdentityWrapper):
 
         return (new_space, size)
 
+    # FIXME: how do we represent the global state space if we have
+    # multiple agents with different obs spaces?
+    # use gym.spaces.flatten_space
     def _construct_global_state_space(self):
         """
             Construct the global state space. See arXiv:2103.01955v2.

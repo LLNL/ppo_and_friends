@@ -13,6 +13,8 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+# FIXME: do we want to have two different modes, one for single agent
+# and another for multi-agent?
 class AgentPolicy():
 
     def __init__(self,
@@ -36,6 +38,8 @@ class AgentPolicy():
         self.enable_icm       = enable_icm
         self.device           = device
         self.test_mode        = test_mode
+        self.using_lstm       = False
+        self.dataset          = None
 
         act_type = type(action_space)
 
@@ -85,12 +89,12 @@ class AgentPolicy():
                 lr=lr, eps=1e-5)
 
     def _initialize_networks(self,
-                             ac_network, 
-                             enable_icm,
-                             icm_network,
-                             actor_kw_args,
-                             critic_kw_args,
-                             icm_kw_args):
+                       ac_network, 
+                       enable_icm,
+                       icm_network,
+                       actor_kw_args,
+                       critic_kw_args,
+                       icm_kw_args):
         """
         """
         #
@@ -101,7 +105,6 @@ class AgentPolicy():
             if base.__name__ == "PPOConv2dNetwork":
                 use_conv2d_setup = True
 
-        self.using_lstm = False
         for base in ac_network.__bases__:
             if base.__name__ == "PPOLSTMNetwork":
                 self.using_lstm = True
@@ -179,6 +182,41 @@ class AgentPolicy():
             broadcast_model_parameters(self.icm_model)
             comm.barrier()
 
+    def initialize_dataset(self):
+        """
+        """
+        sequence_length = 1
+        if self.using_lstm:
+            self.actor.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            self.critic.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            sequence_length = self.actor.sequence_length
+
+        self.dataset = PPODataset(
+            device          = self.device,
+            action_dtype    = self.action_dtype,
+            sequence_length = sequence_length)
+
+    def finalize_dataset(self):
+        """
+        """
+        self.dataset.build()
+
+    def clear_dataset(self):
+        """
+        """
+        self.dataset = None
+
+    #FIXME: obs will be a dictionary in the multi-agent case. Do we want this to
+    # be handed by a multi-agent mode, or do we want to wrap single agent
+    # envs so that they also return dictionaries? OR we could just make sure to
+    # only pass observations from the correct agents into this function... Maybe
+    # that makes the most sense.
     def get_action(self, obs):
         """
             Given an observation from our environment, determine what the

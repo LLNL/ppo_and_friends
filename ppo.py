@@ -5,7 +5,6 @@ import numpy as np
 import os
 from copy import deepcopy
 import torch
-from torch.optim import Adam#FIXME
 from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset#FIXME: remove
@@ -253,7 +252,9 @@ class PPO(object):
         # The first wrapper will always be either a standard vectorization
         # or a multi-agent wrapper. We currently don't support combining them.
         #
-        # TODO: let's support vectorizing multi-agent environments.
+        # FIXME: after this transition, all environments will look like multi
+        # agent envs (dictionaries). So, we'll need to figure out how to best
+        # vectorize them.
         #
         if is_multi_agent:
             env = MultiAgentWrapper(
@@ -605,93 +606,6 @@ class PPO(object):
         if self.using_icm:
             rank_print("Can clone environment: {}".format(self.can_clone_env))
 
-    ## FIXME: we'll need to somehow get actions for classes of agents.
-    ## Should we create an Agent class that keeps track of these things?
-    ## Each agent class would have its own "get_action" and "evaluate"
-    ## methods.
-    #def get_action(self, obs):
-    #    """
-    #        Given an observation from our environment, determine what the
-    #        action should be.
-
-    #        Arguments:
-    #            obs    The environment observation.
-
-    #        Returns:
-    #            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-    #            is the distribution sample before any "squashing" takes place,
-    #            "action" is the the action value that should be fed to the
-    #            environment, and log_prob is the log probabilities from our
-    #            probability distribution.
-    #    """
-    #    if len(obs.shape) < 2:
-    #        msg  = "ERROR: get_action expects a batch of observations but "
-    #        msg += "instead received shape {}.".format(obs.shape)
-    #        rank_print(msg)
-    #        comm.Abort()
-
-    #    t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-    #    with torch.no_grad():
-    #        action_pred = self.actor(t_obs)
-
-    #    action_pred = action_pred.cpu().detach()
-    #    dist        = self.actor.distribution.get_distribution(action_pred)
-
-    #    #
-    #    # Our distribution gives us two potentially distinct actions, one of
-    #    # which is guaranteed to be a raw sample from the distribution. The
-    #    # other might be altered in some way (usually to enforce a range).
-    #    #
-    #    # FIXME: We're going to potentially have multiple actors and critics
-    #    # (one for each class of agent).
-    #    #
-    #    action, raw_action = self.actor.distribution.sample_distribution(dist)
-    #    log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
-
-    #    action     = action.detach().numpy()
-    #    raw_action = raw_action.detach().numpy()
-
-    #    return raw_action, action, log_prob.detach()
-
-    ##
-    ## FIXME: need to handle classes of agents.
-    ##
-    #def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
-    #    """
-    #        Given a batch of observations, use our critic to approximate
-    #        the expected return values. Also use a batch of corresponding
-    #        actions to retrieve some other useful information.
-
-    #        Arguments:
-    #            batch_critic_obs   A batch of observations for the critic.
-    #            batch_obs          A batch of standard observations.
-    #            batch_actions      A batch of actions corresponding to the batch of
-    #                               observations.
-
-    #        Returns:
-    #            A tuple of form (values, log_probs, entropies) s.t. values are
-    #            the critic predicted value, log_probs are the log probabilities
-    #            from our probability distribution, and entropies are the
-    #            entropies from our distribution.
-    #    """
-    #    values      = self.critic(batch_critic_obs).squeeze()
-    #    action_pred = self.actor(batch_obs).cpu()
-    #    dist        = self.actor.distribution.get_distribution(action_pred)
-
-    #    if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-    #        log_probs = self.actor.distribution.get_log_probs(
-    #            dist,
-    #            batch_actions.unsqueeze(1).cpu())
-    #    else:
-    #        log_probs = self.actor.distribution.get_log_probs(
-    #            dist,
-    #            batch_actions.cpu())
-
-    #    entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-    #    return values, log_probs.to(self.device), entropy.to(self.device)
-
     def print_status(self):
         """
             Print out statistics from our status_dict.
@@ -758,7 +672,7 @@ class PPO(object):
         update_optimizer_lr(self.policy.critic_optim, self.lr)
 
         if self.using_icm:
-            update_optimizer_lr(self.icm_optim, self.lr)
+            update_optimizer_lr(self.policy.icm_optim, self.lr)
 
         self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
 
@@ -853,31 +767,7 @@ class PPO(object):
             rank_print(msg)
             comm.Abort()
 
-        #
-        # When using lstm networks, we need to reset the hidden state
-        # for each rollout and pass our sequence length to our dataset.
-        #
-        sequence_length = 1
-        if self.using_lstm:
-            self.policy.actor.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            #FIXME
-            self.policy.critic.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            sequence_length = self.policy.actor.sequence_length
-
-        #
-        # FIXME: should each policy instance have its owne
-        # PPODataset?
-        #
-        dataset = PPODataset(
-            device          = self.device,
-            action_dtype    = self.action_dtype,
-            sequence_length = sequence_length)
+        self.policy.initialize_dataset()
 
         total_episodes     = 0.0
         total_rollout_ts   = 0
@@ -894,7 +784,7 @@ class PPO(object):
         self.policy.critic.eval()
 
         if self.using_icm:
-            self.icm_model.eval()
+            self.policy.icm_model.eval()
 
         #
         # TODO: soft resets might cause rollouts to start off in "traps"
@@ -939,6 +829,12 @@ class PPO(object):
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
         bs_clip_range = self.get_bs_clip_range(None)
+        #
+        # FIXME: when tracking episode infos in the policy (or wherever)
+        # we need to map TWO things to EpisodeInfo objects:
+        #    1. Agents
+        #    2. Environment instances!
+        #
         episode_infos = np.array([None] * env_batch_size, dtype=object)
 
         # FIXME: I think we'll need a separate episode_infos for
@@ -949,6 +845,11 @@ class PPO(object):
         # acting at different steps. Sooo, we won't know the number
         # agents for each step ahead of time...
         # That should be okay, though, right? Do we use append instead?
+        #
+        # How do we currently handle cases where agents die before the
+        # the sim has ended? We typically death mask them. In the Abmarl
+        # design, death masking isn't needed because the agents will
+        # no longer be acting...
         #
         for ei_idx in range(env_batch_size):
             episode_infos[ei_idx] = EpisodeInfo(
@@ -991,7 +892,10 @@ class PPO(object):
                 c_obs = torch.tensor(obs,
                     dtype=torch.float).to(self.device)
 
-            #FIXME
+            # FIXME: how do we want to pass in these observations in
+            # the MA setting?
+            # We will have a dictionary mapping agent ids to their observations.
+            # Each agent will map to a policy.
             value = self.policy.critic(c_obs)
 
             if self.normalize_values:
@@ -1140,6 +1044,14 @@ class PPO(object):
                      np.empty(empty_shape),
                      np.empty(empty_shape))
 
+            #
+            # FIXME: This setup assigns a single EpisodeInfo to each agent,
+            # which makes sense. How do we handle this moving forward? Does
+            # the policy keep track of some kind of mapping from agents to
+            # episode infos? Each agent needs its own instance of episode info,
+            # because it literally stores all of its information from
+            # the episode...
+            #
             for ei_idx in range(env_batch_size):
                 episode_infos[ei_idx].add_info(
                     global_observation      = prev_global_obs[ei_idx],
@@ -1182,7 +1094,7 @@ class PPO(object):
                         ending_value   = 0,
                         ending_reward  = 0)
 
-                    dataset.add_episode(episode_infos[done_idx])
+                    self.policy.dataset.add_episode(episode_infos[done_idx])
 
                 #
                 # If we're using a dynamic bs clip, we clip to the min/max
@@ -1206,7 +1118,7 @@ class PPO(object):
                 top_rollout_score = max(top_rollout_score,
                     ep_score[where_done].max())
 
-                done_count = where_done.size
+                Finalize our datasets.
 
                 if self.using_icm:
                     total_intr_rewards[where_done] += intr_reward[where_done]
@@ -1319,7 +1231,7 @@ class PPO(object):
                         ending_value   = nxt_value[idx].item(),
                         ending_reward  = nxt_reward[idx].item())
 
-                    dataset.add_episode(episode_infos[maxed_idx])
+                    self.policy.dataset.add_episode(episode_infos[maxed_idx])
 
                     bs_clip_range = self.get_bs_clip_range(
                         episode_infos[maxed_idx].rewards)
@@ -1461,15 +1373,13 @@ class PPO(object):
             self.status_dict["intrinsic score avg"] = ism
 
         #
-        # Finally, bulid the dataset.
+        # Finalize our datasets.
         #
-        dataset.build()
+        self.policy.finalize_dataset()
 
         comm.barrier()
         stop_time = time.time()
         self.status_dict["rollout time"] = stop_time - start_time
-
-        return dataset
 
     def learn(self, num_timesteps):
         """
@@ -1489,7 +1399,7 @@ class PPO(object):
         while self.status_dict["timesteps"] < ts_max:
             iter_start_time = time.time()
 
-            dataset = self.rollout()
+            self.rollout()
 
             self.status_dict["iteration"] += 1
 
@@ -1507,7 +1417,7 @@ class PPO(object):
             # observation and action shapes could differ.
             #
             data_loader = DataLoader(
-                dataset,
+                self.policy.dataset,
                 batch_size = self.batch_size,
                 shuffle    = True)
 
@@ -1518,7 +1428,7 @@ class PPO(object):
             self.policy.critic.train()
 
             if self.using_icm:
-                self.icm_model.train()
+                self.policy.icm_model.train()
 
             for epoch_idx in range(self.epochs_per_iter):
 
@@ -1552,7 +1462,7 @@ class PPO(object):
             #
             # We don't want to hange on to this memory as we loop back around.
             #
-            del dataset
+            self.policy.clear_dataset()
             del data_loader
             gc.collect()
 
@@ -1792,17 +1702,17 @@ class PPO(object):
 
             actions = actions.unsqueeze(1)
 
-            _, inv_loss, f_loss = self.icm_model(obs, next_obs, actions)
+            _, inv_loss, f_loss = self.policy.icm_model(obs, next_obs, actions)
 
             icm_loss = (((1.0 - self.icm_beta) * f_loss) +
                 (self.icm_beta * inv_loss))
 
             total_icm_loss += icm_loss.item()
 
-            self.icm_optim.zero_grad()
+            self.policy.icm_optim.zero_grad()
             icm_loss.backward()
-            mpi_avg_gradients(self.icm_model)
-            self.icm_optim.step()
+            mpi_avg_gradients(self.policy.icm_model)
+            self.policy.icm_optim.step()
 
             counter += 1
             comm.barrier()
@@ -1829,7 +1739,7 @@ class PPO(object):
         self.policy.critic.save(self.state_path)
 
         if self.using_icm:
-            self.icm_model.save(self.state_path)
+            self.policy.icm_model.save(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.save_info(self.state_path)
@@ -1854,7 +1764,7 @@ class PPO(object):
         self.policy.critic.load(self.state_path)
 
         if self.using_icm:
-            self.icm_model.load(self.state_path)
+            self.policy.icm_model.load(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.load_info(self.state_path)

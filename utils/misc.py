@@ -12,7 +12,7 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def get_action_dtype(env):
+def get_action_dtype(action_space):
     """
         Get our action space data type. Options are continuous
         and discrete. Note that "discrete" in this case is NOT
@@ -20,14 +20,14 @@ def get_action_dtype(env):
         have a discrete data type.
 
         Arguments:
-            env    The environment to query.
+            env    The action space to query.
 
         Returns:
             A string representing the action space dtype.
     """
-    if np.issubdtype(env.action_space.dtype, np.floating):
+    if np.issubdtype(action_space.dtype, np.floating):
         return "continuous"
-    elif np.issubdtype(env.action_space.dtype, np.integer):
+    elif np.issubdtype(action_space.dtype, np.integer):
         return "discrete"
     return "unknown"
 
