@@ -74,8 +74,8 @@ class ObservationFilter(IdentityWrapper, ABC):
         #
         # Info can come back int two forms:
         #   1. It's a dictionary containing global information.
-        #   2. It's an iterable containing num_agent dictionaries,
-        #      each of which contains info for its assocated agent.
+        #   2. It's an iterable containing num_agent/num_env dictionaries,
+        #      each of which contains info for its assocated environment/agent.
         #
         # In either case, we need to check for global state. If it's there
         # we need to apply the same filters that we're applying to the
@@ -85,9 +85,10 @@ class ObservationFilter(IdentityWrapper, ABC):
         if type(info) == dict:
             info_is_global = True
 
-        if info_is_global and "global state" in info:
-            info["global state"] = \
-                self._filter_global_observation(info["global state"])
+        if info_is_global:
+            if "global state" in info:
+                info["global state"] = \
+                    self._filter_global_observation(info["global state"])
         else:
             #
             # If it's in one, it's in them all.
