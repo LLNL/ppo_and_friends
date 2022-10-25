@@ -241,114 +241,59 @@ GP104BM [GeForce GTX 1070 Mobile]
 ## Environment Settings
 
 I have by no means run any comprehensive studies to figure out what the
-optimal choices are for processor and `env_per_proc` distribution, but
-I've found some general settings that tend to work well. I've outlined
-them below. I've included rough timing information for environments that
-I remembered to record.
+optimal choices are for hyper-parameters, but the settings located
+in the environment launchers tend to work well. In general, using as
+many processors as you have access to will speed up training, but
+there is also communication overhead that will become more noticable
+as you scale up. This, combined with the limitations of how often
+the policy is updated, will lead to diminishing returns at some point.
 
-### CartPole
-4 processors and 2 environments per processor works well here. An excellent
-policy will be learned ~20->30 iterations, which takes a matter of seconds.
+The number of environments per processor is a little less straightforward,
+as this setting will further divide up the episode lengths. I typically see
+good results by setting this to something between 2 and 4, depending on the
+environment.
 
-### Pendulum
-2 processors and 2 environments per processor works well here. I see an
-excellent policy after ~7->12 minutes of training.
-
-### Acrobot
-2 procssors and 1 environment per processor will learn a good policy in
-roughly 30 seconds to a minute.
-
-### MountainCar
-2 processors and 3 environments per processor takes about 6-10 minutes
-to solve the environment.
-
-### MountainCarContinuous
-2 processors and 3 environments per processor works well here.
-
-### LunarLander
-2 processors and 2 environments per processor works well here. I see an
-excellent policy in under 5 minutes (~100 iterations).
-
-### LunarLanderContinuous
-2 processors and 2 environments per processor works well here. I see an
-excellent policy in under 5 minutes (~100 iterations).
+I've added extra information and tips for some of our more unique environments
+below.
 
 ### BipedalWalker
-2 processors and 1 environments per processor will solve the environment
-in about 15->20 minutes. The environment is considered solved when the
-average score over 100 test runs is >= 300. This policy easily gets
-an average score >= 320.
+The environment is considered solved when the average score over 100 test 
+runs is >= 300. This policy easily gets an average score >= 320.
 
 ### BipedalWalkerHardcore
-4 processors and 1 environments per processor works well. This is probably
-the most challenging solveable environment in this repo, and it takes a
-significant amount of time to reach a solved policy. I generally see a solved
-policy around 4 hours or so of training (~6000->7000 iterations), but the
-policy can still be a bit brittle at this point. For example, testing the
-policy 4 times in a row with each test averaging over 100 test runs might
-result in 3 out of the 4 averages being >= 300. Longer training will result
-in a more stable policy.
+This is one of the most challenging environments in this repo, and it takes a
+significant amount of time to reach a solved policy. Using 4 processors and
+1 environment per processor, I generally see a solved policy around 4 hours
+or so of training (~6000->7000 iterations), but the policy can still be a 
+bit brittle at this point. For example, testing the policy 4 times in a row
+with each test averaging over 100 test runs might result in 3 out of the 4
+averages being >= 300. Longer training will result in a more stable policy.
 The environment is considered solved when the average score over 100 test
 runs is >= 300. This policy generally gets an average score >= 320 once
 solved.
 
 ### All Atari pixel environments
-I recommend enabling the `--allow_mpi_gpu` flag for systems with GPUs. I
-tested BreakoutPixels using 4 processors and 2 environments per processor,
-which worked well.
-
-### All Atari RAM environments
-I tested BreakoutRAM using 4 processors and 2 environments per processor,
-which worked well.
-
-### InvertedPendulum
-2 processors and 2 environments per processor learns an excellent policy in
-roughly 10 seconds of training.
-
-### InvertedDoublePendulum
-2 processors and 2 environments per processor learns a good policy within
-a few minutes.
+I recommend enabling the `--allow_mpi_gpu` flag for systems with GPUs.
 
 ### Ant
-4 processors and 1 environment per processor learns a a great policy within
-10 minutes of training. In order to solve the environment, you need to reach
-an average score >= 6000 over 100 test runs. To accomplish this, I trained
-for ~1.5 hours.
+In order to solve the environment, you need to reach an average score >= 6000
+over 100 test runs.
 
-### Walker2d
+### Walker2d and Hopper
 Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
 They will learn to run a bit beyond the max trajectory length very well,
 but they often stumble afterwards. For this reason, I recommend using no
-more than 2 processors and training with a single environment per processor.
+training with a single environment per processor.
 This will result in a solved policy fairly quickly.
-
-### Hopper
-Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
-They will learn to run a bit beyond the max trajectory length very well,
-but they often stumble afterwards. For this reason, I recommend using no
-more than 2 processors and training with a single environment per processor.
-This will result in a solved policy fairly quickly.
-
-### Swimmer
-2 processors and 2 environments per processor works very well.
-
-### HalfCheetah
-2 processors and 2 environments per processor learns an excellent policy
-in about 2 minutes.
-
-### Humanoid
-2 processors and 2 environments per processor learns an excellent policy
-within 40 minutes or less.
 
 ### HumanoidStandup
-Who knows with this one...
+This is an unsolved environment.
 
 ### RobotWarehouseTiny
 There are many configuration options for the robot warehouse. This one
 uses 3 agents in a "tiny" warehouse.
-4 processors works well. This environment has very sparse rewards, so it
-can take a while for the agents to explore enough to reach a good policy.
-In the example gif below, agents were trained for a little less than 5 hours.
+This environment has very sparse rewards, so it can take a while for the
+agents to explore enough to reach a good policy.
 
 ### RobotWarehouseSmall
 There are many configuration options for the robot warehouse. This one
@@ -360,14 +305,11 @@ learning takes longer.
 ### LevelBasedForaging
 There are many configuration options for this environment. This configuration
 uses 3 players, an 8x8 grid, 2 food sources, and each agent is aware of
-the entire grid. 4 procesors works well with this environment, and a good
-policy can be learned in under 10 minutes.
+the entire grid.
 
 ### PressurePlate
 This environment allows configuration of the number of players. This
-configuration uses 4 players. 4 procesors works well with this
-environment. I trained for ~15 minutes before testing, at which point
-the environment was solved.
+configuration uses 4 players.
 
 # Resulting Policies
 Policies can differ from one training to another, and the longer training
