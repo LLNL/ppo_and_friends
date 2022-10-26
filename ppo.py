@@ -548,6 +548,8 @@ class PPO(object):
             use_gae                  = use_gae,
             gamma                    = gamma,
             lambd                    = lambd,
+            dynamic_bs_clip          = dynamic_bs_clip,
+            bootstrap_clip           = callable_bootstrap_clip,
             status_dict              = self.status_dict)
 
         self.test_mode_dependencies.append(self.policy)
@@ -784,40 +786,41 @@ class PPO(object):
         total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        bs_clip_range = self.get_bs_clip_range(None)
-        #
-        # FIXME: when tracking episode infos in the policy (or wherever)
-        # we need to map TWO things to EpisodeInfo objects:
-        #    1. Agents
-        #    2. Environment instances!
-        #
-        # The policy could keep arrays of dictionaries s.t. each dict
-        # in the array is an env instance, and each dict maps agents
-        # to episodes.
-        #
-        episode_infos = np.array([None] * env_batch_size, dtype=object)
+        #bs_clip_range = self.get_bs_clip_range(None)
+        ##
+        ## FIXME: when tracking episode infos in the policy (or wherever)
+        ## we need to map TWO things to EpisodeInfo objects:
+        ##    1. Agents
+        ##    2. Environment instances!
+        ##
+        ## The policy could keep arrays of dictionaries s.t. each dict
+        ## in the array is an env instance, and each dict maps agents
+        ## to episodes.
+        ##
+        #episode_infos = np.array([None] * env_batch_size, dtype=object)
 
-        # FIXME: I think we'll need a separate episode_infos for
-        # each class of agent (they might have different action
-        # spaces).
-        # Maybe each policy tracks its own episode infos?
-        # One complication here is that we can have different agents
-        # acting at different steps. Sooo, we won't know the number
-        # agents for each step ahead of time...
-        # That should be okay, though, right? Do we use append instead?
-        #
-        # How do we currently handle cases where agents die before the
-        # the sim has ended? We typically death mask them. In the Abmarl
-        # design, death masking isn't needed because the agents will
-        # no longer be acting...
-        #
-        for ei_idx in range(env_batch_size):
-            episode_infos[ei_idx] = EpisodeInfo(
-                starting_ts    = 0,
-                use_gae        = self.use_gae,
-                gamma          = self.gamma,
-                lambd          = self.lambd,
-                bootstrap_clip = bs_clip_range)
+        ## FIXME: I think we'll need a separate episode_infos for
+        ## each class of agent (they might have different action
+        ## spaces).
+        ## Maybe each policy tracks its own episode infos?
+        ## One complication here is that we can have different agents
+        ## acting at different steps. Sooo, we won't know the number
+        ## agents for each step ahead of time...
+        ## That should be okay, though, right? Do we use append instead?
+        ##
+        ## How do we currently handle cases where agents die before the
+        ## the sim has ended? We typically death mask them. In the Abmarl
+        ## design, death masking isn't needed because the agents will
+        ## no longer be acting...
+        ##
+        #for ei_idx in range(env_batch_size):
+        #    episode_infos[ei_idx] = EpisodeInfo(
+        #        starting_ts    = 0,
+        #        use_gae        = self.use_gae,
+        #        gamma          = self.gamma,
+        #        lambd          = self.lambd,
+        #        bootstrap_clip = bs_clip_range)
+        self.policy.initialize_episodes(env_batch_size)
 
         #
         # TODO: If we're using multiple environments, we can end up going over
@@ -1012,20 +1015,38 @@ class PPO(object):
             # because it literally stores all of its information from
             # the episode...
             #
-            for ei_idx in range(env_batch_size):
-                episode_infos[ei_idx].add_info(
-                    global_observation      = prev_global_obs[ei_idx],
-                    observation             = prev_obs[ei_idx],
-                    next_observation        = ep_obs[ei_idx],
-                    raw_action              = raw_action[ei_idx],
-                    action                  = action[ei_idx],
-                    value                   = value[ei_idx].item(),
-                    log_prob                = log_prob[ei_idx],
-                    reward                  = reward[ei_idx].item(),
-                    actor_hidden            = actor_hidden[:, [ei_idx], :],
-                    actor_cell              = actor_cell[:, [ei_idx], :],
-                    critic_hidden           = critic_hidden[:, [ei_idx], :],
-                    critic_cell             = critic_cell[:, [ei_idx], :])
+            #for ei_idx in range(env_batch_size):
+            #    episode_infos[ei_idx].add_info(
+            #        global_observation      = prev_global_obs[ei_idx],
+            #        observation             = prev_obs[ei_idx],
+            #        next_observation        = ep_obs[ei_idx],
+            #        raw_action              = raw_action[ei_idx],
+            #        action                  = action[ei_idx],
+            #        value                   = value[ei_idx].item(),
+            #        log_prob                = log_prob[ei_idx],
+            #        reward                  = reward[ei_idx].item(),
+            #        actor_hidden            = actor_hidden[:, [ei_idx], :],
+            #        actor_cell              = actor_cell[:, [ei_idx], :],
+            #        critic_hidden           = critic_hidden[:, [ei_idx], :],
+            #        critic_cell             = critic_cell[:, [ei_idx], :])
+            self.policy.add_episode_info(
+                global_observations    = prev_global_obs,
+                observations           = prev_obs,
+                next_observations      = ep_obs,
+                raw_actions            = raw_action,
+                actions                = action,
+                values                 = value,
+                log_probs              = log_prob,
+                rewards                = reward,
+                actor_hidden           = actor_hidden,
+                actor_cell             = actor_cell,
+                critic_hidden          = critic_cell,
+                critic_cell            = critic_cell)
+
+            rollout_max_reward = max(rollout_max_reward, reward.max())
+            rollout_min_reward = min(rollout_min_reward, reward.min())
+            rollout_max_obs    = max(rollout_max_obs, obs.max())
+            rollout_min_obs    = min(rollout_min_obs, obs.min())
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
@@ -1047,30 +1068,38 @@ class PPO(object):
             #
             if done.any():
 
-                for done_idx in where_done:
-                    episode_infos[done_idx].end_episode(
-                        ending_ts      = episode_lengths[done_idx],
-                        terminal       = True,
-                        ending_value   = 0,
-                        ending_reward  = 0)
+                #for done_idx in where_done:
+                #    episode_infos[done_idx].end_episode(
+                #        ending_ts      = episode_lengths[done_idx],
+                #        terminal       = True,
+                #        ending_value   = 0,
+                #        ending_reward  = 0)
 
-                    self.policy.dataset.add_episode(episode_infos[done_idx])
+                #    self.policy.dataset.add_episode(episode_infos[done_idx])
 
-                #
-                # If we're using a dynamic bs clip, we clip to the min/max
-                # rewards from the episode. Otherwise, rely on the user
-                # provided range.
-                #
-                for i, done_idx in enumerate(where_done):
-                    bs_min, bs_max = self.get_bs_clip_range(
-                        episode_infos[done_idx].rewards)
+                ##
+                ## If we're using a dynamic bs clip, we clip to the min/max
+                ## rewards from the episode. Otherwise, rely on the user
+                ## provided range.
+                ##
+                #for i, done_idx in enumerate(where_done):
+                #    bs_min, bs_max = self.get_bs_clip_range(
+                #        episode_infos[done_idx].rewards)
 
-                    episode_infos[done_idx] = EpisodeInfo(
-                        starting_ts    = 0,
-                        use_gae        = self.use_gae,
-                        gamma          = self.gamma,
-                        lambd          = self.lambd,
-                        bootstrap_clip = (bs_min, bs_max))
+                #    episode_infos[done_idx] = EpisodeInfo(
+                #        starting_ts    = 0,
+                #        use_gae        = self.use_gae,
+                #        gamma          = self.gamma,
+                #        lambd          = self.lambd,
+                #        bootstrap_clip = (bs_min, bs_max))
+                done_count = where_done.size
+
+                self.policy.end_episodes(
+                    env_idxs        = where_done,
+                    episode_lengths = episode_lengths,
+                    terminal        = np.ones(done_count).astype(bool),
+                    ending_values   = np.zeros(done_count),
+                    ending_rewards  = np.zeros(done_count))
 
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
@@ -1080,8 +1109,6 @@ class PPO(object):
 
                 if self.using_icm:
                     total_intr_rewards[where_done] += intr_reward[where_done]
-
-                done_count = where_done.size
 
                 total_ext_rewards[where_done] += ep_score[where_done]
                 total_rewards                 += ep_rewards[where_done].sum()
@@ -1184,24 +1211,32 @@ class PPO(object):
                     surprise    = intr_reward[where_maxed] - ism
                     nxt_reward += surprise
 
-                for idx, maxed_idx in enumerate(where_maxed):
-                    episode_infos[maxed_idx].end_episode(
-                        ending_ts      = episode_lengths[maxed_idx],
-                        terminal       = False,
-                        ending_value   = nxt_value[idx].item(),
-                        ending_reward  = nxt_reward[idx].item())
+                #for idx, maxed_idx in enumerate(where_maxed):
+                #    episode_infos[maxed_idx].end_episode(
+                #        ending_ts      = episode_lengths[maxed_idx],
+                #        terminal       = False,
+                #        ending_value   = nxt_value[idx].item(),
+                #        ending_reward  = nxt_reward[idx].item())
 
-                    self.policy.dataset.add_episode(episode_infos[maxed_idx])
+                #    self.policy.dataset.add_episode(episode_infos[maxed_idx])
 
-                    bs_clip_range = self.get_bs_clip_range(
-                        episode_infos[maxed_idx].rewards)
+                #    bs_clip_range = self.get_bs_clip_range(
+                #        episode_infos[maxed_idx].rewards)
 
-                    episode_infos[maxed_idx] = EpisodeInfo(
-                        starting_ts    = episode_lengths[maxed_idx],
-                        use_gae        = self.use_gae,
-                        gamma          = self.gamma,
-                        lambd          = self.lambd,
-                        bootstrap_clip = bs_clip_range)
+                #    episode_infos[maxed_idx] = EpisodeInfo(
+                #        starting_ts    = episode_lengths[maxed_idx],
+                #        use_gae        = self.use_gae,
+                #        gamma          = self.gamma,
+                #        lambd          = self.lambd,
+                #        bootstrap_clip = bs_clip_range)
+                maxed_count = where_maxed.size
+
+                self.policy.end_episodes(
+                    env_idxs        = where_maxed,
+                    episode_lengths = episode_lengths,
+                    terminal        = np.zeros(maxed_count).astype(bool),
+                    ending_values   = nxt_value,
+                    ending_rewards  = nxt_reward)
 
                 if total_rollout_ts >= self.ts_per_rollout:
 

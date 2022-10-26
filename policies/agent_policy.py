@@ -32,6 +32,8 @@ class AgentPolicy():
                  use_gae,
                  gamma,
                  lambd,
+                 dynamic_bs_clip,
+                 bootstrap_clip,
                  status_dict,
                  enable_icm  = False,
                  test_mode   = False):
@@ -46,6 +48,8 @@ class AgentPolicy():
         self.use_gae          = use_gae
         self.gamma            = gamma
         self.lambd            = lambd
+        self.dynamic_bs_clip  = dynamic_bs_clip
+        self.bootstrap_clip   = bootstrap_clip
         self.status_dict      = status_dict
         self.using_lstm       = False
         self.dataset          = None
@@ -215,7 +219,7 @@ class AgentPolicy():
         # FIXME: these will become dictionaries mapping agent ids to
         # their episodes.
         for ei_idx in range(env_batch_size):
-            episode_infos[ei_idx] = EpisodeInfo(
+            self.episodes[ei_idx] = EpisodeInfo(
                 starting_ts    = 0,
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
@@ -260,8 +264,10 @@ class AgentPolicy():
         """
         # FIXME: these will become dictionaries mapping agent ids
         # to their episode infos.
+        env_batch_size = self.episodes.size
+
         for ei_idx in range(env_batch_size):
-            self.episode_infos[ei_idx].add_info(
+            self.episodes[ei_idx].add_info(
                 global_observation = global_observations[ei_idx],
                 observation        = observations[ei_idx],
                 next_observation   = next_observations[ei_idx],
@@ -279,19 +285,19 @@ class AgentPolicy():
         self,
         env_idxs,
         episode_lengths,
-        terminals,
+        terminal,
         ending_values,
         ending_rewards):
         """
         """
         for idx, env_i in enumerate(env_idxs):
-            episode_infos[env_i].end_episode(
+            self.episodes[env_i].end_episode(
                 ending_ts      = episode_lengths[env_i],
-                terminal       = terminals[idx],
-                ending_value   = ending_values[idx],
-                ending_reward  = ending_rewards[idx])
+                terminal       = terminal[idx],
+                ending_value   = ending_values[idx].item(),
+                ending_reward  = ending_rewards[idx].item())
 
-            self.dataset.add_episode(episode_infos[env_i])
+            self.dataset.add_episode(self.episodes[env_i])
 
         #
         # If we're using a dynamic bs clip, we clip to the min/max
@@ -300,15 +306,15 @@ class AgentPolicy():
         #
         for idx, env_i in enumerate(env_idxs):
             bs_min, bs_max = self.get_bs_clip_range(
-                self.episode_infos[env_i].rewards)
+                self.episodes[env_i].rewards)
 
             #
             # If we're terminal, the start of the next episode is 0.
             # Otherwise, we pick up where we left off.
             #
-            starting_ts = 0 if terminals[env_i] else episode_lengths[env_i]
+            starting_ts = 0 if terminal[env_i] else episode_lengths[env_i]
 
-            self.episode_infos[env_i] = EpisodeInfo(
+            self.episodes[env_i] = EpisodeInfo(
                 starting_ts    = starting_ts,
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
