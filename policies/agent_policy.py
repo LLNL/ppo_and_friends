@@ -299,12 +299,11 @@ class AgentPolicy():
 
             self.dataset.add_episode(self.episodes[env_i])
 
-        #
-        # If we're using a dynamic bs clip, we clip to the min/max
-        # rewards from the episode. Otherwise, rely on the user
-        # provided range.
-        #
-        for idx, env_i in enumerate(env_idxs):
+            #
+            # If we're using a dynamic bs clip, we clip to the min/max
+            # rewards from the episode. Otherwise, rely on the user
+            # provided range.
+            #
             bs_min, bs_max = self.get_bs_clip_range(
                 self.episodes[env_i].rewards)
 
@@ -312,7 +311,7 @@ class AgentPolicy():
             # If we're terminal, the start of the next episode is 0.
             # Otherwise, we pick up where we left off.
             #
-            starting_ts = 0 if terminal[env_i] else episode_lengths[env_i]
+            starting_ts = 0 if terminal[idx] else episode_lengths[env_i]
 
             self.episodes[env_i] = EpisodeInfo(
                 starting_ts    = starting_ts,
