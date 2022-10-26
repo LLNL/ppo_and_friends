@@ -53,7 +53,7 @@ class AgentPolicy():
         self.status_dict      = status_dict
         self.using_lstm       = False
         self.dataset          = None
-        self.episodes         = None
+        self.episodes         = np.empty(0, dtype=object)
 
         act_type = type(action_space)
 
@@ -329,7 +329,8 @@ class AgentPolicy():
     def clear_dataset(self):
         """
         """
-        self.dataset = None
+        self.dataset  = None
+        self.episodes = np.empty(0, dtype=object)
 
     #FIXME: obs will be a dictionary in the multi-agent case. Do we want this to
     # be handed by a multi-agent mode, or do we want to wrap single agent
