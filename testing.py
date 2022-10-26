@@ -17,12 +17,12 @@ def test_policy(ppo,
             num_test_runs  How many times should we run in the environment?
             device         The device to infer on.
     """
-
+    #FIXME: we'll need to handle multiple policies here too.
     env    = ppo.env
-    policy = ppo.actor
+    policy = ppo.policy.actor
     render = ppo.render
 
-    action_dtype = get_action_dtype(env)
+    action_dtype = get_action_dtype(env.action_space)
 
     max_int     = np.iinfo(np.int32).max
     num_steps   = 0
