@@ -7,6 +7,7 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
+from ppo_and_friends.utils.misc import update_optimizer_lr
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -28,6 +29,10 @@ class AgentPolicy():
                  icm_kw_args,
                  lr,
                  device,
+                 use_gae,
+                 gamma,
+                 lambd,
+                 status_dict,
                  enable_icm  = False,
                  test_mode   = False):
         """
@@ -38,8 +43,13 @@ class AgentPolicy():
         self.enable_icm       = enable_icm
         self.device           = device
         self.test_mode        = test_mode
+        self.use_gae          = use_gae
+        self.gamma            = gamma
+        self.lambd            = lambd
+        self.status_dict      = status_dict
         self.using_lstm       = False
         self.dataset          = None
+        self.episodes         = None
 
         act_type = type(action_space)
 
@@ -182,6 +192,36 @@ class AgentPolicy():
             broadcast_model_parameters(self.icm_model)
             comm.barrier()
 
+    def initialize_episodes(self, env_batch_size):
+        """
+        """
+        #
+        # FIXME: when tracking episode infos in the policy (or wherever)
+        # we need to map TWO things to EpisodeInfo objects:
+        #    1. Agents
+        #    2. Environment instances!
+        #
+        # The policy could keep arrays of dictionaries s.t. each dict
+        # in the array is an env instance, and each dict maps agents
+        # to episodes.
+        #
+        # NOTE that different agents will map to different polices, meaning
+        # that our dictionaries can be different sizes for each policy, but
+        # the number of environment instances will be consistent.
+        #
+        self.episodes = np.array([None] * env_batch_size, dtype=object)
+        bs_clip_range = self.get_bs_clip_range(None)
+
+        # FIXME: these will become dictionaries mapping agent ids to
+        # their episodes.
+        for ei_idx in range(env_batch_size):
+            episode_infos[ei_idx] = EpisodeInfo(
+                starting_ts    = 0,
+                use_gae        = self.use_gae,
+                gamma          = self.gamma,
+                lambd          = self.lambd,
+                bootstrap_clip = bs_clip_range)
+
     def initialize_dataset(self):
         """
         """
@@ -201,6 +241,79 @@ class AgentPolicy():
             device          = self.device,
             action_dtype    = self.action_dtype,
             sequence_length = sequence_length)
+
+    def add_episode_info(
+        self, 
+        global_observations,
+        observations,
+        next_observations,
+        raw_actions, 
+        actions, 
+        values, 
+        log_probs, 
+        rewards, 
+        actor_hidden, 
+        actor_cell, 
+        critic_hidden, 
+        critic_cell):
+        """
+        """
+        # FIXME: these will become dictionaries mapping agent ids
+        # to their episode infos.
+        for ei_idx in range(env_batch_size):
+            self.episode_infos[ei_idx].add_info(
+                global_observation = global_observations[ei_idx],
+                observation        = observations[ei_idx],
+                next_observation   = next_observations[ei_idx],
+                raw_action         = raw_actions[ei_idx],
+                action             = actions[ei_idx],
+                value              = values[ei_idx].item(),
+                log_prob           = log_probs[ei_idx],
+                reward             = rewards[ei_idx].item(),
+                actor_hidden       = actor_hidden[:, [ei_idx], :],
+                actor_cell         = actor_cell[:, [ei_idx], :],
+                critic_hidden      = critic_hidden[:, [ei_idx], :],
+                critic_cell        = critic_cell[:, [ei_idx], :])
+
+    def end_episodes(
+        self,
+        env_idxs,
+        episode_lengths,
+        terminals,
+        ending_values,
+        ending_rewards):
+        """
+        """
+        for idx, env_i in enumerate(env_idxs):
+            episode_infos[env_i].end_episode(
+                ending_ts      = episode_lengths[env_i],
+                terminal       = terminals[idx],
+                ending_value   = ending_values[idx],
+                ending_reward  = ending_rewards[idx])
+
+            self.dataset.add_episode(episode_infos[env_i])
+
+        #
+        # If we're using a dynamic bs clip, we clip to the min/max
+        # rewards from the episode. Otherwise, rely on the user
+        # provided range.
+        #
+        for idx, env_i in enumerate(env_idxs):
+            bs_min, bs_max = self.get_bs_clip_range(
+                self.episode_infos[env_i].rewards)
+
+            #
+            # If we're terminal, the start of the next episode is 0.
+            # Otherwise, we pick up where we left off.
+            #
+            starting_ts = 0 if terminals[env_i] else episode_lengths[env_i]
+
+            self.episode_infos[env_i] = EpisodeInfo(
+                starting_ts    = starting_ts,
+                use_gae        = self.use_gae,
+                gamma          = self.gamma,
+                lambd          = self.lambd,
+                bootstrap_clip = (bs_min, bs_max))
 
     def finalize_dataset(self):
         """
@@ -293,3 +406,88 @@ class AgentPolicy():
         entropy = self.actor.distribution.get_entropy(dist, action_pred)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
+
+    def get_intrinsic_reward(self,
+                             prev_obs,
+                             obs,
+                             action):
+        """
+            Query the ICM for an intrinsic reward.
+
+            Arguments:
+                prev_obs    The previous observation (before the latest
+                            action).
+                obs         The current observation.
+                action      The action taken.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: get_intrinsic_reward expects a batch of "
+            msg += "observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        obs_1 = torch.tensor(prev_obs,
+            dtype=torch.float).to(self.device)
+        obs_2 = torch.tensor(obs,
+            dtype=torch.float).to(self.device)
+
+        if self.action_dtype == "discrete":
+            action = torch.tensor(action,
+                dtype=torch.long).to(self.device)
+
+        elif self.action_dtype == "continuous":
+            action = torch.tensor(action,
+                dtype=torch.float).to(self.device)
+
+        if len(action.shape) != 2:
+            action = action.unsqueeze(1)
+
+        with torch.no_grad():
+            intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+
+        batch_size   = obs.shape[0]
+        intr_reward  = intr_reward.detach().cpu().numpy()
+        intr_reward  = intr_reward.reshape((batch_size, -1))
+        intr_reward *= self.intr_reward_weight
+
+        return intr_reward
+
+    def update_learning_rate(self, lr):
+        """
+        """
+        update_optimizer_lr(self.actor_optim, lr)
+        update_optimizer_lr(self.critic_optim, lr)
+
+        if self.enable_icm:
+            update_optimizer_lr(self.icm_optim, lr)
+
+    def get_bs_clip_range(self, ep_rewards):
+        """
+            Get the current bootstrap clip range.
+
+            Arguments:
+                ep_rewards    A numpy array containing the rewards for
+                              this episode.
+
+            Returns:
+                A tuple containing the min and max values for the bootstrap
+                clip.
+        """
+        if self.dynamic_bs_clip and ep_rewards is not None:
+            bs_min = min(ep_rewards)
+            bs_max = max(ep_rewards)
+
+        else:
+            iteration = self.status_dict["iteration"]
+            timestep  = self.status_dict["timesteps"]
+
+            bs_min = self.bootstrap_clip[0](
+                iteration = iteration,
+                timestep  = timestep)
+
+            bs_max = self.bootstrap_clip[1](
+                iteration = iteration,
+                timestep  = timestep)
+
+        return (bs_min, bs_max)
