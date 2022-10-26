@@ -255,6 +255,9 @@ class PPO(object):
         # FIXME: after this transition, all environments will look like multi
         # agent envs (dictionaries). So, we'll need to figure out how to best
         # vectorize them.
+        # We should always vectorize our enviornments and return arrays of
+        # dictionaries. We can start by only allowing num_envs == 1 for
+        # testing/debugging.
         #
         if is_multi_agent:
             env = MultiAgentWrapper(
@@ -332,7 +335,8 @@ class PPO(object):
 
         #
         # FIXME: If we vectorize multi-agent environments, we'll need to
-        # change this here.
+        # change this here. I think it will actually be simpler, because we
+        # won't be treating agents as environments.
         #
         # Funny business: we're taking over our "environments per processor"
         # code when using multi-agent environments. Each agent is basically
@@ -540,7 +544,11 @@ class PPO(object):
             lr                       = lr,
             enable_icm               = use_icm,
             device                   = device,
-            test_mode                = test_mode)
+            test_mode                = test_mode,
+            use_gae                  = use_gae,
+            gamma                    = gamma,
+            lambd                    = lambd,
+            status_dict              = self.status_dict)
 
         self.test_mode_dependencies.append(self.policy)
         self.pickle_safe_test_mode_dependencies.append(self.policy)
@@ -667,13 +675,9 @@ class PPO(object):
             iteration = iteration,
             timestep  = timestep)
 
-        #FIXME:
-        update_optimizer_lr(self.policy.actor_optim, self.lr)
-        update_optimizer_lr(self.policy.critic_optim, self.lr)
+        self.policy.update_learning_rate(self.lr)
 
-        if self.using_icm:
-            update_optimizer_lr(self.policy.icm_optim, self.lr)
-
+        #FIXME
         self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
 
     def update_entropy_weight(self,
@@ -691,54 +695,6 @@ class PPO(object):
             timestep  = timestep)
 
         self.status_dict["entropy weight"] = self.entropy_weight
-
-    #FIXME: handle classes of agents.
-    def get_intrinsic_reward(self,
-                             prev_obs,
-                             obs,
-                             action):
-        """
-            Query the ICM for an intrinsic reward.
-
-            Arguments:
-                prev_obs    The previous observation (before the latest
-                            action).
-                obs         The current observation.
-                action      The action taken.
-        """
-        if len(obs.shape) < 2:
-            msg  = "ERROR: get_intrinsic_reward expects a batch of "
-            msg += "observations but "
-            msg += "instead received shape {}.".format(obs.shape)
-            rank_print(msg)
-            comm.Abort()
-
-        obs_1 = torch.tensor(prev_obs,
-            dtype=torch.float).to(self.device)
-        obs_2 = torch.tensor(obs,
-            dtype=torch.float).to(self.device)
-
-        if self.action_dtype == "discrete":
-            action = torch.tensor(action,
-                dtype=torch.long).to(self.device)
-
-        elif self.action_dtype == "continuous":
-            action = torch.tensor(action,
-                dtype=torch.float).to(self.device)
-
-        if len(action.shape) != 2:
-            action = action.unsqueeze(1)
-
-        #FIXME
-        with torch.no_grad():
-            intr_reward, _, _ = self.policy.icm_model(obs_1, obs_2, action)
-
-        batch_size   = obs.shape[0]
-        intr_reward  = intr_reward.detach().cpu().numpy()
-        intr_reward  = intr_reward.reshape((batch_size, -1))
-        intr_reward *= self.intr_reward_weight
-
-        return intr_reward
 
     def rollout(self):
         """
@@ -834,6 +790,10 @@ class PPO(object):
         # we need to map TWO things to EpisodeInfo objects:
         #    1. Agents
         #    2. Environment instances!
+        #
+        # The policy could keep arrays of dictionaries s.t. each dict
+        # in the array is an env instance, and each dict maps agents
+        # to episodes.
         #
         episode_infos = np.array([None] * env_batch_size, dtype=object)
 
@@ -978,7 +938,7 @@ class PPO(object):
             # to out extrinsic reward.
             #
             if self.using_icm:
-                intr_reward = self.get_intrinsic_reward(
+                intr_reward = self.policy.get_intrinsic_reward(
                     prev_obs,
                     obs,
                     action)
@@ -1118,10 +1078,10 @@ class PPO(object):
                 top_rollout_score = max(top_rollout_score,
                     ep_score[where_done].max())
 
-                Finalize our datasets.
-
                 if self.using_icm:
                     total_intr_rewards[where_done] += intr_reward[where_done]
+
+                done_count = where_done.size
 
                 total_ext_rewards[where_done] += ep_score[where_done]
                 total_rewards                 += ep_rewards[where_done].sum()
@@ -1334,6 +1294,7 @@ class PPO(object):
         rw_range          = (rollout_min_reward, rollout_max_reward)
         obs_range         = (rollout_min_obs, rollout_max_obs)
 
+        #FIXME: should the status dict show info specific to each agent?
         self.status_dict["episode reward avg"]  = running_score
         self.status_dict["extrinsic score avg"] = running_ext_score
         self.status_dict["top score"]           = top_score
