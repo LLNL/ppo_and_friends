@@ -527,14 +527,14 @@ class PPO(object):
             intr_reward_weight       = intr_reward_weight,
             lr                       = lr,
             enable_icm               = use_icm,
-            device                   = device,
             test_mode                = test_mode,
             use_gae                  = use_gae,
             gamma                    = gamma,
             lambd                    = lambd,
             dynamic_bs_clip          = dynamic_bs_clip,
-            bootstrap_clip           = callable_bootstrap_clip,
-            status_dict              = self.status_dict)
+            bootstrap_clip           = callable_bootstrap_clip)
+
+        self.policy.to(self.device)
 
         self.test_mode_dependencies.append(self.policy)
         self.pickle_safe_test_mode_dependencies.append(self.policy)
@@ -615,36 +615,6 @@ class PPO(object):
                 rank_print("    {}: {}".format(key, self.status_dict[key]))
 
         rank_print("--------------------------------------------------------")
-
-    def get_bs_clip_range(self, ep_rewards):
-        """
-            Get the current bootstrap clip range.
-
-            Arguments:
-                ep_rewards    A numpy array containing the rewards for
-                              this episode.
-
-            Returns:
-                A tuple containing the min and max values for the bootstrap
-                clip.
-        """
-        if self.dynamic_bs_clip and ep_rewards is not None:
-            bs_min = min(ep_rewards)
-            bs_max = max(ep_rewards)
-
-        else:
-            iteration = self.status_dict["iteration"]
-            timestep  = self.status_dict["timesteps"]
-
-            bs_min = self.bootstrap_clip[0](
-                iteration = iteration,
-                timestep  = timestep)
-
-            bs_max = self.bootstrap_clip[1](
-                iteration = iteration,
-                timestep  = timestep)
-
-        return (bs_min, bs_max)
 
     def update_learning_rate(self,
                              iteration,
@@ -770,7 +740,7 @@ class PPO(object):
         total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        self.policy.initialize_episodes(env_batch_size)
+        self.policy.initialize_episodes(env_batch_size, self.status_dict)
 
         #
         # TODO: If we're using multiple environments, we can end up going over
@@ -951,7 +921,8 @@ class PPO(object):
                     episode_lengths = episode_lengths,
                     terminal        = np.ones(done_count).astype(bool),
                     ending_values   = np.zeros(done_count),
-                    ending_rewards  = np.zeros(done_count))
+                    ending_rewards  = np.zeros(done_count),
+                    status_dict     = self.status_dict)
 
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
@@ -1071,7 +1042,8 @@ class PPO(object):
                     episode_lengths = episode_lengths,
                     terminal        = np.zeros(maxed_count).astype(bool),
                     ending_values   = nxt_value,
-                    ending_rewards  = nxt_reward)
+                    ending_rewards  = nxt_reward,
+                    status_dict     = self.status_dict)
 
                 if total_rollout_ts >= self.ts_per_rollout:
 

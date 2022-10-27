@@ -8,6 +8,7 @@ from ppo_and_friends.utils.misc import get_action_dtype
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -22,12 +23,10 @@ class AgentPolicy():
                  action_space,
                  actor_observation_space,
                  critic_observation_space,
-                 ac_network,
-                 actor_kw_args,
-                 critic_kw_args,
-                 icm_kw_args,
-                 device,
-                 status_dict,
+                 ac_network         = FeedForwardNetwork,
+                 actor_kw_args      = {},
+                 critic_kw_args     = {},
+                 icm_kw_args        = {},
                  lr                 = 3e-4,
                  use_gae            = True,
                  gamma              = 0.99,
@@ -45,17 +44,16 @@ class AgentPolicy():
         self.critic_obs_space   = critic_observation_space
         self.enable_icm         = enable_icm
         self.intr_reward_weight = intr_reward_weight
-        self.device             = device
         self.test_mode          = test_mode
         self.use_gae            = use_gae
         self.gamma              = gamma
         self.lambd              = lambd
         self.dynamic_bs_clip    = dynamic_bs_clip
         self.bootstrap_clip     = bootstrap_clip
-        self.status_dict        = status_dict
         self.using_lstm         = False
         self.dataset            = None
         self.episodes           = np.empty(0, dtype=object)
+        self.device             = torch.device("cpu")
 
         act_type = type(action_space)
 
@@ -103,6 +101,16 @@ class AgentPolicy():
         if self.enable_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
+
+    def to(self, device):
+        """
+        """
+        self.device    = device
+        self.actor     = self.actor.to(self.device)
+        self.critic    = self.critic.to(self.device)
+
+        if self.enable_icm:
+            self.icm_model = self.icm_model.to(self.device)
 
     def _initialize_networks(self,
                        ac_network, 
@@ -194,11 +202,11 @@ class AgentPolicy():
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 
-            self.icm_model.to(self.device)
+            self.icm_model = self.icm_model.to(self.device)
             broadcast_model_parameters(self.icm_model)
             comm.barrier()
 
-    def initialize_episodes(self, env_batch_size):
+    def initialize_episodes(self, env_batch_size, status_dict):
         """
         """
         #
@@ -216,7 +224,7 @@ class AgentPolicy():
         # the number of environment instances will be consistent.
         #
         self.episodes = np.array([None] * env_batch_size, dtype=object)
-        bs_clip_range = self.get_bs_clip_range(None)
+        bs_clip_range = self.get_bs_clip_range(None, status_dict)
 
         # FIXME: these will become dictionaries mapping agent ids to
         # their episodes.
@@ -332,7 +340,8 @@ class AgentPolicy():
         episode_lengths,
         terminal,
         ending_values,
-        ending_rewards):
+        ending_rewards,
+        status_dict):
         """
         """
         for idx, env_i in enumerate(env_idxs):
@@ -350,7 +359,8 @@ class AgentPolicy():
             # provided range.
             #
             bs_min, bs_max = self.get_bs_clip_range(
-                self.episodes[env_i].rewards)
+                self.episodes[env_i].rewards,
+                status_dict)
 
             #
             # If we're terminal, the start of the next episode is 0.
@@ -513,13 +523,14 @@ class AgentPolicy():
         if self.enable_icm:
             update_optimizer_lr(self.icm_optim, lr)
 
-    def get_bs_clip_range(self, ep_rewards):
+    def get_bs_clip_range(self, ep_rewards, status_dict):
         """
             Get the current bootstrap clip range.
 
             Arguments:
                 ep_rewards    A numpy array containing the rewards for
                               this episode.
+                status_dict   The status dictionary.
 
             Returns:
                 A tuple containing the min and max values for the bootstrap
@@ -530,8 +541,8 @@ class AgentPolicy():
             bs_max = max(ep_rewards)
 
         else:
-            iteration = self.status_dict["iteration"]
-            timestep  = self.status_dict["timesteps"]
+            iteration = status_dict["iteration"]
+            timestep  = status_dict["timesteps"]
 
             bs_min = self.bootstrap_clip[0](
                 iteration = iteration,
