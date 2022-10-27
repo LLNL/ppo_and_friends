@@ -6,14 +6,12 @@ import os
 from copy import deepcopy
 import torch
 from torch import nn
+from ppo_and_friends.networks.icm import ICM#FIXME
 from torch.utils.data import DataLoader
-from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset#FIXME: remove
-from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.agent_policy import AgentPolicy
-from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.environments.general_wrappers import VectorizedEnv, MultiAgentWrapper
 from ppo_and_friends.environments.filter_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, RewardClipper
@@ -33,6 +31,7 @@ num_procs = comm.Get_size()
 
 class PPO(object):
 
+    #FIXME: a number of these args will be moved to the AgentPolicy.
     def __init__(self,
                  env_generator,
                  ac_network,
@@ -411,8 +410,6 @@ class PPO(object):
             msg += "functions."
             rank_print(msg)
 
-        action_dtype = get_action_dtype(action_space)
-
         #
         # Establish some class variables.
         #
@@ -421,7 +418,6 @@ class PPO(object):
         self.is_multi_agent      = is_multi_agent
         self.state_path          = state_path
         self.render              = render
-        self.action_dtype        = action_dtype
         self.use_gae             = use_gae
         self.using_icm           = use_icm
         self.icm_beta            = icm_beta
@@ -509,19 +505,6 @@ class PPO(object):
         if save_best_only:
             self.status_dict["last save"] = -1
 
-        #
-        # Initialize our networks: actor, critic, and possibly ICM.
-        #
-        use_conv2d_setup = False
-        for base in ac_network.__bases__:
-            if base.__name__ == "PPOConv2dNetwork":
-                use_conv2d_setup = True
-
-        self.using_lstm = False
-        for base in ac_network.__bases__:
-            if base.__name__ == "PPOLSTMNetwork":
-                self.using_lstm = True
-
         # FIXME: we'll need different networks for each class of agents.
         # This is where we can create Policy classes for each policy type.
         # We'll also have a policy mapping function taht maps agent ids
@@ -541,6 +524,7 @@ class PPO(object):
             actor_kw_args            = actor_kw_args,
             critic_kw_args           = critic_kw_args,
             icm_kw_args              = icm_kw_args,
+            intr_reward_weight       = intr_reward_weight,
             lr                       = lr,
             enable_icm               = use_icm,
             device                   = device,
@@ -786,40 +770,6 @@ class PPO(object):
         total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        #bs_clip_range = self.get_bs_clip_range(None)
-        ##
-        ## FIXME: when tracking episode infos in the policy (or wherever)
-        ## we need to map TWO things to EpisodeInfo objects:
-        ##    1. Agents
-        ##    2. Environment instances!
-        ##
-        ## The policy could keep arrays of dictionaries s.t. each dict
-        ## in the array is an env instance, and each dict maps agents
-        ## to episodes.
-        ##
-        #episode_infos = np.array([None] * env_batch_size, dtype=object)
-
-        ## FIXME: I think we'll need a separate episode_infos for
-        ## each class of agent (they might have different action
-        ## spaces).
-        ## Maybe each policy tracks its own episode infos?
-        ## One complication here is that we can have different agents
-        ## acting at different steps. Sooo, we won't know the number
-        ## agents for each step ahead of time...
-        ## That should be okay, though, right? Do we use append instead?
-        ##
-        ## How do we currently handle cases where agents die before the
-        ## the sim has ended? We typically death mask them. In the Abmarl
-        ## design, death masking isn't needed because the agents will
-        ## no longer be acting...
-        ##
-        #for ei_idx in range(env_batch_size):
-        #    episode_infos[ei_idx] = EpisodeInfo(
-        #        starting_ts    = 0,
-        #        use_gae        = self.use_gae,
-        #        gamma          = self.gamma,
-        #        lambd          = self.lambd,
-        #        bootstrap_clip = bs_clip_range)
         self.policy.initialize_episodes(env_batch_size)
 
         #
@@ -959,76 +909,6 @@ class PPO(object):
                 for done_idx in where_done:
                     ep_obs[done_idx] = info[done_idx][term_key]
 
-            #
-            # When using lstm networks, we need to save the hidden states
-            # encountered during the rollouts. These will later be used to
-            # initialize the hidden states when updating the models.
-            # Note that we pass in empty arrays when not using lstm networks.
-            #
-            #FIXME: handled by the policy classes?
-            if self.using_lstm:
-
-                #FIXME
-                actor_hidden  = self.policy.actor.hidden_state[0].clone()
-                actor_cell    = self.policy.actor.hidden_state[1].clone()
-
-                critic_hidden = self.policy.critic.hidden_state[0].clone()
-                critic_cell   = self.policy.critic.hidden_state[1].clone()
-
-                if done.any():
-                    actor_zero_hidden, actor_zero_cell = \
-                        self.policy.actor.get_zero_hidden_state(
-                            batch_size = env_batch_size,
-                            device     = self.device)
-
-                    actor_hidden[:, where_done, :] = \
-                        actor_zero_hidden[:, where_done, :]
-
-                    actor_cell[:, where_done, :] = \
-                        actor_zero_cell[:, where_done, :]
-
-                    critic_zero_hidden, critic_zero_cell = \
-                        self.policy.critic.get_zero_hidden_state(
-                            batch_size = env_batch_size,
-                            device     = self.device)
-
-                    critic_hidden[:, where_done, :] = \
-                        critic_zero_hidden[:, where_done, :]
-
-                    critic_cell[:, where_done, :] = \
-                        critic_zero_cell[:, where_done, :]
-
-            else:
-                empty_shape = (0, env_batch_size, 0)
-
-                actor_hidden, actor_cell, critic_hidden, critic_cell  = \
-                    (np.empty(empty_shape),
-                     np.empty(empty_shape),
-                     np.empty(empty_shape),
-                     np.empty(empty_shape))
-
-            #
-            # FIXME: This setup assigns a single EpisodeInfo to each agent,
-            # which makes sense. How do we handle this moving forward? Does
-            # the policy keep track of some kind of mapping from agents to
-            # episode infos? Each agent needs its own instance of episode info,
-            # because it literally stores all of its information from
-            # the episode...
-            #
-            #for ei_idx in range(env_batch_size):
-            #    episode_infos[ei_idx].add_info(
-            #        global_observation      = prev_global_obs[ei_idx],
-            #        observation             = prev_obs[ei_idx],
-            #        next_observation        = ep_obs[ei_idx],
-            #        raw_action              = raw_action[ei_idx],
-            #        action                  = action[ei_idx],
-            #        value                   = value[ei_idx].item(),
-            #        log_prob                = log_prob[ei_idx],
-            #        reward                  = reward[ei_idx].item(),
-            #        actor_hidden            = actor_hidden[:, [ei_idx], :],
-            #        actor_cell              = actor_cell[:, [ei_idx], :],
-            #        critic_hidden           = critic_hidden[:, [ei_idx], :],
-            #        critic_cell             = critic_cell[:, [ei_idx], :])
             self.policy.add_episode_info(
                 global_observations    = prev_global_obs,
                 observations           = prev_obs,
@@ -1038,10 +918,7 @@ class PPO(object):
                 values                 = value,
                 log_probs              = log_prob,
                 rewards                = reward,
-                actor_hidden           = actor_hidden,
-                actor_cell             = actor_cell,
-                critic_hidden          = critic_cell,
-                critic_cell            = critic_cell)
+                where_done             = where_done)
 
             rollout_max_reward = max(rollout_max_reward, reward.max())
             rollout_min_reward = min(rollout_min_reward, reward.min())
@@ -1067,31 +944,6 @@ class PPO(object):
             # In these cases, the environment cannot proceed any further.
             #
             if done.any():
-
-                #for done_idx in where_done:
-                #    episode_infos[done_idx].end_episode(
-                #        ending_ts      = episode_lengths[done_idx],
-                #        terminal       = True,
-                #        ending_value   = 0,
-                #        ending_reward  = 0)
-
-                #    self.policy.dataset.add_episode(episode_infos[done_idx])
-
-                ##
-                ## If we're using a dynamic bs clip, we clip to the min/max
-                ## rewards from the episode. Otherwise, rely on the user
-                ## provided range.
-                ##
-                #for i, done_idx in enumerate(where_done):
-                #    bs_min, bs_max = self.get_bs_clip_range(
-                #        episode_infos[done_idx].rewards)
-
-                #    episode_infos[done_idx] = EpisodeInfo(
-                #        starting_ts    = 0,
-                #        use_gae        = self.use_gae,
-                #        gamma          = self.gamma,
-                #        lambd          = self.lambd,
-                #        bootstrap_clip = (bs_min, bs_max))
                 done_count = where_done.size
 
                 self.policy.end_episodes(
@@ -1185,6 +1037,7 @@ class PPO(object):
                 # and the one we get. Adding that to the critic's
                 # output can act as an extra surprise bonus.
                 #
+                #FIXME: would this logic be better handled in the policy class?
                 if self.using_icm:
                     if self.can_clone_env:
                         if self.obs_augment:
@@ -1202,7 +1055,7 @@ class PPO(object):
                             clone_action = np.tile(clone_action.flatten(), env_batch_size)
                             clone_action = clone_action.reshape(action_shape)
 
-                        intr_reward = self.get_intrinsic_reward(
+                        intr_reward = self.policy.get_intrinsic_reward(
                             clone_prev_obs,
                             clone_obs,
                             clone_action)
@@ -1211,24 +1064,6 @@ class PPO(object):
                     surprise    = intr_reward[where_maxed] - ism
                     nxt_reward += surprise
 
-                #for idx, maxed_idx in enumerate(where_maxed):
-                #    episode_infos[maxed_idx].end_episode(
-                #        ending_ts      = episode_lengths[maxed_idx],
-                #        terminal       = False,
-                #        ending_value   = nxt_value[idx].item(),
-                #        ending_reward  = nxt_reward[idx].item())
-
-                #    self.policy.dataset.add_episode(episode_infos[maxed_idx])
-
-                #    bs_clip_range = self.get_bs_clip_range(
-                #        episode_infos[maxed_idx].rewards)
-
-                #    episode_infos[maxed_idx] = EpisodeInfo(
-                #        starting_ts    = episode_lengths[maxed_idx],
-                #        use_gae        = self.use_gae,
-                #        gamma          = self.gamma,
-                #        lambd          = self.lambd,
-                #        bootstrap_clip = bs_clip_range)
                 maxed_count = where_maxed.size
 
                 self.policy.end_episodes(
@@ -1533,7 +1368,7 @@ class PPO(object):
             # In the case of lstm networks, we need to initialze our hidden
             # states to those that developed during the rollout.
             #
-            if self.using_lstm:
+            if self.policy.using_lstm:
                 actor_hidden  = torch.transpose(actor_hidden, 0, 1)
                 actor_cell    = torch.transpose(actor_cell, 0, 1)
                 critic_hidden = torch.transpose(critic_hidden, 0, 1)
@@ -1628,14 +1463,14 @@ class PPO(object):
             #
             #FIXME
             self.policy.actor_optim.zero_grad()
-            actor_loss.backward(retain_graph = self.using_lstm)
+            actor_loss.backward(retain_graph = self.policy.using_lstm)
             mpi_avg_gradients(self.policy.actor)
             nn.utils.clip_grad_norm_(self.policy.actor.parameters(),
                 self.gradient_clip)
             self.policy.actor_optim.step()
 
             self.policy.critic_optim.zero_grad()
-            critic_loss.backward(retain_graph = self.using_lstm)
+            critic_loss.backward(retain_graph = self.policy.using_lstm)
             mpi_avg_gradients(self.policy.critic)
             nn.utils.clip_grad_norm_(self.policy.critic.parameters(),
                 self.gradient_clip)
@@ -1645,7 +1480,7 @@ class PPO(object):
             # The idea here is similar to re-computing advantages, but now
             # we want to update the hidden states before the next epoch.
             #
-            if self.using_lstm:
+            if self.policy.using_lstm:
                 actor_hidden  = self.policy.actor.hidden_state[0].detach().clone()
                 critic_hidden = self.policy.critic.hidden_state[0].detach().clone()
 

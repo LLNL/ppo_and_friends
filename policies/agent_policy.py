@@ -23,37 +23,39 @@ class AgentPolicy():
                  actor_observation_space,
                  critic_observation_space,
                  ac_network,
-                 icm_network,
                  actor_kw_args,
                  critic_kw_args,
                  icm_kw_args,
-                 lr,
                  device,
-                 use_gae,
-                 gamma,
-                 lambd,
-                 dynamic_bs_clip,
-                 bootstrap_clip,
                  status_dict,
-                 enable_icm  = False,
-                 test_mode   = False):
+                 lr                 = 3e-4,
+                 use_gae            = True,
+                 gamma              = 0.99,
+                 lambd              = 0.95,
+                 dynamic_bs_clip    = False,
+                 bootstrap_clip     = (-10., 10.),
+                 enable_icm         = False,
+                 icm_network        = ICM,
+                 intr_reward_weight = 1.0,
+                 test_mode          = False):
         """
         """
-        self.action_space     = action_space
-        self.actor_obs_space  = actor_observation_space
-        self.critic_obs_space = critic_observation_space
-        self.enable_icm       = enable_icm
-        self.device           = device
-        self.test_mode        = test_mode
-        self.use_gae          = use_gae
-        self.gamma            = gamma
-        self.lambd            = lambd
-        self.dynamic_bs_clip  = dynamic_bs_clip
-        self.bootstrap_clip   = bootstrap_clip
-        self.status_dict      = status_dict
-        self.using_lstm       = False
-        self.dataset          = None
-        self.episodes         = np.empty(0, dtype=object)
+        self.action_space       = action_space
+        self.actor_obs_space    = actor_observation_space
+        self.critic_obs_space   = critic_observation_space
+        self.enable_icm         = enable_icm
+        self.intr_reward_weight = intr_reward_weight
+        self.device             = device
+        self.test_mode          = test_mode
+        self.use_gae            = use_gae
+        self.gamma              = gamma
+        self.lambd              = lambd
+        self.dynamic_bs_clip    = dynamic_bs_clip
+        self.bootstrap_clip     = bootstrap_clip
+        self.status_dict        = status_dict
+        self.using_lstm         = False
+        self.dataset            = None
+        self.episodes           = np.empty(0, dtype=object)
 
         act_type = type(action_space)
 
@@ -183,7 +185,7 @@ class AgentPolicy():
         comm.barrier()
 
         if enable_icm:
-            obs_dim = self.actor_obs_shape[0]
+            obs_dim = self.actor_obs_space.shape[0]
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
@@ -256,15 +258,58 @@ class AgentPolicy():
         values, 
         log_probs, 
         rewards, 
-        actor_hidden, 
-        actor_cell, 
-        critic_hidden, 
-        critic_cell):
+        where_done):
         """
         """
         # FIXME: these will become dictionaries mapping agent ids
         # to their episode infos.
         env_batch_size = self.episodes.size
+
+        #
+        # When using lstm networks, we need to save the hidden states
+        # encountered during the rollouts. These will later be used to
+        # initialize the hidden states when updating the models.
+        # Note that we pass in empty arrays when not using lstm networks.
+        #
+        if self.using_lstm:
+
+            actor_hidden  = self.actor.hidden_state[0].clone()
+            actor_cell    = self.actor.hidden_state[1].clone()
+
+            critic_hidden = self.critic.hidden_state[0].clone()
+            critic_cell   = self.critic.hidden_state[1].clone()
+
+            if where_done.size > 0:
+                actor_zero_hidden, actor_zero_cell = \
+                    self.actor.get_zero_hidden_state(
+                        batch_size = env_batch_size,
+                        device     = self.device)
+
+                actor_hidden[:, where_done, :] = \
+                    actor_zero_hidden[:, where_done, :]
+
+                actor_cell[:, where_done, :] = \
+                    actor_zero_cell[:, where_done, :]
+
+                critic_zero_hidden, critic_zero_cell = \
+                    self.critic.get_zero_hidden_state(
+                        batch_size = env_batch_size,
+                        device     = self.device)
+
+                critic_hidden[:, where_done, :] = \
+                    critic_zero_hidden[:, where_done, :]
+
+                critic_cell[:, where_done, :] = \
+                    critic_zero_cell[:, where_done, :]
+
+        else:
+            empty_shape = (0, env_batch_size, 0)
+
+            actor_hidden, actor_cell, critic_hidden, critic_cell  = \
+                (np.empty(empty_shape),
+                 np.empty(empty_shape),
+                 np.empty(empty_shape),
+                 np.empty(empty_shape))
 
         for ei_idx in range(env_batch_size):
             self.episodes[ei_idx].add_info(
