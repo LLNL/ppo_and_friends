@@ -264,6 +264,27 @@ class IdentityWrapper():
         else:
             return 1
 
+    def has_wrapper(self, wrapper_class):
+        """
+            Recursively check to see if any of the wrappers around
+            our environemnt match the given wrapper_class.
+
+            Arguments:
+                wrapper_class    The wrapper that we're interested in.
+
+            Returns:
+                True iff the environment is wrapped with wrapper_class.
+        """
+        if isinstance(self, wrapper_class):
+            return True
+        else:
+            has_wrapper = getattr(self.env, "has_wrapper", None)
+
+            if callable(has_wrapper):
+                return has_wrapper(wrapper_class)
+
+        return False
+
 
 class VectorizedEnv(IdentityWrapper, Iterable):
     """
@@ -379,6 +400,14 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
         return obs, reward, done, info
 
+    #FIXME: need to integrate this with MAPPO somehow. Each environment instance
+    # will have the same agents.
+    # When calling step(), we'll expect to get the standard tuple of obs, reward, etc.
+    # but each one will be a dictionary mapping agent ids to their obs, reward, etc.
+    # For vectorized environemnts, could we just return arrays of dictionaries?
+    # We could always vectorize (which is what we did in the non-mappo case), which
+    # would result in an array of size 1 when num_envs == 1. This would homogenize
+    # things.
     def batch_step(self, actions):
         """
             Take a step in our environment with the given actions.
