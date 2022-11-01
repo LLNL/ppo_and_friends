@@ -17,10 +17,10 @@ def test_policy(ppo,
             num_test_runs  How many times should we run in the environment?
             device         The device to infer on.
     """
-    #FIXME: we'll need to handle multiple policies here too.
-    env    = ppo.env
-    policy = ppo.policy.actor
-    render = ppo.render
+    env        = ppo.env
+    policies   = ppo.policies
+    render     = ppo.render
+    policy_map = ppo.policy_mapping_fn
 
     action_dtype = get_action_dtype(env.action_space)
 
@@ -40,7 +40,11 @@ def test_policy(ppo,
     if render_gif:
         gif_frames = []
 
-    policy.eval()
+    for key in policies:
+        policies[key].eval()
+
+    #FIXME: integrate
+    agent_key = policy_map()
 
     for _ in range(num_test_runs):
 
@@ -63,7 +67,7 @@ def test_policy(ppo,
                 obs = obs.unsqueeze(0)
 
             with torch.no_grad():
-                action = policy.get_result(obs).detach().cpu()
+                action = policies[agent_key].actor.get_result(obs).detach().cpu()
 
             if action_dtype == "discrete":
                 action = torch.argmax(action, axis=-1).numpy()

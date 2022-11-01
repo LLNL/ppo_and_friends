@@ -654,7 +654,9 @@ class MultiAgentWrapper(IdentityWrapper):
     # space, but I think we should probably use the class that
     # Abmarl uses to combine these things. It's a Gym function.
     # => gym.spaces.flatten_space. Note that the agent spaces dict
-    # must be a gym Dict, which is ordered.
+    # must be a gym Dict, which is ordered. Also, the flatten_space
+    # function might have a bug with discrete spaces (see Ephraim's
+    # github issue).
     def _get_refined_space(self,
                            multi_agent_space,
                            add_ids = False):
@@ -780,14 +782,12 @@ class MultiAgentWrapper(IdentityWrapper):
     # FIXME: how do we represent the global state space if we have
     # multiple agents with different obs spaces?
     # use gym.spaces.flatten_space
+    # i.e. we won't need this method anymore.
     def _construct_global_state_space(self):
         """
             Construct the global state space. See arXiv:2103.01955v2.
             By deafult, we concatenate all local observations to represent
             the global state.
-
-            NOTE: this method should only be called AFTER
-            _update_observation_space is called.
         """
         #
         # If we're not using the global state space approach, each agent's

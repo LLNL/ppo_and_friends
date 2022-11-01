@@ -7,11 +7,12 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def policy_generator(
+def generate_policy(
+    policy_name,
     policy_class,
-    observation_space,
+    actor_observation_space,
+    critic_observation_space,
     action_space,
-    device,
     **kw_args):
     """
     """
@@ -22,7 +23,12 @@ def policy_generator(
         comm.Abort() 
 
     policy = AgentPolicy(
-        action_space      = action_space,
-        observation_space = observation_space,
-        device            = device,
+        name                      = policy_name,
+        action_space              = action_space,
+        actor_observation_space   = actor_observation_space,
+        critic_observation_space  = critic_observation_space,
         **kw_args)
+
+    return policy
+
+#def PolicySpec

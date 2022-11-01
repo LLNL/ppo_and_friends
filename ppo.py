@@ -12,10 +12,9 @@ from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.agent_policy import AgentPolicy
-from ppo_and_friends.environments.general_wrappers import VectorizedEnv, MultiAgentWrapper
-from ppo_and_friends.environments.filter_wrappers import ObservationNormalizer, ObservationClipper
-from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, RewardClipper
-from ppo_and_friends.environments.filter_wrappers import ObservationAugmentingWrapper
+from ppo_and_friends.policies.utils import generate_policy
+from ppo_and_friends.environments.wrapper_utils import wrap_environment
+from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, ObservationNormalizer
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
@@ -37,6 +36,8 @@ class PPO(object):
                  ac_network,
                  device,
                  random_seed,
+                 policy_settings,
+                 policy_mapping_fn,
                  is_multi_agent      = False,
                  add_agent_ids       = False,
                  death_mask          = True,
@@ -59,7 +60,7 @@ class PPO(object):
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 bootstrap_clip      = (-10.0, 10.0),
+                 bootstrap_clip      = (-10.0, 10.0),#FIXME: moved to policy
                  dynamic_bs_clip     = False,
                  use_gae             = True,
                  use_icm             = False,
@@ -213,8 +214,6 @@ class PPO(object):
                                       mode.
         """
         set_torch_threads()
-        self.status_dict  = {}
-        self.status_dict["iteration"] = 0
 
         #
         # Divide the ts per rollout up among the processors. Make an adjustment
@@ -246,91 +245,31 @@ class PPO(object):
             rank_print(msg)
             add_agent_ids = False
 
-        #
-        # Begin adding wrappers. Order matters!
-        # The first wrapper will always be either a standard vectorization
-        # or a multi-agent wrapper. We currently don't support combining them.
-        #
-        # FIXME: after this transition, all environments will look like multi
-        # agent envs (dictionaries). So, we'll need to figure out how to best
-        # vectorize them.
-        # We should always vectorize our enviornments and return arrays of
-        # dictionaries. We can start by only allowing num_envs == 1 for
-        # testing/debugging.
-        #
-        if is_multi_agent:
-            env = MultiAgentWrapper(
-                env_generator  = env_generator,
-                need_agent_ids = add_agent_ids,
-                death_mask     = death_mask,
-                test_mode      = test_mode)
-        else:
-            env = VectorizedEnv(
-                env_generator = env_generator,
-                num_envs      = envs_per_proc,
-                test_mode     = test_mode)
+        env, self.status_dict = wrap_environment(
+            env_generator     = env_generator,
+            is_multi_agent    = is_multi_agent,
+            add_agent_ids     = add_agent_ids,
+            death_mask        = death_mask,
+            envs_per_proc     = envs_per_proc,
+            random_seed       = random_seed,
+            obs_augment       = obs_augment,
+            normalize_obs     = normalize_obs,
+            normalize_rewards = normalize_rewards,
+            obs_clip          = obs_clip,
+            reward_clip       = reward_clip,
+            gamma             = gamma,
+            test_mode         = test_mode)
 
         #
-        # For reproducibility, we need to set the environment's random
-        # seeds. Let's allow testing to be random.
+        # If we're normalizing, we need to save the stats for reproduction
+        # when in inference.
         #
-        if not test_mode:
-            env.set_random_seed(random_seed)
-
-        #
-        # The second wrapper should always be the augmenter. This is because
-        # our environment should receive pre-normalized data for augmenting.
-        #
-        if obs_augment:
-            if is_multi_agent:
-                msg  = "ERROR: observation augmentations are not currently "
-                msg += "supported within multi-agent environments."
-                rank_print(msg)
-                comm.Abort()
-
-            env = ObservationAugmentingWrapper(
-                env,
-                test_mode = test_mode)
-
         self.save_env_info = False
-
-        if normalize_obs:
-            env = ObservationNormalizer(
-                env          = env,
-                test_mode    = test_mode,
-                update_stats = not test_mode)
-
+        if (env.has_wrapper(RewardNormalizer) or
+            env.has_wrapper(ObservationNormalizer)):
             self.save_env_info = True
 
-        if obs_clip != None and type(obs_clip) == tuple:
-            env = ObservationClipper(
-                env         = env,
-                test_mode   = test_mode,
-                status_dict = self.status_dict,
-                clip_range  = obs_clip)
-
-        #
-        # There are multiple ways to go about normalizing rewards.
-        # The approach in arXiv:2006.05990v1 is to normalize before
-        # sending targets to the critic and then de-normalize when predicting.
-        # We're taking the OpenAI approach of normalizing the rewards straight
-        # from the environment and keeping them normalized at all times.
-        #
-        if normalize_rewards:
-            env = RewardNormalizer(
-                env          = env,
-                test_mode    = test_mode,
-                update_stats = not test_mode,
-                gamma        = gamma)
-
-            self.save_env_info = True
-
-        if reward_clip != None and type(reward_clip) == tuple:
-            env = RewardClipper(
-                env         = env,
-                test_mode   = test_mode,
-                status_dict = self.status_dict,
-                clip_range  = reward_clip)
+        self.status_dict["iteration"] = 0
 
         #
         # FIXME: If we vectorize multi-agent environments, we'll need to
@@ -380,35 +319,36 @@ class PPO(object):
         else:
             self.entropy_dec = entropy_dec
 
-        #
-        # One or both of our bootstrap clip ends might be a function of
-        # our iteration.
-        # We turn them both into functions for sanity.
-        #
-        min_bs_callable  = None
-        max_bs_callable  = None
-        bs_clip_callable = False
+        #FIXME cleanup
+        ##
+        ## One or both of our bootstrap clip ends might be a function of
+        ## our iteration.
+        ## We turn them both into functions for sanity.
+        ##
+        #min_bs_callable  = None
+        #max_bs_callable  = None
+        #bs_clip_callable = False
 
-        if callable(bootstrap_clip[0]):
-            min_bs_callable  = bootstrap_clip[0]
-            bs_clip_callable = True
-        else:
-            min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
+        #if callable(bootstrap_clip[0]):
+        #    min_bs_callable  = bootstrap_clip[0]
+        #    bs_clip_callable = True
+        #else:
+        #    min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
 
-        if callable(bootstrap_clip[1]):
-            max_bs_callable  = bootstrap_clip[1]
-            bs_clip_callable = True
-        else:
-            max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
+        #if callable(bootstrap_clip[1]):
+        #    max_bs_callable  = bootstrap_clip[1]
+        #    bs_clip_callable = True
+        #else:
+        #    max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
 
-        callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
+        #callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
 
-        if bs_clip_callable and dynamic_bs_clip:
-            msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
-            msg += "and also set the bootstrap clip to be callables. This is "
-            msg += "redundant, and the dynamic clip will override the given "
-            msg += "functions."
-            rank_print(msg)
+        #if bs_clip_callable and dynamic_bs_clip:
+        #    msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
+        #    msg += "and also set the bootstrap clip to be callables. This is "
+        #    msg += "redundant, and the dynamic clip will override the given "
+        #    msg += "functions."
+        #    rank_print(msg)
 
         #
         # Establish some class variables.
@@ -433,7 +373,6 @@ class PPO(object):
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
         self.gradient_clip       = gradient_clip
-        self.bootstrap_clip      = callable_bootstrap_clip
         self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
         self.min_entropy_weight  = min_entropy_weight
@@ -450,6 +389,7 @@ class PPO(object):
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
+        self.policy_mapping_fn   = policy_mapping_fn
 
         #
         # In multi-agent settings, the critic receives a "global state". In
@@ -515,29 +455,43 @@ class PPO(object):
         else:
             critic_obs_space = env.observation_space
 
-        self.policy = AgentPolicy(
-            action_space             = action_space,
-            actor_observation_space  = env.observation_space,
-            critic_observation_space = critic_obs_space,
-            ac_network               = ac_network,
-            icm_network              = icm_network,
-            actor_kw_args            = actor_kw_args,
-            critic_kw_args           = critic_kw_args,
-            icm_kw_args              = icm_kw_args,
-            intr_reward_weight       = intr_reward_weight,
-            lr                       = lr,
-            enable_icm               = use_icm,
-            test_mode                = test_mode,
-            use_gae                  = use_gae,
-            gamma                    = gamma,
-            lambd                    = lambd,
-            dynamic_bs_clip          = dynamic_bs_clip,
-            bootstrap_clip           = callable_bootstrap_clip)
+        self.policies = {}
+        for policy_id in policy_settings:
+            settings = policy_settings[policy_id]
 
-        self.policy.to(self.device)
+            self.policies[policy_id] = \
+                generate_policy(
+                    policy_name               = str(policy_id),
+                    policy_class              = settings[0],
+                    actor_observation_space   = settings[1],
+                    critic_observation_space  = settings[2],
+                    action_space              = settings[3],
+                    **settings[4])
 
-        self.test_mode_dependencies.append(self.policy)
-        self.pickle_safe_test_mode_dependencies.append(self.policy)
+        #self.policy = AgentPolicy(
+        #    action_space             = action_space,
+        #    actor_observation_space  = env.observation_space,
+        #    critic_observation_space = critic_obs_space,
+        #    ac_network               = ac_network,
+        #    icm_network              = icm_network,
+        #    actor_kw_args            = actor_kw_args,
+        #    critic_kw_args           = critic_kw_args,
+        #    icm_kw_args              = icm_kw_args,
+        #    intr_reward_weight       = intr_reward_weight,
+        #    lr                       = lr,
+        #    enable_icm               = use_icm,
+        #    test_mode                = test_mode,
+        #    use_gae                  = use_gae,
+        #    gamma                    = gamma,
+        #    lambd                    = lambd,
+        #    dynamic_bs_clip          = dynamic_bs_clip,
+        #    bootstrap_clip           = bootstrap_clip)
+
+        for key in self.policies:
+            self.policies[key].to(self.device)
+
+        self.test_mode_dependencies.append(self.policies)
+        self.pickle_safe_test_mode_dependencies.append(self.policies)
 
         if self.using_icm:
             self.status_dict["icm loss"] = 0
@@ -590,7 +544,9 @@ class PPO(object):
         else:
             try:
                 obs = self.env.reset()
-                _, action, _ = self.policy.get_action(obs)
+                #FIXME: 
+                agent_id = self.policy_mapping_fn()
+                _, action, _ = self.policies[agent_id].get_action(obs)
                 cloned_env   = deepcopy(self.env)
                 cloned_env.step(action)
                 self.can_clone_env = True
@@ -631,10 +587,14 @@ class PPO(object):
             iteration = iteration,
             timestep  = timestep)
 
-        self.policy.update_learning_rate(self.lr)
+        for key in self.policies:
+            self.policies[key].update_learning_rate(self.lr)
 
-        #FIXME
-        self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
+        # FIXME: do we really need this anymore? It's really just a way
+        # of debugging. If our status dict changes to show info for each
+        # policy, then we could still use this.
+        #self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
+        self.status_dict["lr"] = self.lr
 
     def update_entropy_weight(self,
                               iteration,
@@ -679,7 +639,8 @@ class PPO(object):
             rank_print(msg)
             comm.Abort()
 
-        self.policy.initialize_dataset()
+        for key in self.policies:
+            self.policies[key].initialize_dataset()
 
         total_episodes     = 0.0
         total_rollout_ts   = 0
@@ -691,12 +652,8 @@ class PPO(object):
         rollout_max_obs    = -np.finfo(np.float32).max
         rollout_min_obs    = np.finfo(np.float32).max
 
-        #FIXME
-        self.policy.actor.eval()
-        self.policy.critic.eval()
-
-        if self.using_icm:
-            self.policy.icm_model.eval()
+        for key in self.policies:
+            self.policies[key].eval()
 
         #
         # TODO: soft resets might cause rollouts to start off in "traps"
@@ -740,7 +697,11 @@ class PPO(object):
         total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
-        self.policy.initialize_episodes(env_batch_size, self.status_dict)
+        for key in self.policies:
+            self.policies[key].initialize_episodes(
+                env_batch_size, self.status_dict)
+
+        agent_id = self.policy_mapping_fn()
 
         #
         # TODO: If we're using multiple environments, we can end up going over
@@ -764,9 +725,11 @@ class PPO(object):
             episode_lengths  += 1
 
             if self.obs_augment:
-                raw_action, action, log_prob = self.policy.get_action(obs[0:1])
+                raw_action, action, log_prob = \
+                    self.policies[agent_id].get_action(obs[0:1])
             else:
-                raw_action, action, log_prob = self.policy.get_action(obs)
+                raw_action, action, log_prob = \
+                    self.policies[agent_id].get_action(obs)
 
             if self.is_multi_agent:
                 c_obs = torch.tensor(global_obs,
@@ -779,7 +742,7 @@ class PPO(object):
             # the MA setting?
             # We will have a dictionary mapping agent ids to their observations.
             # Each agent will map to a policy.
-            value = self.policy.critic(c_obs)
+            value = self.policies[agent_id].critic(c_obs)
 
             if self.normalize_values:
                 value = self.value_normalizer.denormalize(value)
@@ -861,7 +824,7 @@ class PPO(object):
             # to out extrinsic reward.
             #
             if self.using_icm:
-                intr_reward = self.policy.get_intrinsic_reward(
+                intr_reward = self.policies[agent_id].get_intrinsic_reward(
                     prev_obs,
                     obs,
                     action)
@@ -879,7 +842,7 @@ class PPO(object):
                 for done_idx in where_done:
                     ep_obs[done_idx] = info[done_idx][term_key]
 
-            self.policy.add_episode_info(
+            self.policies[agent_id].add_episode_info(
                 global_observations    = prev_global_obs,
                 observations           = prev_obs,
                 next_observations      = ep_obs,
@@ -916,7 +879,7 @@ class PPO(object):
             if done.any():
                 done_count = where_done.size
 
-                self.policy.end_episodes(
+                self.policies[agent_id].end_episodes(
                     env_idxs        = where_done,
                     episode_lengths = episode_lengths,
                     terminal        = np.ones(done_count).astype(bool),
@@ -975,7 +938,7 @@ class PPO(object):
                         dtype=torch.float).to(self.device)
 
                 #FIXME
-                nxt_value = self.policy.critic(c_obs)
+                nxt_value = self.policies[agent_id].critic(c_obs)
 
                 if self.normalize_values:
                     nxt_value = self.value_normalizer.denormalize(nxt_value)
@@ -1008,28 +971,34 @@ class PPO(object):
                 # and the one we get. Adding that to the critic's
                 # output can act as an extra surprise bonus.
                 #
-                #FIXME: would this logic be better handled in the policy class?
                 if self.using_icm:
                     if self.can_clone_env:
-                        if self.obs_augment:
-                            _, clone_action, _ = self.policy.get_action(obs[0:1])
-                        else:
-                            _, clone_action, _ = self.policy.get_action(obs)
+                        intr_reward = \
+                            self.policies[agent_id].get_cloned_intrinsic_reward(
+                                obs           = obs,
+                                obs_augment   = self.obs_augment,
+                                nv_batch_size = env_batch_size)
 
-                        clone_prev_obs = obs.copy()
-                        cloned_env = deepcopy(self.env)
-                        clone_obs, _, _, clone_info = cloned_env.step(clone_action)
-                        del cloned_env
+                        #FIXME: cleanup
+                        #if self.obs_augment:
+                        #    _, clone_action, _ = self.policy.get_action(obs[0:1])
+                        #else:
+                        #    _, clone_action, _ = self.policy.get_action(obs)
 
-                        if self.obs_augment:
-                            action_shape = (env_batch_size,) + clone_action.shape[1:]
-                            clone_action = np.tile(clone_action.flatten(), env_batch_size)
-                            clone_action = clone_action.reshape(action_shape)
+                        #clone_prev_obs = obs.copy()
+                        #cloned_env = deepcopy(self.env)
+                        #clone_obs, _, _, clone_info = cloned_env.step(clone_action)
+                        #del cloned_env
 
-                        intr_reward = self.policy.get_intrinsic_reward(
-                            clone_prev_obs,
-                            clone_obs,
-                            clone_action)
+                        #if self.obs_augment:
+                        #    action_shape = (env_batch_size,) + clone_action.shape[1:]
+                        #    clone_action = np.tile(clone_action.flatten(), env_batch_size)
+                        #    clone_action = clone_action.reshape(action_shape)
+
+                        #intr_reward = self.policy.get_intrinsic_reward(
+                        #    clone_prev_obs,
+                        #    clone_obs,
+                        #    clone_action)
 
                     ism         = self.status_dict["intrinsic score avg"]
                     surprise    = intr_reward[where_maxed] - ism
@@ -1037,7 +1006,7 @@ class PPO(object):
 
                 maxed_count = where_maxed.size
 
-                self.policy.end_episodes(
+                self.policies[agent_id].end_episodes(
                     env_idxs        = where_maxed,
                     episode_lengths = episode_lengths,
                     terminal        = np.zeros(maxed_count).astype(bool),
@@ -1178,7 +1147,8 @@ class PPO(object):
         #
         # Finalize our datasets.
         #
-        self.policy.finalize_dataset()
+        for key in self.policies:
+            self.policies[key].finalize_dataset()
 
         comm.barrier()
         stop_time = time.time()
@@ -1214,24 +1184,17 @@ class PPO(object):
                 self.status_dict["iteration"],
                 self.status_dict["timesteps"])
 
-            #
-            # FIXME: we may need a separate data loader for each class
-            # of agents that have taken actions. This is because the
-            # observation and action shapes could differ.
-            #
-            data_loader = DataLoader(
-                self.policy.dataset,
-                batch_size = self.batch_size,
-                shuffle    = True)
+            data_loaders = {}
+            for key in self.policies:
+                data_loaders[key] = DataLoader(
+                    self.policies[key].dataset,
+                    batch_size = self.batch_size,
+                    shuffle    = True)
 
             train_start_time = time.time()
 
-            #FIXME
-            self.policy.actor.train()
-            self.policy.critic.train()
-
-            if self.using_icm:
-                self.policy.icm_model.train()
+            for key in self.policies:
+                self.policies[key].train()
 
             for epoch_idx in range(self.epochs_per_iter):
 
@@ -1241,9 +1204,10 @@ class PPO(object):
                 # from "stale" advantages.
                 #
                 if epoch_idx > 0:
-                    data_loader.dataset.recalculate_advantages()
+                    for key in self.policies:
+                        data_loaders[key].dataset.recalculate_advantages()
 
-                self._ppo_batch_train(data_loader)
+                self._ppo_batch_train(data_loaders)
 
                 #
                 # Early ending using KL. Why multiply by 1.5, you ask? I have
@@ -1260,13 +1224,15 @@ class PPO(object):
                     break
 
                 if self.using_icm:
-                    self._icm_batch_train(data_loader)
+                    self._icm_batch_train(data_loaders)
 
             #
             # We don't want to hange on to this memory as we loop back around.
             #
-            self.policy.clear_dataset()
-            del data_loader
+            for key in self.policies:
+                self.policies[key].clear_dataset()
+
+            del data_loaders
             gc.collect()
 
             now_time      = time.time()
@@ -1304,12 +1270,13 @@ class PPO(object):
         pretty_time = format_seconds(seconds)
         rank_print("Time spent training: {}".format(pretty_time))
 
-    def _ppo_batch_train(self, data_loader):
+    def _ppo_batch_train(self, data_loaders):
         """
             Train our PPO networks using mini batches.
 
             Arguments:
-                data_loader    A PyTorch data loader.
+                data_loaders    A dictionary mapping policy keys to
+                                PyTorch data loaders.
         """
         total_actor_loss  = 0
         total_critic_loss = 0
@@ -1318,160 +1285,155 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        #
-        # FIXME: how do we handle batch data for classes of agents?
-        # Maybe we have a different loader for each class?
-        # Maybe the policy class owns the data loader??
-        #
-        for batch_data in data_loader:
-            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
-                rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell, batch_idxs = batch_data
+        for key in data_loaders:
+            for batch_data in data_loaders[key]:
+                critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
+                    rewards_tg, actor_hidden, critic_hidden, \
+                    actor_cell, critic_cell, batch_idxs = batch_data
 
-            torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
 
-            if self.normalize_values:
-                rewards_tg = self.value_normalizer.normalize(rewards_tg)
+                if self.normalize_values:
+                    rewards_tg = self.value_normalizer.normalize(rewards_tg)
 
-            if obs.shape[0] == 1:
-                continue
+                if obs.shape[0] == 1:
+                    continue
 
-            #
-            # In the case of lstm networks, we need to initialze our hidden
-            # states to those that developed during the rollout.
-            #
-            if self.policy.using_lstm:
-                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
-                actor_cell    = torch.transpose(actor_cell, 0, 1)
-                critic_hidden = torch.transpose(critic_hidden, 0, 1)
-                critic_cell   = torch.transpose(critic_cell, 0, 1)
+                #
+                # In the case of lstm networks, we need to initialze our hidden
+                # states to those that developed during the rollout.
+                #
+                if self.policies[key].using_lstm:
+                    actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                    actor_cell    = torch.transpose(actor_cell, 0, 1)
+                    critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                    critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                #FIXME
-                self.policy.actor.hidden_state  = (actor_hidden, actor_cell)
-                self.policy.critic.hidden_state = (critic_hidden, critic_cell)
+                    self.policies[key].actor.hidden_state  = (actor_hidden, actor_cell)
+                    self.policies[key].critic.hidden_state = (critic_hidden, critic_cell)
 
-            #
-            # arXiv:2005.12729v1 suggests that normalizing advantages
-            # at the mini-batch level increases performance.
-            #
-            if self.normalize_adv:
-                adv_std  = advantages.std()
-                adv_mean = advantages.mean()
-                if torch.isnan(adv_std):
-                    rank_print("\nAdvantages std is nan!")
-                    rank_print("Advantages:\n{}".format(advantages))
+                #
+                # arXiv:2005.12729v1 suggests that normalizing advantages
+                # at the mini-batch level increases performance.
+                #
+                if self.normalize_adv:
+                    adv_std  = advantages.std()
+                    adv_mean = advantages.mean()
+                    if torch.isnan(adv_std):
+                        rank_print("\nAdvantages std is nan!")
+                        rank_print("Advantages:\n{}".format(advantages))
+                        comm.Abort()
+
+                    advantages = (advantages - adv_mean) / (adv_std + 1e-8)
+
+                values, curr_log_probs, entropy = self.policies[key].evaluate(
+                    critic_obs,
+                    obs,
+                    raw_actions)
+
+                data_loaders[key].dataset.values[batch_idxs] = values
+
+                #
+                # The heart of PPO: arXiv:1707.06347v2
+                #
+                ratios = torch.exp(curr_log_probs - log_probs)
+                surr1  = ratios * advantages
+                surr2  = torch.clamp(
+                    ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
+
+                total_kl += (log_probs - curr_log_probs).mean().item()
+
+                if torch.isnan(ratios).any() or torch.isinf(ratios).any():
+                    rank_print("ERROR: ratios are nan or inf!")
+
+                    ratios_min = ratios.min()
+                    ratios_max = ratios.max()
+                    rank_print("ratios min, max: {}, {}".format(
+                        ratios_min, ratios_max))
+
+                    clp_min = curr_log_probs.min()
+                    clp_max = curr_log_probs.min()
+                    rank_print("curr_log_probs min, max: {}, {}".format(
+                        clp_min, clp_max))
+
+                    lp_min = log_probs.min()
+                    lp_max = log_probs.min()
+                    rank_print("log_probs min, max: {}, {}".format(
+                        lp_min, lp_max))
+
+                    act_min = raw_actions.min()
+                    act_max = raw_actions.max()
+                    rank_print("actions min, max: {}, {}".format(
+                        act_min, act_max))
+
+                    #FIXME
+                    std = nn.functional.softplus(self.policies[key].actor.distribution.log_std)
+                    rank_print("actor std: {}".format(std))
+
                     comm.Abort()
 
-                advantages = (advantages - adv_mean) / (adv_std + 1e-8)
+                #
+                # We negate here to perform gradient ascent rather than descent.
+                #
+                actor_loss        = (-torch.min(surr1, surr2)).mean()
+                total_actor_loss += actor_loss.item()
 
-            values, curr_log_probs, entropy = self.policy.evaluate(
-                critic_obs,
-                obs,
-                raw_actions)
+                if self.entropy_weight != 0.0:
+                    total_entropy += entropy.mean().item()
+                    actor_loss    -= self.entropy_weight * entropy.mean()
 
-            data_loader.dataset.values[batch_idxs] = values
+                if values.size() == torch.Size([]):
+                    values = values.unsqueeze(0)
 
-            #
-            # The heart of PPO: arXiv:1707.06347v2
-            #
-            ratios = torch.exp(curr_log_probs - log_probs)
-            surr1  = ratios * advantages
-            surr2  = torch.clamp(
-                ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
+                critic_loss        = nn.MSELoss()(values, rewards_tg)
+                total_critic_loss += critic_loss.item()
 
-            total_kl += (log_probs - curr_log_probs).mean().item()
-
-            if torch.isnan(ratios).any() or torch.isinf(ratios).any():
-                rank_print("ERROR: ratios are nan or inf!")
-
-                ratios_min = ratios.min()
-                ratios_max = ratios.max()
-                rank_print("ratios min, max: {}, {}".format(
-                    ratios_min, ratios_max))
-
-                clp_min = curr_log_probs.min()
-                clp_max = curr_log_probs.min()
-                rank_print("curr_log_probs min, max: {}, {}".format(
-                    clp_min, clp_max))
-
-                lp_min = log_probs.min()
-                lp_max = log_probs.min()
-                rank_print("log_probs min, max: {}, {}".format(
-                    lp_min, lp_max))
-
-                act_min = raw_actions.min()
-                act_max = raw_actions.max()
-                rank_print("actions min, max: {}, {}".format(
-                    act_min, act_max))
-
+                #
+                # arXiv:2005.12729v1 suggests that gradient clipping can
+                # have a positive effect on training.
+                #
+                # FIXME: I think each class of actor would need its own
+                # optimizer and loss. They would also need their own critics.
+                #
                 #FIXME
-                std = nn.functional.softplus(self.policy.actor.distribution.log_std)
-                rank_print("actor std: {}".format(std))
+                self.policies[key].actor_optim.zero_grad()
+                actor_loss.backward(retain_graph = self.policies[key].using_lstm)
+                mpi_avg_gradients(self.policies[key].actor)
+                nn.utils.clip_grad_norm_(self.policies[key].actor.parameters(),
+                    self.gradient_clip)
+                self.policies[key].actor_optim.step()
 
-                comm.Abort()
+                self.policies[key].critic_optim.zero_grad()
+                critic_loss.backward(retain_graph = self.policies[key].using_lstm)
+                mpi_avg_gradients(self.policies[key].critic)
+                nn.utils.clip_grad_norm_(self.policies[key].critic.parameters(),
+                    self.gradient_clip)
+                self.policies[key].critic_optim.step()
 
-            #
-            # We negate here to perform gradient ascent rather than descent.
-            #
-            actor_loss        = (-torch.min(surr1, surr2)).mean()
-            total_actor_loss += actor_loss.item()
+                #
+                # The idea here is similar to re-computing advantages, but now
+                # we want to update the hidden states before the next epoch.
+                #
+                if self.policies[key].using_lstm:
+                    actor_hidden  = self.policies[key].actor.hidden_state[0].detach().clone()
+                    critic_hidden = self.policies[key].critic.hidden_state[0].detach().clone()
 
-            if self.entropy_weight != 0.0:
-                total_entropy += entropy.mean().item()
-                actor_loss    -= self.entropy_weight * entropy.mean()
+                    actor_cell    = self.policies[key].actor.hidden_state[1].detach().clone()
+                    critic_cell   = self.policies[key].critic.hidden_state[1].detach().clone()
 
-            if values.size() == torch.Size([]):
-                values = values.unsqueeze(0)
+                    actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                    actor_cell    = torch.transpose(actor_cell, 0, 1)
+                    critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                    critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-            critic_loss        = nn.MSELoss()(values, rewards_tg)
-            total_critic_loss += critic_loss.item()
+                    data_loaders[key].dataset.actor_hidden[batch_idxs]  = actor_hidden
+                    data_loaders[key].dataset.critic_hidden[batch_idxs] = critic_hidden
 
-            #
-            # arXiv:2005.12729v1 suggests that gradient clipping can
-            # have a positive effect on training.
-            #
-            # FIXME: I think each class of actor would need its own
-            # optimizer and loss. They would also need their own critics.
-            #
-            #FIXME
-            self.policy.actor_optim.zero_grad()
-            actor_loss.backward(retain_graph = self.policy.using_lstm)
-            mpi_avg_gradients(self.policy.actor)
-            nn.utils.clip_grad_norm_(self.policy.actor.parameters(),
-                self.gradient_clip)
-            self.policy.actor_optim.step()
+                    data_loaders[key].dataset.actor_cell[batch_idxs]  = actor_cell
+                    data_loaders[key].dataset.critic_cell[batch_idxs] = critic_cell
 
-            self.policy.critic_optim.zero_grad()
-            critic_loss.backward(retain_graph = self.policy.using_lstm)
-            mpi_avg_gradients(self.policy.critic)
-            nn.utils.clip_grad_norm_(self.policy.critic.parameters(),
-                self.gradient_clip)
-            self.policy.critic_optim.step()
-
-            #
-            # The idea here is similar to re-computing advantages, but now
-            # we want to update the hidden states before the next epoch.
-            #
-            if self.policy.using_lstm:
-                actor_hidden  = self.policy.actor.hidden_state[0].detach().clone()
-                critic_hidden = self.policy.critic.hidden_state[0].detach().clone()
-
-                actor_cell    = self.policy.actor.hidden_state[1].detach().clone()
-                critic_cell   = self.policy.critic.hidden_state[1].detach().clone()
-
-                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
-                actor_cell    = torch.transpose(actor_cell, 0, 1)
-                critic_hidden = torch.transpose(critic_hidden, 0, 1)
-                critic_cell   = torch.transpose(critic_cell, 0, 1)
-
-                data_loader.dataset.actor_hidden[batch_idxs]  = actor_hidden
-                data_loader.dataset.critic_hidden[batch_idxs] = critic_hidden
-
-                data_loader.dataset.actor_cell[batch_idxs]  = actor_cell
-                data_loader.dataset.critic_cell[batch_idxs] = critic_cell
-
-            comm.barrier()
-            counter += 1
+                comm.barrier()
+                counter += 1
 
         counter           = comm.allreduce(counter, MPI.SUM)
         total_entropy     = comm.allreduce(total_entropy, MPI.SUM)
@@ -1485,40 +1447,42 @@ class PPO(object):
         self.status_dict["critic loss"]      = total_critic_loss / counter
         self.status_dict["kl avg"]           = total_kl / counter
 
-    def _icm_batch_train(self, data_loader):
+    def _icm_batch_train(self, data_loaders):
         """
             Train our ICM networks using mini batches.
 
             Arguments:
-                data_loader    A PyTorch data loader.
+                data_loaders    A dictionary mapping policy keys to
+                                PyTorch data loaders.
         """
 
         total_icm_loss = 0
         counter = 0
 
-        for batch_data in data_loader:
+        for key in data_loaders:
+            for batch_data in data_loaders[key]:
 
-            _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
-                batch_data
+                _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
+                    batch_data
 
-            torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
 
-            actions = actions.unsqueeze(1)
+                actions = actions.unsqueeze(1)
 
-            _, inv_loss, f_loss = self.policy.icm_model(obs, next_obs, actions)
+                _, inv_loss, f_loss = self.policies[key].icm_model(obs, next_obs, actions)
 
-            icm_loss = (((1.0 - self.icm_beta) * f_loss) +
-                (self.icm_beta * inv_loss))
+                icm_loss = (((1.0 - self.icm_beta) * f_loss) +
+                    (self.icm_beta * inv_loss))
 
-            total_icm_loss += icm_loss.item()
+                total_icm_loss += icm_loss.item()
 
-            self.policy.icm_optim.zero_grad()
-            icm_loss.backward()
-            mpi_avg_gradients(self.policy.icm_model)
-            self.policy.icm_optim.step()
+                self.policies[key].icm_optim.zero_grad()
+                icm_loss.backward()
+                mpi_avg_gradients(self.policies[key].icm_model)
+                self.policies[key].icm_optim.step()
 
-            counter += 1
-            comm.barrier()
+                counter += 1
+                comm.barrier()
 
         counter        = comm.allreduce(counter, MPI.SUM)
         total_icm_loss = comm.allreduce(total_icm_loss, MPI.SUM)
@@ -1537,12 +1501,8 @@ class PPO(object):
 
         comm.barrier()
 
-        #FIXME: add save methods to the policy
-        self.policy.actor.save(self.state_path)
-        self.policy.critic.save(self.state_path)
-
-        if self.using_icm:
-            self.policy.icm_model.save(self.state_path)
+        for key in self.policies:
+            self.policies[key].save(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.save_info(self.state_path)
@@ -1562,12 +1522,9 @@ class PPO(object):
         """
             Load all information required for a restart.
         """
-        #FIXME add load methods to the policy
-        self.policy.actor.load(self.state_path)
-        self.policy.critic.load(self.state_path)
 
-        if self.using_icm:
-            self.policy.icm_model.load(self.state_path)
+        for key in self.policies:
+            self.policies[key].load(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.load_info(self.state_path)
@@ -1621,7 +1578,6 @@ class PPO(object):
         state = self.__dict__.copy()
         del state["env"]
         del state["test_mode_dependencies"]
-        del state["bootstrap_clip"]
         return state
 
     def __setstate__(self, state):
@@ -1634,4 +1590,3 @@ class PPO(object):
         self.__dict__.update(state)
         self.env = None
         self.test_mode_dependencies = self.pickle_safe_test_mode_dependencies
-        self.bootstrap_clip = (None, None)

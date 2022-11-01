@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import torch
 from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
@@ -20,9 +21,11 @@ num_procs = comm.Get_size()
 class AgentPolicy():
 
     def __init__(self,
+                 name,
                  action_space,
                  actor_observation_space,
                  critic_observation_space,
+                 bootstrap_clip     = (-10., 10.),
                  ac_network         = FeedForwardNetwork,
                  actor_kw_args      = {},
                  critic_kw_args     = {},
@@ -32,13 +35,13 @@ class AgentPolicy():
                  gamma              = 0.99,
                  lambd              = 0.95,
                  dynamic_bs_clip    = False,
-                 bootstrap_clip     = (-10., 10.),
                  enable_icm         = False,
                  icm_network        = ICM,
                  intr_reward_weight = 1.0,
                  test_mode          = False):
         """
         """
+        self.name               = name
         self.action_space       = action_space
         self.actor_obs_space    = actor_observation_space
         self.critic_obs_space   = critic_observation_space
@@ -49,7 +52,6 @@ class AgentPolicy():
         self.gamma              = gamma
         self.lambd              = lambd
         self.dynamic_bs_clip    = dynamic_bs_clip
-        self.bootstrap_clip     = bootstrap_clip
         self.using_lstm         = False
         self.dataset            = None
         self.episodes           = np.empty(0, dtype=object)
@@ -86,6 +88,35 @@ class AgentPolicy():
         else:
             rank_print("Using {} actions.".format(self.action_dtype))
 
+        #
+        # One or both of our bootstrap clip ends might be a function of
+        # our iteration.
+        # We turn them both into functions for sanity.
+        #
+        min_bs_callable  = None
+        max_bs_callable  = None
+        bs_clip_callable = False
+
+        if callable(bootstrap_clip[0]):
+            min_bs_callable  = bootstrap_clip[0]
+            bs_clip_callable = True
+        else:
+            min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
+
+        if callable(bootstrap_clip[1]):
+            max_bs_callable  = bootstrap_clip[1]
+            bs_clip_callable = True
+        else:
+            max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
+
+        self.bootstrap_clip = (min_bs_callable, max_bs_callable)
+
+        if bs_clip_callable and dynamic_bs_clip:
+            msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
+            msg += "and also set the bootstrap clip to be callables. This is "
+            msg += "redundant, and the dynamic clip will override the given "
+            msg += "functions."
+            rank_print(msg)
 
         self._initialize_networks(
             ac_network     = ac_network,
@@ -101,6 +132,8 @@ class AgentPolicy():
         if self.enable_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
                 lr=lr, eps=1e-5)
+        else:
+            self.icm_optim = None
 
     def to(self, device):
         """
@@ -553,3 +586,153 @@ class AgentPolicy():
                 timestep  = timestep)
 
         return (bs_min, bs_max)
+
+    def get_cloned_intrinsic_reward(
+        self,
+        obs,
+        obs_augment,
+        env_batch_size):
+        """
+        """
+        if obs_augment:
+            _, clone_action, _ = self.get_action(obs[0:1])
+        else:
+            _, clone_action, _ = self.get_action(obs)
+
+        clone_prev_obs = obs.copy()
+        cloned_env = deepcopy(self.env)
+        clone_obs, _, _, clone_info = cloned_env.step(clone_action)
+        del cloned_env
+
+        if obs_augment:
+            action_shape = (env_batch_size,) + clone_action.shape[1:]
+            clone_action = np.tile(clone_action.flatten(), env_batch_size)
+            clone_action = clone_action.reshape(action_shape)
+
+        intr_reward = self.get_intrinsic_reward(
+            clone_prev_obs,
+            clone_obs,
+            clone_action)
+
+        return intr_reward
+
+    def save(self, save_path):
+        """
+        """
+        policy_dir = "{}-policy".format(self.name)
+        policy_save_path = os.path.join(save_path, policy_dir)
+
+        if rank == 0 and not os.path.exists(policy_save_path):
+            os.makedirs(policy_save_path)
+
+        self.actor.save(policy_save_path)
+        self.critic.save(policy_save_path)
+
+        if self.enable_icm:
+            self.icm_model.save(policy_save_path)
+
+    def load(self, load_path):
+        """
+        """
+        policy_dir = "{}-policy".format(self.name)
+        policy_load_path = os.path.join(load_path, policy_dir)
+
+        self.actor.load(policy_load_path)
+        self.critic.load(policy_load_path)
+
+        if self.enable_icm:
+            self.icm_model.load(policy_load_path)
+
+    def eval(self):
+        """
+        """
+        self.actor.eval()
+        self.critic.eval()
+
+        if self.enable_icm:
+            self.icm_model.eval()
+
+    def train(self):
+        """
+        """
+        self.actor.train()
+        self.critic.train()
+
+        if self.enable_icm:
+            self.icm_model.train()
+
+    def __getstate__(self):
+        """
+            Override the getstate method for pickling. We only want to keep
+            things that won't upset pickle. The environment is something
+            that we can't guarantee can be pickled.
+
+            Returns:
+                The state dictionary minus the environment.
+        """
+        state = self.__dict__.copy()
+        del state["bootstrap_clip"]
+        return state
+
+    def __setstate__(self, state):
+        """
+            Override the setstate method for pickling.
+
+            Arguments:
+                The state loaded from a pickled PPO object.
+        """
+        self.__dict__.update(state)
+        self.bootstrap_clip = (None, None)
+
+    def __eq__(self, other):
+        """
+        """
+        #
+        # TODO: we currently don't compare optimizers because that
+        # requires extra effort, and our current implementation will
+        # enforce they're equal when the learning rate is equal.
+        # We should update this at some point.
+        #
+        # FIXME: bootstrap clip is difficult to compare without using
+        # functions that define __eq__, so we're skipping it.
+        #
+        is_equal = (
+            isinstance(other, AgentPolicy)
+            and self.action_space       == other.action_space
+            and self.actor_obs_space    == other.actor_obs_space
+            and self.critic_obs_space   == other.critic_obs_space
+            and self.enable_icm         == other.enable_icm
+            and self.intr_reward_weight == other.intr_reward_weight
+            and self.test_mode          == other.test_mode
+            and self.use_gae            == other.use_gae
+            and self.gamma              == other.gamma
+            and self.lambd              == other.lambd
+            and self.dynamic_bs_clip    == other.dynamic_bs_clip
+            and self.using_lstm         == other.using_lstm
+            and self.act_dim            == other.act_dim
+            and self.action_dtype       == other.action_dtype)
+
+        return is_equal
+
+    def __str__(self):
+        """
+        """
+        str_self  = "AgentPolicy:\n"
+        str_self += "    action space: {}\n".format(self.action_space)
+        str_self += "    actor obs space: {}\n".format(self.actor_obs_space)
+        str_self += "    critic obs space: {}\n".format(self.critic_obs_space)
+        str_self += "    enable icm: {}\n".format(self.enable_icm)
+        str_self += "    intr reward weight: {}\n".format(self.intr_reward_weight)
+        str_self += "    test mode: {}\n".format(self.test_mode)
+        str_self += "    use gae: {}\n".format(self.use_gae)
+        str_self += "    gamma: {}\n".format(self.gamma)
+        str_self += "    lambd: {}\n".format(self.lambd)
+        str_self += "    dynamic bs clip: {}\n".format(self.dynamic_bs_clip)
+        str_self += "    bootstrap clip: {}\n".format(self.bootstrap_clip)
+        str_self += "    using lstm: {}\n".format(self.using_lstm)
+        str_self += "    act dim: {}\n".format(self.act_dim)
+        str_self += "    action dtype: {}\n".format(self.action_dtype)
+        str_self += "    actor optim: {}\n".format(self.actor_optim)
+        str_self += "    critic optim: {}\n".format(self.critic_optim)
+        str_self += "    icm optim: {}\n".format(self.icm_optim)
+        return str_self

@@ -14,6 +14,7 @@ from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
+from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
@@ -47,6 +48,8 @@ class EnvironmentLauncher(ABC):
         raise NotImplementedError
 
     def run_ppo(self,
+                policy_settings,
+                policy_mapping_fn,
                 env_generator,
                 ac_network,
                 device,
@@ -104,7 +107,9 @@ class EnvironmentLauncher(ABC):
             Run the PPO algorithm.
         """
     
-        ppo = PPO(env_generator      = env_generator,
+        ppo = PPO(policy_settings    = policy_settings,
+                  policy_mapping_fn  = policy_mapping_fn,
+                  env_generator      = env_generator,
                   ac_network         = ac_network,
                   icm_network        = icm_network,
                   device             = device,
@@ -184,12 +189,39 @@ class CartPoleLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 256
 
+        policy_settings = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        #
+        # (policy class, actor obs space, critic obs space,
+        #  action space, policy settings)
+        #
+        policies = { "balancer" : \
+            (None,
+             env_generator().observation_space, 
+             env_generator().observation_space,
+             env_generator().action_space,
+             policy_settings)
+        }
+
+        policy_mapping_fn = lambda *args : "balancer"
+
         self.run_ppo(**self.kw_launch_args,
                      env_generator      = env_generator,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 256,
+
+                     policy_settings    = policies,
+                     policy_mapping_fn  = policy_mapping_fn,
+
                      ac_network         = FeedForwardNetwork,
+                     #ac_network         = LSTMNetwork,
+
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 32,
                      use_gae            = True,
