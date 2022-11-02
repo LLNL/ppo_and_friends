@@ -539,60 +539,208 @@ class PPO(object):
         if self.using_icm:
             rank_print("Can clone environment: {}".format(self.can_clone_env))
 
+    #def get_policy_actions(self, obs):
+    #    """
+    #    """
+    #    batch_size  = obs.size
+    #    raw_actions = np.array([{}] * batch_size) 
+    #    actions     = np.array([{}] * batch_size)
+    #    log_probs   = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in obs[b_idx]:
+    #            policy_id = self.policy_mapping_fn[agent_id]
+
+    #            raw_action, action, log_prob = \
+    #                self.policies[policy_id].get_action(obs[b_idx][agent_id])
+
+    #            raw_actions[b_idx][agent_id] = raw_action
+    #            actions[b_idx][agent_id]     = action
+    #            log_probs[b_idx][agent_id]   = log_prob
+
+    #    return raw_actions, actions, log_probs
+
+    #def get_policy_actions_from_aug_obs(self, obs):
+    #    """
+    #    """
+    #    batch_size  = obs.size
+    #    raw_actions = np.array([{}] * batch_size) 
+    #    actions     = np.array([{}] * batch_size)
+    #    log_probs   = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in obs[b_idx]:
+    #            policy_id = self.policy_mapping_fn[agent_id]
+
+    #            obs_slice = obs[b_idx][agent_id][0:1]
+    #            raw_action, action, log_prob = \
+    #                self.policies[policy_id].get_action(obs_slice)
+
+    #            raw_actions[b_idx][agent_id] = raw_action
+    #            actions[b_idx][agent_id]     = action
+    #            log_probs[b_idx][agent_id]   = log_prob
+
+    #    return raw_actions, actions, log_probs
+
+    #def get_policy_values(self, obs):
+    #    """
+    #    """
+    #    batch_size = obs.size
+    #    values     = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in obs[b_idx]:
+    #            policy_id = self.policy_mapping_fn[agent_id]
+    #            value = self.policies[policy_id].critic(obs[b_idx][agent_id])
+    #            values[b_idx][agent_id] = value
+
+    #    return value
+
+    #def get_natural_reward(self, info):
+    #    """
+    #    """
+    #    have_nat_reward = False
+    #    batch_size      = info.size
+    #    natural_reward  = np.array([{}] * batch_size)
+
+    #    if "natural reward" in info[next(iter(info))][0]:
+    #        have_nat_reward = True
+
+    #    if have_nat_reward:
+    #        for b_idx in range(batch_size):
+    #            for agent in info[b_idx]:
+    #                natural_reward[b_idx][agent] = \
+    #                    info[b_idx][agent]["natural reward"]
+
+    #    return have_nat_reward, natural_reward
+
+    ##FIXME: should we perform these operations in-place instead?
+    #def get_detached_values(self, values):
+    #    """
+    #    """
+    #    batch_size = values.size
+    #    detached   = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in values[b_idx]:
+    #            detached[b_idx][agent_id] = \
+    #                values[b_idx][agent_id].detach().cpu().numpy()
+
+    #    return detached
+
+    #def get_denormalized_values(self, values):
+    #    """
+    #    """
+    #    batch_size    = values.size
+    #    denorm_values = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in values[b_idx]:
+    #            policy_id = self.policy_mapping_fn[agent_id]
+    #            value     = values[b_idx][agent_id]
+    #            value     = self.value_normalizers[policy_id].denormalize(value)
+    #            denorm_values[b_idx][agent_id] = value
+
+    #    return denorm_values
+
+    #def get_normalized_values(self, values):
+    #    """
+    #    """
+    #    batch_size  = values.size
+    #    norm_values = np.array([{}] * batch_size)
+
+    #    for b_idx in range(batch_size);
+    #        for agent_id in values[b_idx]:
+    #            policy_id = self.policy_mapping_fn[agent_id]
+    #            value     = values[b_idx][agent_id]
+    #            value     = self.value_normalizers[policy_id].normalize(value)
+    #            norm_values[b_idx][agent_id] = value
+
+    #    return norm_values
+
+    #def establish_non_terminal_dones(self,
+    #                                 env_batch_size,
+    #                                 info,
+    #                                 done):
+    #    """
+    #    """
+    #    non_terminal_dones = np.array([{}] * env_batch_size)
+    #    have_non_terminal_done = False
+
+    #    for b_idx in range(env_batch_size):
+    #        for agent_id in info:
+    #            if "non-terminal done" in info[b_idx][agent_id]:
+    #                ntd = info[b_idx][agent_id]["non-terminal done"]
+    #                non_terminal_dones[b_idx][agent_id] = ntd
+    #                have_non_terminal_dones = ntd or have_non_terminal_dones
+
+    #                if ntd:
+    #                    done[b_idx][agent_id] = False
+
+    #    return have_non_terminal_done, non_teriminal_dones
+
+
+    #def apply_reward_weight(self,
+    #                        rewards,
+    #                        weight):
+    #    """
+    #    """
+    #    batch_size = rewards.size
+
+    #    for b_idx in range(batch_size):
+    #        for agent_id in rewards[b_idx]:
+    #            rewards[b_idx][agent_id] *= weight
+
+    #    return rewards
+
     def get_policy_actions(self, obs):
         """
         """
-        batch_size  = obs.size
-        raw_actions = np.array([{}] * batch_size) 
-        actions     = np.array([{}] * batch_size)
-        log_probs   = np.array([{}] * batch_size)
+        raw_actions = {}
+        actions     = {}
+        log_probs   = {}
 
-        for b_idx in range(batch_size):
-            for agent_id in obs[b_idx]:
-                policy_id = self.policy_mapping_fn[agent_id]
+        for agent_id in obs:
+            policy_id = self.policy_mapping_fn[agent_id]
 
-                raw_action, action, log_prob = \
-                    self.policies[policy_id].get_action(obs[b_idx][agent_id])
+            raw_action, action, log_prob = \
+                self.policies[policy_id].get_action(obs[agent_id])
 
-                raw_actions[b_idx][agent_id] = raw_action
-                actions[b_idx][agent_id]     = action
-                log_probs[b_idx][agent_id]   = log_prob
+            raw_actions[agent_id] = raw_action
+            actions[agent_id]     = action
+            log_probs[agent_id]   = log_prob
 
         return raw_actions, actions, log_probs
 
     def get_policy_actions_from_aug_obs(self, obs):
         """
         """
-        batch_size  = obs.size
-        raw_actions = np.array([{}] * batch_size) 
-        actions     = np.array([{}] * batch_size)
-        log_probs   = np.array([{}] * batch_size)
+        raw_actions = {} 
+        actions     = {}
+        log_probs   = {}
 
-        for b_idx in range(batch_size):
-            for agent_id in obs[b_idx]:
-                policy_id = self.policy_mapping_fn[agent_id]
+        for agent_id in obs:
+            policy_id = self.policy_mapping_fn[agent_id]
 
-                obs_slice = obs[b_idx][agent_id][0:1]
-                raw_action, action, log_prob = \
-                    self.policies[policy_id].get_action(obs_slice)
+            obs_slice = obs[agent_id][0:1]
+            raw_action, action, log_prob = \
+                self.policies[policy_id].get_action(obs_slice)
 
-                raw_actions[b_idx][agent_id] = raw_action
-                actions[b_idx][agent_id]     = action
-                log_probs[b_idx][agent_id]   = log_prob
+            raw_actions[agent_id] = raw_action
+            actions[agent_id]     = action
+            log_probs[agent_id]   = log_prob
 
         return raw_actions, actions, log_probs
 
     def get_policy_values(self, obs):
         """
         """
-        batch_size = obs.size
-        values     = np.array([{}] * batch_size)
+        values = {}
 
-        for b_idx in range(batch_size):
-            for agent_id in obs[b_idx]:
-                policy_id = self.policy_mapping_fn[agent_id]
-                value = self.policies[policy_id].critic(obs[b_idx][agent_id])
-                values[b_idx][agent_id] = value
+        for agent_id in obs:
+            policy_id        = self.policy_mapping_fn[agent_id]
+            value            = self.policies[policy_id].critic(obs[agent_id])
+            values[agent_id] = value
 
         return value
 
@@ -600,98 +748,146 @@ class PPO(object):
         """
         """
         have_nat_reward = False
-        batch_size      = info.size
-        natural_reward  = np.array([{}] * batch_size)
+        natural_reward  = {}
+        first_agent     = next(iter(info))
+        batch_size      = info[first_agent].size
 
-        if "natural reward" in next(iter(info[0])):
+        if "natural reward" in info[first_agent][0]:
             have_nat_reward = True
+        else:
+            return have_nat_reward, natural_reward
 
         if have_nat_reward:
-            for b_idx in range(batch_size):
-                for agent in info[b_idx]:
-                    natural_reward[b_idx][agent] = \
-                        info[b_idx][agent]["natural reward"]
+            for agent_id in info:
+                natural_reward[agent_id] = np.array([None] * batch_size)
+                for b_idx in range(batch_size):
+                    natural_reward[agent_id][b_idx] = \
+                        info[agent_id][b_idx]["natural reward"]
 
         return have_nat_reward, natural_reward
 
     #FIXME: should we perform these operations in-place instead?
-    def get_detatched_values(self, values):
+    def get_detached_dict(self, attached):
         """
         """
-        batch_size = values.size
-        detached   = np.array([{}] * batch_size)
+        detached = {}
 
-        for b_idx in range(batch_size):
-            for agent_id in values[b_idx]:
-                detached[b_idx][agent_id] = \
-                    values[b_idx][agent_id].detach().cpu().numpy()
+        for agent_id in attached:
+            detached[agent_id] = \
+                attached[agent_id].detach().cpu().numpy()
 
         return detached
 
     def get_denormalized_values(self, values):
         """
         """
-        batch_size    = values.size
-        denorm_values = np.array([{}] * batch_size)
+        denorm_values = {}
 
-        for b_idx in range(batch_size):
-            for agent_id in values[b_idx]:
-                policy_id = self.policy_mapping_fn[agent_id]
-                value     = values[b_idx][agent_id]
-                value     = self.value_normalizers[policy_id].denormalize(value)
-                denorm_values[b_idx][agent_id] = value
+        for agent_id in values:
+            policy_id = self.policy_mapping_fn[agent_id]
+            value     = values[agent_id]
+            value     = self.value_normalizers[policy_id].denormalize(value)
+            denorm_values[agent_id] = value
 
         return denorm_values
 
     def get_normalized_values(self, values):
         """
         """
-        batch_size  = values.size
-        norm_values = np.array([{}] * batch_size)
+        norm_values = {}
 
-        for b_idx in range(batch_size);
-            for agent_id in values[b_idx]:
-                policy_id = self.policy_mapping_fn[agent_id]
-                value     = values[b_idx][agent_id]
-                value     = self.value_normalizers[policy_id].normalize(value)
-                norm_values[b_idx][agent_id] = value
+        for agent_id in values:
+            policy_id = self.policy_mapping_fn[agent_id]
+            value     = values[agent_id]
+            value     = self.value_normalizers[policy_id].normalize(value)
+            norm_values[agent_id] = value
 
         return norm_values
 
     def establish_non_terminal_dones(self,
-                                     env_batch_size,
                                      info,
-                                     done):
+                                     dones):
         """
         """
-        non_terminal_dones = np.array([{}] * env_batch_size)
-        have_non_terminal_done = False
+        first_agent = next(iter(dones))
+        batch_size  = dones[first_agent].size
+        non_terminal_dones = np.zeros(batch_size).astype(bool)
+        have_non_terminal_dones = False
 
-        for b_idx in range(env_batch_size):
-            for agent_id in info:
-                if "non-terminal done" in info[b_idx][agent_id]:
-                    ntd = info[b_idx][agent_id]["non-terminal done"]
-                    non_terminal_dones[b_idx][agent_id] = ntd
-                    have_non_terminal_dones = ntd or have_non_terminal_dones
+        #
+        # Because we always death mask, any environment that's done for
+        # one agent is done for them all.
+        #
+        for b_idx in range(batch_size):
+            if "non-terminal done" in info[first_agent][b_idx]:
+                ntd = info[first_agent][b_idx]["non-terminal done"]
+                non_terminal_dones[b_idx] = ntd
+                have_non_terminal_dones   = ntd or have_non_terminal_dones
 
-                    if ntd:
-                        done[b_idx][agent_id] = False
+        if have_non_terminal_dones:
+            for agent_id in dones:
+                dones[agent_id][non_terminal_dones] = False
 
-        return have_non_terminal_done, non_teriminal_dones
+        return np.where(non_terminal_dones)[0]
 
+    def np_dict_to_tensor_dict(self, obs):
+        """
+        """
+        tensor_dict = {}
+
+        for agent_id in obs:
+            tensor_dict[agent_id] = torch.tensor(obs[agent_id],
+                dtype=torch.float).to(self.device)
+
+        return tensor_dict
+
+    def apply_intrinsic_rewards(self,
+                                rewards,
+                                prev_obs,
+                                obs,
+                                actions):
+        """
+        """
+        if not self.using_icm:
+            return rewards
+
+        for agent_id in obs:
+            intr_rewards = self.policies[agent_id].get_intrinsic_reward(
+                prev_obs[agent_id],
+                obs[agent_id],
+                actions[agent_id])
+
+            rewards[agent_id] = rewards[agent_id] + intr_rewards
+
+        return rewards
 
     def apply_reward_weight(self,
                             rewards,
                             weight):
         """
         """
-        batch_size = rewards.size
-
-        for b_idx in range(batch_size):
-            for agent_id in rewards[b_idx]:
-                rewards[b_idx][agent_id] *= weight
+        for agent_id in rewards:
+            rewards[agent_id] *= weight
 
         return rewards
+
+    def get_done_envs(self,
+                      dones):
+        """
+        """
+        first_id   = next(iter(dones))
+        batch_size = dones[first_id].size
+        done_envs  = np.zeros(batch_size).astype(bool)
+
+        #
+        # Because we always death mask, any agent that has a done environment
+        # means that all agents are done in that same environment.
+        #
+        where_done     = np.where(dones[first_id])[0]
+        where_not_done = np.where(~dones[first_id])[0]
+
+        return where_done, where_not_done
+
 
     def print_status(self):
         """
@@ -823,7 +1019,7 @@ class PPO(object):
 
         #FIXME: refactor?
         ep_rewards         = np.zeros((env_batch_size, 1))
-        episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
+        episode_lengths    = np.zeros(env_batch_size).astype(np.int32)#FIXME: i think this is still applicable
         ep_score           = np.zeros((env_batch_size, 1))
         total_ext_rewards  = np.zeros((env_batch_size, 1))
         total_intr_rewards = np.zeros((env_batch_size, 1))
@@ -861,10 +1057,9 @@ class PPO(object):
                 raw_action, action, log_prob = \
                     self.get_policy_actions(obs)
 
-            c_obs = torch.tensor(global_obs,
-                dtype=torch.float).to(self.device)
+            critic_obs = self.np_dict_to_tensor_dict(global_obs)
 
-            value = self.get_policy_values(c_obs)
+            value = self.get_policy_values(critic_obs)
 
             if self.normalize_values:
                 value = self.get_denormalized_values(value)
@@ -879,6 +1074,11 @@ class PPO(object):
             prev_obs        = obs.copy()
             prev_global_obs = global_obs.copy()
 
+            #
+            # The returned objects are dictionaries mapping agent ids
+            # to np arrays. Each element of the numpy array represents
+            # the results from a single environment.
+            #
             obs, global_obs, ext_reward, done, info = self.env.step(action)
 
             #
@@ -888,7 +1088,7 @@ class PPO(object):
             # these non-terminal done states as needing to end without
             # entering a terminal state.
             #
-            have_non_terminal_dones, non_terminal_dones = \
+            where_non_terminal = \
                 self.establish_non_terminal_dones(
                     env_batch_size,
                     info,
@@ -926,7 +1126,7 @@ class PPO(object):
                 log_prob     = np.tile(log_prob.flatten(), batch_size)
                 log_prob     = log_prob.reshape(lp_shape)
 
-            value = self.get_detached_values(value)
+            value = self.get_detached_dict(value)
 
             #
             # If any of our wrappers are altering the rewards, there should
@@ -954,48 +1154,45 @@ class PPO(object):
             # This amounts to adding "curiosity", aka intrinsic reward,
             # to out extrinsic reward.
             #
-            if self.using_icm:
-                intr_reward = self.policies[agent_id].get_intrinsic_reward(
-                    prev_obs,
-                    obs,
-                    action)
+            reward = self.apply_intrinsic_rewards(
+                ext_reward,
+                prev_obs,
+                obs,
+                action)
 
-                reward = ext_reward + intr_reward
-            else:
-                reward = ext_reward
+            ep_obs = obs.copy()
 
-            ep_obs     = obs.copy()
-            where_done = np.where(done)[0]
-            where_not_done = np.where(~done)[0]
+            where_done, where_not_done = self.get_done_envs(done)
+            done_count = where_done.size
 
-            if done.any():
-                term_key = "terminal observation"
-                for done_idx in where_done:
-                    ep_obs[done_idx] = info[done_idx][term_key]
+            for agent_id in action:
+                if done_count > 0:
+                    for done_idx in where_done:
+                        ep_obs[agent_id][done_idx] = \
+                            info[agent_id][done_idx]["terminal observation"]
 
-            self.policies[agent_id].add_episode_info(
-                global_observations    = prev_global_obs,
-                observations           = prev_obs,
-                next_observations      = ep_obs,
-                raw_actions            = raw_action,
-                actions                = action,
-                values                 = value,
-                log_probs              = log_prob,
-                rewards                = reward,
-                where_done             = where_done)
+                policy_id = self.policy_mapping_fn(agent_id)
 
-            rollout_max_reward = max(rollout_max_reward, reward.max())
-            rollout_min_reward = min(rollout_min_reward, reward.min())
-            rollout_max_obs    = max(rollout_max_obs, obs.max())
-            rollout_min_obs    = min(rollout_min_obs, obs.min())
+                self.policies[policy_id].add_episode_info(
+                    global_observations    = prev_global_obs[agent_id],
+                    observations           = prev_obs[agent_id],
+                    next_observations      = ep_obs[agent_id],
+                    raw_actions            = raw_action[agent_id],
+                    actions                = action[agent_id],
+                    values                 = value[agent_id],
+                    log_probs              = log_prob[agent_id],
+                    rewards                = reward[agent_id],
+                    where_done             = where_done)
 
-            rollout_max_reward = max(rollout_max_reward, reward.max())
-            rollout_min_reward = min(rollout_min_reward, reward.min())
-            rollout_max_obs    = max(rollout_max_obs, obs.max())
-            rollout_min_obs    = min(rollout_min_obs, obs.min())
+            #FIXME: this will change when we report policy status.
+            for agent_id in obs:
+                rollout_max_reward = max(rollout_max_reward, reward[agent_id].max())
+                rollout_min_reward = min(rollout_min_reward, reward[agent_id].min())
+                rollout_max_obs    = max(rollout_max_obs, obs[agent_id].max())
+                rollout_min_obs    = min(rollout_min_obs, obs[agent_id].min())
 
-            ep_rewards += reward
-            ep_score   += natural_reward
+                ep_rewards += reward[agent_id]
+                ep_score   += natural_reward[agent_id]
 
             #
             # Episode end cases.
@@ -1007,16 +1204,21 @@ class PPO(object):
             # We handle any episodes that have reached a terminal done state.
             # In these cases, the environment cannot proceed any further.
             #
-            if done.any():
-                done_count = where_done.size
+            if done_count > 0:
 
-                self.policies[agent_id].end_episodes(
-                    env_idxs        = where_done,
-                    episode_lengths = episode_lengths,
-                    terminal        = np.ones(done_count).astype(bool),
-                    ending_values   = np.zeros(done_count),
-                    ending_rewards  = np.zeros(done_count),
-                    status_dict     = self.status_dict)
+                #
+                # Every agent has at least one done environment.
+                #
+                for agent_id in done:
+                    policy_id = self.policy_mapping_fn(agent_id)
+
+                    self.policies[policy_id].end_episodes(
+                        env_idxs        = where_done,
+                        episode_lengths = episode_lengths,
+                        terminal        = np.ones(done_count).astype(bool),
+                        ending_values   = np.zeros(done_count),
+                        ending_rewards  = np.zeros(done_count),
+                        status_dict     = self.status_dict)
 
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
@@ -1025,7 +1227,11 @@ class PPO(object):
                     ep_score[where_done].max())
 
                 if self.using_icm:
-                    total_intr_rewards[where_done] += intr_reward[where_done]
+                    # FIXME This will change when we report status on individual
+                    # policies.
+                    for agent_id in intr_reward:
+                        total_intr_rewards[where_done] += \
+                            intr_reward[agent_id][where_done]
 
                 total_ext_rewards[where_done] += ep_score[where_done]
                 total_rewards                 += ep_rewards[where_done].sum()
@@ -1058,23 +1264,18 @@ class PPO(object):
                     where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
-                where_maxed = np.concatenate((where_maxed, where_non_terminal))#FIXME
+                where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                if self.is_multi_agent:
-                    c_obs = torch.tensor(global_obs[where_maxed],
-                        dtype=torch.float).to(self.device)
-                else:
-                    c_obs = torch.tensor(obs[where_maxed],
-                        dtype=torch.float).to(self.device)
+                critic_obs = torch.tensor(global_obs[where_maxed],
+                    dtype=torch.float).to(self.device)
 
-                #FIXME
-                nxt_value = self.policies[agent_id].critic(c_obs)
+                nxt_value = self.get_policy_values(critic_obs)
 
                 if self.normalize_values:
                     nxt_value = self.get_denormalized_values(next_value)
 
-                nxt_reward = nxt_value.detach().cpu().numpy()
+                nxt_reward = self.get_detached_dict(nxt_value)
 
                 #
                 # Tricky business:
@@ -1102,53 +1303,36 @@ class PPO(object):
                 # and the one we get. Adding that to the critic's
                 # output can act as an extra surprise bonus.
                 #
-                if self.using_icm:
-                    if self.can_clone_env:
-                        intr_reward = \
-                            self.policies[agent_id].get_cloned_intrinsic_reward(
-                                obs           = obs,
-                                obs_augment   = self.obs_augment,
-                                nv_batch_size = env_batch_size)
-
-                        #FIXME: cleanup
-                        #if self.obs_augment:
-                        #    _, clone_action, _ = self.policy.get_action(obs[0:1])
-                        #else:
-                        #    _, clone_action, _ = self.policy.get_action(obs)
-
-                        #clone_prev_obs = obs.copy()
-                        #cloned_env = deepcopy(self.env)
-                        #clone_obs, _, _, clone_info = cloned_env.step(clone_action)
-                        #del cloned_env
-
-                        #if self.obs_augment:
-                        #    action_shape = (env_batch_size,) + clone_action.shape[1:]
-                        #    clone_action = np.tile(clone_action.flatten(), env_batch_size)
-                        #    clone_action = clone_action.reshape(action_shape)
-
-                        #intr_reward = self.policy.get_intrinsic_reward(
-                        #    clone_prev_obs,
-                        #    clone_obs,
-                        #    clone_action)
-
-                    ism         = self.status_dict["intrinsic score avg"]
-                    surprise    = intr_reward[where_maxed] - ism
-                    nxt_reward += surprise
-
                 maxed_count = where_maxed.size
 
-                self.policies[agent_id].end_episodes(
-                    env_idxs        = where_maxed,
-                    episode_lengths = episode_lengths,
-                    terminal        = np.zeros(maxed_count).astype(bool),
-                    ending_values   = nxt_value,
-                    ending_rewards  = nxt_reward,
-                    status_dict     = self.status_dict)
+                for agent_id in nxt_reward:
+                    policy_id = self.policy_mapping_fn(agent_id)
+
+                    if self.using_icm:
+                        if self.can_clone_env:
+                            intr_reward = \
+                                self.policies[policy_id].get_cloned_intrinsic_reward(
+                                    obs           = obs[policy_id],
+                                    obs_augment   = self.obs_augment,
+                                    nv_batch_size = env_batch_size)#FIXME: this can come from the obs
+
+                    ism = self.status_dict["intrinsic score avg"]
+                    surprise = intr_reward[agent_id][where_maxed] - ism
+                    nxt_reward[agent_id] += surprise
+                    
+                    self.policies[policy_id].end_episodes(
+                        env_idxs        = where_maxed,
+                        episode_lengths = episode_lengths,
+                        terminal        = np.zeros(maxed_count).astype(bool),
+                        ending_values   = nxt_value[agent_id],
+                        ending_rewards  = nxt_reward[agent_id],
+                        status_dict     = self.status_dict)
 
                 if total_rollout_ts >= self.ts_per_rollout:
 
                     if self.using_icm:
-                        total_intr_rewards += intr_reward
+                        for agent_id in intr_reward:
+                            total_intr_rewards += intr_reward[agent_id]
 
                     #
                     # ts_before_ep are the timesteps before the current

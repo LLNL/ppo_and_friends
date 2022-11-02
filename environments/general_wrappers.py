@@ -47,6 +47,7 @@ class IdentityWrapper(ABC):
         self.observation_space        = env.observation_space
         self.critic_observation_space = env.critic_observation_space
         self.action_space             = env.action_space
+        self.null_actions             = env.null_actions
 
         self.agent_ids = {agent_id for agent_id in self.action_space.keys()}
 
@@ -363,8 +364,9 @@ class PPOEnvironmentWrapper(ABC):
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
-        self.env      = env
-        self.all_done = False
+        self.env          = env
+        self.all_done     = False
+        self.null_actions = {}
 
         #FIXME: these will need to be converted to dictionaries if they're not alread.
         # we also need obs spaces for actors and critics.
@@ -527,7 +529,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
     def step(self, actions):
         """
         """
-        obs, reward, done, info = /
+        obs, reward, done, info = \
             self._wrap_gym_step(*self.env.step(
                 self._unwrap_action(actions)))
 
@@ -564,6 +566,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         support this second idea.
     """
 
+    #FIXME: add some of the multi-agent options (add ids, etc.)
     def __init__(self,
                  env_generator,
                  num_envs = 1,
@@ -642,10 +645,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             obs, global_obs = self.env.reset()
 
-        #FIXME integrate soft_reset into this class.
-        self.obs_cache = obs.copy()
-        self.need_hard_reset = False
-
         return obs, global_obs, reward, done, info
 
     #FIXME: need to integrate this with MAPPO somehow. Each environment instance
@@ -671,14 +670,39 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        batch_obs        = np.array([None] * self.num_envs)
-        batch_global_obs = np.array([None] * self.num_envs)
-        batch_rewards    = np.array([None] * self.num_envs)
-        batch_dones      = np.array([None] * self.num_envs)
-        batch_infos      = np.array([None] * self.num_envs)
+        batch_obs        = {}
+        batch_global_obs = {}
+        batch_rewards    = {}
+        batch_dones      = {}
+        batch_infos      = {}
 
+        obs_shape = (self.num_envs,) + self.observation_space.shape
+        global_obs_shape = \
+            (self.num_envs,) + self.global_observation_space.shape
+
+        #
+        # Each agent keeps track of its own batches.
+        #
+        for agent_id in self.agent_ids:
+            batch_obs[agent_id]        = np.zeros(obs_shape)
+            batch_global_obs[agent_id] = np.zeros(global_obs_shape)
+            batch_rewards[agent_id] = np.zeros((self.num_envs, 1))
+            batch_dones[agent_id]   = np.zeros((self.num_envs, 1)).astype(bool)
+            batch_infos[agent_id]   = np.zeros([None] * self.num_envs)
+
+        env_actions = np.array([{}] * self.num_envs)
+        for agent_id in actions:
+            for b_idx in range(self.num_envs):
+                env_actions[b_idx][agent_id] = actions[agent_id][b_idx]
+
+        # FIXME: need to handle when not all agents are acting.
+        # we also need to handle when an agent dies, but the sim is still going.
+        # will this be handled in the ppo env wrapper? Probably the best bet...
+        # maybe it's also best to handle non-acting agents in that same wrapper.
+        # also, we should always death mask. Why would we ever want to not?
         for env_idx in range(self.num_envs):
-            act = actions[env_idx]
+            #act = actions[env_idx]
+            act = env_actions[env_idx]
 
             obs, global_obs, reward, done, info = self.envs[env_idx].step(act)
 
@@ -689,12 +713,14 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
                 obs, global_obs = self.envs[env_idx].reset()
 
-            batch_obs[env_idx]        = obs
-            batch_global_obs[env_idx] = global_obs
-            batch_rewards[env_idx]    = reward
-            batch_dones[env_idx]      = done
-            batch_infos[env_idx]      = info
+            for agent_id in obs:
+                batch_obs[agent_id][env_idx]        = obs[agent_id]
+                batch_global_obs[agent_id][env_idx] = global_obs[agent_id]
+                batch_rewards[agent_id][env_idx]    = reward[agent_id]
+                batch_dones[agent_id][env_idx]      = done[agent_id]
+                batch_infos[agent_id][env_idx]      = info[agent_id]
 
+        #FIXME: integrate soft resets into this class
         self.obs_cache = batch_obs.copy()
         self.need_hard_reset = False
 
@@ -730,13 +756,35 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Returns:
                 The resulting observation.
         """
-        batch_obs        = np.array([None] * self.num_envs)
-        batch_global_obs = np.array([None] * self.num_envs)
+        #batch_obs        = np.array([None] * self.num_envs)
+        #batch_global_obs = np.array([None] * self.num_envs)
 
+        #for env_idx in range(self.num_envs):
+        #    obs, global_obs           = self.envs[env_idx].reset()
+        #    batch_obs[env_idx]        = obs
+        #    batch_global_obs[env_idx] = obs
+
+        #return batch_obs, batch_global_obs
+
+        batch_obs        = {}
+        batch_global_obs = {}
+
+        obs_shape = (self.num_envs,) + self.observation_space.shape
+        global_obs_shape = \
+            (self.num_envs,) + self.global_observation_space.shape
+
+        #FIXME: need to handle when not all agents are acting.
         for env_idx in range(self.num_envs):
-            obs, global_obs           = self.envs[env_idx].reset()
-            batch_obs[env_idx]        = obs
-            batch_global_obs[env_idx] = obs
+            obs, global_obs = self.envs[env_idx].reset()
+
+            for agent_id in obs:
+                if agent_id not in batch_obs:
+                    batch_obs[agent_id] = np.zeros(obs_shape).astype(np.float32)
+                    batch_global_obs[agent_id] = \
+                        np.zeros(global_obs_shape).astype(np.float32)
+
+                batch_obs[agent_id][env_idx]        = obs
+                batch_global_obs[agent_id][env_idx] = global_obs
 
         return batch_obs, batch_global_obs
 
