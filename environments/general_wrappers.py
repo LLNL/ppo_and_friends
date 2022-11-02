@@ -7,10 +7,11 @@ import numpy as np
 import pickle
 import sys
 import os
+from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import need_action_squeeze
 from collections.abc import Iterable
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Dict
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -18,7 +19,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-class IdentityWrapper():
+class IdentityWrapper(ABC):
     """
         A wrapper that acts exactly like the original environment but also
         has a few extra bells and whistles.
@@ -39,14 +40,23 @@ class IdentityWrapper():
 
         self.env               = env
         self.test_mode         = test_mode
-        self.observation_space = env.observation_space
-        self.action_space      = env.action_space
         self.need_hard_reset   = True
         self.obs_cache         = None
         self.can_augment_obs   = False
 
+        self.observation_space        = env.observation_space
+        self.critic_observation_space = env.critic_observation_space
+        self.action_space             = env.action_space
+
+        self.agent_ids = {agent_id for agent_id in self.action_space.keys()}
+
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
+
+    def get_all_done(self):
+        """
+        """
+        return self.env.get_all_done()
 
     def get_num_agents(self):
         """
@@ -55,28 +65,63 @@ class IdentityWrapper():
             Returns:
                 The number of agents in the environment.
         """
-        get_num_agents = getattr(self.env, "get_num_agents", None)
+        return len(self.observation_space.keys())
 
-        if callable(get_num_agents):
-            return get_num_agents()
-        return 1
-
+    #FIXME: we should probably rename global_state to global_obs
     def get_global_state_space(self):
         """
             Get the global state space. This is specific to multi-agent
-            environments. In single agent environments, we just return
-            the observation space.
+            environments. In single agent environments, it is the same
+            as the observation_space.
 
             Returns:
                 If available, the global state space is returned. Otherwise,
                 the observation space is returned.
         """
-        get_global_state_space = getattr(self.env,
-            "get_global_state_space", None)
+        return self.critic_observation_space
 
-        if callable(get_global_state_space):
-            return get_global_state_space()
-        return self.observation_space
+    def get_global_state(self, obs):
+        """
+            From arXiv:2103.01955v2, cacluate the "Feature-Pruned
+            Agent-Specific Global State". By default, we assume that
+            the environment doesn't offer extra information, which leads
+            us to actually caculating the "Concatenation of Local Observations".
+            We can create sub-classes of this implementation to handle
+            environments that do offer global state info.
+
+            Arguments:
+                obs    The refined agent observations.
+
+            Returns:
+                The global state to be fed to the critic.
+        """
+        #
+        # If our wrapped environment has its own implementation, rely
+        # on that. Otherwise, we'll just concatenate all of the agents
+        # together.
+        #
+        get_global_state = getattr(self.env,
+            "get_global_state", None)
+
+        if callable(get_global_state):
+            return get_global_state(obs)
+
+        #
+        # FIXME: make sure we don't hit memory limits here.
+        #
+        global_state   = {}
+        all_agents_obs = np.array([None] * self.num_agents)
+
+        for idx, agent_id in enumerate(obs):
+            all_agents_obs[idx] = obs[agent_id]
+
+        all_agents_obs = np.concatenate(all_agents_obs).flatten()
+        all_agents_obs = all_agents_obs.astype(np.float32)
+
+        for agent_id in obs:
+            global_state[agent_id] = all_agent_obs
+
+        return global_state
 
     def set_random_seed(self, seed):
         """
@@ -85,8 +130,16 @@ class IdentityWrapper():
             Arguments:
                 seed    The seed value.
         """
-        self.env.seed(seed)
-        self.env.action_space.seed(seed)
+        try:
+            self.env.seed(seed)
+        except:
+            msg  = "WARNING: unable to set the environment seed. "
+            msg += "You may witness stochastic behavior."
+            rank_print(msg)
+            pass
+
+        for key in self.action_space:
+            self.action_space[key].seed(seed)
 
     def step(self, action):
         """
@@ -104,7 +157,9 @@ class IdentityWrapper():
         self.obs_cache = obs.copy()
         self.need_hard_reset = False
 
-        return obs, reward, done, info
+        global_state = self.get_global_state(obs)
+
+        return obs, global_obs, reward, done, info
 
     def reset(self):
         """
@@ -113,8 +168,8 @@ class IdentityWrapper():
             Returns:
                 The resulting observation.
         """
-        obs = self.env.reset()
-        return obs
+        obs, global_state = self.env.reset()
+        return obs, global_state
 
     def _env_soft_reset(self):
         """
@@ -151,7 +206,9 @@ class IdentityWrapper():
         if callable(soft_reset):
             return soft_reset()
 
-        return self.obs_cache
+        global_state = self.get_global_state(self.obs_cache)
+
+        return self.obs_cache, global_state
 
     def soft_reset(self):
         """
@@ -286,6 +343,212 @@ class IdentityWrapper():
         return False
 
 
+#FIXME: move to some other file?
+class PPOEnvironmentWrapper(ABC):
+    """
+        A wrapper that acts exactly like the original environment but also
+        has a few extra bells and whistles.
+    """
+
+    def __init__(self,
+                 env,
+                 test_mode = False,
+                 **kw_args):
+        """
+            Initialize the wrapper.
+
+            Arguments:
+                env           The environment to wrap.
+                status_dict   The dictionary containing training stats.
+        """
+        super(PPOEnvironmentWrapper, self).__init__(**kw_args)
+
+        self.env      = env
+        self.all_done = False
+
+        #FIXME: these will need to be converted to dictionaries if they're not alread.
+        # we also need obs spaces for actors and critics.
+        #self.observation_space = env.observation_space
+        #self.action_space      = env.action_space
+        self.define_multi_agent_spaces()
+
+        if callable(getattr(self.env, "augment_observation", None)):
+            self.can_augment_obs = True
+
+    @abstractmethod
+    def define_multi_agent_spaces(self):
+        """
+        """
+        return
+
+    def get_all_done(self):
+        """
+        """
+        return self.all_done
+
+    @abstractmethod
+    def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
+        return
+
+    @abstractmethod
+    def reset(self):
+        """
+            Reset the environment.
+
+            Returns:
+                The resulting observation.
+        """
+        return
+
+    def render(self, **kw_args):
+        """
+            Render the environment.
+        """
+        return self.env.render(**kw_args)
+
+
+# FIXME: will the environment generators need to be wrapped by
+# these multi-agent interfaces now?? We could then pass that
+# generator to the vectorized wrapper. This probably makes
+# the most sense...
+#
+# FIXME: move to gym_wrappers?
+class SingleAgentGymWrapper(PPOEnvironmentWrapper):
+
+    def __init__(self,
+                 env,
+                 test_mode = False,
+                 **kw_args):
+        """
+        """
+        self.agent_ids = {"agent0"}
+
+        super(SingleAgentGymWrapper, self).__init__(
+            env,
+            test_mode,
+            **kw_args)
+        #
+        # Environments are very inconsistent! Some of them require their
+        # actions to be squeezed before they can be sent to the env.
+        #
+        self.action_squeeze = need_action_squeeze(self.env)
+
+    def define_multi_agent_spaces(self):
+        """
+        """
+        self.action_space             = Dict()
+        self.observation_space        = Dict()
+        self.critic_observation_space = Dict()
+
+        for a_id in self.agent_ids:
+            self.action_space[a_id]             = self.env.action_space
+            self.observation_space[a_id]        = self.env.observation_space
+            self.critic_observation_space[a_id] = self.env.observation_space
+
+    def get_agent_id(self):
+        """
+        """
+        if len(self.agent_ids) != 1:
+            msg  = "ERROR: SingleAgentGymWrapper expects a single agnet, "
+            msg += "but there are {}".format(len(self.agent_ids))
+            rank_print(msg)
+            comm.Abort()
+
+        return self.agent_ids[0]
+
+    def _unwrap_action(self,
+                       action):
+        """
+        """
+        agent_id   = self.get_agent_id()
+        env_action = action[agent_id]
+
+        if self.action_squeeze:
+            env_action = env_action.squeeze()
+
+        return env_action
+
+    def _wrap_gym_step(self,
+                       obs,
+                       reward,
+                       done,
+                       info):
+        """
+        """
+        agent_id = self.get_agent_id()
+
+        #
+        # HACK: some environments are buggy and don't follow their
+        # own rules!
+        #
+        obs = obs.reshape(self.observation_space.shape)
+
+        if type(reward) == np.ndarray:
+            reward = reward[0]
+
+        reward = np.float32(reward)
+
+        if done:
+            self.all_done = True
+
+        obs      = {agent_id : obs}
+        reward   = {agent_id : reward}
+        done     = {agent_id : done}
+        info     = {agent_id : info}
+
+        return obs, reward, done, info
+
+    def _wrap_gym_reset(self,
+                        obs):
+        """
+        """
+        agent_id = self.get_agent_id()
+        self.all_done = False
+
+        #
+        # HACK: some environments are buggy and don't follow their
+        # own rules!
+        #
+        obs = obs.reshape(self.observation_space.shape)
+        obs = {agent_id : obs}
+
+        return obs
+
+    def step(self, actions):
+        """
+        """
+        obs, reward, done, info = /
+            self._wrap_gym_step(*self.env.step(
+                self._unwrap_action(actions)))
+
+        self.obs_cache = obs.copy()
+        self.need_hard_reset = False
+
+        return obs, reward, done, info
+
+    def reset(self):
+        """
+        """
+        obs = self._wrap_gym_reset(*self.env.reset())
+        return obs
+
+    def seed(self, seed):
+        """
+        """
+        self.env.seed(seed)
+
+
+#FIXME need to handle dicts
 class VectorizedEnv(IdentityWrapper, Iterable):
     """
         Wrapper for "vectorizing" environments. As far as I can tell, this
@@ -316,12 +579,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         super(VectorizedEnv, self).__init__(
             env_generator(),
             **kw_args)
-
-        #
-        # Environments are very inconsistent! Some of them require their
-        # actions to be squeezed before they can be sent to the env.
-        #
-        self.action_squeeze = need_action_squeeze(self.env)
 
         self.num_envs = num_envs
         self.envs     = np.array([None] * self.num_envs, dtype=object)
@@ -377,28 +634,19 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        if self.action_squeeze:
-            env_action = action.squeeze()
-        else:
-            env_action = action
+        obs, global_obs, reward, done, info = self.env.step(action)
 
-        obs, reward, done, info = self.env.step(env_action)
+        if self.env.get_all_done():
+            for agent_id in info:
+                info[agent_id]["terminal observation"] = obs[agent_id].copy()
 
-        #
-        # HACK: some environments are buggy and don't follow their
-        # own rules!
-        #
-        obs = obs.reshape(self.observation_space.shape)
+            obs, global_obs = self.env.reset()
 
-        if type(reward) == np.ndarray:
-            reward = reward[0]
+        #FIXME integrate soft_reset into this class.
+        self.obs_cache = obs.copy()
+        self.need_hard_reset = False
 
-        if done:
-            info["terminal observation"] = obs.copy()
-            obs = self.env.reset()
-            obs = obs.reshape(self.observation_space.shape)
-
-        return obs, reward, done, info
+        return obs, global_obs, reward, done, info
 
     #FIXME: need to integrate this with MAPPO somehow. Each environment instance
     # will have the same agents.
@@ -423,43 +671,35 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        obs_shape     = (self.num_envs,) + self.observation_space.shape
-        batch_obs     = np.zeros(obs_shape)
-        batch_rewards = np.zeros((self.num_envs, 1))
-        batch_dones   = np.zeros((self.num_envs, 1)).astype(bool)
-        batch_infos   = np.array([None] * self.num_envs,
-            dtype=object)
+        batch_obs        = np.array([None] * self.num_envs)
+        batch_global_obs = np.array([None] * self.num_envs)
+        batch_rewards    = np.array([None] * self.num_envs)
+        batch_dones      = np.array([None] * self.num_envs)
+        batch_infos      = np.array([None] * self.num_envs)
 
         for env_idx in range(self.num_envs):
             act = actions[env_idx]
 
-            if self.action_squeeze:
-                act = act.squeeze()
+            obs, global_obs, reward, done, info = self.envs[env_idx].step(act)
 
-            obs, reward, done, info = self.envs[env_idx].step(act)
+            if self.envs[env_idx].get_all_done():
+                for agent_id in info:
+                    info[agent_id]["terminal observation"] = \
+                        obs[agent_id].copy()
 
-            #
-            # HACK: some environments are buggy and don't follow their
-            # own rules!
-            #
-            obs = obs.reshape(self.observation_space.shape)
+                obs, global_obs = self.envs[env_idx].reset()
 
-            if type(reward) == np.ndarray:
-                reward = reward[0]
-
-            if done:
-                info["terminal observation"] = obs.copy()
-                obs = self.envs[env_idx].reset()
-                obs = obs.reshape(self.observation_space.shape)
-
-            batch_obs[env_idx]     = obs
-            batch_rewards[env_idx] = reward
-            batch_dones[env_idx]   = done
-            batch_infos[env_idx]   = info
+            batch_obs[env_idx]        = obs
+            batch_global_obs[env_idx] = global_obs
+            batch_rewards[env_idx]    = reward
+            batch_dones[env_idx]      = done
+            batch_infos[env_idx]      = info
 
         self.obs_cache = batch_obs.copy()
+        self.need_hard_reset = False
 
-        return batch_obs, batch_rewards, batch_dones, batch_infos
+        return (batch_obs, batch_global_obs,
+            batch_rewards, batch_dones, batch_infos)
 
     def reset(self):
         """
@@ -472,6 +712,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             return self.single_reset()
         return self.batch_reset()
 
+    #FIXME: integrate soft resets
     def single_reset(self):
         """
             Reset the environment.
@@ -479,8 +720,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Returns:
                 The resulting observation.
         """
-        obs = self.env.reset()
-        return obs
+        obs, global_obs = self.env.reset()
+        return obs, global_obs
 
     def batch_reset(self):
         """
@@ -489,15 +730,15 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Returns:
                 The resulting observation.
         """
-        obs_shape = (self.num_envs,) + self.observation_space.shape
-        batch_obs = np.zeros(obs_shape)
+        batch_obs        = np.array([None] * self.num_envs)
+        batch_global_obs = np.array([None] * self.num_envs)
 
         for env_idx in range(self.num_envs):
-            obs = self.envs[env_idx].reset()
-            obs = obs.reshape(self.observation_space.shape)
-            batch_obs[env_idx] = obs
+            obs, global_obs           = self.envs[env_idx].reset()
+            batch_obs[env_idx]        = obs
+            batch_global_obs[env_idx] = obs
 
-        return batch_obs
+        return batch_obs, batch_global_obs
 
     def __len__(self):
         """
@@ -867,10 +1108,10 @@ class MultiAgentWrapper(IdentityWrapper):
         # copies, we can use broadcast_to to create references to the same
         # memory location.
         #
-        global_obs = obs.flatten()
-        obs_size   = global_obs.size
-        global_obs = np.broadcast_to(global_obs, (self.num_agents, obs_size))
-        return global_obs
+        global_state = obs.flatten()
+        obs_size     = global_state.size
+        global_state = np.broadcast_to(global_state, (self.num_agents, obs_size))
+        return global_state
 
     def _refine_obs(self, obs):
         """
@@ -973,13 +1214,13 @@ class MultiAgentWrapper(IdentityWrapper):
 
         if all_done:
             terminal_obs = obs.copy()
-            obs, global_obs = self.reset()
+            obs, global_state = self.reset()
 
             if info_is_global:
-                info["global state"] = global_obs
+                info["global state"] = global_state
             else:
                 for i in range(info.size):
-                    info[i]["global state"] = global_obs
+                    info[i]["global state"] = global_state
 
         else:
             global_state = self.get_feature_pruned_global_state(obs)

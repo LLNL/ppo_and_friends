@@ -15,6 +15,7 @@ from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
+from ppo_and_friends.environments.general_wrappers import SingleAgentGymWrapper
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
@@ -173,7 +174,7 @@ class EnvironmentLauncher(ABC):
 class CartPoleLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('CartPole-v0')
+        env_generator = lambda : SingleAgentGymWrapper(gym.make('CartPole-v0'))
 
         actor_kw_args = {}
         actor_kw_args["activation"] = nn.LeakyReLU()

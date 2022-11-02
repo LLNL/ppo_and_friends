@@ -392,16 +392,6 @@ class PPO(object):
         self.policy_mapping_fn   = policy_mapping_fn
 
         #
-        # In multi-agent settings, the critic receives a "global state". In
-        # single-agent settings, the critic receives the same observation
-        # as the actor.
-        #
-        if is_multi_agent:
-            self.critic_obs_shape = self.env.get_global_state_space().shape
-        else:
-            self.critic_obs_shape = self.actor_obs_shape
-
-        #
         # Create a dictionary to track the status of training.
         #
         max_int = np.iinfo(np.int32).max
@@ -425,35 +415,8 @@ class PPO(object):
         self.status_dict["reward range"]         = (max_int, -max_int)
         self.status_dict["obs range"]            = (max_int, -max_int)
 
-        #
-        # Value normalization is discussed in multiple papers, so I'm not
-        # going to reference one in particular. In general, the idea is
-        # to normalize the targets of the critic network using a running
-        # average. The output of the critic then needs to be de-normalized
-        # for calcultaing advantages.
-        #
-        if normalize_values:
-            self.value_normalizer = RunningStatNormalizer(
-                name      = "value_normalizer",
-                device    = self.device,
-                test_mode = test_mode)
-
-            self.test_mode_dependencies.append(self.value_normalizer)
-            self.pickle_safe_test_mode_dependencies.append(
-                self.value_normalizer)
-
         if save_best_only:
             self.status_dict["last save"] = -1
-
-        # FIXME: we'll need different networks for each class of agents.
-        # This is where we can create Policy classes for each policy type.
-        # We'll also have a policy mapping function taht maps agent ids
-        # to their respective policies.
-        #
-        if is_multi_agent:
-            critic_obs_space = self.env.get_global_state_space()
-        else:
-            critic_obs_space = env.observation_space
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -468,6 +431,28 @@ class PPO(object):
                     action_space              = settings[3],
                     **settings[4])
 
+        #
+        # Value normalization is discussed in multiple papers, so I'm not
+        # going to reference one in particular. In general, the idea is
+        # to normalize the targets of the critic network using a running
+        # average. The output of the critic then needs to be de-normalized
+        # for calcultaing advantages. We track separate normalizers for
+        # each policy.
+        #
+        if normalize_values:
+            self.value_normalizers = {}
+
+            for policy_id in policy_settings:
+                self.value_normalizers[policy_id] = RunningStatNormalizer(
+                    name      = "{}-value_normalizer".format(policy_id),
+                    device    = self.device,
+                    test_mode = test_mode)
+
+            self.test_mode_dependencies.append(self.value_normalizers)
+            self.pickle_safe_test_mode_dependencies.append(
+                self.value_normalizers)
+
+        #FIXME: cleanup
         #self.policy = AgentPolicy(
         #    action_space             = action_space,
         #    actor_observation_space  = env.observation_space,
@@ -487,8 +472,8 @@ class PPO(object):
         #    dynamic_bs_clip          = dynamic_bs_clip,
         #    bootstrap_clip           = bootstrap_clip)
 
-        for key in self.policies:
-            self.policies[key].to(self.device)
+        for policy_id in self.policies:
+            self.policies[policy_id].to(self.device)
 
         self.test_mode_dependencies.append(self.policies)
         self.pickle_safe_test_mode_dependencies.append(self.policies)
@@ -544,17 +529,169 @@ class PPO(object):
         else:
             try:
                 obs = self.env.reset()
-                #FIXME: 
-                agent_id = self.policy_mapping_fn()
-                _, action, _ = self.policies[agent_id].get_action(obs)
+                _, actions, _ = self.get_policy_actions(obs)
                 cloned_env   = deepcopy(self.env)
-                cloned_env.step(action)
+                cloned_env.step(actions)
                 self.can_clone_env = True
             except:
                 self.can_clone_env = False
 
         if self.using_icm:
             rank_print("Can clone environment: {}".format(self.can_clone_env))
+
+    def get_policy_actions(self, obs):
+        """
+        """
+        batch_size  = obs.size
+        raw_actions = np.array([{}] * batch_size) 
+        actions     = np.array([{}] * batch_size)
+        log_probs   = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size):
+            for agent_id in obs[b_idx]:
+                policy_id = self.policy_mapping_fn[agent_id]
+
+                raw_action, action, log_prob = \
+                    self.policies[policy_id].get_action(obs[b_idx][agent_id])
+
+                raw_actions[b_idx][agent_id] = raw_action
+                actions[b_idx][agent_id]     = action
+                log_probs[b_idx][agent_id]   = log_prob
+
+        return raw_actions, actions, log_probs
+
+    def get_policy_actions_from_aug_obs(self, obs):
+        """
+        """
+        batch_size  = obs.size
+        raw_actions = np.array([{}] * batch_size) 
+        actions     = np.array([{}] * batch_size)
+        log_probs   = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size):
+            for agent_id in obs[b_idx]:
+                policy_id = self.policy_mapping_fn[agent_id]
+
+                obs_slice = obs[b_idx][agent_id][0:1]
+                raw_action, action, log_prob = \
+                    self.policies[policy_id].get_action(obs_slice)
+
+                raw_actions[b_idx][agent_id] = raw_action
+                actions[b_idx][agent_id]     = action
+                log_probs[b_idx][agent_id]   = log_prob
+
+        return raw_actions, actions, log_probs
+
+    def get_policy_values(self, obs):
+        """
+        """
+        batch_size = obs.size
+        values     = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size):
+            for agent_id in obs[b_idx]:
+                policy_id = self.policy_mapping_fn[agent_id]
+                value = self.policies[policy_id].critic(obs[b_idx][agent_id])
+                values[b_idx][agent_id] = value
+
+        return value
+
+    def get_natural_reward(self, info):
+        """
+        """
+        have_nat_reward = False
+        batch_size      = info.size
+        natural_reward  = np.array([{}] * batch_size)
+
+        if "natural reward" in next(iter(info[0])):
+            have_nat_reward = True
+
+        if have_nat_reward:
+            for b_idx in range(batch_size):
+                for agent in info[b_idx]:
+                    natural_reward[b_idx][agent] = \
+                        info[b_idx][agent]["natural reward"]
+
+        return have_nat_reward, natural_reward
+
+    #FIXME: should we perform these operations in-place instead?
+    def get_detatched_values(self, values):
+        """
+        """
+        batch_size = values.size
+        detached   = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size):
+            for agent_id in values[b_idx]:
+                detached[b_idx][agent_id] = \
+                    values[b_idx][agent_id].detach().cpu().numpy()
+
+        return detached
+
+    def get_denormalized_values(self, values):
+        """
+        """
+        batch_size    = values.size
+        denorm_values = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size):
+            for agent_id in values[b_idx]:
+                policy_id = self.policy_mapping_fn[agent_id]
+                value     = values[b_idx][agent_id]
+                value     = self.value_normalizers[policy_id].denormalize(value)
+                denorm_values[b_idx][agent_id] = value
+
+        return denorm_values
+
+    def get_normalized_values(self, values):
+        """
+        """
+        batch_size  = values.size
+        norm_values = np.array([{}] * batch_size)
+
+        for b_idx in range(batch_size);
+            for agent_id in values[b_idx]:
+                policy_id = self.policy_mapping_fn[agent_id]
+                value     = values[b_idx][agent_id]
+                value     = self.value_normalizers[policy_id].normalize(value)
+                norm_values[b_idx][agent_id] = value
+
+        return norm_values
+
+    def establish_non_terminal_dones(self,
+                                     env_batch_size,
+                                     info,
+                                     done):
+        """
+        """
+        non_terminal_dones = np.array([{}] * env_batch_size)
+        have_non_terminal_done = False
+
+        for b_idx in range(env_batch_size):
+            for agent_id in info:
+                if "non-terminal done" in info[b_idx][agent_id]:
+                    ntd = info[b_idx][agent_id]["non-terminal done"]
+                    non_terminal_dones[b_idx][agent_id] = ntd
+                    have_non_terminal_dones = ntd or have_non_terminal_dones
+
+                    if ntd:
+                        done[b_idx][agent_id] = False
+
+        return have_non_terminal_done, non_teriminal_dones
+
+
+    def apply_reward_weight(self,
+                            rewards,
+                            weight):
+        """
+        """
+        batch_size = rewards.size
+
+        for b_idx in range(batch_size):
+            for agent_id in rewards[b_idx]:
+                rewards[b_idx][agent_id] *= weight
+
+        return rewards
 
     def print_status(self):
         """
@@ -681,15 +818,10 @@ class PPO(object):
         # Maybe we keep track of the max number of agents that could
         # step at one time...
         #
-        if self.is_multi_agent:
-            obs, global_obs = initial_reset_func()
-            env_batch_size  = obs.shape[0]
-        else:
-            obs            = initial_reset_func()
-            env_batch_size = obs.shape[0]
-            empty_shape    = (env_batch_size, 0)
-            global_obs     = np.empty(empty_shape).astype(np.float32)
+        obs, global_obs    = initial_reset_func()
+        env_batch_size     = self.env.get_batch_size()
 
+        #FIXME: refactor?
         ep_rewards         = np.zeros((env_batch_size, 1))
         episode_lengths    = np.zeros(env_batch_size).astype(np.int32)
         ep_score           = np.zeros((env_batch_size, 1))
@@ -700,8 +832,6 @@ class PPO(object):
         for key in self.policies:
             self.policies[key].initialize_episodes(
                 env_batch_size, self.status_dict)
-
-        agent_id = self.policy_mapping_fn()
 
         #
         # TODO: If we're using multiple environments, we can end up going over
@@ -726,34 +856,30 @@ class PPO(object):
 
             if self.obs_augment:
                 raw_action, action, log_prob = \
-                    self.policies[agent_id].get_action(obs[0:1])
+                    self.get_policy_actions_from_aug_obs(obs)
             else:
                 raw_action, action, log_prob = \
-                    self.policies[agent_id].get_action(obs)
+                    self.get_policy_actions(obs)
 
-            if self.is_multi_agent:
-                c_obs = torch.tensor(global_obs,
-                    dtype=torch.float).to(self.device)
-            else:
-                c_obs = torch.tensor(obs,
-                    dtype=torch.float).to(self.device)
+            c_obs = torch.tensor(global_obs,
+                dtype=torch.float).to(self.device)
 
-            # FIXME: how do we want to pass in these observations in
-            # the MA setting?
-            # We will have a dictionary mapping agent ids to their observations.
-            # Each agent will map to a policy.
-            value = self.policies[agent_id].critic(c_obs)
+            value = self.get_policy_values(c_obs)
 
             if self.normalize_values:
-                value = self.value_normalizer.denormalize(value)
+                value = self.get_denormalized_values(value)
 
+            #
+            # Note that we have global observations as well as local.
+            # When we're learning from a multi-agent environment, we
+            # feed a "global state" to the critic. This is called
+            # Centralized Training Decentralized Execution (CTDE).
+            # arXiv:2006.07869v4
+            #
             prev_obs        = obs.copy()
             prev_global_obs = global_obs.copy()
 
-            #FIXME: these will be dictionaries
-            obs, ext_reward, done, info = self.env.step(action)
-
-            ext_reward = np.float32(ext_reward)
+            obs, global_obs, ext_reward, done, info = self.env.step(action)
 
             #
             # Non-terminal dones are interesting cases. We need to
@@ -762,25 +888,23 @@ class PPO(object):
             # these non-terminal done states as needing to end without
             # entering a terminal state.
             #
-            non_terminal_dones = np.zeros(env_batch_size).astype(bool)
+            have_non_terminal_dones, non_terminal_dones = \
+                self.establish_non_terminal_dones(
+                    env_batch_size,
+                    info,
+                    done)
 
-            for b_idx in range(env_batch_size):
-                if "non-terminal done" in info[b_idx]:
-                    non_terminal_dones[b_idx] = \
-                        info[b_idx]["non-terminal done"]
+            #FIXME: cleanup
+            #non_terminal_dones = np.zeros(env_batch_size).astype(bool)
 
-            have_non_terminal_dones  = non_terminal_dones.any()
-            where_non_terminal       = np.where(non_terminal_dones)[0]
-            done[where_non_terminal] = False
+            #for b_idx in range(env_batch_size):
+            #    if "non-terminal done" in info[b_idx]:
+            #        non_terminal_dones[b_idx] = \
+            #            info[b_idx]["non-terminal done"]
 
-            if self.is_multi_agent:
-                #
-                # When we're learning from a multi-agent environment, we
-                # feed a "global state" to the critic. This is called
-                # Centralized Training Decentralized Execution (CTDE).
-                # arXiv:2006.07869v4
-                #
-                global_obs = info[0]["global state"].copy()
+            #have_non_terminal_dones  = non_terminal_dones.any()
+            #where_non_terminal       = np.where(non_terminal_dones)[0]
+            #done[where_non_terminal] = False
 
             #
             # In the observational augment case, our action is a single action,
@@ -788,6 +912,7 @@ class PPO(object):
             # actions into batches as well.
             #
             if self.obs_augment:
+                #FIXME: refactor this
                 batch_size   = obs.shape[0]
 
                 action_shape = (batch_size,) + action.shape[1:]
@@ -801,22 +926,28 @@ class PPO(object):
                 log_prob     = np.tile(log_prob.flatten(), batch_size)
                 log_prob     = log_prob.reshape(lp_shape)
 
-            value = value.detach().cpu().numpy()
+            value = self.get_detached_values(value)
 
             #
             # If any of our wrappers are altering the rewards, there should
             # be an unaltered version in the info.
             #
-            if "natural reward" in info[0]:
-                natural_reward = np.zeros((env_batch_size, 1))
+            have_nat_reward, natural_reward = self.get_natural_reward(info)
 
-                for b_idx in range(env_batch_size):
-                    natural_reward[b_idx] = \
-                        info[b_idx]["natural reward"].copy()
-            else:
+            if not have_nat_reward:
                 natural_reward = ext_reward.copy()
 
-            ext_reward *= self.ext_reward_weight
+            #FIXME:
+            #if "natural reward" in info[0]:
+            #    natural_reward = np.zeros((env_batch_size, 1))
+
+            #    for b_idx in range(env_batch_size):
+            #        natural_reward[b_idx] = \
+            #            info[b_idx]["natural reward"].copy()
+            #else:
+            #    natural_reward = ext_reward.copy()
+
+            self.apply_reward_weight(ext_reward, self.ext_reward_weight)
 
             #
             # If we're using the ICM, we need to do some extra work here.
@@ -927,7 +1058,7 @@ class PPO(object):
                     where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
 
                 where_maxed = np.setdiff1d(where_maxed, where_done)
-                where_maxed = np.concatenate((where_maxed, where_non_terminal))
+                where_maxed = np.concatenate((where_maxed, where_non_terminal))#FIXME
                 where_maxed = np.unique(where_maxed)
 
                 if self.is_multi_agent:
@@ -941,7 +1072,7 @@ class PPO(object):
                 nxt_value = self.policies[agent_id].critic(c_obs)
 
                 if self.normalize_values:
-                    nxt_value = self.value_normalizer.denormalize(nxt_value)
+                    nxt_value = self.get_denormalized_values(next_value)
 
                 nxt_reward = nxt_value.detach().cpu().numpy()
 
@@ -1285,8 +1416,8 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for key in data_loaders:
-            for batch_data in data_loaders[key]:
+        for policy_id in data_loaders:
+            for batch_data in data_loaders[policy_id]:
                 critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                     rewards_tg, actor_hidden, critic_hidden, \
                     actor_cell, critic_cell, batch_idxs = batch_data
@@ -1294,7 +1425,8 @@ class PPO(object):
                 torch.cuda.empty_cache()
 
                 if self.normalize_values:
-                    rewards_tg = self.value_normalizer.normalize(rewards_tg)
+                    rewards_tg = \
+                        self.value_normalizers[policy_id].normalize(rewards_tg)
 
                 if obs.shape[0] == 1:
                     continue
@@ -1303,14 +1435,14 @@ class PPO(object):
                 # In the case of lstm networks, we need to initialze our hidden
                 # states to those that developed during the rollout.
                 #
-                if self.policies[key].using_lstm:
+                if self.policies[policy_id].using_lstm:
                     actor_hidden  = torch.transpose(actor_hidden, 0, 1)
                     actor_cell    = torch.transpose(actor_cell, 0, 1)
                     critic_hidden = torch.transpose(critic_hidden, 0, 1)
                     critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                    self.policies[key].actor.hidden_state  = (actor_hidden, actor_cell)
-                    self.policies[key].critic.hidden_state = (critic_hidden, critic_cell)
+                    self.policies[policy_id].actor.hidden_state  = (actor_hidden, actor_cell)
+                    self.policies[policy_id].critic.hidden_state = (critic_hidden, critic_cell)
 
                 #
                 # arXiv:2005.12729v1 suggests that normalizing advantages
@@ -1326,12 +1458,12 @@ class PPO(object):
 
                     advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-                values, curr_log_probs, entropy = self.policies[key].evaluate(
+                values, curr_log_probs, entropy = self.policies[policy_id].evaluate(
                     critic_obs,
                     obs,
                     raw_actions)
 
-                data_loaders[key].dataset.values[batch_idxs] = values
+                data_loaders[policy_id].dataset.values[batch_idxs] = values
 
                 #
                 # The heart of PPO: arXiv:1707.06347v2
@@ -1367,7 +1499,7 @@ class PPO(object):
                         act_min, act_max))
 
                     #FIXME
-                    std = nn.functional.softplus(self.policies[key].actor.distribution.log_std)
+                    std = nn.functional.softplus(self.policies[policy_id].actor.distribution.log_std)
                     rank_print("actor std: {}".format(std))
 
                     comm.Abort()
@@ -1396,41 +1528,41 @@ class PPO(object):
                 # optimizer and loss. They would also need their own critics.
                 #
                 #FIXME
-                self.policies[key].actor_optim.zero_grad()
-                actor_loss.backward(retain_graph = self.policies[key].using_lstm)
-                mpi_avg_gradients(self.policies[key].actor)
-                nn.utils.clip_grad_norm_(self.policies[key].actor.parameters(),
+                self.policies[policy_id].actor_optim.zero_grad()
+                actor_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+                mpi_avg_gradients(self.policies[policy_id].actor)
+                nn.utils.clip_grad_norm_(self.policies[policy_id].actor.parameters(),
                     self.gradient_clip)
-                self.policies[key].actor_optim.step()
+                self.policies[policy_id].actor_optim.step()
 
-                self.policies[key].critic_optim.zero_grad()
-                critic_loss.backward(retain_graph = self.policies[key].using_lstm)
-                mpi_avg_gradients(self.policies[key].critic)
-                nn.utils.clip_grad_norm_(self.policies[key].critic.parameters(),
+                self.policies[policy_id].critic_optim.zero_grad()
+                critic_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+                mpi_avg_gradients(self.policies[policy_id].critic)
+                nn.utils.clip_grad_norm_(self.policies[policy_id].critic.parameters(),
                     self.gradient_clip)
-                self.policies[key].critic_optim.step()
+                self.policies[policy_id].critic_optim.step()
 
                 #
                 # The idea here is similar to re-computing advantages, but now
                 # we want to update the hidden states before the next epoch.
                 #
-                if self.policies[key].using_lstm:
-                    actor_hidden  = self.policies[key].actor.hidden_state[0].detach().clone()
-                    critic_hidden = self.policies[key].critic.hidden_state[0].detach().clone()
+                if self.policies[policy_id].using_lstm:
+                    actor_hidden  = self.policies[policy_id].actor.hidden_state[0].detach().clone()
+                    critic_hidden = self.policies[policy_id].critic.hidden_state[0].detach().clone()
 
-                    actor_cell    = self.policies[key].actor.hidden_state[1].detach().clone()
-                    critic_cell   = self.policies[key].critic.hidden_state[1].detach().clone()
+                    actor_cell    = self.policies[policy_id].actor.hidden_state[1].detach().clone()
+                    critic_cell   = self.policies[policy_id].critic.hidden_state[1].detach().clone()
 
                     actor_hidden  = torch.transpose(actor_hidden, 0, 1)
                     actor_cell    = torch.transpose(actor_cell, 0, 1)
                     critic_hidden = torch.transpose(critic_hidden, 0, 1)
                     critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                    data_loaders[key].dataset.actor_hidden[batch_idxs]  = actor_hidden
-                    data_loaders[key].dataset.critic_hidden[batch_idxs] = critic_hidden
+                    data_loaders[policy_id].dataset.actor_hidden[batch_idxs]  = actor_hidden
+                    data_loaders[policy_id].dataset.critic_hidden[batch_idxs] = critic_hidden
 
-                    data_loaders[key].dataset.actor_cell[batch_idxs]  = actor_cell
-                    data_loaders[key].dataset.critic_cell[batch_idxs] = critic_cell
+                    data_loaders[policy_id].dataset.actor_cell[batch_idxs]  = actor_cell
+                    data_loaders[policy_id].dataset.critic_cell[batch_idxs] = critic_cell
 
                 comm.barrier()
                 counter += 1
@@ -1459,8 +1591,8 @@ class PPO(object):
         total_icm_loss = 0
         counter = 0
 
-        for key in data_loaders:
-            for batch_data in data_loaders[key]:
+        for policy_id in data_loaders:
+            for batch_data in data_loaders[policy_id]:
 
                 _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
                     batch_data
@@ -1469,17 +1601,17 @@ class PPO(object):
 
                 actions = actions.unsqueeze(1)
 
-                _, inv_loss, f_loss = self.policies[key].icm_model(obs, next_obs, actions)
+                _, inv_loss, f_loss = self.policies[policy_id].icm_model(obs, next_obs, actions)
 
                 icm_loss = (((1.0 - self.icm_beta) * f_loss) +
                     (self.icm_beta * inv_loss))
 
                 total_icm_loss += icm_loss.item()
 
-                self.policies[key].icm_optim.zero_grad()
+                self.policies[policy_id].icm_optim.zero_grad()
                 icm_loss.backward()
-                mpi_avg_gradients(self.policies[key].icm_model)
-                self.policies[key].icm_optim.step()
+                mpi_avg_gradients(self.policies[policy_id].icm_model)
+                self.policies[policy_id].icm_optim.step()
 
                 counter += 1
                 comm.barrier()
@@ -1501,14 +1633,15 @@ class PPO(object):
 
         comm.barrier()
 
-        for key in self.policies:
-            self.policies[key].save(self.state_path)
+        for policy_id in self.policies:
+            self.policies[policy_id].save(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.save_info(self.state_path)
 
         if self.normalize_values:
-            self.value_normalizer.save_info(self.state_path)
+            for policy_id in self.value_normalizers:
+                self.value_normalizers[policy_id].save_info(self.state_path)
 
         file_name  = "state_{}.pickle".format(rank)
         state_file = os.path.join(self.state_path, file_name)
@@ -1523,14 +1656,15 @@ class PPO(object):
             Load all information required for a restart.
         """
 
-        for key in self.policies:
-            self.policies[key].load(self.state_path)
+        for policy_id in self.policies:
+            self.policies[policy_id].load(self.state_path)
 
         if self.save_env_info and self.env != None:
             self.env.load_info(self.state_path)
 
         if self.normalize_values:
-            self.value_normalizer.load_info(self.state_path)
+            for policy_id in self.value_normalizers:
+                self.value_normalizers[policy_id].load_info(self.state_path)
 
         if self.test_mode:
             file_name  = "state_0.pickle"
