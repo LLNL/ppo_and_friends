@@ -111,7 +111,7 @@ class IdentityWrapper(ABC):
         # FIXME: make sure we don't hit memory limits here.
         #
         global_state   = {}
-        all_agents_obs = np.array([None] * self.num_agents)
+        all_agents_obs = np.array([None] * self.get_num_agents())
 
         for idx, agent_id in enumerate(obs):
             all_agents_obs[idx] = obs[agent_id]
@@ -120,7 +120,7 @@ class IdentityWrapper(ABC):
         all_agents_obs = all_agents_obs.astype(np.float32)
 
         for agent_id in obs:
-            global_state[agent_id] = all_agent_obs
+            global_state[agent_id] = all_agents_obs
 
         return global_state
 
@@ -466,7 +466,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
             rank_print(msg)
             comm.Abort()
 
-        return self.agent_ids[0]
+        return tuple(self.agent_ids)[0]
 
     def _unwrap_action(self,
                        action):
@@ -508,7 +508,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         done     = {agent_id : done}
         info     = {agent_id : info}
 
-        return obs, reward, done, info
+        return obs, obs, reward, done, info
 
     def _wrap_gym_reset(self,
                         obs):
@@ -524,25 +524,25 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         obs = obs.reshape(self.observation_space.shape)
         obs = {agent_id : obs}
 
-        return obs
+        return obs, obs
 
     def step(self, actions):
         """
         """
-        obs, reward, done, info = \
+        obs, global_obs, reward, done, info = \
             self._wrap_gym_step(*self.env.step(
                 self._unwrap_action(actions)))
 
         self.obs_cache = obs.copy()
         self.need_hard_reset = False
 
-        return obs, reward, done, info
+        return obs, global_obs, reward, done, info
 
     def reset(self):
         """
         """
-        obs = self._wrap_gym_reset(*self.env.reset())
-        return obs
+        obs, global_obs = self._wrap_gym_reset(self.env.reset())
+        return obs, global_obs
 
     def seed(self, seed):
         """
@@ -676,19 +676,22 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         batch_dones      = {}
         batch_infos      = {}
 
-        obs_shape = (self.num_envs,) + self.observation_space.shape
-        global_obs_shape = \
-            (self.num_envs,) + self.global_observation_space.shape
-
         #
         # Each agent keeps track of its own batches.
         #
         for agent_id in self.agent_ids:
+            obs_shape = (self.num_envs,) + \
+                self.observation_space[agent_id].shape
+
+            global_obs_shape = \
+                (self.num_envs,) + \
+                 self.critic_observation_space[agent_id].shape
+
             batch_obs[agent_id]        = np.zeros(obs_shape)
             batch_global_obs[agent_id] = np.zeros(global_obs_shape)
             batch_rewards[agent_id] = np.zeros((self.num_envs, 1))
             batch_dones[agent_id]   = np.zeros((self.num_envs, 1)).astype(bool)
-            batch_infos[agent_id]   = np.zeros([None] * self.num_envs)
+            batch_infos[agent_id]   = np.array([None] * self.num_envs)
 
         env_actions = np.array([{}] * self.num_envs)
         for agent_id in actions:
@@ -769,22 +772,24 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         batch_obs        = {}
         batch_global_obs = {}
 
-        obs_shape = (self.num_envs,) + self.observation_space.shape
-        global_obs_shape = \
-            (self.num_envs,) + self.global_observation_space.shape
-
         #FIXME: need to handle when not all agents are acting.
         for env_idx in range(self.num_envs):
             obs, global_obs = self.envs[env_idx].reset()
 
             for agent_id in obs:
                 if agent_id not in batch_obs:
+                    obs_shape = (self.num_envs,) + \
+                        self.observation_space[agent_id].shape
+                    global_obs_shape = \
+                        (self.num_envs,) + \
+                         self.critic_observation_space[agent_id].shape
+
                     batch_obs[agent_id] = np.zeros(obs_shape).astype(np.float32)
                     batch_global_obs[agent_id] = \
                         np.zeros(global_obs_shape).astype(np.float32)
 
-                batch_obs[agent_id][env_idx]        = obs
-                batch_global_obs[agent_id][env_idx] = global_obs
+                batch_obs[agent_id][env_idx]        = obs[agent_id]
+                batch_global_obs[agent_id][env_idx] = global_obs[agent_id]
 
         return batch_obs, batch_global_obs
 

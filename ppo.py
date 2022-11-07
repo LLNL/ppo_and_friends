@@ -701,7 +701,7 @@ class PPO(object):
         log_probs   = {}
 
         for agent_id in obs:
-            policy_id = self.policy_mapping_fn[agent_id]
+            policy_id = self.policy_mapping_fn(agent_id)
 
             raw_action, action, log_prob = \
                 self.policies[policy_id].get_action(obs[agent_id])
@@ -720,7 +720,7 @@ class PPO(object):
         log_probs   = {}
 
         for agent_id in obs:
-            policy_id = self.policy_mapping_fn[agent_id]
+            policy_id = self.policy_mapping_fn(agent_id)
 
             obs_slice = obs[agent_id][0:1]
             raw_action, action, log_prob = \
@@ -738,11 +738,11 @@ class PPO(object):
         values = {}
 
         for agent_id in obs:
-            policy_id        = self.policy_mapping_fn[agent_id]
+            policy_id        = self.policy_mapping_fn(agent_id)
             value            = self.policies[policy_id].critic(obs[agent_id])
             values[agent_id] = value
 
-        return value
+        return values
 
     def get_natural_reward(self, info):
         """
@@ -784,7 +784,7 @@ class PPO(object):
         denorm_values = {}
 
         for agent_id in values:
-            policy_id = self.policy_mapping_fn[agent_id]
+            policy_id = self.policy_mapping_fn(agent_id)
             value     = values[agent_id]
             value     = self.value_normalizers[policy_id].denormalize(value)
             denorm_values[agent_id] = value
@@ -797,7 +797,7 @@ class PPO(object):
         norm_values = {}
 
         for agent_id in values:
-            policy_id = self.policy_mapping_fn[agent_id]
+            policy_id = self.policy_mapping_fn(agent_id)
             value     = values[agent_id]
             value     = self.value_normalizers[policy_id].normalize(value)
             norm_values[agent_id] = value
@@ -1090,9 +1090,10 @@ class PPO(object):
             #
             where_non_terminal = \
                 self.establish_non_terminal_dones(
-                    env_batch_size,
                     info,
                     done)
+
+            have_non_terminal_dones = where_non_terminal.size > 0
 
             #FIXME: cleanup
             #non_terminal_dones = np.zeros(env_batch_size).astype(bool)
@@ -1267,15 +1268,18 @@ class PPO(object):
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                critic_obs = torch.tensor(global_obs[where_maxed],
-                    dtype=torch.float).to(self.device)
+                #FIXME: do we need to reduce the batch to only maxed? Shouldn't need
+                # to since we complete replaced critic_obs variable in the past.
+                #critic_obs = torch.tensor(global_obs[where_maxed],
+                #    dtype=torch.float).to(self.device)
+                critic_obs = self.np_dict_to_tensor_dict(global_obs)
 
-                nxt_value = self.get_policy_values(critic_obs)
+                next_value = self.get_policy_values(critic_obs)
 
                 if self.normalize_values:
-                    nxt_value = self.get_denormalized_values(next_value)
+                    next_value = self.get_denormalized_values(next_value)
 
-                nxt_reward = self.get_detached_dict(nxt_value)
+                next_reward = self.get_detached_dict(next_value)
 
                 #
                 # Tricky business:
@@ -1305,27 +1309,27 @@ class PPO(object):
                 #
                 maxed_count = where_maxed.size
 
-                for agent_id in nxt_reward:
+                for agent_id in next_reward:
                     policy_id = self.policy_mapping_fn(agent_id)
 
                     if self.using_icm:
                         if self.can_clone_env:
                             intr_reward = \
                                 self.policies[policy_id].get_cloned_intrinsic_reward(
-                                    obs           = obs[policy_id],
+                                    obs           = obs[agent_id],
                                     obs_augment   = self.obs_augment,
                                     nv_batch_size = env_batch_size)#FIXME: this can come from the obs
 
-                    ism = self.status_dict["intrinsic score avg"]
-                    surprise = intr_reward[agent_id][where_maxed] - ism
-                    nxt_reward[agent_id] += surprise
+                        ism = self.status_dict["intrinsic score avg"]
+                        surprise = intr_reward[agent_id][where_maxed] - ism
+                        next_reward[agent_id] += surprise
                     
                     self.policies[policy_id].end_episodes(
                         env_idxs        = where_maxed,
                         episode_lengths = episode_lengths,
                         terminal        = np.zeros(maxed_count).astype(bool),
-                        ending_values   = nxt_value[agent_id],
-                        ending_rewards  = nxt_reward[agent_id],
+                        ending_values   = next_value[agent_id],
+                        ending_rewards  = next_reward[agent_id],
                         status_dict     = self.status_dict)
 
                 if total_rollout_ts >= self.ts_per_rollout:

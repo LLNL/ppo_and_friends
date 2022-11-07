@@ -203,9 +203,9 @@ class CartPoleLauncher(EnvironmentLauncher):
         #
         policies = { "balancer" : \
             (None,
-             env_generator().observation_space, 
-             env_generator().observation_space,
-             env_generator().action_space,
+             env_generator().observation_space["agent0"],
+             env_generator().observation_space["agent0"],
+             env_generator().action_space["agent0"],
              policy_settings)
         }
 
@@ -226,11 +226,15 @@ class CartPoleLauncher(EnvironmentLauncher):
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 32,
                      use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
+
+                     #FIXME: debugging
+                     normalize_obs      = False,
+                     obs_clip           = None,#(-10., 10.),
+                     reward_clip        = None,#(-10., 10.),
+                     normalize_rewards  = False,
+                     use_soft_resets    = False,
+
                      normalize_adv      = True,
-                     obs_clip           = (-10., 10.),
-                     reward_clip        = (-10., 10.),
                      lr                 = lr,
                      min_lr             = min_lr,
                      lr_dec             = lr_dec)

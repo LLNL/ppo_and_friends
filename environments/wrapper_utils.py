@@ -33,17 +33,22 @@ def wrap_environment(
     # dictionaries. We can start by only allowing num_envs == 1 for
     # testing/debugging.
     #
-    if is_multi_agent:
-        env = MultiAgentWrapper(
-            env_generator  = env_generator,
-            need_agent_ids = add_agent_ids,
-            death_mask     = death_mask,
-            test_mode      = test_mode)
-    else:
-        env = VectorizedEnv(
-            env_generator = env_generator,
-            num_envs      = envs_per_proc,
-            test_mode     = test_mode)
+    #if is_multi_agent:
+    #    env = MultiAgentWrapper(
+    #        env_generator  = env_generator,
+    #        need_agent_ids = add_agent_ids,
+    #        death_mask     = death_mask,
+    #        test_mode      = test_mode)
+    #else:
+    #    env = VectorizedEnv(
+    #        env_generator = env_generator,
+    #        num_envs      = envs_per_proc,
+    #        test_mode     = test_mode)
+
+    env = VectorizedEnv(
+        env_generator = env_generator,
+        num_envs      = envs_per_proc,
+        test_mode     = test_mode)
 
     #
     # For reproducibility, we need to set the environment's random
