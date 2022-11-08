@@ -100,7 +100,7 @@ class EnvironmentLauncher(ABC):
                 num_timesteps       = 1,
                 test                = False,
                 pickle_class        = False,
-                use_soft_resets     = True,
+                use_soft_resets     = False,
                 obs_augment         = False,
                 num_test_runs       = 1):
 

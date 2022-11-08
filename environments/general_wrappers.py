@@ -163,6 +163,19 @@ class IdentityWrapper(ABC):
 
         return obs, global_obs, reward, done, info
 
+    def _cache_step(self, action):
+        """
+            Take a single step in the environment using the given
+            action, and cache the observation for soft resets.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
+        return self._cache_step(action)
+
     def step(self, action):
         """
             Take a single step in the environment using the given
@@ -174,7 +187,7 @@ class IdentityWrapper(ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        return self._cache_step(action)
+        return self.cache_step(action)
 
     def reset(self):
         """

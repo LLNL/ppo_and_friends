@@ -769,6 +769,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 with a single info dictionary. The observations will
                 contain augmentations of the original observation.
         """
+        #TODO: update for soft resets.
         obs, reward, done, info = self.env.step(action)
 
         batch_obs  = self.env.augment_observation(obs)
