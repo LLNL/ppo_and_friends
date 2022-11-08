@@ -73,7 +73,7 @@ class EnvironmentLauncher(ABC):
                 max_ts_per_ep       = 200,
                 use_gae             = True,
                 use_icm             = False,
-                save_best_only      = False,
+                save_every          = 1,
                 icm_beta            = 0.8,
                 ext_reward_weight   = 1.0,
                 intr_reward_weight  = 1.0,
@@ -128,7 +128,7 @@ class EnvironmentLauncher(ABC):
                   max_ts_per_ep      = max_ts_per_ep,
                   use_gae            = use_gae,
                   use_icm            = use_icm,
-                  save_best_only     = save_best_only,
+                  save_every         = save_every,
                   ext_reward_weight  = ext_reward_weight,
                   intr_reward_weight = intr_reward_weight,
                   entropy_weight     = entropy_weight,
@@ -229,9 +229,9 @@ class CartPoleLauncher(EnvironmentLauncher):
 
                      #FIXME: debugging
                      normalize_obs      = True,
-                     obs_clip           = None,#(-10., 10.),
-                     reward_clip        = None,#(-10., 10.),
-                     normalize_rewards  = False,
+                     obs_clip           = (-10., 10.),
+                     reward_clip        = (-10., 10.),
+                     normalize_rewards  = True,
                      use_soft_resets    = False,
 
                      normalize_adv      = True,

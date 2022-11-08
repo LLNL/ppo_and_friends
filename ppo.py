@@ -78,7 +78,7 @@ class PPO(object):
                  render              = False,
                  load_state          = False,
                  state_path          = "./",
-                 save_best_only      = False,
+                 save_every          = 1,
                  pickle_class        = False,
                  use_soft_resets     = True,
                  obs_augment         = False,
@@ -192,11 +192,7 @@ class PPO(object):
                                       training?
                  load_state           Should we load a saved state?
                  state_path           The path to save/load our state.
-                 save_best_only       When enabled, only save the models when
-                                      the top mean window increases. Note that
-                                      this assumes that the top scores will be
-                                      the best policy, which might not always
-                                      hold up, but it's a general assumption.
+                 save_every           Save every save_every iterations.
                  pickle_class         When enabled, the entire PPO class will
                                       be pickled and saved into the output
                                       directory after it's been initialized.
@@ -269,8 +265,6 @@ class PPO(object):
             env.has_wrapper(ObservationNormalizer)):
             self.save_env_info = True
 
-        self.status_dict["iteration"] = 0
-
         #
         # FIXME: If we vectorize multi-agent environments, we'll need to
         # change this here. I think it will actually be simpler, because we
@@ -319,37 +313,6 @@ class PPO(object):
         else:
             self.entropy_dec = entropy_dec
 
-        #FIXME cleanup
-        ##
-        ## One or both of our bootstrap clip ends might be a function of
-        ## our iteration.
-        ## We turn them both into functions for sanity.
-        ##
-        #min_bs_callable  = None
-        #max_bs_callable  = None
-        #bs_clip_callable = False
-
-        #if callable(bootstrap_clip[0]):
-        #    min_bs_callable  = bootstrap_clip[0]
-        #    bs_clip_callable = True
-        #else:
-        #    min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
-
-        #if callable(bootstrap_clip[1]):
-        #    max_bs_callable  = bootstrap_clip[1]
-        #    bs_clip_callable = True
-        #else:
-        #    max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
-
-        #callable_bootstrap_clip = (min_bs_callable, max_bs_callable)
-
-        #if bs_clip_callable and dynamic_bs_clip:
-        #    msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
-        #    msg += "and also set the bootstrap clip to be callables. This is "
-        #    msg += "redundant, and the dynamic clip will override the given "
-        #    msg += "functions."
-        #    rank_print(msg)
-
         #
         # Establish some class variables.
         #
@@ -377,46 +340,18 @@ class PPO(object):
         self.entropy_weight      = entropy_weight
         self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
-        self.save_best_only      = save_best_only
+        self.save_every          = save_every
         self.mean_window_size    = mean_window_size 
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
-        self.score_cache         = np.zeros(0)
         self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
-
-        #
-        # Create a dictionary to track the status of training.
-        #
-        max_int = np.iinfo(np.int32).max
-        self.status_dict["rollout time"]         = 0
-        self.status_dict["train time"]           = 0
-        self.status_dict["running time"]         = 0
-        self.status_dict["timesteps"]            = 0
-        self.status_dict["longest run"]          = 0
-        self.status_dict["window avg"]           = 'N/A'
-        self.status_dict["top window avg"]       = 'N/A'
-        self.status_dict["episode reward avg"]   = 0
-        self.status_dict["extrinsic score avg"]  = 0
-        self.status_dict["top score"]            = -max_int
-        self.status_dict["total episodes"]       = 0
-        self.status_dict["weighted entropy"]     = 0
-        self.status_dict["actor loss"]           = 0
-        self.status_dict["critic loss"]          = 0
-        self.status_dict["kl avg"]               = 0
-        self.status_dict["lr"]                   = self.lr
-        self.status_dict["entropy weight"]       = self.entropy_weight
-        self.status_dict["reward range"]         = (max_int, -max_int)
-        self.status_dict["obs range"]            = (max_int, -max_int)
-
-        if save_best_only:
-            self.status_dict["last save"] = -1
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -430,6 +365,36 @@ class PPO(object):
                     critic_observation_space  = settings[2],
                     action_space              = settings[3],
                     **settings[4])
+
+        #
+        # Create a dictionary to track the status of training.
+        # These entries can be general, agent specific, or
+        # policy specific.
+        #
+        max_int = np.iinfo(np.int32).max
+
+        self.status_dict["general"] = {}
+        self.status_dict["general"]["iteration"]      = 0
+        self.status_dict["general"]["rollout time"]   = 0
+        self.status_dict["general"]["train time"]     = 0
+        self.status_dict["general"]["running time"]   = 0
+        self.status_dict["general"]["timesteps"]      = 0
+        self.status_dict["general"]["lr"]             = self.lr
+        self.status_dict["general"]["entropy weight"] = self.entropy_weight
+        self.status_dict["general"]["total episodes"] = 0
+
+        for policy_id in self.policies:
+            self.status_dict[policy_id] = {}
+            self.status_dict[policy_id]["longest run"]         = 0
+            self.status_dict[policy_id]["episode reward avg"]  = 0
+            self.status_dict[policy_id]["extrinsic score avg"] = 0
+            self.status_dict[policy_id]["top score"]           = -max_int
+            self.status_dict[policy_id]["weighted entropy"]    = 0
+            self.status_dict[policy_id]["actor loss"]          = 0
+            self.status_dict[policy_id]["critic loss"]         = 0
+            self.status_dict[policy_id]["kl avg"]              = 0
+            self.status_dict[policy_id]["reward range"] = (max_int, -max_int)
+            self.status_dict[policy_id]["obs range"]    = (max_int, -max_int)
 
         #
         # Value normalization is discussed in multiple papers, so I'm not
@@ -479,8 +444,9 @@ class PPO(object):
         self.pickle_safe_test_mode_dependencies.append(self.policies)
 
         if self.using_icm:
-            self.status_dict["icm loss"] = 0
-            self.status_dict["intrinsic score avg"] = 0
+            for policy_id in self.policies:
+                self.status_dict[policy_id]["icm loss"] = 0
+                self.status_dict[policy_id]["intrinsic score avg"] = 0
 
         if load_state:
             if not os.path.exists(state_path):
@@ -499,8 +465,8 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                self.lr= min(self.status_dict["lr"], self.lr)
-                self.status_dict["lr"] = self.lr
+                self.lr= min(self.status_dict["general"]["lr"], self.lr)
+                self.status_dict["general"]["lr"] = self.lr
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -759,7 +725,7 @@ class PPO(object):
 
         if have_nat_reward:
             for agent_id in info:
-                natural_reward[agent_id] = np.array([None] * batch_size)
+                natural_reward[agent_id] = np.zeros(batch_size)
                 for b_idx in range(batch_size):
                     natural_reward[agent_id][b_idx] = \
                         info[agent_id][b_idx]["natural reward"]
@@ -895,13 +861,20 @@ class PPO(object):
         """
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
-        for key in self.status_dict:
+        for key in self.status_dict["general"]:
 
             if key in ["running time", "rollout time", "train time"]:
-                pretty_time = format_seconds(self.status_dict[key])
-                rank_print("    {}: {}".format(key, pretty_time))
+                pretty_time = format_seconds(self.status_dict["general"][key])
+                rank_print("  {}: {}".format(key, pretty_time))
             else:
-                rank_print("    {}: {}".format(key, self.status_dict[key]))
+                rank_print("  {}: {}".format(key,
+                    self.status_dict["general"][key]))
+
+        for policy_id in self.policies:
+            rank_print("  {} policy:".format(policy_id))
+            for key in self.status_dict[policy_id]:
+                rank_print("    {}: {}".format(key,
+                    self.status_dict[policy_id][key]))
 
         rank_print("--------------------------------------------------------")
 
@@ -927,7 +900,7 @@ class PPO(object):
         # of debugging. If our status dict changes to show info for each
         # policy, then we could still use this.
         #self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
-        self.status_dict["lr"] = self.lr
+        self.status_dict["general"]["lr"] = self.lr
 
     def update_entropy_weight(self,
                               iteration,
@@ -943,7 +916,7 @@ class PPO(object):
             iteration = iteration,
             timestep  = timestep)
 
-        self.status_dict["entropy weight"] = self.entropy_weight
+        self.status_dict["general"]["entropy weight"] = self.entropy_weight
 
     def rollout(self):
         """
@@ -975,15 +948,9 @@ class PPO(object):
         for key in self.policies:
             self.policies[key].initialize_dataset()
 
-        total_episodes     = 0.0
-        total_rollout_ts   = 0
-        total_rewards      = 0
-        top_rollout_score  = -np.finfo(np.float32).max
-        longest_run        = 0
-        rollout_max_reward = -np.finfo(np.float32).max
-        rollout_min_reward = np.finfo(np.float32).max
-        rollout_max_obs    = -np.finfo(np.float32).max
-        rollout_min_obs    = np.finfo(np.float32).max
+        total_episodes   = 0.0
+        total_rollout_ts = 0
+        longest_run      = 0
 
         for key in self.policies:
             self.policies[key].eval()
@@ -1017,12 +984,35 @@ class PPO(object):
         obs, global_obs    = initial_reset_func()
         env_batch_size     = self.env.get_batch_size()
 
+        top_rollout_score  = {}
+        rollout_max_reward = {}
+        rollout_min_reward = {}
+        rollout_max_obs    = {}
+        rollout_min_obs    = {}
+        ep_scores          = {}
+        ep_rewards         = {}
+        total_ext_rewards  = {}
+        total_intr_rewards = {}
+        total_rewards      = {}
+
+        for policy_id in self.policies:
+            top_rollout_score[policy_id]  = -np.finfo(np.float32).max
+            rollout_max_reward[policy_id] = -np.finfo(np.float32).max
+            rollout_min_reward[policy_id] = np.finfo(np.float32).max
+            rollout_max_obs[policy_id]    = -np.finfo(np.float32).max
+            rollout_min_obs[policy_id]    = np.finfo(np.float32).max
+            ep_scores[policy_id]          = np.zeros((env_batch_size, 1))
+            ep_rewards[policy_id]         = np.zeros((env_batch_size, 1))
+            total_ext_rewards[policy_id]  = np.zeros((env_batch_size, 1))
+            total_intr_rewards[policy_id] = np.zeros((env_batch_size, 1))
+            total_rewards[policy_id]      = 0.0
+
         #FIXME: refactor?
-        ep_rewards         = np.zeros((env_batch_size, 1))
-        episode_lengths    = np.zeros(env_batch_size).astype(np.int32)#FIXME: i think this is still applicable
-        ep_score           = np.zeros((env_batch_size, 1))
-        total_ext_rewards  = np.zeros((env_batch_size, 1))
-        total_intr_rewards = np.zeros((env_batch_size, 1))
+        episode_lengths = np.zeros(env_batch_size).astype(np.int32)#FIXME: i think this is still applicable
+
+        #FIXME: cleanup
+        #total_ext_rewards  = np.zeros((env_batch_size, 1))
+        #total_intr_rewards = np.zeros((env_batch_size, 1))
         ep_ts              = np.zeros(env_batch_size).astype(np.int32)
 
         for key in self.policies:
@@ -1095,18 +1085,6 @@ class PPO(object):
 
             have_non_terminal_dones = where_non_terminal.size > 0
 
-            #FIXME: cleanup
-            #non_terminal_dones = np.zeros(env_batch_size).astype(bool)
-
-            #for b_idx in range(env_batch_size):
-            #    if "non-terminal done" in info[b_idx]:
-            #        non_terminal_dones[b_idx] = \
-            #            info[b_idx]["non-terminal done"]
-
-            #have_non_terminal_dones  = non_terminal_dones.any()
-            #where_non_terminal       = np.where(non_terminal_dones)[0]
-            #done[where_non_terminal] = False
-
             #
             # In the observational augment case, our action is a single action,
             # but our return values are all batches. We need to tile the
@@ -1137,16 +1115,6 @@ class PPO(object):
 
             if not have_nat_reward:
                 natural_reward = deepcopy(ext_reward)
-
-            #FIXME:
-            #if "natural reward" in info[0]:
-            #    natural_reward = np.zeros((env_batch_size, 1))
-
-            #    for b_idx in range(env_batch_size):
-            #        natural_reward[b_idx] = \
-            #            info[b_idx]["natural reward"].copy()
-            #else:
-            #    natural_reward = ext_reward.copy()
 
             self.apply_reward_weight(ext_reward, self.ext_reward_weight)
 
@@ -1185,15 +1153,20 @@ class PPO(object):
                     rewards                = reward[agent_id],
                     where_done             = where_done)
 
-            #FIXME: this will change when we report policy status.
-            for agent_id in obs:
-                rollout_max_reward = max(rollout_max_reward, reward[agent_id].max())
-                rollout_min_reward = min(rollout_min_reward, reward[agent_id].min())
-                rollout_max_obs    = max(rollout_max_obs, obs[agent_id].max())
-                rollout_min_obs    = min(rollout_min_obs, obs[agent_id].min())
+                rollout_max_reward[policy_id] = \
+                    max(rollout_max_reward[policy_id], reward[agent_id].max())
 
-                ep_rewards += reward[agent_id]
-                ep_score   += natural_reward[agent_id]
+                rollout_min_reward[policy_id] = \
+                    min(rollout_min_reward[policy_id], reward[agent_id].min())
+
+                rollout_max_obs[policy_id]    = \
+                    max(rollout_max_obs[policy_id], obs[agent_id].max())
+
+                rollout_min_obs[policy_id]    = \
+                    min(rollout_min_obs[policy_id], obs[agent_id].min())
+
+                ep_rewards[policy_id] += reward[agent_id]
+                ep_scores[policy_id]  += natural_reward[agent_id]
 
             #
             # Episode end cases.
@@ -1221,24 +1194,28 @@ class PPO(object):
                         ending_rewards  = np.zeros(done_count),
                         status_dict     = self.status_dict)
 
+                    top_rollout_score[policy_id] = \
+                        max(top_rollout_score[policy_id],
+                        ep_scores[policy_id][where_done].max())
+
+                    total_ext_rewards[policy_id][where_done] += \
+                        ep_scores[policy_id][where_done]
+
+                    if self.using_icm:
+                        total_intr_rewards[policy_id][where_done] += \
+                            intr_reward[agent_id][where_done]
+
+                    total_rewards[policy_id] += \
+                        ep_rewards[policy_id][where_done].sum()
+
+                    ep_rewards[policy_id][where_done] = 0
+                    ep_scores[policy_id][where_done] = 0
+
+
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
 
-                top_rollout_score = max(top_rollout_score,
-                    ep_score[where_done].max())
-
-                if self.using_icm:
-                    # FIXME This will change when we report status on individual
-                    # policies.
-                    for agent_id in intr_reward:
-                        total_intr_rewards[where_done] += \
-                            intr_reward[agent_id][where_done]
-
-                total_ext_rewards[where_done] += ep_score[where_done]
-                total_rewards                 += ep_rewards[where_done].sum()
                 episode_lengths[where_done]    = 0
-                ep_score[where_done]           = 0
-                ep_rewards[where_done]         = 0
                 total_episodes                += done_count
                 ep_ts[where_done]              = 0
 
@@ -1320,9 +1297,9 @@ class PPO(object):
                                     obs_augment   = self.obs_augment,
                                     nv_batch_size = env_batch_size)#FIXME: this can come from the obs
 
-                        ism = self.status_dict["intrinsic score avg"]
-                        surprise = intr_reward[agent_id][where_maxed] - ism
-                        next_reward[agent_id] += surprise
+                        ism = self.status_dict[policy_id]["intrinsic score avg"]
+                        surprise = intr_reward[where_maxed] - ism
+                        next_reward[policy_id] += surprise
                     
                     self.policies[policy_id].end_episodes(
                         env_idxs        = where_maxed,
@@ -1336,7 +1313,10 @@ class PPO(object):
 
                     if self.using_icm:
                         for agent_id in intr_reward:
-                            total_intr_rewards += intr_reward[agent_id]
+                            policy_id = self.policy_mapping_fn(agent_id)
+
+                            total_intr_rewards[policy_id] += \
+                                intr_reward[agent_id]
 
                     #
                     # ts_before_ep are the timesteps before the current
@@ -1360,11 +1340,14 @@ class PPO(object):
 
                     ep_perc            = episode_lengths / avg_ep_len
                     total_episodes    += ep_perc.sum()
-                    total_ext_rewards += ep_score
-                    total_rewards     += ep_rewards.sum()
 
-                    top_rollout_score = max(top_rollout_score,
-                        ep_score.max())
+                    for policy_id in self.policies:
+                        total_ext_rewards[policy_id] += ep_scores[policy_id]
+                        total_rewards[policy_id] += ep_rewards[policy_id].sum()
+
+                        top_rollout_score[policy_id] = \
+                            max(top_rollout_score[policy_id],
+                            ep_scores[policy_id].max())
 
                 ep_ts[where_maxed] = 0
 
@@ -1372,96 +1355,86 @@ class PPO(object):
                 episode_lengths.max())
 
         #
-        # We didn't complete any episodes, so let's just take the top score from
-        # our incomplete episode's scores.
+        # Update the status dictionary.
         #
-        if total_episodes <= 1.0:
-            top_rollout_score = max(top_rollout_score,
-                ep_score.max())
+        total_episodes = comm.allreduce(total_episodes, MPI.SUM)
 
-        #
-        # Update our status dict.
-        #
-        top_score = max(top_rollout_score, self.status_dict["top score"])
-        top_score = comm.allreduce(top_score, MPI.MAX)
+        for policy_id in self.policies:
+            #
+            # We didn't complete any episodes, so let's just take the top score
+            # from our incomplete episode's scores.
+            #
+            if total_episodes <= 1.0:
+                top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
+                    ep_scores[policy_id].max())
 
-        #
-        # If we're normalizing, we don't really want to keep track
-        # of the largest and smallest ever seen, because our range will
-        # fluctuate with normalization. When we aren't normalizing, the
-        # the global range is accurate and useful.
-        #
-        if not self.normalize_rewards:
-            rollout_max_reward = max(self.status_dict["reward range"][1],
-                rollout_max_reward)
+            top_score = max(top_rollout_score[policy_id],
+                self.status_dict[policy_id]["top score"])
 
-            rollout_min_reward = min(self.status_dict["reward range"][0],
-                rollout_min_reward)
+            top_score = comm.allreduce(top_score, MPI.MAX)
 
-        rollout_max_reward = comm.allreduce(rollout_max_reward, MPI.MAX)
-        rollout_min_reward = comm.allreduce(rollout_min_reward, MPI.MIN)
+            #
+            # If we're normalizing, we don't really want to keep track
+            # of the largest and smallest ever seen, because our range will
+            # fluctuate with normalization. When we aren't normalizing, the
+            # the global range is accurate and useful.
+            #
+            if not self.normalize_rewards:
+                max_reward = max(self.status_dict[policy_id]["reward range"][1],
+                    rollout_max_reward[policy_id])
 
-        if not self.normalize_obs:
-            rollout_max_obs = max(self.status_dict["obs range"][1],
-                rollout_max_obs)
+                min_reward = min(self.status_dict[policy_id]["reward range"][0],
+                    rollout_min_reward[policy_id])
+            else:
+                max_reward = rollout_max_reward[policy_id]
+                min_reward = rollout_min_reward[policy_id]
 
-            rollout_min_obs = min(self.status_dict["obs range"][0],
-                rollout_min_obs)
+            max_reward = comm.allreduce(max_reward, MPI.MAX)
+            min_reward = comm.allreduce(min_reward, MPI.MIN)
 
-        rollout_max_obs = comm.allreduce(rollout_max_obs, MPI.MAX)
-        rollout_min_obs = comm.allreduce(rollout_min_obs, MPI.MIN)
+            if not self.normalize_obs:
+                max_obs = max(self.status_dict[policy_id]["obs range"][1],
+                    rollout_max_obs[policy_id])
 
-        total_ext_rewards = total_ext_rewards.sum()
+                min_obs = min(self.status_dict[policy_id]["obs range"][0],
+                    rollout_min_obs[policy_id])
+            else:
+                max_obs = rollout_max_obs[policy_id]
+                min_obs = rollout_min_obs[policy_id]
 
-        longest_run       = comm.allreduce(longest_run, MPI.MAX)
-        total_episodes    = comm.allreduce(total_episodes, MPI.SUM)
-        total_ext_rewards = comm.allreduce(total_ext_rewards, MPI.SUM)
-        total_rewards     = comm.allreduce(total_rewards, MPI.SUM)
-        total_rollout_ts  = comm.allreduce(total_rollout_ts, MPI.SUM)
+            max_obs = comm.allreduce(max_obs, MPI.MAX)
+            min_obs = comm.allreduce(min_obs, MPI.MIN)
 
-        running_ext_score = total_ext_rewards / total_episodes
-        running_score     = total_rewards / total_episodes
-        rw_range          = (rollout_min_reward, rollout_max_reward)
-        obs_range         = (rollout_min_obs, rollout_max_obs)
+            ext_reward_sum = total_ext_rewards[policy_id].sum()
+            ext_reward_sum = comm.allreduce(ext_reward_sum, MPI.SUM)
+            agent_rewards  = comm.allreduce(total_rewards[policy_id], MPI.SUM)
 
-        #FIXME: should the status dict show info specific to each agent?
-        self.status_dict["episode reward avg"]  = running_score
-        self.status_dict["extrinsic score avg"] = running_ext_score
-        self.status_dict["top score"]           = top_score
-        self.status_dict["total episodes"] += total_episodes / self.num_agents
-        self.status_dict["longest run"]     = longest_run
-        self.status_dict["reward range"]    = rw_range
-        self.status_dict["obs range"]       = obs_range
-        self.status_dict["timesteps"]      += total_rollout_ts
+            running_ext_score = ext_reward_sum / total_episodes
+            running_score     = agent_rewards / total_episodes
+            rw_range          = (min_reward, max_reward)
+            obs_range         = (min_obs, max_obs)
 
-        #
-        # Update our score cache and the window mean when appropriate.
-        #
-        if self.score_cache.size < self.mean_window_size:
-            self.score_cache = np.append(self.score_cache, running_score)
-            self.status_dict["window avg"]  = "N/A"
-        else:
-            self.score_cache = np.roll(self.score_cache, -1)
-            self.score_cache[-1] = running_score
+            self.status_dict[policy_id]["episode reward avg"]  = running_score
+            self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
+            self.status_dict[policy_id]["top score"]           = top_score
+            self.status_dict[policy_id]["obs range"]       = obs_range
+            self.status_dict[policy_id]["reward range"]    = rw_range
 
-            self.status_dict["window avg"]  = self.score_cache.mean()
+            if self.using_icm:
+                intr_rewards = total_intr_rewards[policy_id].sum() / \
+                    env_batch_size
+                intr_rewards = comm.allreduce(total_intr_rewards[policy_id],
+                    MPI.SUM)
 
-            if type(self.status_dict["top window avg"]) == str:
-                self.status_dict["top window avg"] = \
-                    self.status_dict["window avg"]
+                ism = intr_rewards / (total_episodes/ env_batch_size)
+                self.status_dict[policy_id]["intrinsic score avg"] = ism
 
-            elif (self.status_dict["window avg"] >
-                self.status_dict["top window avg"]):
+        longest_run      = comm.allreduce(longest_run, MPI.MAX)
+        total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
 
-                self.status_dict["top window avg"] = \
-                    self.status_dict["window avg"]
-
-        if self.using_icm:
-            total_intr_rewards = total_intr_rewards.sum() / env_batch_size
-            total_intr_rewards = comm.allreduce(total_intr_rewards, MPI.SUM)
-
-            ism = total_intr_rewards / (total_episodes/ env_batch_size)
-            self.status_dict["intrinsic score avg"] = ism
+        self.status_dict["general"]["total episodes"] += total_episodes
+        self.status_dict["general"]["longest run"]     = longest_run
+        self.status_dict["general"]["timesteps"]      += total_rollout_ts
 
         #
         # Finalize our datasets.
@@ -1471,7 +1444,7 @@ class PPO(object):
 
         comm.barrier()
         stop_time = time.time()
-        self.status_dict["rollout time"] = stop_time - start_time
+        self.status_dict["general"]["rollout time"] = stop_time - start_time
 
     def learn(self, num_timesteps):
         """
@@ -1486,22 +1459,21 @@ class PPO(object):
                                  many timesteps were run during the last save.
         """
         start_time = time.time()
-        ts_max     = self.status_dict["timesteps"] + num_timesteps
+        ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
+        iteration  = 0
 
-        while self.status_dict["timesteps"] < ts_max:
+        while self.status_dict["general"]["timesteps"] < ts_max:
             iter_start_time = time.time()
 
             self.rollout()
 
-            self.status_dict["iteration"] += 1
-
             self.update_learning_rate(
-                self.status_dict["iteration"],
-                self.status_dict["timesteps"])
+                self.status_dict["general"]["iteration"],
+                self.status_dict["general"]["timesteps"])
 
             self.update_entropy_weight(
-                self.status_dict["iteration"],
-                self.status_dict["timesteps"])
+                self.status_dict["general"]["iteration"],
+                self.status_dict["general"]["timesteps"])
 
             data_loaders = {}
             for key in self.policies:
@@ -1515,69 +1487,65 @@ class PPO(object):
             for key in self.policies:
                 self.policies[key].train()
 
-            for epoch_idx in range(self.epochs_per_iter):
+            #
+            # We train each policy separately.
+            #
+            for policy_id in data_loaders:
 
-                #
-                # arXiv:2006.05990v1 suggests that re-computing the advantages
-                # before each new epoch helps mitigate issues that can arrise
-                # from "stale" advantages.
-                #
-                if epoch_idx > 0:
-                    for key in self.policies:
-                        data_loaders[key].dataset.recalculate_advantages()
+                for epoch_idx in range(self.epochs_per_iter):
 
-                self._ppo_batch_train(data_loaders)
+                    #
+                    # arXiv:2006.05990v1 suggests that re-computing the
+                    # advantages before each new epoch helps mitigate issues
+                    # that can arrise from "stale" advantages.
+                    #
+                    if epoch_idx > 0:
+                        data_loaders[policy_id].dataset.recalculate_advantages()
 
-                #
-                # Early ending using KL. Why multiply by 1.5, you ask? I have
-                # no idea, really. It's a magic number that the folks at
-                # OpenAI are using.
-                #
-                comm.barrier()
-                if self.status_dict["kl avg"] > (1.5 * self.target_kl):
-                    msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
-                    msg += "has been reached. "
-                    msg += "Ending early (after "
-                    msg += "{} epochs)".format(epoch_idx + 1)
-                    rank_print(msg)
-                    break
+                    self._ppo_batch_train(data_loaders[policy_id], policy_id)
 
-                if self.using_icm:
-                    self._icm_batch_train(data_loaders)
+                    #
+                    # Early ending using KL. Why multiply by 1.5, you ask? I have
+                    # no idea, really. It's a magic number that the folks at
+                    # OpenAI are using.
+                    #
+                    comm.barrier()
+                    if (self.status_dict[policy_id]["kl avg"] >
+                        (1.5 * self.target_kl)):
+
+                        msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
+                        msg += "has been reached. "
+                        msg += "Ending early (after "
+                        msg += "{} epochs)".format(epoch_idx + 1)
+                        rank_print(msg)
+                        break
+
+                    if self.using_icm:
+                        self._icm_batch_train(data_loaders[policy_id], policy_id)
 
             #
             # We don't want to hange on to this memory as we loop back around.
             #
-            for key in self.policies:
-                self.policies[key].clear_dataset()
+            for policy_id in self.policies:
+                self.policies[policy_id].clear_dataset()
 
             del data_loaders
             gc.collect()
 
             now_time      = time.time()
             training_time = (now_time - train_start_time)
-            self.status_dict["train time"] = now_time - train_start_time
+            self.status_dict["general"]["train time"] = now_time - train_start_time
 
             running_time = (now_time - iter_start_time)
-            self.status_dict["running time"] += running_time
+            self.status_dict["general"]["running time"] += running_time
+
+            iteration += 1
+            self.status_dict["general"]["iteration"] = iteration
+
             self.print_status()
 
-            need_save = False
-            if type(self.status_dict["top window avg"]) == str:
-                need_save = True
-            elif (self.save_best_only and
-                self.status_dict["window avg"] ==
-                self.status_dict["top window avg"]):
-                need_save = True
-            elif not self.save_best_only:
-                need_save = True
-
-            if need_save:
+            if self.save_every > 0 and iteration % self.save_every == 0:
                 self.save()
-
-                if "last save" in self.status_dict:
-                    self.status_dict["last save"] = \
-                        self.status_dict["iteration"]
 
             comm.barrier()
             if self.lr <= 0.0:
@@ -1589,13 +1557,13 @@ class PPO(object):
         pretty_time = format_seconds(seconds)
         rank_print("Time spent training: {}".format(pretty_time))
 
-    def _ppo_batch_train(self, data_loaders):
+    def _ppo_batch_train(self, data_loader, policy_id):
         """
             Train our PPO networks using mini batches.
 
             Arguments:
-                data_loaders    A dictionary mapping policy keys to
-                                PyTorch data loaders.
+                data_loader    A PyTorch data loader for a specific policy.
+                policy_id      The id for the policy that we're training.
         """
         total_actor_loss  = 0
         total_critic_loss = 0
@@ -1604,156 +1572,155 @@ class PPO(object):
         total_kl          = 0
         counter           = 0
 
-        for policy_id in data_loaders:
-            for batch_data in data_loaders[policy_id]:
-                critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
-                    rewards_tg, actor_hidden, critic_hidden, \
-                    actor_cell, critic_cell, batch_idxs = batch_data
+        for batch_data in data_loader:
+            critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
+                rewards_tg, actor_hidden, critic_hidden, \
+                actor_cell, critic_cell, batch_idxs = batch_data
 
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
-                if self.normalize_values:
-                    rewards_tg = \
-                        self.value_normalizers[policy_id].normalize(rewards_tg)
+            if self.normalize_values:
+                rewards_tg = \
+                    self.value_normalizers[policy_id].normalize(rewards_tg)
 
-                if obs.shape[0] == 1:
-                    continue
+            if obs.shape[0] == 1:
+                continue
 
-                #
-                # In the case of lstm networks, we need to initialze our hidden
-                # states to those that developed during the rollout.
-                #
-                if self.policies[policy_id].using_lstm:
-                    actor_hidden  = torch.transpose(actor_hidden, 0, 1)
-                    actor_cell    = torch.transpose(actor_cell, 0, 1)
-                    critic_hidden = torch.transpose(critic_hidden, 0, 1)
-                    critic_cell   = torch.transpose(critic_cell, 0, 1)
+            #
+            # In the case of lstm networks, we need to initialze our hidden
+            # states to those that developed during the rollout.
+            #
+            if self.policies[policy_id].using_lstm:
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                    self.policies[policy_id].actor.hidden_state  = (actor_hidden, actor_cell)
-                    self.policies[policy_id].critic.hidden_state = (critic_hidden, critic_cell)
+                self.policies[policy_id].actor.hidden_state  = (actor_hidden, actor_cell)
+                self.policies[policy_id].critic.hidden_state = (critic_hidden, critic_cell)
 
-                #
-                # arXiv:2005.12729v1 suggests that normalizing advantages
-                # at the mini-batch level increases performance.
-                #
-                if self.normalize_adv:
-                    adv_std  = advantages.std()
-                    adv_mean = advantages.mean()
-                    if torch.isnan(adv_std):
-                        rank_print("\nAdvantages std is nan!")
-                        rank_print("Advantages:\n{}".format(advantages))
-                        comm.Abort()
-
-                    advantages = (advantages - adv_mean) / (adv_std + 1e-8)
-
-                values, curr_log_probs, entropy = self.policies[policy_id].evaluate(
-                    critic_obs,
-                    obs,
-                    raw_actions)
-
-                data_loaders[policy_id].dataset.values[batch_idxs] = values
-
-                #
-                # The heart of PPO: arXiv:1707.06347v2
-                #
-                ratios = torch.exp(curr_log_probs - log_probs)
-                surr1  = ratios * advantages
-                surr2  = torch.clamp(
-                    ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
-
-                total_kl += (log_probs - curr_log_probs).mean().item()
-
-                if torch.isnan(ratios).any() or torch.isinf(ratios).any():
-                    rank_print("ERROR: ratios are nan or inf!")
-
-                    ratios_min = ratios.min()
-                    ratios_max = ratios.max()
-                    rank_print("ratios min, max: {}, {}".format(
-                        ratios_min, ratios_max))
-
-                    clp_min = curr_log_probs.min()
-                    clp_max = curr_log_probs.min()
-                    rank_print("curr_log_probs min, max: {}, {}".format(
-                        clp_min, clp_max))
-
-                    lp_min = log_probs.min()
-                    lp_max = log_probs.min()
-                    rank_print("log_probs min, max: {}, {}".format(
-                        lp_min, lp_max))
-
-                    act_min = raw_actions.min()
-                    act_max = raw_actions.max()
-                    rank_print("actions min, max: {}, {}".format(
-                        act_min, act_max))
-
-                    #FIXME
-                    std = nn.functional.softplus(self.policies[policy_id].actor.distribution.log_std)
-                    rank_print("actor std: {}".format(std))
-
+            #
+            # arXiv:2005.12729v1 suggests that normalizing advantages
+            # at the mini-batch level increases performance.
+            #
+            if self.normalize_adv:
+                adv_std  = advantages.std()
+                adv_mean = advantages.mean()
+                if torch.isnan(adv_std):
+                    rank_print("\nAdvantages std is nan!")
+                    rank_print("Advantages:\n{}".format(advantages))
                     comm.Abort()
 
-                #
-                # We negate here to perform gradient ascent rather than descent.
-                #
-                actor_loss        = (-torch.min(surr1, surr2)).mean()
-                total_actor_loss += actor_loss.item()
+                advantages = (advantages - adv_mean) / (adv_std + 1e-8)
 
-                if self.entropy_weight != 0.0:
-                    total_entropy += entropy.mean().item()
-                    actor_loss    -= self.entropy_weight * entropy.mean()
+            values, curr_log_probs, entropy = self.policies[policy_id].evaluate(
+                critic_obs,
+                obs,
+                raw_actions)
 
-                if values.size() == torch.Size([]):
-                    values = values.unsqueeze(0)
+            data_loader.dataset.values[batch_idxs] = values
 
-                critic_loss        = nn.MSELoss()(values, rewards_tg)
-                total_critic_loss += critic_loss.item()
+            #
+            # The heart of PPO: arXiv:1707.06347v2
+            #
+            ratios = torch.exp(curr_log_probs - log_probs)
+            surr1  = ratios * advantages
+            surr2  = torch.clamp(
+                ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
 
-                #
-                # arXiv:2005.12729v1 suggests that gradient clipping can
-                # have a positive effect on training.
-                #
-                # FIXME: I think each class of actor would need its own
-                # optimizer and loss. They would also need their own critics.
-                #
+            total_kl += (log_probs - curr_log_probs).mean().item()
+
+            if torch.isnan(ratios).any() or torch.isinf(ratios).any():
+                rank_print("ERROR: ratios are nan or inf!")
+
+                ratios_min = ratios.min()
+                ratios_max = ratios.max()
+                rank_print("ratios min, max: {}, {}".format(
+                    ratios_min, ratios_max))
+
+                clp_min = curr_log_probs.min()
+                clp_max = curr_log_probs.min()
+                rank_print("curr_log_probs min, max: {}, {}".format(
+                    clp_min, clp_max))
+
+                lp_min = log_probs.min()
+                lp_max = log_probs.min()
+                rank_print("log_probs min, max: {}, {}".format(
+                    lp_min, lp_max))
+
+                act_min = raw_actions.min()
+                act_max = raw_actions.max()
+                rank_print("actions min, max: {}, {}".format(
+                    act_min, act_max))
+
                 #FIXME
-                self.policies[policy_id].actor_optim.zero_grad()
-                actor_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
-                mpi_avg_gradients(self.policies[policy_id].actor)
-                nn.utils.clip_grad_norm_(self.policies[policy_id].actor.parameters(),
-                    self.gradient_clip)
-                self.policies[policy_id].actor_optim.step()
+                std = nn.functional.softplus(self.policies[policy_id].actor.distribution.log_std)
+                rank_print("actor std: {}".format(std))
 
-                self.policies[policy_id].critic_optim.zero_grad()
-                critic_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
-                mpi_avg_gradients(self.policies[policy_id].critic)
-                nn.utils.clip_grad_norm_(self.policies[policy_id].critic.parameters(),
-                    self.gradient_clip)
-                self.policies[policy_id].critic_optim.step()
+                comm.Abort()
 
-                #
-                # The idea here is similar to re-computing advantages, but now
-                # we want to update the hidden states before the next epoch.
-                #
-                if self.policies[policy_id].using_lstm:
-                    actor_hidden  = self.policies[policy_id].actor.hidden_state[0].detach().clone()
-                    critic_hidden = self.policies[policy_id].critic.hidden_state[0].detach().clone()
+            #
+            # We negate here to perform gradient ascent rather than descent.
+            #
+            actor_loss        = (-torch.min(surr1, surr2)).mean()
+            total_actor_loss += actor_loss.item()
 
-                    actor_cell    = self.policies[policy_id].actor.hidden_state[1].detach().clone()
-                    critic_cell   = self.policies[policy_id].critic.hidden_state[1].detach().clone()
+            if self.entropy_weight != 0.0:
+                total_entropy += entropy.mean().item()
+                actor_loss    -= self.entropy_weight * entropy.mean()
 
-                    actor_hidden  = torch.transpose(actor_hidden, 0, 1)
-                    actor_cell    = torch.transpose(actor_cell, 0, 1)
-                    critic_hidden = torch.transpose(critic_hidden, 0, 1)
-                    critic_cell   = torch.transpose(critic_cell, 0, 1)
+            if values.size() == torch.Size([]):
+                values = values.unsqueeze(0)
 
-                    data_loaders[policy_id].dataset.actor_hidden[batch_idxs]  = actor_hidden
-                    data_loaders[policy_id].dataset.critic_hidden[batch_idxs] = critic_hidden
+            critic_loss        = nn.MSELoss()(values, rewards_tg)
+            total_critic_loss += critic_loss.item()
 
-                    data_loaders[policy_id].dataset.actor_cell[batch_idxs]  = actor_cell
-                    data_loaders[policy_id].dataset.critic_cell[batch_idxs] = critic_cell
+            #
+            # arXiv:2005.12729v1 suggests that gradient clipping can
+            # have a positive effect on training.
+            #
+            # FIXME: I think each class of actor would need its own
+            # optimizer and loss. They would also need their own critics.
+            #
+            #FIXME
+            self.policies[policy_id].actor_optim.zero_grad()
+            actor_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+            mpi_avg_gradients(self.policies[policy_id].actor)
+            nn.utils.clip_grad_norm_(self.policies[policy_id].actor.parameters(),
+                self.gradient_clip)
+            self.policies[policy_id].actor_optim.step()
 
-                comm.barrier()
-                counter += 1
+            self.policies[policy_id].critic_optim.zero_grad()
+            critic_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+            mpi_avg_gradients(self.policies[policy_id].critic)
+            nn.utils.clip_grad_norm_(self.policies[policy_id].critic.parameters(),
+                self.gradient_clip)
+            self.policies[policy_id].critic_optim.step()
+
+            #
+            # The idea here is similar to re-computing advantages, but now
+            # we want to update the hidden states before the next epoch.
+            #
+            if self.policies[policy_id].using_lstm:
+                actor_hidden  = self.policies[policy_id].actor.hidden_state[0].detach().clone()
+                critic_hidden = self.policies[policy_id].critic.hidden_state[0].detach().clone()
+
+                actor_cell    = self.policies[policy_id].actor.hidden_state[1].detach().clone()
+                critic_cell   = self.policies[policy_id].critic.hidden_state[1].detach().clone()
+
+                actor_hidden  = torch.transpose(actor_hidden, 0, 1)
+                actor_cell    = torch.transpose(actor_cell, 0, 1)
+                critic_hidden = torch.transpose(critic_hidden, 0, 1)
+                critic_cell   = torch.transpose(critic_cell, 0, 1)
+
+                data_laoder.dataset.actor_hidden[batch_idxs]  = actor_hidden
+                data_laoder.dataset.critic_hidden[batch_idxs] = critic_hidden
+
+                data_laoder.dataset.actor_cell[batch_idxs]  = actor_cell
+                data_laoder.dataset.critic_cell[batch_idxs] = critic_cell
+
+            comm.barrier()
+            counter += 1
 
         counter           = comm.allreduce(counter, MPI.SUM)
         total_entropy     = comm.allreduce(total_entropy, MPI.SUM)
@@ -1762,51 +1729,53 @@ class PPO(object):
         total_kl          = comm.allreduce(total_kl, MPI.SUM)
         w_entropy         = total_entropy * self.entropy_weight
 
-        self.status_dict["weighted entropy"] = w_entropy / counter
-        self.status_dict["actor loss"]       = total_actor_loss / counter
-        self.status_dict["critic loss"]      = total_critic_loss / counter
-        self.status_dict["kl avg"]           = total_kl / counter
+        self.status_dict[policy_id]["weighted entropy"] = w_entropy / counter
+        self.status_dict[policy_id]["actor loss"] = \
+            total_actor_loss / counter
 
-    def _icm_batch_train(self, data_loaders):
+        self.status_dict[policy_id]["critic loss"] = \
+            total_critic_loss / counter
+
+        self.status_dict[policy_id]["kl avg"] = total_kl / counter
+
+    def _icm_batch_train(self, data_loader, policy_id):
         """
             Train our ICM networks using mini batches.
 
             Arguments:
-                data_loaders    A dictionary mapping policy keys to
-                                PyTorch data loaders.
+                data_loader    A PyTorch data loader for a specific policy.
+                policy_id      The id for the policy that we're training.
         """
-
         total_icm_loss = 0
         counter = 0
 
-        for policy_id in data_loaders:
-            for batch_data in data_loaders[policy_id]:
+        for batch_data in data_loader:
 
-                _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
-                    batch_data
+            _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
+                batch_data
 
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
-                actions = actions.unsqueeze(1)
+            actions = actions.unsqueeze(1)
 
-                _, inv_loss, f_loss = self.policies[policy_id].icm_model(obs, next_obs, actions)
+            _, inv_loss, f_loss = self.policies[policy_id].icm_model(obs, next_obs, actions)
 
-                icm_loss = (((1.0 - self.icm_beta) * f_loss) +
-                    (self.icm_beta * inv_loss))
+            icm_loss = (((1.0 - self.icm_beta) * f_loss) +
+                (self.icm_beta * inv_loss))
 
-                total_icm_loss += icm_loss.item()
+            total_icm_loss += icm_loss.item()
 
-                self.policies[policy_id].icm_optim.zero_grad()
-                icm_loss.backward()
-                mpi_avg_gradients(self.policies[policy_id].icm_model)
-                self.policies[policy_id].icm_optim.step()
+            self.policies[policy_id].icm_optim.zero_grad()
+            icm_loss.backward()
+            mpi_avg_gradients(self.policies[policy_id].icm_model)
+            self.policies[policy_id].icm_optim.step()
 
-                counter += 1
-                comm.barrier()
+            counter += 1
+            comm.barrier()
 
         counter        = comm.allreduce(counter, MPI.SUM)
         total_icm_loss = comm.allreduce(total_icm_loss, MPI.SUM)
-        self.status_dict["icm loss"] = total_icm_loss / counter
+        self.status_dict[policy_id]["icm loss"] = total_icm_loss / counter
 
 
     # FIXME: save and load will need to save/load policies.

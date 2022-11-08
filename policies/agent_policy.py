@@ -574,8 +574,8 @@ class AgentPolicy():
             bs_max = max(ep_rewards)
 
         else:
-            iteration = status_dict["iteration"]
-            timestep  = status_dict["timesteps"]
+            iteration = status_dict["general"]["iteration"]
+            timestep  = status_dict["general"]["timesteps"]
 
             bs_min = self.bootstrap_clip[0](
                 iteration = iteration,

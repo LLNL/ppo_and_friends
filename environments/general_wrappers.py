@@ -35,7 +35,6 @@ class IdentityWrapper(ABC):
 
             Arguments:
                 env           The environment to wrap.
-                status_dict   The dictionary containing training stats.
         """
         super(IdentityWrapper, self).__init__(**kw_args)
 
@@ -52,7 +51,8 @@ class IdentityWrapper(ABC):
 
         self.agent_ids = {agent_id for agent_id in self.action_space.keys()}
 
-        if callable(getattr(self.env, "augment_observation", None)):
+        if (callable(getattr(self.env, "augment_observation", None)) and
+            callable(getattr(self.env, "augment_global_observation", None))):
             self.can_augment_obs = True
 
     def get_all_done(self):
@@ -154,27 +154,12 @@ class IdentityWrapper(ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, global_obs, reward, done, info = self.env.step(action)
 
         self.obs_cache = deepcopy(obs)
         self.need_hard_reset = False
 
-        global_state = self.get_global_state(obs)
-
         return obs, global_obs, reward, done, info
-
-    def _cache_step(self, action):
-        """
-            Take a single step in the environment using the given
-            action, and cache the observation for soft resets.
-
-            Arguments:
-                action    The action to take.
-
-            Returns:
-                The resulting observation, reward, done, and info tuple.
-        """
-        return self._cache_step(action)
 
     def step(self, action):
         """
@@ -187,7 +172,7 @@ class IdentityWrapper(ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        return self.cache_step(action)
+        return self._cache_step(action)
 
     def reset(self):
         """
@@ -293,6 +278,22 @@ class IdentityWrapper(ABC):
         else:
             raise NotImplementedError
 
+    def augment_global_observation(self, obs):
+        """
+            If our environment has defined a global observation augmentation
+            method, we can access it here.
+
+            Arguments:
+                The observation to augment.
+
+            Returns:
+                The batch of augmented observations.
+        """
+        if self.can_augment_obs:
+            return self.env.augment_global_observation(obs)
+        else:
+            raise NotImplementedError
+
     def _check_env_save(self, path):
         """
             Determine if our wrapped environment has a "save_info"
@@ -387,7 +388,6 @@ class PPOEnvironmentWrapper(ABC):
 
             Arguments:
                 env           The environment to wrap.
-                status_dict   The dictionary containing training stats.
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 

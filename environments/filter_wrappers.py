@@ -49,6 +49,13 @@ class ObservationFilter(IdentityWrapper, ABC):
         """
         return
 
+    def _apply_filters(self, local_obs, global_obs):
+        """
+        """
+        local_obs  = self._filter_local_observation(local_obs)
+        global_obs = self._filter_global_observation(global_obs)
+        return local_obs, global_obs
+
     def step(self, action):
         """
             Take a single step in the environment using the given
@@ -61,9 +68,9 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, global_obs, reward, done, info = self.env.step(action)
 
-        obs = self._filter_local_observation(obs)
+        obs, global_obs = self._apply_filters(obs, global_obs)
 
         #
         # We need to cache the observation in case our lower level
@@ -72,36 +79,7 @@ class ObservationFilter(IdentityWrapper, ABC):
         self.obs_cache = deepcopy(obs)
         self.need_hard_reset = False
 
-        #
-        # Info can come back int two forms:
-        #   1. It's a dictionary containing global information.
-        #   2. It's an iterable containing num_agent/num_env dictionaries,
-        #      each of which contains info for its assocated environment/agent.
-        #
-        # In either case, we need to check for global state. If it's there
-        # we need to apply the same filters that we're applying to the
-        # local observations.
-        #
-        info_is_global = False
-        if type(info) == dict:
-            info_is_global = True
-
-        if info_is_global:
-            if "global state" in info:
-                info["global state"] = \
-                    self._filter_global_observation(info["global state"])
-        else:
-            #
-            # If it's in one, it's in them all.
-            #
-            if "global state" in info[0]:
-
-                iter_size = len(info)
-                for i in range(iter_size):
-                    info[i]["global state"] = \
-                        self._filter_global_observation(info[i]["global state"])
-
-        return obs, reward, done, info
+        return obs, global_obs, reward, done, info
 
     def reset(self):
         """
@@ -110,24 +88,8 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation.
         """
-        obs = self.env.reset()
-
-        #
-        # In our multi-agent case, the global state is returned along
-        # with the local observation.
-        #
-        is_multi_agent = False
-        if type(obs) == tuple  or type(obs) == list:
-            is_multi_agent = True
-            obs, global_state = obs
-
-        obs = self._filter_local_observation(obs)
-
-        if is_multi_agent:
-            global_state = self._filter_global_observation(global_state)
-            return (obs, global_state)
-
-        return obs
+        obs, global_obs = self.env.reset()
+        return self._apply_filters(obs, global_obs)
 
     def soft_reset(self):
         """
@@ -136,24 +98,8 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation.
         """
-        obs = self._env_soft_reset()
-
-        #
-        # In our multi-agent case, the global state is returned along
-        # with the local observation.
-        #
-        is_multi_agent = False
-        if type(obs) == tuple  or type(obs) == list:
-            is_multi_agent = True
-            obs, global_state = obs
-
-        obs = self._filter_local_observation(obs)
-
-        if is_multi_agent:
-            global_state = self._filter_global_observation(global_state)
-            return (obs, global_state)
-
-        return obs
+        obs, global_obs = self._env_soft_reset()
+        return self._apply_filters(obs, global_obs)
 
 
 class ObservationNormalizer(ObservationFilter):
@@ -183,17 +129,17 @@ class ObservationNormalizer(ObservationFilter):
             env,
             **kw_args)
 
-        self.running_stats = RunningMeanStd(
-            shape = self.env.observation_space.shape)
+        self.actor_running_stats = {}
 
-        #
-        # We might need to normalize global observations separately, so
-        # let's keep track of a separate running stats for this.
-        #
-        global_obs_shape = self.env.get_global_state_space().shape
+        for agent_id in self.env.observation_space:
+            self.actor_running_stats[agent_id] = RunningMeanStd(
+                shape = self.env.observation_space[agent_id].shape)
 
-        self.global_running_stats = RunningMeanStd(
-            shape = global_obs_shape)
+        self.critic_running_stats = {}
+
+        for agent_id in self.env.critic_observation_space:
+            self.critic_running_stats[agent_id] = RunningMeanStd(
+                shape = self.env.critic_observation_space[agent_id].shape)
 
         self.update_stats  = update_stats
         self.epsilon       = epsilon
@@ -209,7 +155,8 @@ class ObservationNormalizer(ObservationFilter):
                 The normalized observation.
         """
         if self.update_stats:
-            self.running_stats.update(obs)
+            for agent_id in obs:
+                self.actor_running_stats[agent_id].update(obs[agent_id])
 
         return self.local_normalize(obs)
 
@@ -225,7 +172,8 @@ class ObservationNormalizer(ObservationFilter):
                 The normalized observation.
         """
         if self.update_stats:
-            self.global_running_stats.update(global_obs)
+            for agent_id in global_obs:
+                self.critic_running_stats[agent_id].update(global_obs[agent_id])
 
         return self.global_normalize(global_obs)
 
@@ -240,52 +188,100 @@ class ObservationNormalizer(ObservationFilter):
             Returns:
                 The normalized observation.
         """
-        if type(obs) == np.ndarray:
-            return self._local_normalize(deepcopy(obs))
-        return self._local_normalize(obs)
+        for agent_id in obs:
+            if type(obs[agent_id]) == np.ndarray:
+                obs[agent_id] = self._local_normalize(
+                    agent_id, deepcopy(obs[agent_id]))
+            else:
+                obs[agent_id] = self._local_normalize(
+                    agent_id, obs[agent_id])
 
-    def _local_normalize(self, obs):
+        return obs
+
+    def _local_normalize(self, agent_id, agent_obs):
         """
             Normalize an observation using our running stats.
 
             Arguments:
-                obs    The observation to normalize.
+                agent_id     The assocated agent id.
+                agent_obs    The observation to normalize.
 
             Returns:
                 The normalized observation.
         """
-        obs = (obs - self.running_stats.mean) / \
-            np.sqrt(self.running_stats.variance + self.epsilon)
-        return obs
+        agent_obs = (agent_obs - self.actor_running_stats[agent_id].mean) / \
+            np.sqrt(self.actor_running_stats[agent_id].variance + self.epsilon)
+        return agent_obs
 
-    def global_normalize(self, global_obs):
+    def global_normalize(self, obs):
         """
             A simple wrapper around self._global_normalize() that mitigates
             issues with memory references.
 
             Arguments:
-                global_obs    The global observation to normalize.
+                obs    The global observation to normalize.
 
             Returns:
                 The normalized observation.
         """
-        if type(global_obs) == np.ndarray:
-            return self._global_normalize(deepcopy(global_obs))
-        return self._global_normalize(global_obs)
+        for agent_id in obs:
+            if type(obs[agent_id]) == np.ndarray:
+                obs[agent_id] = self._local_normalize(
+                    agent_id, deepcopy(obs[agent_id]))
+            else:
+                obs[agent_id] = self._local_normalize(
+                    agent_id, obs[agent_id])
 
-    def _global_normalize(self, global_obs):
+        return obs
+
+    def _global_normalize(self, obs):
         """
             Normalize a global observation using our running stats.
 
             Arguments:
-                global_obs    The global observation to normalize.
+                agent_id     The assocated agent id.
+                obs          The global observation to normalize.
 
             Returns:
                 The normalized observation.
         """
-        global_obs = (global_obs - self.global_running_stats.mean) / \
-            np.sqrt(self.global_running_stats.variance + self.epsilon)
-        return global_obs
+        agent_obs = (agent_obs - self.critic_running_stats[agent_id].mean) / \
+            np.sqrt(self.critic_running_stats[agent_id].variance + self.epsilon)
+        return agent_obs
+
+    def _save_stats(self, path, file_name, stats):
+        """
+            Save out our running stats.
+
+            Arguments: 
+                path        The path to save to.
+                file_name   The file name to save to.
+                stats       The stats object to save.
+        """
+        out_file  = os.path.join(path, file_name)
+
+        with open(out_file, "wb") as fh:
+            pickle.dump(stats, fh)
+
+    def _load_stats(self, path, file_name, backup_file_name, stats):
+        """
+            Load our running stats.
+
+            Arguments: 
+                path               The path to load from.
+                file_name          The file name to load.
+                backup_file_name   If file_name doesn't exist, rely on this
+                                   file instead. This is useful when a processor
+                                   file is missing, but we know rank 0 exists.
+                stats              The stats object to load to.
+        """
+        in_file = os.path.join(path, file_name)
+
+        if not os.path.exists(in_file):
+            in_file = os.path.join(path, backup_file_name)
+
+        with open(in_file, "rb") as fh:
+            stats = pickle.load(fh)
 
     def save_info(self, path):
         """
@@ -298,11 +294,11 @@ class ObservationNormalizer(ObservationFilter):
         if self.test_mode:
             return
 
-        file_name = "RunningObsStats_{}.pkl".format(rank)
-        out_file  = os.path.join(path, file_name)
+        file_name = "ActorRunningObsStats_{}.pkl".format(rank)
+        self._save_stats(path, file_name, self.actor_running_stats)
 
-        with open(out_file, "wb") as fh:
-            pickle.dump(self.running_stats, fh)
+        file_name = "CriticRunningObsStats_{}.pkl".format(rank)
+        self._save_stats(path, file_name, self.critic_running_stats)
 
         self._check_env_save(path)
 
@@ -315,23 +311,25 @@ class ObservationNormalizer(ObservationFilter):
                 path    The path to load from.
         """
         if self.test_mode:
-            file_name = "RunningObsStats_0.pkl"
+            actor_file_name  = "ActorRunningObsStats_0.pkl"
+            critic_file_name = "CriticRunningObsStats_0.pkl"
         else:
-            file_name = "RunningObsStats_{}.pkl".format(rank)
-
-        in_file = os.path.join(path, file_name)
+            actor_file_name  = "ActorRunningObsStats_{}.pkl".format(rank)
+            critic_file_name = "CriticRunningObsStats_{}.pkl".format(rank)
 
         #
         # There are cases where we initially train using X ranks, and we
         # later want to continue training using (X+k) ranks. In these cases,
         # let's copy rank 0's info to all ranks > X.
         #
-        if not os.path.exists(in_file):
-            file_name = "RunningObsStats_0.pkl"
-            in_file   = os.path.join(path, file_name)
+        backup_actor_file_name  = "ActorRunningObsStats_0.pkl"
+        backup_critic_file_name = "CriticRunningObsStats_0.pkl"
 
-        with open(in_file, "rb") as fh:
-            self.running_stats = pickle.load(fh)
+        self._load_stats(path, actor_file_name,
+            backup_actor_file_name, self.actor_running_stats)
+
+        self._load_stats(path, critic_file_name,
+            backup_critic_file_name, self.critic_running_stats)
 
         self._check_env_load(path)
 
@@ -363,7 +361,10 @@ class RewardNormalizer(IdentityWrapper):
             env,
             **kw_args)
 
-        self.running_stats = RunningMeanStd(shape=())
+        self.running_stats = {}
+        for agent_id in self.env.agent_ids:
+            self.running_stats[agent_id] = RunningMeanStd(shape=())
+
         self.update_stats  = update_stats
         self.epsilon       = epsilon
         self.gamma         = gamma
@@ -373,12 +374,11 @@ class RewardNormalizer(IdentityWrapper):
         # if so, we need to be able to correlate a running reward with
         # each environment instance.
         #
-        if self.test_mode and self.get_num_agents() == 1:
-            self.batch_size = 1
-        else:
-            self.batch_size = self.get_batch_size()
+        self.batch_size = self.get_batch_size()
 
-        self.running_reward = np.zeros(self.batch_size)
+        self.running_reward = {}
+        for agent_id in self.env.agent_ids:
+            self.running_reward[agent_id] = np.zeros(self.batch_size)
 
     def step(self, action):
         """
@@ -393,62 +393,71 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, done, and info tuple.
         """
 
-        obs, reward, done, info = self._cache_step(action)
+        obs, global_obs, reward, done, info = self._cache_step(action)
 
-        for env_idx in range(self.batch_size):
+        for agent_id in reward:
+
             if self.update_stats:
-                self.running_reward[env_idx] = \
-                    self.running_reward[env_idx] * self.gamma + reward[env_idx]
+                for env_idx in range(self.batch_size):
+                    self.running_reward[agent_id][env_idx] = \
+                        self.running_reward[agent_id][env_idx] * \
+                        self.gamma + reward[agent_id][env_idx]
 
-                self.running_stats.update(self.running_reward)
+                    self.running_stats[agent_id].update(
+                        self.running_reward[agent_id])
 
-        if self.batch_size > 1:
-            where_done = np.where(done)[0]
-            self.running_reward[where_done] = 0.0
-        elif done:
-            self.running_reward[0] = 0.0
+            if self.batch_size > 1:
+                where_done = np.where(done[agent_id])[0]
+                self.running_reward[agent_id][where_done] = 0.0
 
-        if type(reward) == np.ndarray:
-            batch_size = reward.shape[0]
+            elif done[agent_id]:
+                self.running_reward[agent_id][0] = 0.0
 
-            for r_idx in range(batch_size):
-                if "natural reward" not in info[r_idx]:
-                    info[r_idx]["natural reward"] = reward[r_idx]
-        else:
-            if "natural reward" not in info:
-                info["natural reward"] = reward
+            if type(reward[agent_id]) == np.ndarray:
+                batch_size = reward[agent_id].shape[0]
 
-        reward = self.normalize(reward)
+                for r_idx in range(batch_size):
+                    if "natural reward" not in info[agent_id][r_idx]:
+                        info[agent_id][r_idx]["natural reward"] = \
+                            reward[agent_id][r_idx]
+            else:
+                if "natural reward" not in info:
+                    info[agent_id]["natural reward"] = reward[agent_id]
 
-        return obs, reward, done, info
+            reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
-    def normalize(self, reward):
+        return obs, global_obs, reward, done, info
+
+    def normalize(self, agent_id, agent_reward):
         """
             A simple wrapper around self._normalize() that mitigates
             issues with memory references.
 
             Arguments:
-                reward    The reward to normalize.
+                agent_id        The associated agent id.
+                agent_reward    The reward to normalize.
 
             Returns:
                 The normalized reward.
         """
-        if type(reward) == np.ndarray:
-            return self._normalize(deepcopy(reward))
-        return self._normalize(reward)
+        if type(agent_reward) == np.ndarray:
+            return self._normalize(agent_id, deepcopy(agent_reward))
+        return self._normalize(agent_id, agent_reward)
 
-    def _normalize(self, reward):
+    def _normalize(self, agent_id, agent_reward):
         """
             Normalize our reward using Stable Baseline's approach.
 
             Arguments:
-                reward    The reward to normalize.
+                agent_id        The associated agent_id.
+                agent_reward    The reward to normalize.
 
             Returns:
                 The normalized reward.
         """
-        reward /= np.sqrt(self.running_stats.variance + self.epsilon)
-        return reward
+        agent_reward /= np.sqrt(
+            self.running_stats[agent_id].variance + self.epsilon)
+        return agent_reward
 
     def save_info(self, path):
         """
@@ -549,22 +558,41 @@ class GenericClipper(IdentityWrapper):
                 A tuple containing the clip range as (min, max).
         """
         min_value = self.clip_range[0](
-            iteration = self.status_dict["iteration"],
-            timestep  = self.status_dict["timesteps"])
+            iteration = self.status_dict["general"]["iteration"],
+            timestep  = self.status_dict["general"]["timesteps"])
         max_value = self.clip_range[1](
-            iteration = self.status_dict["iteration"],
-            timestep  = self.status_dict["timesteps"])
+            iteration = self.status_dict["general"]["iteration"],
+            timestep  = self.status_dict["general"]["timesteps"])
 
         return (min_value, max_value)
 
-    def _clip(self, val):
+    def _apply_agent_clipping(self, agent_dict):
         """
-            Perform the clip.
+            Apply clipping to all agent values.
 
             Arguments:
-                val    The value to be clipped.
+                agent_dict    A dictionary mapping agent ids to the values
+                              needing to be clipped.
+
+            Returns:
+                The agent_dict after clipping has been applied.
         """
-        raise NotImplementedError
+        for agent_id in agent_dict:
+            agent_dict[agent_id] = self._clip(agent_dict[agent_id])
+        return agent_dict
+
+    def _clip(self, val):
+        """
+            Clip a value to our clip range.
+
+            Arguments:
+                val    The value to clip.
+
+            Returns:
+                The clipped value.
+        """
+        min_value, max_value = self.get_clip_range()
+        return np.clip(val, min_value, max_value)
 
 
 class ObservationClipper(ObservationFilter, GenericClipper):
@@ -592,7 +620,7 @@ class ObservationClipper(ObservationFilter, GenericClipper):
             clip_range  = clip_range,
             **kw_args)
 
-    def _filter_global_observation(self, global_obs):
+    def _filter_global_observation(self, obs):
         """
             A simple wrapper for clipping the global observation.
 
@@ -602,7 +630,7 @@ class ObservationClipper(ObservationFilter, GenericClipper):
             Returns:
                 The clipped observation.
         """
-        return self._clip(global_obs)
+        return self._apply_agent_clipping(obs)
 
     def _filter_local_observation(self, obs):
         """
@@ -614,20 +642,7 @@ class ObservationClipper(ObservationFilter, GenericClipper):
             Returns:
                 The clipped observation.
         """
-        return self._clip(obs)
-
-    def _clip(self, obs):
-        """
-            Perform the observation clip.
-
-            Arguments:
-                obs    The observation to clip.
-
-            Returns:
-                The clipped observation.
-        """
-        min_value, max_value = self.get_clip_range()
-        return np.clip(obs, min_value, max_value)
+        return self._apply_agent_clipping(obs)
 
 
 class RewardClipper(GenericClipper):
@@ -656,45 +671,35 @@ class RewardClipper(GenericClipper):
             clip_range  = clip_range,
             **kw_args)
 
-    def step(self, action):
+    def step(self, actions):
         """
             Take a single step in the environment using the given
-            action, and clip the resulting reward.
+            actions, and clip the resulting reward.
 
             Arguments:
-                action    The action to take.
+                actions    A dictionary mapping agent ids to their actions.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, global_observation, reward, done,
+                and info tuple.
         """
-        obs, reward, done, info = self._cache_step(action)
+        obs, global_obs, reward, done, info = self._cache_step(actions)
 
-        if type(reward) == np.ndarray:
-            batch_size = reward.shape[0]
+        for agent_id in reward:
+            if type(reward[agent_id]) == np.ndarray:
+                batch_size = reward[agent_id].shape[0]
 
-            for r_idx in range(batch_size):
-                if "natural reward" not in info[r_idx]:
-                    info[r_idx]["natural reward"] = reward[r_idx]
-        else:
-            if "natural reward" not in info:
-                info["natural reward"] = reward
+                for r_idx in range(batch_size):
+                    if "natural reward" not in info[agent_id][r_idx]:
+                        info[agent_id][r_idx]["natural reward"] = \
+                            reward[agent_id][r_idx]
+            else:
+                if "natural reward" not in info:
+                    info[agent_id]["natural reward"] = reward[agent_id]
 
-        reward = self._clip(reward)
+        reward = self._apply_agent_clipping(reward)
 
-        return obs, reward, done, info
-
-    def _clip(self, reward):
-        """
-            Perform the reward clip.
-
-            Arguments:
-                reward    The reward to clip.
-
-            Returns:
-                The clipped reward.
-        """
-        min_value, max_value = self.get_clip_range()
-        return np.clip(reward, min_value, max_value)
+        return obs, global_obs, reward, done, info
 
 
 class ObservationAugmentingWrapper(IdentityWrapper):
@@ -769,34 +774,45 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 with a single info dictionary. The observations will
                 contain augmentations of the original observation.
         """
-        #TODO: update for soft resets.
-        obs, reward, done, info = self.env.step(action)
+        # TODO: update for soft resets.
+        # FIXME: this needs to be tested after MA refactor.
+        obs, global_obs, reward, done, info = self.env.step(action)
 
-        batch_obs  = self.env.augment_observation(obs)
-        batch_size = batch_obs.shape[0]
+        batch_obs        = self.env.augment_observation(obs)
+        batch_global_obs = self.env.augment_global_observation(global_obs)
+        batch_size       = batch_obs.shape[0]
 
-        if "terminal observation" in info[0]:
-            batch_infos = np.array([None] * batch_size,
-                dtype=object)
+        batch_rewards = {}
+        batch_dones   = {}
+        batch_infos   = {}
 
-            terminal_obs = info[0]["terminal observation"]
-            terminal_obs = self.env.augment_observation(terminal_obs)
+        for agent_id in obs:
+            if "terminal observation" in info[0]:
+                batch_infos[agent_id] = np.array([None] * batch_size,
+                    dtype=object)
 
-            for i in range(batch_size):
-                i_info = deepcopy(info[0])
-                i_info["terminal observation"] = deepcopy(terminal_obs[i])
-                batch_infos[i] = deepcopy(i_info)
-        else:
-            batch_infos = np.tile((info[0],), batch_size)
+                terminal_obs = info[agent_id][0]["terminal observation"]
+                terminal_obs = self.env.augment_observation(terminal_obs)
 
-        batch_rewards = np.tile((reward,), batch_size)
-        batch_dones   = np.tile((done,), batch_size).astype(bool)
+                for i in range(batch_size):
+                    i_info = deepcopy(info[agent_id][0])
+                    i_info["terminal observation"] = deepcopy(terminal_obs[i])
+                    batch_infos[agent_id][i] = i_info
+            else:
+                batch_infos[agent_id] = np.tile((info[agent_id][0],), batch_size)
 
-        batch_rewards = batch_rewards.reshape((batch_size, 1))
-        batch_dones   = batch_dones.reshape((batch_size, 1))
-        batch_infos   = batch_infos.reshape((batch_size))
+            batch_rewards[agent_id] = np.tile((reward[agent_id],), batch_size)
+            batch_dones[agent_id] = \
+                np.tile((done[agent_id],), batch_size).astype(bool)
 
-        return batch_obs, batch_rewards, batch_dones, batch_infos
+            batch_rewards[agent_id] = \
+                batch_rewards[agent_id].reshape((batch_size, 1))
+            batch_dones[agent_id] = \
+                batch_dones[agent_id].reshape((batch_size, 1))
+            batch_infos[agent_id] = batch_infos[agent_id].reshape((batch_size))
+
+        return (batch_obs, batch_global_obs, batch_rewards,
+            batch_dones, batch_infos)
 
     def aug_test_step(self, action):
         """
@@ -814,20 +830,28 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 Observation, reward, done, and info (possibly augmented).
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, global_obs, reward, done, info = self.env.step(action)
 
-        batch_obs  = self.env.augment_observation(obs)
-        batch_size = batch_obs.shape[0]
+        batch_obs        = self.env.augment_observation(obs)
+        batch_global_obs = self.env.augment_global_observation(global_obs)
+        batch_size       = batch_obs.shape[0]
 
         if self.test_idx < 0:
             self.test_idx = np.random.randint(0, batch_size)
 
-        if "terminal observation" in info:
-            terminal_obs = info["terminal observation"]
-            terminal_obs = self.env.augment_observation(terminal_obs)
-            info["terminal observation"] = deepcopy(terminal_obs[self.test_idx])
+        for agent_id in batch_obs:
+            batch_obs[agent_id] = batch_obs[agent_id][self.test_idx]
+            batch_global_obs[agent_id] = \
+                batch_global_obs[agent_id][self.test_idx]
 
-        return batch_obs[self.test_idx], reward, done, info
+        for agent_id in info:
+            if "terminal observation" in info[agent_id]:
+                terminal_obs = info[agent_id]["terminal observation"]
+                terminal_obs = self.env.augment_observation(terminal_obs)
+                info[agent_id]["terminal observation"] = \
+                    deepcopy(terminal_obs[self.test_idx])
+
+        return batch_obs, batch_global_obs, reward, done, info
 
     def reset(self):
         """
@@ -848,11 +872,12 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 The resulting observations.
         """
-        obs = self.env.reset()
+        obs, global_obs = self.env.reset()
 
-        aug_obs_batch = self.env.augment_observation(obs)
+        obs = self.env.augment_observation(obs)
+        global_obs = self.env.augment_global_observation(global_obs)
 
-        return aug_obs_batch
+        return obs, global_obs
 
     def aug_test_reset(self):
         """
@@ -862,15 +887,20 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 The resulting observation (possibly augmented).
         """
-        obs = self.env.reset()
+        obs, global_obs = self.env.reset()
 
-        aug_obs_batch = self.env.augment_observation(obs)
-        batch_size    = aug_obs_batch.shape[0]
+        obs = self.env.augment_observation(obs)
+        global_obs = self.env.augment_global_observation(global_obs)
+        batch_size = obs.shape[0]
 
         if self.test_idx < 0:
             self.test_idx = np.random.randint(0, batch_size)
 
-        return aug_obs_batch[self.test_idx]
+        for agent_id in obs:
+            obs[agent_id] = obs[agent_id][self.test_idx]
+            global_obs[agent_id] = global_obs[agent_id][self.test_idx]
+
+        return obs, global_obs
 
     def get_batch_size(self):
         """
