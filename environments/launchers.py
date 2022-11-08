@@ -228,7 +228,7 @@ class CartPoleLauncher(EnvironmentLauncher):
                      use_gae            = True,
 
                      #FIXME: debugging
-                     normalize_obs      = False,
+                     normalize_obs      = True,
                      obs_clip           = None,#(-10., 10.),
                      reward_clip        = None,#(-10., 10.),
                      normalize_rewards  = False,

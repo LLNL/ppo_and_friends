@@ -6,6 +6,7 @@
 from ppo_and_friends.utils.stats import RunningMeanStd
 from ppo_and_friends.environments.general_wrappers import IdentityWrapper
 import numpy as np
+from copy import deepcopy
 import pickle
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -68,7 +69,7 @@ class ObservationFilter(IdentityWrapper, ABC):
         # We need to cache the observation in case our lower level
         # wrappers don't have soft_reset defined.
         #
-        self.obs_cache = obs.copy()
+        self.obs_cache = deepcopy(obs)
         self.need_hard_reset = False
 
         #
@@ -240,7 +241,7 @@ class ObservationNormalizer(ObservationFilter):
                 The normalized observation.
         """
         if type(obs) == np.ndarray:
-            return self._local_normalize(obs.copy())
+            return self._local_normalize(deepcopy(obs))
         return self._local_normalize(obs)
 
     def _local_normalize(self, obs):
@@ -269,7 +270,7 @@ class ObservationNormalizer(ObservationFilter):
                 The normalized observation.
         """
         if type(global_obs) == np.ndarray:
-            return self._global_normalize(global_obs.copy())
+            return self._global_normalize(deepcopy(global_obs))
         return self._global_normalize(global_obs)
 
     def _global_normalize(self, global_obs):
@@ -392,7 +393,7 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, done, and info tuple.
         """
 
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, done, info = self._cache_step(action)
 
         for env_idx in range(self.batch_size):
             if self.update_stats:
@@ -433,7 +434,7 @@ class RewardNormalizer(IdentityWrapper):
                 The normalized reward.
         """
         if type(reward) == np.ndarray:
-            return self._normalize(reward.copy())
+            return self._normalize(deepcopy(reward))
         return self._normalize(reward)
 
     def _normalize(self, reward):
@@ -666,7 +667,7 @@ class RewardClipper(GenericClipper):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, done, info = self._cache_step(action)
 
         if type(reward) == np.ndarray:
             batch_size = reward.shape[0]
@@ -746,6 +747,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 The resulting observation(s), reward(s), done(s), and info(s).
         """
+        #TODO: update to handle soft resets.
         if self.test_mode:
             return self.aug_test_step(action)
         return self.aug_step(action)
@@ -780,9 +782,9 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             terminal_obs = self.env.augment_observation(terminal_obs)
 
             for i in range(batch_size):
-                i_info = info[0].copy()
-                i_info["terminal observation"] = terminal_obs[i].copy()
-                batch_infos[i] = i_info.copy()
+                i_info = deepcopy(info[0])
+                i_info["terminal observation"] = deepcopy(terminal_obs[i])
+                batch_infos[i] = deepcopy(i_info)
         else:
             batch_infos = np.tile((info[0],), batch_size)
 
@@ -822,7 +824,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
         if "terminal observation" in info:
             terminal_obs = info["terminal observation"]
             terminal_obs = self.env.augment_observation(terminal_obs)
-            info["terminal observation"] = terminal_obs[self.test_idx].copy()
+            info["terminal observation"] = deepcopy(terminal_obs[self.test_idx])
 
         return batch_obs[self.test_idx], reward, done, info
 

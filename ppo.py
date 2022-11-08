@@ -1071,8 +1071,8 @@ class PPO(object):
             # Centralized Training Decentralized Execution (CTDE).
             # arXiv:2006.07869v4
             #
-            prev_obs        = obs.copy()
-            prev_global_obs = global_obs.copy()
+            prev_obs        = deepcopy(obs)
+            prev_global_obs = deepcopy(global_obs)
 
             #
             # The returned objects are dictionaries mapping agent ids
@@ -1136,7 +1136,7 @@ class PPO(object):
             have_nat_reward, natural_reward = self.get_natural_reward(info)
 
             if not have_nat_reward:
-                natural_reward = ext_reward.copy()
+                natural_reward = deepcopy(ext_reward)
 
             #FIXME:
             #if "natural reward" in info[0]:
@@ -1161,7 +1161,7 @@ class PPO(object):
                 obs,
                 action)
 
-            ep_obs = obs.copy()
+            ep_obs = deepcopy(obs)
 
             where_done, where_not_done = self.get_done_envs(done)
             done_count = where_done.size

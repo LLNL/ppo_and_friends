@@ -22,20 +22,15 @@ def test_policy(ppo,
     render     = ppo.render
     policy_map = ppo.policy_mapping_fn
 
-    action_dtype = get_action_dtype(env.action_space)
+    action_dtype = {}
+    for agent_id in env.agent_ids:
+        action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
 
-    max_int     = np.iinfo(np.int32).max
-    num_steps   = 0
-    total_score = 0
-    min_score   = max_int
-    max_score   = -max_int
-
-    is_multi_agent = env.get_num_agents() > 1
-
-    if is_multi_agent:
-        reset_filter = lambda x : x[0]
-    else:
-        reset_filter = lambda x: x
+    max_int      = np.iinfo(np.int32).max
+    num_steps    = 0
+    total_scores = {agent_id : 0.0 for agent_id in env.agent_ids}
+    min_scores   = {agent_id : max_int for agent_id in env.agent_ids}
+    max_scores   = {agent_id : -max_int for agent_id in env.agent_ids}
 
     if render_gif:
         gif_frames = []
@@ -43,14 +38,10 @@ def test_policy(ppo,
     for key in policies:
         policies[key].eval()
 
-    #FIXME: integrate
-    agent_key = policy_map()
-
     for _ in range(num_test_runs):
 
-        obs      = reset_filter(env.reset())
+        obs, _   = env.reset()
         done     = False
-        ep_score = 0
 
         while not done:
             num_steps += 1
@@ -61,56 +52,50 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render(mode = "rgb_array"))
 
-            obs = torch.tensor(obs, dtype=torch.float).to(device)
+            actions = {}
+            for agent_id in obs:
 
-            if not is_multi_agent:
-                obs = obs.unsqueeze(0)
+                obs[agent_id] = torch.tensor(obs[agent_id],
+                    dtype=torch.float).to(device)
 
-            with torch.no_grad():
-                action = policies[agent_key].actor.get_result(obs).detach().cpu()
+                obs[agent_id] = obs[agent_id].unsqueeze(0)
+                policy_id     = policy_map(agent_id)
 
-            if action_dtype == "discrete":
-                action = torch.argmax(action, axis=-1).numpy()
-            else:
-                action = action.numpy()
+                with torch.no_grad():
+                    actions[agent_id] = \
+                        policies[policy_id].actor.get_result(
+                            obs[agent_id]).detach().cpu()
 
-            obs, reward, done, info = env.step(action)
+                if action_dtype[agent_id] == "discrete":
+                    actions[agent_id] = torch.argmax(actions[agent_id], axis=-1).numpy()
+                else:
+                    actions[agent_id] = actions[agent_id].numpy()
 
-            reward = np.float32(reward)
+            obs, _, reward, done, info = env.step(actions)
 
-            if is_multi_agent:
-                done = done.all()
+            done = env.get_all_done()
 
-            if "natural reward" in info:
-                score = info["natural reward"]
-            else:
-                score = reward
+            for agent_id in reward:
+                reward[agent_id] = np.float32(reward[agent_id])
 
-            ep_score += score
-            total_score += score
+                if "natural reward" in info[agent_id]:
+                    score = info[agent_id]["natural reward"]
+                else:
+                    score = reward[agent_id]
 
-        #
-        # For multi-agent environments, we report the average score per
-        # agent. There are other options we could try instead. For coop
-        # games, we could sum the scores. Adversarial games get tricky...
-        #
-        if is_multi_agent:
-            refined_score = ep_score.mean()
-        else:
-            refined_score = ep_score
+                total_scores[agent_id] += score
 
-        min_score = min(min_score, refined_score)
-        max_score = max(max_score, refined_score)
+                min_scores[agent_id] = min(min_scores[agent_id], score)
+                max_scores[agent_id] = max(max_scores[agent_id], score)
 
-    if is_multi_agent:
-        total_score = total_score.mean()
-
-    print("Ran env {} times.".format(num_test_runs))
-    print("Ran {} total time steps.".format(num_steps))
-    print("Ran {} time steps on average.".format(num_steps / num_test_runs))
-    print("Lowest score: {}".format(min_score))
-    print("Highest score: {}".format(max_score))
-    print("Average score: {}".format(total_score / num_test_runs))
+    for agent_id in env.agent_ids:
+        print("\nAgent {}:".format(agent_id))
+        print("    Ran env {} times.".format(num_test_runs))
+        print("    Ran {} total time steps.".format(num_steps))
+        print("    Ran {} time steps on average.".format(num_steps / num_test_runs))
+        print("    Lowest score: {}".format(min_scores[agent_id]))
+        print("    Highest score: {}".format(max_scores[agent_id]))
+        print("    Average score: {}".format(total_scores[agent_id] / num_test_runs))
 
     if render_gif:
         print("Attempting to create gif..")
