@@ -725,7 +725,7 @@ class PPO(object):
 
         if have_nat_reward:
             for agent_id in info:
-                natural_reward[agent_id] = np.zeros(batch_size)
+                natural_reward[agent_id] = np.zeros((batch_size, 1))
                 for b_idx in range(batch_size):
                     natural_reward[agent_id][b_idx] = \
                         info[agent_id][b_idx]["natural reward"]

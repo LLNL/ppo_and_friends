@@ -416,13 +416,14 @@ class RewardNormalizer(IdentityWrapper):
             if type(reward[agent_id]) == np.ndarray:
                 batch_size = reward[agent_id].shape[0]
 
-                for r_idx in range(batch_size):
-                    if "natural reward" not in info[agent_id][r_idx]:
-                        info[agent_id][r_idx]["natural reward"] = \
-                            reward[agent_id][r_idx]
+                for b_idx in range(batch_size):
+                    if "natural reward" not in info[agent_id][b_idx]:
+                        info[agent_id][b_idx]["natural reward"] = \
+                            deepcopy(reward[agent_id][b_idx])
             else:
                 if "natural reward" not in info:
-                    info[agent_id]["natural reward"] = reward[agent_id]
+                    info[agent_id]["natural reward"] = \
+                        deepcopy(reward[agent_id])
 
             reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
@@ -689,13 +690,14 @@ class RewardClipper(GenericClipper):
             if type(reward[agent_id]) == np.ndarray:
                 batch_size = reward[agent_id].shape[0]
 
-                for r_idx in range(batch_size):
-                    if "natural reward" not in info[agent_id][r_idx]:
-                        info[agent_id][r_idx]["natural reward"] = \
-                            reward[agent_id][r_idx]
+                for b_idx in range(batch_size):
+                    if "natural reward" not in info[agent_id][b_idx]:
+                        info[agent_id][b_idx]["natural reward"] = \
+                            deepcopy(reward[agent_id][b_idx])
             else:
                 if "natural reward" not in info:
-                    info[agent_id]["natural reward"] = reward[agent_id]
+                    info[agent_id]["natural reward"] = \
+                        deepcopy(reward[agent_id])
 
         reward = self._apply_agent_clipping(reward)
 
