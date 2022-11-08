@@ -170,7 +170,7 @@ should be used with caution and consideration.
 ## Soft Resets
 
 ### What are soft resets?
-In short, the environmets is only reset back to its starting state when it
+In short, the environment is only reset back to its starting state when it
 reaches a done state. This can be useful when you want to keep your timesteps
 per episode fairly short while allowing your agent(s) to explore the
 environment at further time states. I believe RLlib has a similar feature
