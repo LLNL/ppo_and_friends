@@ -392,7 +392,7 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, done, and info tuple.
         """
 
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, done, info = self._cache_step(action)
 
         for env_idx in range(self.batch_size):
             if self.update_stats:
@@ -666,7 +666,7 @@ class RewardClipper(GenericClipper):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, reward, done, info = self.env.step(action)
+        obs, reward, done, info = self._cache_step(action)
 
         if type(reward) == np.ndarray:
             batch_size = reward.shape[0]
@@ -767,6 +767,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 with a single info dictionary. The observations will
                 contain augmentations of the original observation.
         """
+        #TODO: update for soft resets.
         obs, reward, done, info = self.env.step(action)
 
         batch_obs  = self.env.augment_observation(obs)

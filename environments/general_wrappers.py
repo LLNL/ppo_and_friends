@@ -88,10 +88,10 @@ class IdentityWrapper():
         self.env.seed(seed)
         self.env.action_space.seed(seed)
 
-    def step(self, action):
+    def _cache_step(self, action):
         """
             Take a single step in the environment using the given
-            action.
+            action, and cache the observation for soft resets.
 
             Arguments:
                 action    The action to take.
@@ -105,6 +105,19 @@ class IdentityWrapper():
         self.need_hard_reset = False
 
         return obs, reward, done, info
+
+    def step(self, action):
+        """
+            Take a single step in the environment using the given
+            action.
+
+            Arguments:
+                action    The action to take.
+
+            Returns:
+                The resulting observation, reward, done, and info tuple.
+        """
+        return self.cache_step(action)
 
     def reset(self):
         """
@@ -428,6 +441,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             batch_dones[env_idx]   = done
             batch_infos[env_idx]   = info
 
+        self.need_hard_reset = False
         self.obs_cache = batch_obs.copy()
 
         return batch_obs, batch_rewards, batch_dones, batch_infos

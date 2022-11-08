@@ -110,7 +110,8 @@ Some things to note:
    we will never collect states from `U` and thus might not ever learn
    how to handle those unique situations. A similar logic applies for
    `envs_per_proc`. **Note**: this particular issue is now partially
-   mitigated by the recent addition of "soft resets".
+   mitigated by the recent addition of "soft resets", but this feature
+   has its own complications.
 3. When running with multiple processors or environment instances,
    the stats that are displayed might not fully reflect the true status
    of learning. For instance, imagine an environment that, when performing
@@ -165,6 +166,23 @@ duplicated, except that it might contain augmented terminal observations.
 **NOTE:** we don't currently prohibit the use of multiple environments per
 processor in conjunction with `aug_observation`, but it is untested and
 should be used with caution and consideration.
+
+## Soft Resets
+
+### What are soft resets?
+In short, the environment is only reset back to its starting state when it
+reaches a done state. This can be useful when you want to keep your timesteps
+per episode fairly short while allowing your agent(s) to explore the
+environment at further time states.
+
+### When to use caution
+While soft resets can be very useful, there are also situations where they
+can be detrimental. Imagine a scenario where your agent can easily fall into
+inescapable "traps" midway through exploring the environment. If soft resets
+are enabled, you might find that your rollouts are starting with the agent
+in this trap, which could negatively impact learning. On the other hand, if
+the traps are escapable, and escaping is a desired learned behavior, then
+using soft resets might actually be helpful in the long term.
 
 ## Non-Terminal Done States
 
