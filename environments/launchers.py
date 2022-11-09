@@ -11,7 +11,6 @@ from ppo_and_friends.testing import test_policy
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork, AtariPixelNetwork
 from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
-from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
@@ -52,111 +51,23 @@ class EnvironmentLauncher(ABC):
                 policy_settings,
                 policy_mapping_fn,
                 env_generator,
-                ac_network,
                 device,
-                random_seed,
-                is_multi_agent      = False,
-                death_mask          = True,
-                add_agent_ids       = False,
-                envs_per_proc       = 1,
-                icm_network         = ICM,
-                batch_size          = 256,
-                ts_per_rollout      = num_procs * 1024,
-                epochs_per_iter     = 10,
-                target_kl           = 100.,
-                lr                  = 3e-4,
-                min_lr              = 1e-4,
-                lr_dec              = None,
-                entropy_weight      = 0.01,
-                min_entropy_weight  = 0.01,
-                entropy_dec         = None,
-                max_ts_per_ep       = 200,
-                use_gae             = True,
-                use_icm             = False,
-                save_every          = 1,
-                icm_beta            = 0.8,
-                ext_reward_weight   = 1.0,
-                intr_reward_weight  = 1.0,
-                actor_kw_args       = {},
-                critic_kw_args      = {},
-                icm_kw_args         = {},
-                gamma               = 0.99,
-                lambd               = 0.95,
-                surr_clip           = 0.2,
-                bootstrap_clip      = (-10.0, 10.0),
-                dynamic_bs_clip     = False,
-                gradient_clip       = 0.5,
-                mean_window_size    = 100,
-                normalize_adv       = True,
-                normalize_obs       = True,
-                normalize_rewards   = True,
-                normalize_values    = True,
-                obs_clip            = None,
-                reward_clip         = None,
-                render              = False,
-                render_gif          = False,
-                load_state          = False,
-                state_path          = "./",
-                num_timesteps       = 1,
-                test                = False,
-                pickle_class        = False,
-                use_soft_resets     = False,
-                obs_augment         = False,
-                num_test_runs       = 1):
+                test          = False,
+                num_timesteps = 1_000_000,
+                render_gif    = False,
+                num_test_runs = 1,
+                **kw_args):
 
         """
             Run the PPO algorithm.
         """
     
-        ppo = PPO(policy_settings    = policy_settings,
-                  policy_mapping_fn  = policy_mapping_fn,
-                  env_generator      = env_generator,
-                  ac_network         = ac_network,
-                  icm_network        = icm_network,
-                  device             = device,
-                  is_multi_agent     = is_multi_agent,
-                  death_mask         = death_mask,
-                  add_agent_ids      = add_agent_ids,
-                  random_seed        = random_seed,
-                  batch_size         = batch_size,
-                  envs_per_proc      = envs_per_proc,
-                  ts_per_rollout     = ts_per_rollout,
-                  lr                 = lr,
-                  target_kl          = target_kl,
-                  min_lr             = min_lr,
-                  lr_dec             = lr_dec,
-                  max_ts_per_ep      = max_ts_per_ep,
-                  use_gae            = use_gae,
-                  use_icm            = use_icm,
-                  save_every         = save_every,
-                  ext_reward_weight  = ext_reward_weight,
-                  intr_reward_weight = intr_reward_weight,
-                  entropy_weight     = entropy_weight,
-                  min_entropy_weight = min_entropy_weight,
-                  entropy_dec        = entropy_dec,
-                  icm_kw_args        = icm_kw_args,
-                  actor_kw_args      = actor_kw_args,
-                  critic_kw_args     = critic_kw_args,
-                  gamma              = gamma,
-                  lambd              = lambd,
-                  surr_clip          = surr_clip,
-                  bootstrap_clip     = bootstrap_clip,
-                  dynamic_bs_clip    = dynamic_bs_clip,
-                  gradient_clip      = gradient_clip,
-                  normalize_adv      = normalize_adv,
-                  normalize_obs      = normalize_obs,
-                  normalize_rewards  = normalize_rewards,
-                  normalize_values   = normalize_values,
-                  obs_clip           = obs_clip,
-                  reward_clip        = reward_clip,
-                  mean_window_size   = mean_window_size,
-                  render             = render,
-                  load_state         = load_state,
-                  state_path         = state_path,
-                  pickle_class       = pickle_class,
-                  use_soft_resets    = use_soft_resets,
-                  obs_augment        = obs_augment,
-                  test_mode          = test)
+        ppo = PPO(policy_settings   = policy_settings,
+                  policy_mapping_fn = policy_mapping_fn,
+                  env_generator     = env_generator,
+                  device            = device,
+                  test_mode         = test,
+                  **kw_args)
     
         if test:
             test_policy(ppo,
@@ -213,27 +124,15 @@ class CartPoleLauncher(EnvironmentLauncher):
 
         self.run_ppo(**self.kw_launch_args,
                      env_generator      = env_generator,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 256,
-
                      policy_settings    = policies,
                      policy_mapping_fn  = policy_mapping_fn,
-
-                     ac_network         = FeedForwardNetwork,
-                     #ac_network         = LSTMNetwork,
-
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 32,
-                     use_gae            = True,
-
-                     #FIXME: debugging
-                     normalize_obs      = True,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
+                     normalize_obs      = True,
                      normalize_rewards  = True,
-                     use_soft_resets    = False,
-
                      normalize_adv      = True,
                      lr                 = lr,
                      min_lr             = min_lr,
@@ -264,7 +163,6 @@ class PendulumLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      max_ts_per_ep      = 32,
@@ -312,7 +210,6 @@ class MountainCarLauncher(EnvironmentLauncher):
         # for good performance.
         #
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      dynamic_bs_clip    = True,
@@ -361,7 +258,6 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
         # 10-50 iterations).
         #
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      max_ts_per_ep      = 128,
                      batch_size         = 512,
                      lr_dec             = lr_dec,
@@ -407,7 +303,6 @@ class AcrobotLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
                      lr_dec             = lr_dec,
@@ -463,7 +358,6 @@ class LunarLanderLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 1024
 
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      max_ts_per_ep       = 128,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
@@ -521,7 +415,6 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 1024
 
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
@@ -589,7 +482,6 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
         # reward to the same range seems to help with stability.
         #
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 512,
@@ -673,7 +565,6 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 512,
@@ -738,7 +629,7 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator        = wrapper_generator,
-                     ac_network           = AtariPixelNetwork,
+                     #ac_network           = AtariPixelNetwork,
                      actor_kw_args        = actor_kw_args,
                      critic_kw_args       = critic_kw_args,
                      batch_size           = 512,
@@ -800,7 +691,6 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = wrapper_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -830,7 +720,6 @@ class InvertedPendulumLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      use_gae            = True,
                      use_icm            = False,
                      ts_per_rollout     = ts_per_rollout,
@@ -869,7 +758,6 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -916,7 +804,6 @@ class AntLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -987,7 +874,6 @@ class HumanoidLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -1043,7 +929,6 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -1087,7 +972,6 @@ class Walker2DLauncher(EnvironmentLauncher):
         # performance in walker2d. I also find this to be the case.
         #
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -1134,7 +1018,6 @@ class HopperLauncher(EnvironmentLauncher):
         # That may be a result of it's combination with other settings in here.
         #
         self.run_ppo(env_generator      = env_generator,
-                ac_network         = FeedForwardNetwork,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 512,
@@ -1180,7 +1063,6 @@ class HalfCheetahLauncher(EnvironmentLauncher):
         # Normalizing values seems to stabilize results in this env.
         #
         self.run_ppo(env_generator = env_generator,
-                ac_network         = FeedForwardNetwork,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 512,
@@ -1220,7 +1102,6 @@ class SwimmerLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 1024
 
         self.run_ppo(env_generator      = env_generator,
-                ac_network         = FeedForwardNetwork,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 512,
@@ -1292,15 +1173,12 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         # normalizations are enabled.
         #
         self.run_ppo(env_generator      = env_generator,
-                ac_network         = FeedForwardNetwork,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 10000,
                 epochs_per_iter    = 5,
                 max_ts_per_ep      = 512,
                 ts_per_rollout     = ts_per_rollout,
-                is_multi_agent     = True,
-                add_agent_ids      = True,
                 use_gae            = True,
                 normalize_values   = True,
                 normalize_obs      = False,
@@ -1368,15 +1246,12 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
         # normalizations are enabled.
         #
         self.run_ppo(env_generator      = env_generator,
-                     ac_network         = FeedForwardNetwork,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 10000,
                      epochs_per_iter    = 5,
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
-                     is_multi_agent     = True,
-                     add_agent_ids      = True,
                      use_gae            = True,
                      normalize_values   = True,
                      normalize_obs      = False,
@@ -1431,15 +1306,12 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * E * 50
 
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 10000,
                      epochs_per_iter     = 5,
                      max_ts_per_ep       = 16,
                      ts_per_rollout      = ts_per_rollout,
-                     is_multi_agent      = True,
-                     add_agent_ids       = True,
                      use_gae             = True,
                      normalize_values    = True,
                      normalize_obs       = False,
@@ -1499,15 +1371,12 @@ class PressurePlateLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * E * 64
     
         self.run_ppo(env_generator       = env_generator,
-                     ac_network          = FeedForwardNetwork,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 10000,
                      epochs_per_iter     = 5,
                      max_ts_per_ep       = 16,
                      ts_per_rollout      = ts_per_rollout,
-                     is_multi_agent      = True,
-                     add_agent_ids       = True,
                      use_gae             = True,
                      normalize_values    = True,
                      normalize_obs       = False,

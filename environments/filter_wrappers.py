@@ -281,7 +281,9 @@ class ObservationNormalizer(ObservationFilter):
             in_file = os.path.join(path, backup_file_name)
 
         with open(in_file, "rb") as fh:
-            stats = pickle.load(fh)
+            p_stats = pickle.load(fh)
+            for key in p_stats:
+                stats[key] = p_stats[key]
 
     def save_info(self, path):
         """
@@ -413,6 +415,10 @@ class RewardNormalizer(IdentityWrapper):
             elif done[agent_id]:
                 self.running_reward[agent_id][0] = 0.0
 
+            #
+            # NOTE: when training, we always receive an ndarray. When testing,
+            # it's a flat value.
+            #
             if type(reward[agent_id]) == np.ndarray:
                 batch_size = reward[agent_id].shape[0]
 
@@ -421,7 +427,7 @@ class RewardNormalizer(IdentityWrapper):
                         info[agent_id][b_idx]["natural reward"] = \
                             deepcopy(reward[agent_id][b_idx])
             else:
-                if "natural reward" not in info:
+                if "natural reward" not in info[agent_id]:
                     info[agent_id]["natural reward"] = \
                         deepcopy(reward[agent_id])
 
@@ -504,7 +510,9 @@ class RewardNormalizer(IdentityWrapper):
             in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:
-            self.running_stats = pickle.load(fh)
+            p_stats = pickle.load(fh)
+            for key in p_stats:
+                self.running_stats[key] = p_stats[key]
 
         self._check_env_load(path)
 
@@ -687,6 +695,10 @@ class RewardClipper(GenericClipper):
         obs, global_obs, reward, done, info = self._cache_step(actions)
 
         for agent_id in reward:
+            #
+            # NOTE: when training, we always receive an ndarray. When testing,
+            # it's a flat value.
+            #
             if type(reward[agent_id]) == np.ndarray:
                 batch_size = reward[agent_id].shape[0]
 
@@ -695,7 +707,7 @@ class RewardClipper(GenericClipper):
                         info[agent_id][b_idx]["natural reward"] = \
                             deepcopy(reward[agent_id][b_idx])
             else:
-                if "natural reward" not in info:
+                if "natural reward" not in info[agent_id]:
                     info[agent_id]["natural reward"] = \
                         deepcopy(reward[agent_id])
 

@@ -19,7 +19,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-
 class IdentityWrapper(ABC):
     """
         A wrapper that acts exactly like the original environment but also
@@ -381,7 +380,8 @@ class PPOEnvironmentWrapper(ABC):
 
     def __init__(self,
                  env,
-                 test_mode = False,
+                 test_mode     = False,
+                 add_agent_ids = False,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -391,14 +391,11 @@ class PPOEnvironmentWrapper(ABC):
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
-        self.env          = env
-        self.all_done     = False
-        self.null_actions = {}
+        self.env           = env
+        self.all_done      = False
+        self.null_actions  = {}
+        self.add_agent_ids = add_agent_ids
 
-        #FIXME: these will need to be converted to dictionaries if they're not alread.
-        # we also need obs spaces for actors and critics.
-        #self.observation_space = env.observation_space
-        #self.action_space      = env.action_space
         self.define_multi_agent_spaces()
 
         if callable(getattr(self.env, "augment_observation", None)):
@@ -466,6 +463,12 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
             env,
             test_mode,
             **kw_args)
+
+        if self.add_agent_ids:
+            msg  = "WARNING: adding agent ids is not applicable "
+            msg += "for single agent simulators. Disregarding."
+            rank_print(msg)
+
         #
         # Environments are very inconsistent! Some of them require their
         # actions to be squeezed before they can be sent to the env.

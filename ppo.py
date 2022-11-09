@@ -6,7 +6,6 @@ import os
 from copy import deepcopy
 import torch
 from torch import nn
-from ppo_and_friends.networks.icm import ICM#FIXME
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
@@ -27,52 +26,41 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-
+# TODO:
+#  1. let's allow each policy to have its own lr,
+#     entropy_weight, gamma, icm_beta, reward weights, target_kl,
+#     surr_clip, gradient_clip, bootstrap_clip, 
 class PPO(object):
 
-    #FIXME: a number of these args will be moved to the AgentPolicy.
     def __init__(self,
                  env_generator,
-                 ac_network,
                  device,
                  random_seed,
                  policy_settings,
                  policy_mapping_fn,
-                 is_multi_agent      = False,
-                 add_agent_ids       = False,
-                 death_mask          = True,
                  envs_per_proc       = 1,
-                 icm_network         = ICM,
-                 icm_kw_args         = {},
-                 actor_kw_args       = {},
-                 critic_kw_args      = {},
                  lr                  = 3e-4,
                  min_lr              = 1e-4,
                  lr_dec              = None,
                  entropy_weight      = 0.01,
                  min_entropy_weight  = 0.01,
                  entropy_dec         = None,
-                 max_ts_per_ep       = 64,
+                 max_ts_per_ep       = 200,
                  batch_size          = 256,
-                 ts_per_rollout      = 2048,
+                 ts_per_rollout      = num_procs * 1024,
                  gamma               = 0.99,
-                 lambd               = 0.95,
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 bootstrap_clip      = (-10.0, 10.0),#FIXME: moved to policy
                  dynamic_bs_clip     = False,
-                 use_gae             = True,
-                 use_icm             = False,
                  icm_beta            = 0.8,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
-                 target_kl           = 0.015,
-                 mean_window_size    = 100,
+                 target_kl           = 100.,
                  normalize_adv       = True,
-                 normalize_obs       = False,
-                 normalize_rewards   = False,
-                 normalize_values    = False,
+                 normalize_obs       = True,
+                 normalize_rewards   = True,
+                 normalize_values    = True,
                  obs_clip            = None,
                  reward_clip         = None,
                  render              = False,
@@ -80,33 +68,21 @@ class PPO(object):
                  state_path          = "./",
                  save_every          = 1,
                  pickle_class        = False,
-                 use_soft_resets     = True,
+                 use_soft_resets     = False,
                  obs_augment         = False,
-                 test_mode           = False):
+                 test_mode           = False,
+                 **kw_args):#FIXME: remove):
         """
             Initialize the PPO trainer.
 
             Parameters:
                  env_generator        A function that creates instances of
                                       the environment to learn from.
-                 ac_network           The actor/critic network.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
-                 is_multi_agent       Does our environment contain multiple
-                                      agents? If so, enable MAPPO algorithm.
-                 add_agent_ids        Optionally add agent ids to the
-                                      observations. This is only valid when
-                                      is_multi_agent == True.
-                 death_mask           Should we perform death masking in multi-
-                                      agent environments?
                  envs_per_proc        The number of environment instances each
                                       processor owns.
                  icm_network          The network to use for ICM applications.
-                 icm_kw_args          Extra keyword args for the ICM network.
-                 actor_kw_args        Extra keyword args for the actor
-                                      network.
-                 critic_kw_args       Extra keyword args for the critic
-                                      network.
                  lr                   The initial learning rate.
                  min_lr               The minimum learning rate.
                  lr_dec               A class that inherits from the
@@ -132,7 +108,6 @@ class PPO(object):
                  gamma                The 'gamma' value for calculating
                                       advantages and discounting rewards
                                       when normalizing them.
-                 lambd                The 'lambda' value for calculating GAEs.
                  epochs_per_iter      'Epoch' is used loosely and with a variety
                                       of meanings in RL. In this case, a single
                                       epoch is a single update of all networks.
@@ -143,26 +118,6 @@ class PPO(object):
                                       (standard PPO approach).
                  gradient_clip        A clip value to use on the gradient
                                       update.
-                 bootstrap_clip       When using GAE, we bootstrap the values
-                                      and rewards when an epsiode is cut off
-                                      before completion. In these cases, we
-                                      clip the bootstrapped reward to a
-                                      specific range. Why is this? Well, our
-                                      estimated reward (from our value network)
-                                      might be way outside of the expected
-                                      range. We also allow the range min/max
-                                      to be callables that take in the
-                                      current iteration.
-                 dynamic_bs_clip      If set to True, bootstrap_clip will be
-                                      used as the initial clip values, but all
-                                      values thereafter will be taken from the
-                                      global min and max rewards that have been
-                                      seen so far.
-                 use_gae              Should we use Generalized Advantage
-                                      Estimations? If not, fall back on the
-                                      vanilla advantage calculation.
-                 use_icm              Should we use an Intrinsic Curiosity
-                                      Module?
                  icm_beta             The beta value used within the ICM.
                  ext_reward_weight    An optional weight for the extrinsic
                                       reward.
@@ -173,9 +128,6 @@ class PPO(object):
                  target_kl            KL divergence used for early stopping.
                                       This is typically set in the range
                                       [0.1, 0.5]. Use high values to disable.
-                 mean_window_size     The window size for a running mean. Note
-                                      that each "score" in the window is
-                                      actually the mean score for that rollout.
                  normalize_adv        Should we normalize the advantages? This
                                       occurs at the minibatch level.
                  normalize_obs        Should we normalize the observations?
@@ -229,23 +181,8 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
-        if is_multi_agent and envs_per_proc > 1:
-            msg  = "WARNING: envs_per_proc > 1 is not currently supported "
-            msg += "for multi-agent environments. Setting envs_per_proc to 1."
-            rank_print(msg)
-            envs_per_proc = 1
-
-        if not is_multi_agent and add_agent_ids:
-            msg  = "WARNING: add_agent_ids is only valid when is_multi_agent "
-            msg += "is True. Disregarding."
-            rank_print(msg)
-            add_agent_ids = False
-
         env, self.status_dict = wrap_environment(
             env_generator     = env_generator,
-            is_multi_agent    = is_multi_agent,
-            add_agent_ids     = add_agent_ids,
-            death_mask        = death_mask,
             envs_per_proc     = envs_per_proc,
             random_seed       = random_seed,
             obs_augment       = obs_augment,
@@ -277,11 +214,9 @@ class PPO(object):
         # is what we want when envs_per_proc > 1, but it's not what we
         # want when num_agents > 1.
         #
-        if is_multi_agent:
-            ts_per_rollout *= env.get_num_agents()
-            self.num_agents = env.get_num_agents()
-        else:
-            self.num_agents = 1
+        #if #is_multi_agent:
+        #   # ts_per_rollout *= env.get_num_agents()
+        #   # self.num_agents = env.get_num_agents()
 
         #
         # When we toggle test mode on/off, we need to make sure to also
@@ -318,11 +253,8 @@ class PPO(object):
         #
         self.env                 = env
         self.device              = device
-        self.is_multi_agent      = is_multi_agent
         self.state_path          = state_path
         self.render              = render
-        self.use_gae             = use_gae
-        self.using_icm           = use_icm
         self.icm_beta            = icm_beta
         self.ext_reward_weight   = ext_reward_weight
         self.intr_reward_weight  = intr_reward_weight
@@ -331,7 +263,6 @@ class PPO(object):
         self.batch_size          = batch_size
         self.ts_per_rollout      = ts_per_rollout
         self.gamma               = gamma
-        self.lambd               = lambd
         self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
@@ -341,7 +272,6 @@ class PPO(object):
         self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_every          = save_every
-        self.mean_window_size    = mean_window_size 
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
@@ -417,34 +347,14 @@ class PPO(object):
             self.pickle_safe_test_mode_dependencies.append(
                 self.value_normalizers)
 
-        #FIXME: cleanup
-        #self.policy = AgentPolicy(
-        #    action_space             = action_space,
-        #    actor_observation_space  = env.observation_space,
-        #    critic_observation_space = critic_obs_space,
-        #    ac_network               = ac_network,
-        #    icm_network              = icm_network,
-        #    actor_kw_args            = actor_kw_args,
-        #    critic_kw_args           = critic_kw_args,
-        #    icm_kw_args              = icm_kw_args,
-        #    intr_reward_weight       = intr_reward_weight,
-        #    lr                       = lr,
-        #    enable_icm               = use_icm,
-        #    test_mode                = test_mode,
-        #    use_gae                  = use_gae,
-        #    gamma                    = gamma,
-        #    lambd                    = lambd,
-        #    dynamic_bs_clip          = dynamic_bs_clip,
-        #    bootstrap_clip           = bootstrap_clip)
-
         for policy_id in self.policies:
             self.policies[policy_id].to(self.device)
 
         self.test_mode_dependencies.append(self.policies)
         self.pickle_safe_test_mode_dependencies.append(self.policies)
 
-        if self.using_icm:
-            for policy_id in self.policies:
+        for policy_id in self.policies:
+            if self.policies[policy_id].enable_icm:
                 self.status_dict[policy_id]["icm loss"] = 0
                 self.status_dict[policy_id]["intrinsic score avg"] = 0
 
@@ -502,8 +412,7 @@ class PPO(object):
             except:
                 self.can_clone_env = False
 
-        if self.using_icm:
-            rank_print("Can clone environment: {}".format(self.can_clone_env))
+        rank_print("Can clone environment: {}".format(self.can_clone_env))
 
     #def get_policy_actions(self, obs):
     #    """
@@ -814,16 +723,16 @@ class PPO(object):
                                 actions):
         """
         """
-        if not self.using_icm:
-            return rewards
-
         for agent_id in obs:
-            intr_rewards = self.policies[agent_id].get_intrinsic_reward(
-                prev_obs[agent_id],
-                obs[agent_id],
-                actions[agent_id])
+            policy_id = self.policy_mapping_fn(agent_id)
 
-            rewards[agent_id] = rewards[agent_id] + intr_rewards
+            if self.policies[policy_id].enable_icm:
+                intr_rewards = self.policies[policy_id].get_intrinsic_reward(
+                    prev_obs[agent_id],
+                    obs[agent_id],
+                    actions[agent_id])
+
+                rewards[agent_id] = rewards[agent_id] + intr_rewards
 
         return rewards
 
@@ -1007,13 +916,8 @@ class PPO(object):
             total_intr_rewards[policy_id] = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]      = 0.0
 
-        #FIXME: refactor?
-        episode_lengths = np.zeros(env_batch_size).astype(np.int32)#FIXME: i think this is still applicable
-
-        #FIXME: cleanup
-        #total_ext_rewards  = np.zeros((env_batch_size, 1))
-        #total_intr_rewards = np.zeros((env_batch_size, 1))
-        ep_ts              = np.zeros(env_batch_size).astype(np.int32)
+        episode_lengths = np.zeros(env_batch_size).astype(np.int32)
+        ep_ts           = np.zeros(env_batch_size).astype(np.int32)
 
         for key in self.policies:
             self.policies[key].initialize_episodes(
@@ -1033,10 +937,6 @@ class PPO(object):
             if self.render:
                 self.env.render()
 
-            #
-            # FIXME: total_rollout_ts is wrong in the multi-agent case.
-            # This should be divided by the number of agents that acted.
-            #
             total_rollout_ts += env_batch_size
             episode_lengths  += 1
 
@@ -1201,7 +1101,7 @@ class PPO(object):
                     total_ext_rewards[policy_id][where_done] += \
                         ep_scores[policy_id][where_done]
 
-                    if self.using_icm:
+                    if self.policies[policy_id].enable_icm:
                         total_intr_rewards[policy_id][where_done] += \
                             intr_reward[agent_id][where_done]
 
@@ -1245,13 +1145,8 @@ class PPO(object):
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                #FIXME: do we need to reduce the batch to only maxed? Shouldn't need
-                # to since we complete replaced critic_obs variable in the past.
-                #critic_obs = torch.tensor(global_obs[where_maxed],
-                #    dtype=torch.float).to(self.device)
-                critic_obs = self.np_dict_to_tensor_dict(global_obs)
-
-                next_value = self.get_policy_values(critic_obs)
+                critic_obs  = self.np_dict_to_tensor_dict(global_obs)
+                next_value  = self.get_policy_values(critic_obs)
 
                 if self.normalize_values:
                     next_value = self.get_denormalized_values(next_value)
@@ -1289,13 +1184,12 @@ class PPO(object):
                 for agent_id in next_reward:
                     policy_id = self.policy_mapping_fn(agent_id)
 
-                    if self.using_icm:
+                    if self.policies[policy_id].enable_icm:
                         if self.can_clone_env:
                             intr_reward = \
                                 self.policies[policy_id].get_cloned_intrinsic_reward(
-                                    obs           = obs[agent_id],
-                                    obs_augment   = self.obs_augment,
-                                    nv_batch_size = env_batch_size)#FIXME: this can come from the obs
+                                    obs            = obs[agent_id],
+                                    obs_augment    = self.obs_augment)
 
                         ism = self.status_dict[policy_id]["intrinsic score avg"]
                         surprise = intr_reward[where_maxed] - ism
@@ -1311,10 +1205,10 @@ class PPO(object):
 
                 if total_rollout_ts >= self.ts_per_rollout:
 
-                    if self.using_icm:
-                        for agent_id in intr_reward:
-                            policy_id = self.policy_mapping_fn(agent_id)
+                    for agent_id in total_intr_rewards:
+                        policy_id = self.policy_mapping_fn(agent_id)
 
+                        if self.policies[policy_id].enable_icm:
                             total_intr_rewards[policy_id] += \
                                 intr_reward[agent_id]
 
@@ -1420,7 +1314,7 @@ class PPO(object):
             self.status_dict[policy_id]["obs range"]       = obs_range
             self.status_dict[policy_id]["reward range"]    = rw_range
 
-            if self.using_icm:
+            if self.policies[policy_id].enable_icm:
                 intr_rewards = total_intr_rewards[policy_id].sum() / \
                     env_batch_size
                 intr_rewards = comm.allreduce(total_intr_rewards[policy_id],
@@ -1460,7 +1354,7 @@ class PPO(object):
         """
         start_time = time.time()
         ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
-        iteration  = 0
+        iteration  = self.status_dict["general"]["iteration"]
 
         while self.status_dict["general"]["timesteps"] < ts_max:
             iter_start_time = time.time()
@@ -1520,7 +1414,7 @@ class PPO(object):
                         rank_print(msg)
                         break
 
-                    if self.using_icm:
+                    if self.policies[policy_id].enable_icm:
                         self._icm_batch_train(data_loaders[policy_id], policy_id)
 
             #

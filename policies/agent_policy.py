@@ -40,6 +40,27 @@ class AgentPolicy():
                  intr_reward_weight = 1.0,
                  test_mode          = False):
         """
+            Arguments:
+                 lambd                The 'lambda' value for calculating GAEs.
+                 use_gae              Should we use Generalized Advantage
+                                      Estimations? If not, fall back on the
+                                      vanilla advantage calculation.
+                 bootstrap_clip       When using GAE, we bootstrap the values
+                                      and rewards when an epsiode is cut off
+                                      before completion. In these cases, we
+                                      clip the bootstrapped reward to a
+                                      specific range. Why is this? Well, our
+                                      estimated reward (from our value network)
+                                      might be way outside of the expected
+                                      range. We also allow the range min/max
+                                      to be callables that take in the
+                                      current iteration.
+                 dynamic_bs_clip      If set to True, bootstrap_clip will be
+                                      used as the initial clip values, but all
+                                      values thereafter will be taken from the
+                                      global min and max rewards that have been
+                                      seen so far.
+
         """
         self.name               = name
         self.action_space       = action_space
@@ -590,14 +611,15 @@ class AgentPolicy():
     def get_cloned_intrinsic_reward(
         self,
         obs,
-        obs_augment,
-        env_batch_size):
+        obs_augment):
         """
         """
         if obs_augment:
             _, clone_action, _ = self.get_action(obs[0:1])
+            env_batch_size = obs[0:1].shape[0]
         else:
             _, clone_action, _ = self.get_action(obs)
+            env_batch_size = obs.shape[0]
 
         clone_prev_obs = obs.copy()
         cloned_env = deepcopy(self.env)

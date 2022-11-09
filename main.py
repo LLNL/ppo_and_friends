@@ -40,7 +40,7 @@ if __name__ == "__main__":
         help="Render a gif when testing.")
 
     #TODO: let's also let users stop at an iteration rather than timestep.
-    parser.add_argument("--num_timesteps", default=10000000, type=int,
+    parser.add_argument("--num_timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
 
     parser.add_argument("--random_seed", default=2, type=int,
