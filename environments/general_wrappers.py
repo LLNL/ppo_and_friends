@@ -523,7 +523,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         # HACK: some environments are buggy and don't follow their
         # own rules!
         #
-        obs = obs.reshape(self.observation_space.shape)
+        obs = obs.reshape(self.observation_space[agent_id].shape)
 
         if type(reward) == np.ndarray:
             reward = reward[0]
@@ -552,7 +552,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         # HACK: some environments are buggy and don't follow their
         # own rules!
         #
-        obs = obs.reshape(self.observation_space.shape)
+        obs = obs.reshape(self.observation_space[agent_id].shape)
         obs = {agent_id : obs}
 
         return obs, deepcopy(obs)

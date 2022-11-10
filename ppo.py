@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
-from ppo_and_friends.policies.agent_policy import AgentPolicy
 from ppo_and_friends.policies.utils import generate_policy
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, ObservationNormalizer
@@ -52,7 +51,6 @@ class PPO(object):
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 dynamic_bs_clip     = False,
                  icm_beta            = 0.8,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
@@ -70,8 +68,7 @@ class PPO(object):
                  pickle_class        = False,
                  use_soft_resets     = False,
                  obs_augment         = False,
-                 test_mode           = False,
-                 **kw_args):#FIXME: remove):
+                 test_mode           = False):
         """
             Initialize the PPO trainer.
 
@@ -267,7 +264,6 @@ class PPO(object):
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
         self.gradient_clip       = gradient_clip
-        self.dynamic_bs_clip     = dynamic_bs_clip
         self.entropy_weight      = entropy_weight
         self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
@@ -289,11 +285,12 @@ class PPO(object):
 
             self.policies[policy_id] = \
                 generate_policy(
-                    policy_name               = str(policy_id),
-                    policy_class              = settings[0],
-                    actor_observation_space   = settings[1],
-                    critic_observation_space  = settings[2],
-                    action_space              = settings[3],
+                    policy_name              = str(policy_id),
+                    policy_class             = settings[0],
+                    actor_observation_space  = settings[1],
+                    critic_observation_space = settings[2],
+                    action_space             = settings[3],
+                    test_mode                = test_mode,
                     **settings[4])
 
         #
@@ -400,6 +397,7 @@ class PPO(object):
         # Some methods (ICM) perform best if we can clone the environment,
         # but not all environments support this.
         #
+        #FIXME: make sure we can still clone some environments.
         if test_mode:
             self.can_clone_env = False
         else:
@@ -723,18 +721,21 @@ class PPO(object):
                                 actions):
         """
         """
+        intr_rewards = {}
+
         for agent_id in obs:
             policy_id = self.policy_mapping_fn(agent_id)
 
             if self.policies[policy_id].enable_icm:
-                intr_rewards = self.policies[policy_id].get_intrinsic_reward(
-                    prev_obs[agent_id],
-                    obs[agent_id],
-                    actions[agent_id])
+                intr_rewards[agent_id] = \
+                    self.policies[policy_id].get_intrinsic_reward(
+                        prev_obs[agent_id],
+                        obs[agent_id],
+                        actions[agent_id])
 
-                rewards[agent_id] = rewards[agent_id] + intr_rewards
+                rewards[agent_id] = rewards[agent_id] + intr_rewards[agent_id]
 
-        return rewards
+        return rewards, intr_rewards
 
     def apply_reward_weight(self,
                             rewards,
@@ -898,11 +899,13 @@ class PPO(object):
         rollout_min_reward = {}
         rollout_max_obs    = {}
         rollout_min_obs    = {}
-        ep_scores          = {}
+        ep_nat_rewards     = {}
         ep_rewards         = {}
+        ep_intr_rewards    = {}
         total_ext_rewards  = {}
         total_intr_rewards = {}
         total_rewards      = {}
+        agents_per_policy  = {}
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]  = -np.finfo(np.float32).max
@@ -910,11 +913,13 @@ class PPO(object):
             rollout_min_reward[policy_id] = np.finfo(np.float32).max
             rollout_max_obs[policy_id]    = -np.finfo(np.float32).max
             rollout_min_obs[policy_id]    = np.finfo(np.float32).max
-            ep_scores[policy_id]          = np.zeros((env_batch_size, 1))
+            ep_nat_rewards[policy_id]     = np.zeros((env_batch_size, 1))
+            ep_intr_rewards[policy_id]    = np.zeros((env_batch_size, 1))
             ep_rewards[policy_id]         = np.zeros((env_batch_size, 1))
             total_ext_rewards[policy_id]  = np.zeros((env_batch_size, 1))
             total_intr_rewards[policy_id] = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]      = 0.0
+            agents_per_policy[policy_id]  = 0
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
@@ -931,6 +936,9 @@ class PPO(object):
         # had an effect on this.
         #
         while total_rollout_ts < self.ts_per_rollout:
+
+            for policy_id in agents_per_policy:
+                agents_per_policy[policy_id] = 0
 
             ep_ts += 1
 
@@ -1023,7 +1031,7 @@ class PPO(object):
             # This amounts to adding "curiosity", aka intrinsic reward,
             # to out extrinsic reward.
             #
-            reward = self.apply_intrinsic_rewards(
+            reward, intr_rewards = self.apply_intrinsic_rewards(
                 ext_reward,
                 prev_obs,
                 obs,
@@ -1065,8 +1073,19 @@ class PPO(object):
                 rollout_min_obs[policy_id]    = \
                     min(rollout_min_obs[policy_id], obs[agent_id].min())
 
-                ep_rewards[policy_id] += reward[agent_id]
-                ep_scores[policy_id]  += natural_reward[agent_id]
+                ep_rewards[policy_id]        += reward[agent_id]
+                ep_nat_rewards[policy_id]    += natural_reward[agent_id]
+                ep_intr_rewards[policy_id]   += intr_rewards[agent_id]
+                agents_per_policy[policy_id] += 1
+
+            #
+            # Since each policy can have multiple agents, we average
+            # the scores to get a more interpretable value.
+            #
+            for policy_id in agents_per_policy:
+                ep_rewards[policy_id]      /= agents_per_policy[policy_id]
+                ep_nat_rewards[policy_id]  /= agents_per_policy[policy_id]
+                ep_intr_rewards[policy_id] /= agents_per_policy[policy_id]
 
             #
             # Episode end cases.
@@ -1096,20 +1115,21 @@ class PPO(object):
 
                     top_rollout_score[policy_id] = \
                         max(top_rollout_score[policy_id],
-                        ep_scores[policy_id][where_done].max())
+                        ep_nat_rewards[policy_id][where_done].max())
 
                     total_ext_rewards[policy_id][where_done] += \
-                        ep_scores[policy_id][where_done]
+                        ep_nat_rewards[policy_id][where_done]
 
                     if self.policies[policy_id].enable_icm:
                         total_intr_rewards[policy_id][where_done] += \
-                            intr_reward[agent_id][where_done]
+                            ep_intr_rewards[policy_id][where_done]
 
                     total_rewards[policy_id] += \
-                        ep_rewards[policy_id][where_done].sum()
+                        ep_rewards[policy_id][where_done]
 
-                    ep_rewards[policy_id][where_done] = 0
-                    ep_scores[policy_id][where_done] = 0
+                    ep_rewards[policy_id][where_done]      = 0
+                    ep_nat_rewards[policy_id][where_done]  = 0
+                    ep_intr_rewards[policy_id][where_done] = 0
 
 
                 longest_run = max(longest_run,
@@ -1186,14 +1206,14 @@ class PPO(object):
 
                     if self.policies[policy_id].enable_icm:
                         if self.can_clone_env:
-                            intr_reward = \
+                            intr_rewards[agent_id] = \
                                 self.policies[policy_id].get_cloned_intrinsic_reward(
                                     obs            = obs[agent_id],
                                     obs_augment    = self.obs_augment)
 
                         ism = self.status_dict[policy_id]["intrinsic score avg"]
-                        surprise = intr_reward[where_maxed] - ism
-                        next_reward[policy_id] += surprise
+                        surprise = intr_rewards[agent_id][where_maxed] - ism
+                        next_reward[agent_id] += surprise
                     
                     self.policies[policy_id].end_episodes(
                         env_idxs        = where_maxed,
@@ -1204,13 +1224,6 @@ class PPO(object):
                         status_dict     = self.status_dict)
 
                 if total_rollout_ts >= self.ts_per_rollout:
-
-                    for agent_id in total_intr_rewards:
-                        policy_id = self.policy_mapping_fn(agent_id)
-
-                        if self.policies[policy_id].enable_icm:
-                            total_intr_rewards[policy_id] += \
-                                intr_reward[agent_id]
 
                     #
                     # ts_before_ep are the timesteps before the current
@@ -1232,16 +1245,23 @@ class PPO(object):
                     else:
                         avg_ep_len = ts_before_ep / current_total
 
-                    ep_perc            = episode_lengths / avg_ep_len
-                    total_episodes    += ep_perc.sum()
+                    ep_perc         = episode_lengths / avg_ep_len
+                    total_episodes += ep_perc.sum()
 
                     for policy_id in self.policies:
-                        total_ext_rewards[policy_id] += ep_scores[policy_id]
-                        total_rewards[policy_id] += ep_rewards[policy_id].sum()
+                        total_ext_rewards[policy_id] += \
+                            ep_nat_rewards[policy_id]
+
+                        total_rewards[policy_id] += \
+                            ep_rewards[policy_id]
+
+                        if self.policies[policy_id].enable_icm:
+                            total_intr_rewards[policy_id] += \
+                                ep_intr_rewards[policy_id]
 
                         top_rollout_score[policy_id] = \
                             max(top_rollout_score[policy_id],
-                            ep_scores[policy_id].max())
+                            ep_nat_rewards[policy_id].max())
 
                 ep_ts[where_maxed] = 0
 
@@ -1260,7 +1280,7 @@ class PPO(object):
             #
             if total_episodes <= 1.0:
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
-                    ep_scores[policy_id].max())
+                    ep_nat_rewards[policy_id].max())
 
             top_score = max(top_rollout_score[policy_id],
                 self.status_dict[policy_id]["top score"])
@@ -1301,7 +1321,9 @@ class PPO(object):
 
             ext_reward_sum = total_ext_rewards[policy_id].sum()
             ext_reward_sum = comm.allreduce(ext_reward_sum, MPI.SUM)
-            agent_rewards  = comm.allreduce(total_rewards[policy_id], MPI.SUM)
+
+            agent_rewards  = total_rewards[policy_id].sum()
+            agent_rewards  = comm.allreduce(agent_rewards, MPI.SUM)
 
             running_ext_score = ext_reward_sum / total_episodes
             running_score     = agent_rewards / total_episodes
@@ -1315,13 +1337,11 @@ class PPO(object):
             self.status_dict[policy_id]["reward range"]    = rw_range
 
             if self.policies[policy_id].enable_icm:
-                intr_rewards = total_intr_rewards[policy_id].sum() / \
-                    env_batch_size
-                intr_rewards = comm.allreduce(total_intr_rewards[policy_id],
-                    MPI.SUM)
+                intr_rewards = total_intr_rewards[policy_id].sum()
+                intr_rewards = comm.allreduce(intr_rewards, MPI.SUM)
 
                 ism = intr_rewards / (total_episodes/ env_batch_size)
-                self.status_dict[policy_id]["intrinsic score avg"] = ism
+                self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)

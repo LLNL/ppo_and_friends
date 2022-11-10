@@ -166,13 +166,14 @@ class AgentPolicy():
         if self.enable_icm:
             self.icm_model = self.icm_model.to(self.device)
 
-    def _initialize_networks(self,
-                       ac_network, 
-                       enable_icm,
-                       icm_network,
-                       actor_kw_args,
-                       critic_kw_args,
-                       icm_kw_args):
+    def _initialize_networks(
+        self,
+        ac_network, 
+        enable_icm,
+        icm_network,
+        actor_kw_args,
+        critic_kw_args,
+        icm_kw_args):
         """
         """
         #

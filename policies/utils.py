@@ -13,6 +13,7 @@ def generate_policy(
     actor_observation_space,
     critic_observation_space,
     action_space,
+    test_mode,
     **kw_args):
     """
     """
@@ -27,8 +28,31 @@ def generate_policy(
         action_space              = action_space,
         actor_observation_space   = actor_observation_space,
         critic_observation_space  = critic_observation_space,
+        test_mode                 = test_mode,
         **kw_args)
 
     return policy
 
+
+def get_single_agent_policy_defaults(
+    env_generator,
+    policy_args,
+    policy_name = "single_agent"):
+    """
+    """
+
+    policy_settings = { policy_name : \
+        (None,
+         env_generator().observation_space["agent0"],
+         env_generator().observation_space["agent0"],
+         env_generator().action_space["agent0"],
+         policy_args)
+    }
+
+    policy_mapping_fn = lambda *args : policy_name
+
+    return policy_settings, policy_mapping_fn
+
+
+#FIXME: create a policy spec?
 #def PolicySpec

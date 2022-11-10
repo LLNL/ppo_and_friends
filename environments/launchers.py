@@ -15,6 +15,7 @@ from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.general_wrappers import SingleAgentGymWrapper
+from ppo_and_friends.policies.utils import get_single_agent_policy_defaults
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
@@ -101,32 +102,22 @@ class CartPoleLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 256
 
-        policy_settings = {\
+        policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
         }
 
-        #
-        # (policy class, actor obs space, critic obs space,
-        #  action space, policy settings)
-        #
-        policies = { "balancer" : \
-            (None,
-             env_generator().observation_space["agent0"],
-             env_generator().observation_space["agent0"],
-             env_generator().action_space["agent0"],
-             policy_settings)
-        }
-
-        policy_mapping_fn = lambda *args : "balancer"
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
 
         self.run_ppo(**self.kw_launch_args,
                      env_generator      = env_generator,
-                     batch_size         = 256,
-                     policy_settings    = policies,
+                     policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 256,
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 32,
                      obs_clip           = (-10., 10.),
@@ -143,7 +134,7 @@ class PendulumLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('Pendulum-v1')
+        env_generator = lambda : SingleAgentGymWrapper(gym.make('Pendulum-v1'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -162,16 +153,26 @@ class PendulumLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 512
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "dynamic_bs_clip"  : True,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         self.run_ppo(env_generator      = env_generator,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
-                     dynamic_bs_clip    = True,
-                     obs_clip           = (-10., 10.),
-                     reward_clip        = (-10., 10.),
+                     obs_clip           = None,
+                     reward_clip        = None,
+                     normalize_obs      = False,
+                     normalize_rewards  = False,
                      lr                 = lr,
                      min_lr             = min_lr,
                      lr_dec             = lr_dec,
@@ -182,7 +183,8 @@ class MountainCarLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('MountainCar-v0')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('MountainCar-v0'))
 
         actor_kw_args = {"activation" : nn.LeakyReLU()}
         actor_kw_args["hidden_size"] = 128
@@ -199,6 +201,20 @@ class MountainCarLauncher(EnvironmentLauncher):
             step_values  = [0.0003,],
             ending_value = 0.0001)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "dynamic_bs_clip"  : True,
+            "bootstrap_clip"   : (-10, 10),
+            "enable_icm"       : True,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         #
         # NOTE: This environment performs dramatically  better when
         # max_ts_per_ep is set to the total timesteps allowed by the
@@ -210,29 +226,26 @@ class MountainCarLauncher(EnvironmentLauncher):
         # for good performance.
         #
         self.run_ppo(env_generator      = env_generator,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
-                     dynamic_bs_clip    = True,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
-                     use_icm            = True,
-                     use_gae            = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
                      obs_clip           = None,
                      reward_clip        = None,
-                     bootstrap_clip     = (-10, 10),
                      **self.kw_launch_args)
 
 
 class MountainCarContinuousLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('MountainCarContinuous-v0')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('MountainCarContinuous-v0'))
 
         #
         # Extra args for the actor critic models.
@@ -252,29 +265,38 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "dynamic_bs_clip"  : True,
+            "bootstrap_clip"   : (-10, 10),
+            "enable_icm"       : True,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         #
         # I've noticed that normalizing rewards and observations
         # can slow down learning at times. It's not by much (maybe
         # 10-50 iterations).
         #
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 128,
                      batch_size         = 512,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
-                     use_icm            = True,
-                     use_gae            = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
                      obs_clip           = None,
                      reward_clip        = None,
-                     normalize_adv      = True,
-                     bootstrap_clip     = (-10., 10.),
-                     dynamic_bs_clip    = True,
                      ext_reward_weight  = 1./100.,
                      intr_reward_weight = 50.,
                      **self.kw_launch_args)
@@ -284,7 +306,8 @@ class AcrobotLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('Acrobot-v1')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Acrobot-v1'))
 
         actor_kw_args = {}
         actor_kw_args["hidden_size"] = 64
@@ -302,15 +325,25 @@ class AcrobotLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 512
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
-                     use_gae            = True,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      normalize_obs      = True,
                      normalize_rewards  = True,
                      obs_clip           = (-10., 10.),
@@ -327,7 +360,8 @@ class AcrobotLauncher(EnvironmentLauncher):
 class LunarLanderLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('LunarLander-v2')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('LunarLander-v2'))
 
         #
         # Extra args for the actor critic models.
@@ -357,16 +391,27 @@ class LunarLanderLauncher(EnvironmentLauncher):
         #
         ts_per_rollout = num_procs * 1024
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep       = 128,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
-                     use_gae             = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     bootstrap_clip      = (-10., 10.),
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      lr_dec              = lr_dec,
@@ -378,7 +423,8 @@ class LunarLanderLauncher(EnvironmentLauncher):
 class LunarLanderContinuousLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('LunarLanderContinuous-v2')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('LunarLanderContinuous-v2'))
 
         #
         # Lunar lander observations are organized as follows:
@@ -414,18 +460,28 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
         #
         ts_per_rollout = num_procs * 1024
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-10., 10.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings     = policy_settings,
+                     policy_mapping_fn   = policy_mapping_fn,
                      max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
-                     use_gae             = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     bootstrap_clip      = (-10., 10.),
                      target_kl           = 0.015,
                      lr_dec              = lr_dec,
                      lr                  = lr,
@@ -436,7 +492,8 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
 class BipedalWalkerLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('BipedalWalker-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('BipedalWalker-v3'))
 
         #
         # The lidar observations are the last 10.
@@ -482,6 +539,8 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
         # reward to the same range seems to help with stability.
         #
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 512,
@@ -503,7 +562,8 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
 class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('BipedalWalkerHardcore-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('BipedalWalkerHardcore-v3'))
 
         actor_kw_args = {}
         actor_kw_args["std_offset"]  = 0.1
@@ -565,6 +625,8 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 512,
@@ -597,16 +659,16 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             #
             render = False
 
-            env_generator = lambda : gym.make(
+            env_generator = lambda : SingleAgentGymWrapper(gym.make(
                 'Breakout-v0',
                 repeat_action_probability = 0.0,
                 frameskip = 1,
-                render_mode = 'human')
+                render_mode = 'human'))
         else:
-            env_generator = lambda : gym.make(
+            env_generator = lambda : SingleAgentGymWrapper(gym.make(
                 'Breakout-v0',
                 repeat_action_probability = 0.0,
-                frameskip = 1)
+                frameskip = 1))
 
         wrapper_generator = lambda : BreakoutPixelsEnvWrapper(
             env              = env_generator(),
@@ -629,6 +691,8 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator        = wrapper_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      #ac_network           = AtariPixelNetwork,
                      actor_kw_args        = actor_kw_args,
                      critic_kw_args       = critic_kw_args,
@@ -656,16 +720,16 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             #
             render = False
     
-            env_generator = lambda : gym.make(
+            env_generator = lambda : SingleAgentGymWrapper(gym.make(
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
                 frameskip = 1,
-                render_mode = 'human')
+                render_mode = 'human'))
         else:
-            env_generator = lambda : gym.make(
+            env_generator = lambda : SingleAgentGymWrapper(gym.make(
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
-                frameskip = 1)
+                frameskip = 1))
     
         wrapper_generator = lambda : BreakoutRAMEnvWrapper(
             env              = env_generator(),
@@ -691,6 +755,8 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = wrapper_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -715,13 +781,15 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
 class InvertedPendulumLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('InvertedPendulum-v2')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('InvertedPendulum-v2'))
 
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      use_gae            = True,
-                     use_icm            = False,
                      ts_per_rollout     = ts_per_rollout,
                      **self.kw_launch_args)
 
@@ -730,7 +798,8 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('InvertedDoublePendulum-v2')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('InvertedDoublePendulum-v2'))
 
         #
         # Pendulum observations are organized as follows:
@@ -758,6 +827,8 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -778,7 +849,8 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
 class AntLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('Ant-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Ant-v3'))
 
         #
         # Ant observations are organized as follows:
@@ -804,6 +876,8 @@ class AntLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -824,7 +898,8 @@ class AntLauncher(EnvironmentLauncher):
 class HumanoidLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('Humanoid-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Humanoid-v3'))
 
         #
         # Humanoid observations are a bit mysterious. See
@@ -874,6 +949,8 @@ class HumanoidLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -895,7 +972,8 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         #
         # NOTE: this is an UNSOVLED environment.
         #
-        env_generator = lambda : gym.make('HumanoidStandup-v2')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('HumanoidStandup-v2'))
     
         #
         #    Positions: 22
@@ -929,6 +1007,8 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -948,7 +1028,8 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
 class Walker2DLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('Walker2d-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Walker2d-v3'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.Tanh()
@@ -972,6 +1053,8 @@ class Walker2DLauncher(EnvironmentLauncher):
         # performance in walker2d. I also find this to be the case.
         #
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
@@ -993,7 +1076,8 @@ class Walker2DLauncher(EnvironmentLauncher):
 class HopperLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('Hopper-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Hopper-v3'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.Tanh()
@@ -1018,6 +1102,8 @@ class HopperLauncher(EnvironmentLauncher):
         # That may be a result of it's combination with other settings in here.
         #
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 512,
@@ -1040,7 +1126,8 @@ class HalfCheetahLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('HalfCheetah-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('HalfCheetah-v3'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1082,7 +1169,8 @@ class HalfCheetahLauncher(EnvironmentLauncher):
 class SwimmerLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : gym.make('Swimmer-v3')
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Swimmer-v3'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1102,6 +1190,8 @@ class SwimmerLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * 1024
 
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 512,
@@ -1173,6 +1263,8 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         # normalizations are enabled.
         #
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                 actor_kw_args      = actor_kw_args,
                 critic_kw_args     = critic_kw_args,
                 batch_size         = 10000,
@@ -1246,6 +1338,8 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
         # normalizations are enabled.
         #
         self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args      = actor_kw_args,
                      critic_kw_args     = critic_kw_args,
                      batch_size         = 10000,
@@ -1306,6 +1400,8 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * E * 50
 
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 10000,
@@ -1371,6 +1467,8 @@ class PressurePlateLauncher(EnvironmentLauncher):
         ts_per_rollout = num_procs * E * 64
     
         self.run_ppo(env_generator       = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
                      actor_kw_args       = actor_kw_args,
                      critic_kw_args      = critic_kw_args,
                      batch_size          = 10000,
