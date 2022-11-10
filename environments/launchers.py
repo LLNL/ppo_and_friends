@@ -197,8 +197,8 @@ class MountainCarLauncher(EnvironmentLauncher):
 
         lr_dec = LinearStepMapper(
             step_type    = "iteration",
-            steps        = [200,],
-            step_values  = [0.0003,],
+            steps        = [35, 50, 60],
+            step_values  = [0.0003, 0.00025, 0.0002],
             ending_value = 0.0001)
 
         policy_args = {\
@@ -228,6 +228,7 @@ class MountainCarLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
+                     epochs_per_iter    = 32, 
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
                      lr_dec             = lr_dec,
@@ -330,6 +331,7 @@ class AcrobotLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "bootstrap_clip"   : (-10., 10.),
         }
 
         policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
@@ -348,7 +350,6 @@ class AcrobotLauncher(EnvironmentLauncher):
                      normalize_rewards  = True,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
-                     bootstrap_clip     = (-10., 10.),
                      **self.kw_launch_args)
 
 
@@ -403,8 +404,8 @@ class LunarLanderLauncher(EnvironmentLauncher):
             policy_args   = policy_args)
 
         self.run_ppo(env_generator       = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
+                     policy_settings     = policy_settings,
+                     policy_mapping_fn   = policy_mapping_fn,
                      max_ts_per_ep       = 128,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
@@ -412,8 +413,6 @@ class LunarLanderLauncher(EnvironmentLauncher):
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
                      lr_dec              = lr_dec,
                      lr                  = lr,
                      min_lr              = min_lr,

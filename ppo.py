@@ -48,7 +48,7 @@ class PPO(object):
                  batch_size          = 256,
                  ts_per_rollout      = num_procs * 1024,
                  gamma               = 0.99,
-                 epochs_per_iter     = 10,
+                 epochs_per_iter     = 32,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
                  icm_beta            = 0.8,
@@ -734,6 +734,8 @@ class PPO(object):
                         actions[agent_id])
 
                 rewards[agent_id] = rewards[agent_id] + intr_rewards[agent_id]
+            else:
+                intr_rewards[agent_id] = 0.0
 
         return rewards, intr_rewards
 
@@ -1593,10 +1595,7 @@ class PPO(object):
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
             #
-            # FIXME: I think each class of actor would need its own
-            # optimizer and loss. They would also need their own critics.
-            #
-            #FIXME
+            #FIXME: cleanup
             self.policies[policy_id].actor_optim.zero_grad()
             actor_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].actor)
