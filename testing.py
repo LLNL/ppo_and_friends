@@ -43,6 +43,8 @@ def test_policy(ppo,
         obs, _   = env.reset()
         done     = False
 
+        episode_score = {agent_id : 0.0 for agent_id in env.agent_ids}
+
         while not done:
             num_steps += 1
 
@@ -83,10 +85,14 @@ def test_policy(ppo,
                 else:
                     score = reward[agent_id]
 
-                total_scores[agent_id] += score
+                total_scores[agent_id]  += score
+                episode_score[agent_id] += score
 
-                min_scores[agent_id] = min(min_scores[agent_id], score)
-                max_scores[agent_id] = max(max_scores[agent_id], score)
+        for agent_id in total_scores:
+            min_scores[agent_id] = min(min_scores[agent_id],
+                episode_score[agent_id])
+            max_scores[agent_id] = max(max_scores[agent_id],
+                episode_score[agent_id])
 
     for agent_id in env.agent_ids:
         print("\nAgent {}:".format(agent_id))
