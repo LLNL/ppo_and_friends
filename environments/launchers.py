@@ -169,6 +169,7 @@ class PendulumLauncher(EnvironmentLauncher):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
+                     epochs_per_iter    = 8,
                      obs_clip           = None,
                      reward_clip        = None,
                      normalize_obs      = False,
@@ -476,6 +477,7 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
                      policy_mapping_fn   = policy_mapping_fn,
                      max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
+                     epochs_per_iter     = 16,
                      batch_size          = 512,
                      normalize_obs       = True,
                      normalize_rewards   = True,
@@ -532,26 +534,34 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 512
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-1., 10.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         #
         # Thresholding the reward to a low of -1 doesn't drastically
         # change learning, but it does help a bit. Clipping the bootstrap
         # reward to the same range seems to help with stability.
         #
         self.run_ppo(env_generator       = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
+                     policy_settings     = policy_settings,
+                     policy_mapping_fn   = policy_mapping_fn,
                      batch_size          = 512,
                      max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
-                     use_gae             = True,
                      normalize_adv       = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-1., 10.),
-                     bootstrap_clip      = (-1., 10.),
                      lr_dec              = lr_dec,
                      lr                  = lr,
                      min_lr              = min_lr,
@@ -621,25 +631,33 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
             step_values  = [-1.,],
             ending_value = -10.)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (bs_clip_min, 10.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
-        self.run_ppo(env_generator       = env_generator,
+        self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
-                     batch_size          = 512,
-                     max_ts_per_ep       = 32,
-                     ts_per_rollout      = ts_per_rollout,
-                     use_gae             = True,
-                     normalize_obs       = True,
-                     normalize_rewards   = True,
-                     obs_clip            = (-10., 10.),
-                     reward_clip         = (reward_clip_min, 10.),
-                     bootstrap_clip      = (bs_clip_min, 10.),
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
+                     batch_size         = 512,
+                     max_ts_per_ep      = 32,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_obs      = True,
+                     normalize_rewards  = True,
+                     obs_clip           = (-10., 10.),
+                     reward_clip        = (reward_clip_min, 10.),
+                     lr_dec             = lr_dec,
+                     lr                 = lr,
+                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -656,24 +674,26 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             # NOTE: we don't want to explicitly call render for atari games.
             # They have more advanced ways of rendering.
             #
-            render = False
+            self.kw_launch_args["render"] = False
 
-            env_generator = lambda : SingleAgentGymWrapper(gym.make(
+            gym_generator = lambda : gym.make(
                 'Breakout-v0',
                 repeat_action_probability = 0.0,
                 frameskip = 1,
-                render_mode = 'human'))
+                render_mode = 'human')
         else:
-            env_generator = lambda : SingleAgentGymWrapper(gym.make(
+            gym_generator = lambda : gym.make(
                 'Breakout-v0',
                 repeat_action_probability = 0.0,
-                frameskip = 1))
+                frameskip = 1)
 
-        wrapper_generator = lambda : BreakoutPixelsEnvWrapper(
-            env              = env_generator(),
+        breakout_generator = lambda : BreakoutPixelsEnvWrapper(
+            env              = gym_generator(),
             allow_life_loss  = self.kw_launch_args["test"],
             hist_size        = 4,
             skip_k_frames    = 4)
+
+        env_generator = lambda : SingleAgentGymWrapper(breakout_generator())
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -687,25 +707,32 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : AtariPixelNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-1., 1.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
-        self.run_ppo(env_generator        = wrapper_generator,
+        self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     #ac_network           = AtariPixelNetwork,
-                     actor_kw_args        = actor_kw_args,
-                     critic_kw_args       = critic_kw_args,
-                     batch_size           = 512,
-                     ts_per_rollout       = ts_per_rollout,
-                     max_ts_per_ep        = 64,
-                     epochs_per_iter      = 30,
-                     reward_clip          = (-1., 1.),
-                     bootstrap_clip       = (-1., 1.),
-                     target_kl            = 0.2,
-                     lr_dec               = lr_dec,
-                     lr                   = lr,
-                     min_lr               = min_lr,
-                     use_gae              = True,
+                     batch_size         = 512,
+                     ts_per_rollout     = ts_per_rollout,
+                     max_ts_per_ep      = 64,
+                     epochs_per_iter    = 30,
+                     reward_clip        = (-1., 1.),
+                     target_kl          = 0.2,
+                     lr_dec             = lr_dec,
+                     lr                 = lr,
+                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -717,24 +744,26 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             # NOTE: we don't want to explicitly call render for atari games.
             # They have more advanced ways of rendering.
             #
-            render = False
+            self.kw_launch_args["render"] = False
     
-            env_generator = lambda : SingleAgentGymWrapper(gym.make(
+            gym_generator = lambda : gym.make(
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
                 frameskip = 1,
-                render_mode = 'human'))
+                render_mode = 'human')
         else:
-            env_generator = lambda : SingleAgentGymWrapper(gym.make(
+            gym_generator = lambda : gym.make(
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
-                frameskip = 1))
+                frameskip = 1)
     
-        wrapper_generator = lambda : BreakoutRAMEnvWrapper(
-            env              = env_generator(),
+        breakout_generator = lambda : BreakoutRAMEnvWrapper(
+            env              = gym_generator(),
             allow_life_loss  = self.kw_launch_args["test"],
             hist_size        = 4,
             skip_k_frames    = 4)
+
+        env_generator = lambda : SingleAgentGymWrapper(breakout_generator())
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -750,21 +779,29 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             max_iteration = 4000,
             max_value     = lr,
             min_value     = min_lr)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-1., 1.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
     
         ts_per_rollout = num_procs * 512
     
-        self.run_ppo(env_generator      = wrapper_generator,
+        self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
                      ts_per_rollout     = ts_per_rollout,
                      max_ts_per_ep      = 64,
-                     use_gae            = True,
                      epochs_per_iter    = 30,
                      reward_clip        = (-1., 1.),
-                     bootstrap_clip     = (-1., 1.),
                      target_kl          = 0.2,
                      lr_dec             = lr_dec,
                      lr                 = lr,
@@ -783,12 +820,19 @@ class InvertedPendulumLauncher(EnvironmentLauncher):
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('InvertedPendulum-v2'))
 
+        policy_args = {\
+            "ac_network" : FeedForwardNetwork,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     use_gae            = True,
                      ts_per_rollout     = ts_per_rollout,
                      **self.kw_launch_args)
 
@@ -823,22 +867,28 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-10., 10.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
                      max_ts_per_ep      = 16,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
-                     bootstrap_clip     = (-10., 10.),
                      entropy_weight     = 0.0,
                      lr_dec             = lr_dec,
                      lr                 = lr,
@@ -872,22 +922,30 @@ class AntLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-10., 10.),
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
                      max_ts_per_ep      = 64,
+                     epochs_per_iter    = 8,
+                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
                      obs_clip           = (-30., 30.),
                      reward_clip        = (-10., 10.),
-                     bootstrap_clip     = (-10., 10.),
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
@@ -928,7 +986,6 @@ class HumanoidLauncher(EnvironmentLauncher):
         #    entropy: we could allow entropy reg, but I'm guessing it won't help
         #             too much.
         #
-
         actor_kw_args["activation"]       = nn.Tanh()
         actor_kw_args["distribution_min"] = -0.4
         actor_kw_args["distribution_max"] = 0.4
@@ -945,19 +1002,27 @@ class HumanoidLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
+                     epochs_per_iter    = 8,
+                     target_kl          = 0.015,
                      max_ts_per_ep      = 16,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
                      reward_clip        = (-10., 10.),
                      lr_dec             = lr_dec,
                      lr                 = lr,
@@ -1002,20 +1067,28 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
             max_iteration = 200.0,
             max_value     = lr,
             min_value     = min_lr)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
     
         ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
                      max_ts_per_ep      = 32,
+                     epochs_per_iter    = 8,
+                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
                      obs_clip           = None,
                      reward_clip        = (-10., 10.),
                      lr_dec             = lr_dec,
@@ -1045,6 +1118,17 @@ class Walker2DLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 1024
 
         #
@@ -1054,14 +1138,10 @@ class Walker2DLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 512,
                      max_ts_per_ep      = 16,
+                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
                      normalize_values   = False,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
@@ -1094,23 +1174,31 @@ class HopperLauncher(EnvironmentLauncher):
             step_values  = [0.0003,],
             ending_value = 0.0001)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 1024
 
         #
         # I find that value normalization hurts the hopper environment training.
         # That may be a result of it's combination with other settings in here.
         #
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                actor_kw_args      = actor_kw_args,
-                critic_kw_args     = critic_kw_args,
+        self.run_ppo(
+                env_generator      = env_generator,
+                policy_settings    = policy_settings,
+                policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 512,
                 max_ts_per_ep      = 16,
+                epochs_per_iter    = 8,
                 ts_per_rollout     = ts_per_rollout,
-                use_gae            = True,
-                normalize_obs      = True,
-                normalize_rewards  = True,
                 normalize_values   = False,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
@@ -1143,20 +1231,29 @@ class HalfCheetahLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 512
 
         #
         # Normalizing values seems to stabilize results in this env.
         #
-        self.run_ppo(env_generator = env_generator,
-                actor_kw_args      = actor_kw_args,
-                critic_kw_args     = critic_kw_args,
+        self.run_ppo(
+                env_generator      = env_generator,
+                policy_settings    = policy_settings,
+                policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 512,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                use_gae            = True,
-                normalize_obs      = True,
-                normalize_rewards  = True,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
                 lr_dec             = lr_dec,
@@ -1186,19 +1283,26 @@ class SwimmerLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
         ts_per_rollout = num_procs * 1024
 
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                actor_kw_args      = actor_kw_args,
-                critic_kw_args     = critic_kw_args,
+        self.run_ppo(
+                env_generator      = env_generator,
+                policy_settings    = policy_settings,
+                policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 512,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                use_gae            = True,
-                normalize_obs      = True,
-                normalize_rewards  = True,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
                 lr_dec             = lr_dec,
@@ -1208,7 +1312,7 @@ class SwimmerLauncher(EnvironmentLauncher):
 
 
 ###############################################################################
-#                              Multi-Agent                                    #
+#                          Multi-Agent Gym                                    #
 ###############################################################################
 
 class RobotWarehouseTinyLauncher(EnvironmentLauncher):

@@ -48,7 +48,7 @@ class PPO(object):
                  batch_size          = 256,
                  ts_per_rollout      = num_procs * 1024,
                  gamma               = 0.99,
-                 epochs_per_iter     = 32,
+                 epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
                  icm_beta            = 0.8,
@@ -309,10 +309,10 @@ class PPO(object):
         self.status_dict["general"]["lr"]             = self.lr
         self.status_dict["general"]["entropy weight"] = self.entropy_weight
         self.status_dict["general"]["total episodes"] = 0
+        self.status_dict["general"]["longest run"]    = 0
 
         for policy_id in self.policies:
             self.status_dict[policy_id] = {}
-            self.status_dict[policy_id]["longest run"]         = 0
             self.status_dict[policy_id]["episode reward avg"]  = 0
             self.status_dict[policy_id]["extrinsic score avg"] = 0
             self.status_dict[policy_id]["top score"]           = -max_int
@@ -920,7 +920,7 @@ class PPO(object):
             ep_rewards[policy_id]         = np.zeros((env_batch_size, 1))
             total_ext_rewards[policy_id]  = np.zeros((env_batch_size, 1))
             total_intr_rewards[policy_id] = np.zeros((env_batch_size, 1))
-            total_rewards[policy_id]      = 0.0
+            total_rewards[policy_id]      = np.zeros((env_batch_size, 1))
             agents_per_policy[policy_id]  = 0
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
@@ -1249,6 +1249,7 @@ class PPO(object):
 
                     ep_perc         = episode_lengths / avg_ep_len
                     total_episodes += ep_perc.sum()
+
 
                     for policy_id in self.policies:
                         total_ext_rewards[policy_id] += \

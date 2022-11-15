@@ -16,8 +16,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-# FIXME: do we want to have two different modes, one for single agent
-# and another for multi-agent?
 class AgentPolicy():
 
     def __init__(self,
