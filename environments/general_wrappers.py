@@ -5,6 +5,7 @@
 from ppo_and_friends.utils.stats import RunningMeanStd
 import numpy as np
 from copy import deepcopy
+from functools import reduce
 import pickle
 import sys
 import os
@@ -12,7 +13,8 @@ from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import need_action_squeeze
 from collections.abc import Iterable
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Dict
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Dict, Tuple
+import gym
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -380,8 +382,10 @@ class PPOEnvironmentWrapper(ABC):
 
     def __init__(self,
                  env,
-                 test_mode     = False,
-                 add_agent_ids = False,
+                 test_mode         = False,
+                 add_agent_ids     = False,
+                 critic_view       = "global",
+                 policy_mapping_fn = None,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -391,18 +395,233 @@ class PPOEnvironmentWrapper(ABC):
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
-        self.env           = env
-        self.all_done      = False
-        self.null_actions  = {}
-        self.add_agent_ids = add_agent_ids
+        critic_view = critic_view.lower()
+        assert critic_view in ["global", "local", "policy"]
 
-        self.define_multi_agent_spaces()
+        if critic_view == "policy" and policy_mapping_fn is None:
+            msg  = "ERROR: policy_mapping_fn must be set when "
+            msg += "critic_view is set to 'policy'."
+            rank_print(msg)
+            comm.Abort()
+
+        self.env               = env
+        self.all_done          = False
+        self.null_actions      = {}
+        self.add_agent_ids     = add_agent_ids
+        self.critic_view       = critic_view
+        self.policy_mapping_fn = policy_mapping_fn
+
+        self.action_space             = Dict()
+        self.observation_space        = Dict()
+        self.critic_observation_space = Dict()
+
+        self._define_multi_agent_spaces()
+        self._define_critic_space()
 
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
 
+        self.agent_int_ids = {}
+        for a_idx, a_id in enumerate(self.agent_ids):
+            self.agent_int_ids[a_id] = a_idx
+
+    def _add_agent_ids_to_obs(self, obs):
+        """
+        """
+        #FIXME: should id norm be optional?
+        for a_id in obs:
+            obs[a_id] = np.concatenate((obs[a_id],
+                (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
+                self.num_agents
+
+        return obs
+
+    def _define_critic_space(self):
+        """
+        """
+        #
+        # Local view: the critics only see what the actor sees.
+        #
+        if self.critic_view == "local":
+            for a_id in self.agent_ids:
+                self.critic_observation_space[a_id] = \
+                    self.observation_space[a_id]
+
+        #
+        # Global view: the critics see everything (observations from all
+        # available agents).
+        #
+        elif self.critic_view == "global":
+            for a_id in self.agent_ids:
+                self.critic_observation_space[a_id] = \
+                    gym.spaces.flatten_space(self.observation_space)
+
+        #
+        # Policy view: the critics see observations from all agents that
+        # share policies.
+        #
+        elif self.critic_view == "policy":
+            self.policy_spaces = {}
+
+            #
+            # First, map policy ids to shared spaces.
+            #
+            for a_id in self.agent_ids:
+                policy_id = self.policy_mapping_fn(a_id)
+
+                if a_id not in self.policy_spaces:
+                    self.policy_spaces[policy_id] = []
+
+                self.policy_spaces[policy_id].append(
+                    self.observation_space[a_id])
+
+            #
+            # Next, flatten the spaces so that each policy has a single space.
+            #
+            for policy_id in self.policy_spaces:
+                self.policy_spaces[policy_id] = \
+                    gym.spaces.flatten_space(Tuple(
+                        self.policy_spaces[policy_id]))
+
+            #
+            # Lastly, we can assign spaces to agents.
+            #
+            for a_id in self.agent_ids:
+                policy_id = self.policy_mapping_fn(a_id)
+                self.critic_observation_space[a_id] = \
+                    self.policy_spaces[policy_id]
+
+    def _construct_global_critic_observation(self,
+                                             obs,
+                                             done):
+        """
+        """
+        #
+        # All agents will share the same critic observations.
+        # Let's be memory sensitive here and only construct
+        # one observation that all agents can share.
+        #
+        critic_obs = {}
+
+        agent0 = next(iter(self.agent_ids))
+        critic_shape = (1, reduce(lambda a, b: a * b,
+            self.critic_observation_space[agent0].shape))
+
+        critic_obs_data = np.zeros(critic_shape)
+
+        critic_obs_data = critic_obs_data.astype(
+            self.critic_observation_space[agent0].dtype)
+
+        #
+        # First pass: construct the shared observation.
+        #
+        start = 0
+        for a_id in self.agent_ids:
+            obs_size = reduce(lambda a, b: a * b,
+                self.observation_space[a_id].shape)
+
+            stop = start + obs_size
+
+            #
+            # There are two cases where we zero out the obervations:
+            #  1. The agent has died, but we're not all done (death masking).
+            #  2. An agent hasn't acted in this turn ("turn masking"). We could
+            #     also keep around previous turn observations in these cases,
+            #     but it's unclear if that would be useful. TODO: investigate.
+            #
+            if a_id not in obs or (done[a_id] and not self.all_done):
+                mask = np.zeros(obs_size)
+                mask = mask.astype(critic_obs_data.dtype)
+                critic_obs_data[0, start : stop] = mask.flatten()
+
+            elif a_id in obs:
+                critic_obs_data[0, start : stop] = obs[a_id].flatten()
+
+            start = stop
+
+        #
+        # Second pass: assign the shared observation.
+        #
+        for a_id in self.agent_ids:
+            critic_obs[a_id] = critic_obs_data
+
+        return critic_obs
+
+    def _construct_policy_critic_observation(self,
+                                             obs,
+                                             done):
+        """
+        """
+        critic_obs  = {}
+        policy_data = {}
+
+        for policy_id in self.policy_spaces:
+            data = np.zeros((1, reduce(lambda a, b : a * b,
+                self.policy_spaces[policy_id].shape)))
+
+            data = critic_obs_data.astype(
+                self.policy_spaces[policy_id].dtype)
+
+            policy_data[policy_id] = {"start" : 0, "data" : data}
+
+        #
+        # First pass: construct the shared observations.
+        #
+        for a_id in self.agent_ids:
+            policy_id = self.policy_mapping_fn(a_id)
+
+
+            obs_size = reduce(lambda a, b: a * b,
+                self.observation_space[a_id].shape)
+
+            start = policy_data[policy_id]["start"]
+            stop  = start + obs_size
+
+            #
+            # There are two cases where we zero out the obervations:
+            #  1. The agent has died, but we're not all done (death masking).
+            #  2. An agent hasn't acted in this turn ("turn masking"). We could
+            #     also keep around previous turn observations in these cases,
+            #     but it's unclear if that would be useful. TODO: investigate.
+            #
+            if a_id not in obs or (done[a_id] and not self.all_done):
+                mask      = np.zeros(obs_size)
+                mask      = mask.astype(critic_obs_data.dtype)
+                agent_obs = mask.flatten()
+
+            elif a_id in obs:
+                agent_obs = obs[a_id].flatten()
+
+            policy_data[policy_id]["data"][0][start : stop] = agent_obs
+
+            policy_data[policy_id]["start"] = stop
+
+        #
+        # Second pass: assign the shared observations.
+        #
+        for a_id in self.agent_ids:
+            policy_id        = self.policy_mapping_fn(a_id)
+            critic_obs[a_id] = policy_data[policy_id]["data"]
+
+        return critic_obs
+
+    def _construct_critic_observation(self,
+                                      obs,
+                                      done):
+        """
+        """
+        if self.critic_view == "global":
+            return self._construct_global_critic_observation(obs, done)
+        if self.critic_view == "local":
+            return deepcopy(obs)
+        if self.critic_view == "policy":
+            return self._construct_policy_critic_observation(obs, done)
+        else:
+            rank_print(f"ERROR: unknown critic_view, {self.critic_view}.")
+            comm.Abort()
+
     @abstractmethod
-    def define_multi_agent_spaces(self):
+    def _define_multi_agent_spaces(self):
         """
         """
         return
@@ -442,18 +661,61 @@ class PPOEnvironmentWrapper(ABC):
         """
         return self.env.render(**kw_args)
 
+    def seed(self, seed):
+        """
+        """
+        self.env.seed(seed)
 
-# FIXME: will the environment generators need to be wrapped by
-# these multi-agent interfaces now?? We could then pass that
-# generator to the vectorized wrapper. This probably makes
-# the most sense...
-#
+
+class PPOGymWrapper(PPOEnvironmentWrapper):
+
+    def step(self, actions):
+        """
+        """
+        obs, global_obs, reward, done, info = \
+            self._wrap_gym_step(*self.env.step(
+                self._unwrap_action(actions)))
+
+        return obs, global_obs, reward, done, info
+
+    def reset(self):
+        """
+        """
+        obs, global_obs = self._wrap_gym_reset(self.env.reset())
+        return obs, global_obs
+
+    @abstractmethod
+    def _unwrap_action(self,
+                       action):
+        """
+        """
+        return
+
+    @abstractmethod
+    def _wrap_gym_step(self,
+                       obs,
+                       reward,
+                       done,
+                       info):
+        """
+        """
+        return
+
+    @abstractmethod
+    def _wrap_gym_reset(self,
+                        obs):
+        """
+        """
+        return
+
+
 # FIXME: move to gym_wrappers?
-class SingleAgentGymWrapper(PPOEnvironmentWrapper):
+class SingleAgentGymWrapper(PPOGymWrapper):
 
     def __init__(self,
                  env,
-                 test_mode = False,
+                 test_mode   = False,
+                 critic_view = "local",
                  **kw_args):
         """
         """
@@ -462,6 +724,7 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         super(SingleAgentGymWrapper, self).__init__(
             env,
             test_mode,
+            critic_view = critic_view,
             **kw_args)
 
         if self.add_agent_ids:
@@ -475,17 +738,12 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         #
         self.action_squeeze = need_action_squeeze(self.env)
 
-    def define_multi_agent_spaces(self):
+    def _define_multi_agent_spaces(self):
         """
         """
-        self.action_space             = Dict()
-        self.observation_space        = Dict()
-        self.critic_observation_space = Dict()
-
         for a_id in self.agent_ids:
-            self.action_space[a_id]             = self.env.action_space
-            self.observation_space[a_id]        = self.env.observation_space
-            self.critic_observation_space[a_id] = self.env.observation_space
+            self.action_space[a_id]      = self.env.action_space
+            self.observation_space[a_id] = self.env.observation_space
 
     def get_agent_id(self):
         """
@@ -540,7 +798,12 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         done     = {agent_id : done}
         info     = {agent_id : info}
 
-        return obs, deepcopy(obs), reward, done, info
+        if self.add_agent_ids:
+            obs = self._add_agent_ids_to_obs(obs)
+
+        global_obs = self._construct_critic_observation(obs, done)
+
+        return obs, global_obs, reward, done, info
 
     def _wrap_gym_reset(self,
                         obs):
@@ -555,51 +818,33 @@ class SingleAgentGymWrapper(PPOEnvironmentWrapper):
         obs = obs.reshape(self.observation_space[agent_id].shape)
         obs = {agent_id : obs}
 
-        return obs, deepcopy(obs)
+        done       = {agent_id : False}
 
-    def step(self, actions):
-        """
-        """
-        obs, global_obs, reward, done, info = \
-            self._wrap_gym_step(*self.env.step(
-                self._unwrap_action(actions)))
+        if self.add_agent_ids:
+            obs = self._add_agent_ids_to_obs(obs)
 
-        self.obs_cache = deepcopy(obs)
-        self.need_hard_reset = False
+        global_obs = self._construct_critic_observation(obs, done)
 
-        return obs, global_obs, reward, done, info
-
-    def reset(self):
-        """
-        """
-        obs, global_obs = self._wrap_gym_reset(self.env.reset())
         return obs, global_obs
 
-    def seed(self, seed):
-        """
-        """
-        self.env.seed(seed)
 
-class MultiAgentGymWrapper(PPOEnvironmentWrapper):
+class MultiAgentGymWrapper(PPOGymWrapper):
 
     def __init__(self,
                  env,
-                 test_mode = False,
+                 test_mode     = False,
+                 add_agent_ids = True,
                  **kw_args):
         """
         """
-        num_agents     = len(env.observation_space)
-        self.agent_ids = {f"agent{i}" for i in range(num_agents)}
+        self.num_agents = len(env.observation_space)
+        self.agent_ids  = {f"agent{i}" for i in range(self.num_agents)}
 
         super(MultiAgentGymWrapper, self).__init__(
             env,
             test_mode,
+            add_agent_ids = add_agent_ids,
             **kw_args)
-
-        if self.add_agent_ids:
-            msg  = "WARNING: adding agent ids is not applicable "
-            msg += "for single agent simulators. Disregarding."
-            rank_print(msg)
 
         #
         # Environments are very inconsistent! Some of them require their
@@ -607,22 +852,57 @@ class MultiAgentGymWrapper(PPOEnvironmentWrapper):
         #
         self.action_squeeze = need_action_squeeze(self.env)
 
-    def define_multi_agent_spaces(self):
+    def _define_multi_agent_spaces(self):
         """
         """
-        self.action_space             = Dict()
-        self.observation_space        = Dict()
-        self.critic_observation_space = Dict()
+        #
+        # Some gym environments are buggy and require a reshape.
+        #
+        self.enforced_obs_shape = {}
 
         for a_idx, a_id in enumerate(self.agent_ids):
-            self.action_space[a_id]             = self.env.action_space[a_idx]
-            self.observation_space[a_id]        = self.env.observation_space[a_idx]
-            self.critic_observation_space[a_id] = self.env.observation_space[a_idx]
+            if self.add_agent_ids:
+                self.observation_space[a_id] = \
+                    self._expand_space_for_ids(self.env.observation_space[a_idx])
+            else:
+                self.observation_space[a_id] = self.env.observation_space[a_idx]
+
+            self.enforced_obs_shape[a_id] = \
+                self.env.observation_space[a_idx].shape
+
+            self.action_space[a_id] = self.env.action_space[a_idx]
+
+    def _expand_space_for_ids(self, space):
+        """
+        """
+        if issubclass(type(space), Box):
+            low   = space.low
+            high  = space.high
+            shape = space.shape
+
+            low   = low.flatten()
+            high  = high.flatten()
+            shape = (reduce(lambda a, b: a * b, shape) + 1,)
+
+            low   = np.concatenate((low, (0,)))
+            high  = np.concatenate((high, (self.num_agents,)))
+
+            return Box(
+                low   = low,
+                high  = high,
+                shape = shape,
+                dtype = space.dtype)
+
+        elif issubclass(type(space), Discrete):
+            return Discrete(space.n + 1)
 
     def _unwrap_action(self,
                        actions):
         """
         """
+        # FIXME: we need to make a note of the fact that this
+        # wrapper requires that all agents step at once, even if
+        # dead.
         gym_actions = np.array([None] * self.num_agents)
 
         for a_idx, a_id in enumerate(self.agent_ids):
@@ -633,7 +913,7 @@ class MultiAgentGymWrapper(PPOEnvironmentWrapper):
 
             gym_actions[a_idx] = env_action
 
-        return Tuple(gym_actions)
+        return tuple(gym_actions)
 
     def _wrap_gym_step(self,
                        obs,
@@ -650,14 +930,14 @@ class MultiAgentGymWrapper(PPOEnvironmentWrapper):
         for a_idx, a_id in enumerate(self.agent_ids):
             agent_obs    = obs[a_idx]
             agent_reward = reward[a_idx]
-            agent_done   = agent_done[a_idx]
+            agent_done   = done[a_idx]
             agent_info   = info
 
             #
             # HACK: some environments are buggy and don't follow their
             # own rules!
             #
-            agent_obs = agent_obs.reshape(self.observation_space[a_id].shape)
+            agent_obs = agent_obs.reshape(self.enforced_obs_shape[a_id])
 
             if type(agent_reward) == np.ndarray:
                 agent_reward = agent_reward[0]
@@ -667,58 +947,48 @@ class MultiAgentGymWrapper(PPOEnvironmentWrapper):
             wrapped_obs[a_id]    = agent_obs
             wrapped_reward[a_id] = agent_reward
             wrapped_info[a_id]   = agent_info
-            wrapped_don[a_id]    = agent_done
+            wrapped_done[a_id]   = agent_done
 
-        if done.all():
+        if np.array(done).all():
             self.all_done = True
 
-        return (wrapped_obs, deepcopy(wrapped_obs),
+        if self.add_agent_ids:
+            wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
+
+        global_obs = self._construct_critic_observation(
+            wrapped_obs, wrapped_done)
+
+        return (wrapped_obs, global_obs,
             wrapped_reward, wrapped_done, wrapped_info)
 
     def _wrap_gym_reset(self,
                         obs):
         """
         """
-        wrapped_obs = {}
+        wrapped_obs  = {}
+        wrapped_done = {}
 
-        for a_id, a_idx in enumerate(self.agent_ids):
+        for a_idx, a_id in enumerate(self.agent_ids):
             agent_obs = obs[a_idx]
 
             #
             # HACK: some environments are buggy and don't follow their
             # own rules!
             #
-            agent_obs = agent_obs.reshape(self.observation_space[a_id].shape)
+            agent_obs = agent_obs.reshape(self.enforced_obs_shape[a_id])
             wrapped_obs[a_id] = agent_obs
 
-        return wrapped_obs, deepcopy(wrapped_obs)
+            wrapped_done[a_id] = False
 
-    #FIXME: this can go into an abstract parent class.
-    def step(self, actions):
-        """
-        """
-        obs, global_obs, reward, done, info = \
-            self._wrap_gym_step(*self.env.step(
-                self._unwrap_action(actions)))
+        if self.add_agent_ids:
+            wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
-        self.obs_cache = deepcopy(obs)
-        self.need_hard_reset = False
+        global_obs = self._construct_critic_observation(
+            wrapped_obs, wrapped_done)
 
-        return obs, global_obs, reward, done, info
-
-    def reset(self):
-        """
-        """
-        obs, global_obs = self._wrap_gym_reset(self.env.reset())
-        return obs, global_obs
-
-    def seed(self, seed):
-        """
-        """
-        self.env.seed(seed)
+        return wrapped_obs, global_obs
 
 
-#FIXME need to handle dicts
 class VectorizedEnv(IdentityWrapper, Iterable):
     """
         Wrapper for "vectorizing" environments. As far as I can tell, this

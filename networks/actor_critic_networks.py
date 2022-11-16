@@ -134,7 +134,6 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
                 self.output_layer = init_layer(nn.Linear(in_dim, out_size))
 
     def forward(self, _input):
-
         out = _input.flatten(start_dim = 1)
 
         if self.have_hidden:

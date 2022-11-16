@@ -34,7 +34,7 @@ def generate_policy(
     return policy
 
 
-def get_single_agent_policy_defaults(
+def get_single_policy_defaults(
     env_generator,
     policy_args,
     policy_name = "single_agent"):
@@ -44,7 +44,7 @@ def get_single_agent_policy_defaults(
     policy_settings = { policy_name : \
         (None,
          env_generator().observation_space["agent0"],
-         env_generator().observation_space["agent0"],
+         env_generator().critic_observation_space["agent0"],
          env_generator().action_space["agent0"],
          policy_args)
     }

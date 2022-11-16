@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
 import os
 import sys
 import pickle
@@ -68,6 +68,8 @@ def need_action_squeeze(env):
 
     elif issubclass(act_type, Discrete):
         need_action_squeeze = True
+    elif issubclass(act_type, Tuple):
+        need_action_squeeze = False
     else:
         msg  = "ERROR: unsupported action space "
         msg += "{}".format(env.action_space)

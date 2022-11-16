@@ -73,8 +73,9 @@ class AgentPolicy():
         self.dynamic_bs_clip    = dynamic_bs_clip
         self.using_lstm         = False
         self.dataset            = None
-        self.episodes           = np.empty(0, dtype=object)
         self.device             = torch.device("cpu")
+        self.agent_ids          = set()
+        self.episodes           = {}
 
         act_type = type(action_space)
 
@@ -154,6 +155,11 @@ class AgentPolicy():
         else:
             self.icm_optim = None
 
+    def register_agent(self, agent_id):
+        """
+        """
+        self.agent_ids = self.agent_ids.union({agent_id})
+
     def to(self, device):
         """
         """
@@ -196,11 +202,9 @@ class AgentPolicy():
         # where I got 1.0 from... I'll try to track that down.
         #
         if use_conv2d_setup:
-            obs_dim = self.actor_obs_space.shape
-
             self.actor = ac_network(
                 name         = "actor", 
-                in_shape     = obs_dim,
+                in_shape     = self.actor_obs_space.shape,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
                 action_dtype = self.action_dtype,
@@ -209,7 +213,7 @@ class AgentPolicy():
 
             self.critic = ac_network(
                 name         = "critic", 
-                in_shape     = obs_dim,
+                in_shape     = self.critic_obs_space.shape,
                 out_dim      = 1,
                 out_init     = 1.0,
                 action_dtype = self.action_dtype,
@@ -276,18 +280,21 @@ class AgentPolicy():
         # that our dictionaries can be different sizes for each policy, but
         # the number of environment instances will be consistent.
         #
-        self.episodes = np.array([None] * env_batch_size, dtype=object)
-        bs_clip_range = self.get_bs_clip_range(None, status_dict)
 
-        # FIXME: these will become dictionaries mapping agent ids to
-        # their episodes.
-        for ei_idx in range(env_batch_size):
-            self.episodes[ei_idx] = EpisodeInfo(
-                starting_ts    = 0,
-                use_gae        = self.use_gae,
-                gamma          = self.gamma,
-                lambd          = self.lambd,
-                bootstrap_clip = bs_clip_range)
+        self.episodes = {}
+        for agent_id in self.agent_ids:
+            self.episodes[agent_id] = np.array([None] * env_batch_size,
+                dtype=object)
+
+            bs_clip_range = self.get_bs_clip_range(None, status_dict)
+
+            for ei_idx in range(env_batch_size):
+                self.episodes[agent_id][ei_idx] = EpisodeInfo(
+                    starting_ts    = 0,
+                    use_gae        = self.use_gae,
+                    gamma          = self.gamma,
+                    lambd          = self.lambd,
+                    bootstrap_clip = bs_clip_range)
 
     def initialize_dataset(self):
         """
@@ -309,8 +316,19 @@ class AgentPolicy():
             action_dtype    = self.action_dtype,
             sequence_length = sequence_length)
 
+    def validate_agent_id(self, agent_id):
+        """
+        """
+        if agent_id not in self.agent_ids:
+            msg  = f"ERROR: agent {agent_id} has not been registered with "
+            msg += "policy {self.name}. Make sure that you've set up your "
+            msg += "policies correctly."
+            rank_print(msg)
+            comm.Abort()
+
     def add_episode_info(
         self, 
+        agent_id,
         global_observations,
         observations,
         next_observations,
@@ -322,9 +340,8 @@ class AgentPolicy():
         where_done):
         """
         """
-        # FIXME: these will become dictionaries mapping agent ids
-        # to their episode infos.
-        env_batch_size = self.episodes.size
+        self.validate_agent_id(agent_id)
+        env_batch_size = self.episodes[agent_id].size
 
         #
         # When using lstm networks, we need to save the hidden states
@@ -373,7 +390,7 @@ class AgentPolicy():
                  np.empty(empty_shape))
 
         for ei_idx in range(env_batch_size):
-            self.episodes[ei_idx].add_info(
+            self.episodes[agent_id][ei_idx].add_info(
                 global_observation = global_observations[ei_idx],
                 observation        = observations[ei_idx],
                 next_observation   = next_observations[ei_idx],
@@ -389,6 +406,7 @@ class AgentPolicy():
 
     def end_episodes(
         self,
+        agent_id,
         env_idxs,
         episode_lengths,
         terminal,
@@ -397,14 +415,16 @@ class AgentPolicy():
         status_dict):
         """
         """
+        self.validate_agent_id(agent_id)
+
         for idx, env_i in enumerate(env_idxs):
-            self.episodes[env_i].end_episode(
+            self.episodes[agent_id][env_i].end_episode(
                 ending_ts      = episode_lengths[env_i],
                 terminal       = terminal[idx],
                 ending_value   = ending_values[idx].item(),
                 ending_reward  = ending_rewards[idx].item())
 
-            self.dataset.add_episode(self.episodes[env_i])
+            self.dataset.add_episode(self.episodes[agent_id][env_i])
 
             #
             # If we're using a dynamic bs clip, we clip to the min/max
@@ -412,7 +432,7 @@ class AgentPolicy():
             # provided range.
             #
             bs_min, bs_max = self.get_bs_clip_range(
-                self.episodes[env_i].rewards,
+                self.episodes[agent_id][env_i].rewards,
                 status_dict)
 
             #
@@ -421,7 +441,7 @@ class AgentPolicy():
             #
             starting_ts = 0 if terminal[idx] else episode_lengths[env_i]
 
-            self.episodes[env_i] = EpisodeInfo(
+            self.episodes[agent_id][env_i] = EpisodeInfo(
                 starting_ts    = starting_ts,
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
@@ -437,7 +457,7 @@ class AgentPolicy():
         """
         """
         self.dataset  = None
-        self.episodes = np.empty(0, dtype=object)
+        self.episodes = {}
 
     #FIXME: obs will be a dictionary in the multi-agent case. Do we want this to
     # be handed by a multi-agent mode, or do we want to wrap single agent

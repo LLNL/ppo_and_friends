@@ -10,6 +10,7 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+#FIXME: we can simplify some of this (global observations are always present as critic obs).
 class EpisodeInfo(object):
 
     def __init__(self,

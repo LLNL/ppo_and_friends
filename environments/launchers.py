@@ -15,7 +15,8 @@ from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.general_wrappers import SingleAgentGymWrapper
-from ppo_and_friends.policies.utils import get_single_agent_policy_defaults
+from ppo_and_friends.environments.general_wrappers import MultiAgentGymWrapper
+from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .gym_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
@@ -109,7 +110,7 @@ class CartPoleLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -161,7 +162,7 @@ class PendulumLauncher(EnvironmentLauncher):
             "dynamic_bs_clip"  : True,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -212,7 +213,7 @@ class MountainCarLauncher(EnvironmentLauncher):
             "enable_icm"       : True,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -277,7 +278,7 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             "enable_icm"       : True,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -335,7 +336,7 @@ class AcrobotLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-10., 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -400,7 +401,7 @@ class LunarLanderLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -468,7 +469,7 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-10., 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -542,7 +543,7 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-1., 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -639,7 +640,7 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (bs_clip_min, 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -715,7 +716,7 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-1., 1.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -788,7 +789,7 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-1., 1.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
     
@@ -824,7 +825,7 @@ class InvertedPendulumLauncher(EnvironmentLauncher):
             "ac_network" : FeedForwardNetwork,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -875,7 +876,7 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-10., 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -930,7 +931,7 @@ class AntLauncher(EnvironmentLauncher):
             "bootstrap_clip"   : (-10., 10.),
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1009,7 +1010,7 @@ class HumanoidLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1075,7 +1076,7 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
     
@@ -1125,7 +1126,7 @@ class Walker2DLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1181,7 +1182,7 @@ class HopperLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1238,7 +1239,7 @@ class HalfCheetahLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1290,7 +1291,7 @@ class SwimmerLauncher(EnvironmentLauncher):
             "lr"               : lr,
         }
 
-        policy_settings, policy_mapping_fn = get_single_agent_policy_defaults(
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
 
@@ -1319,7 +1320,8 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('rware-tiny-3ag-v1')
+        env_generator = lambda : \
+            MultiAgentGymWrapper(gym.make('rware-tiny-3ag-v1'))
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1343,13 +1345,23 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             max_timestep  = 40000000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
         #
-        # Each rank has 3 agents, which will be interpreted as individual
-        # environments, so (internally) we multiply our ts_per_rollout by
-        # the number of agents. We want each rank to see ~2 episodes =>
-        # num_ranks * 2 * 512.
+        # All agents use the same policy, so we can use the basics here.
         #
-        ts_per_rollout = num_procs * 2 * 512
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            policy_name   = "rware",
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        ts_per_rollout = num_procs * 512
     
         #
         # This environment comes from arXiv:2006.07869v4.
@@ -1365,17 +1377,14 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         # I've noticed that performance tends to go down a bit when these
         # normalizations are enabled.
         #
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                actor_kw_args      = actor_kw_args,
-                critic_kw_args     = critic_kw_args,
+        self.run_ppo(
+                env_generator      = env_generator,
+                policy_settings    = policy_settings,
+                policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 10000,
                 epochs_per_iter    = 5,
                 max_ts_per_ep      = 512,
                 ts_per_rollout     = ts_per_rollout,
-                use_gae            = True,
-                normalize_values   = True,
                 normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
@@ -1393,7 +1402,8 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('rware-small-4ag-v1')
+        env_generator = lambda : \
+            MultiAgentGymWrapper(gym.make('rware-small-4ag-v1'))
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1417,15 +1427,23 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
             max_iteration = 6000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        #
+        # All agents use the same policy, so we can use the basics here.
+        #
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            policy_name   = "rware",
+            env_generator = env_generator,
+            policy_args   = policy_args)
     
-        #
-        # Each rank has 4 agents, which will be interpreted as individual
-        # environments, so (internally) we multiply our ts_per_rollout by
-        # the number of agents. We want each rank to see ~E episodes =>
-        # num_ranks * E * 512.
-        #
-        E = 2
-        ts_per_rollout = num_procs * E * 512
+        ts_per_rollout = num_procs * 512
     
         #
         # This is a very sparse reward environment, and there are series of
@@ -1443,13 +1461,10 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args      = actor_kw_args,
-                     critic_kw_args     = critic_kw_args,
                      batch_size         = 10000,
                      epochs_per_iter    = 5,
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
-                     use_gae            = True,
                      normalize_values   = True,
                      normalize_obs      = False,
                      obs_clip           = None,
@@ -1468,7 +1483,8 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : gym.make('Foraging-8x8-3p-2f-v2')
+        env_generator = lambda : \
+            MultiAgentGymWrapper(gym.make('Foraging-8x8-3p-2f-v2'))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1493,36 +1509,41 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
 
-        #
-        # Each rank has 3 agents, which will be interpreted as individual
-        # environments, so (internally) we multiply our ts_per_rollout by
-        # the number of agents. We want each rank to see ~E episodes =>
-        # num_ranks * E * <max epsiode length>.
-        #
-        E = 8
-        ts_per_rollout = num_procs * E * 50
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
 
-        self.run_ppo(env_generator       = env_generator,
+        #
+        # All agents use the same policy, so we can use the basics here.
+        #
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            policy_name   = "lbf",
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        ts_per_rollout = num_procs * 50
+
+        self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
-                     batch_size          = 10000,
-                     epochs_per_iter     = 5,
-                     max_ts_per_ep       = 16,
-                     ts_per_rollout      = ts_per_rollout,
-                     use_gae             = True,
-                     normalize_values    = True,
-                     normalize_obs       = False,
-                     obs_clip            = None,
-                     normalize_rewards   = False,
-                     reward_clip         = None,
-                     entropy_weight      = entropy_weight,
-                     min_entropy_weight  = min_entropy_weight,
-                     entropy_dec         = entropy_dec,
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
+                     batch_size         = 10000,
+                     epochs_per_iter    = 5,
+                     max_ts_per_ep      = 16,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_values   = True,
+                     normalize_obs      = False,
+                     obs_clip           = None,
+                     normalize_rewards  = False,
+                     reward_clip        = None,
+                     entropy_weight     = entropy_weight,
+                     min_entropy_weight = min_entropy_weight,
+                     entropy_dec        = entropy_dec,
+                     lr_dec             = lr_dec,
+                     lr                 = lr,
+                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1535,7 +1556,8 @@ class PressurePlateLauncher(EnvironmentLauncher):
             rank_print(msg)
             comm.Abort()
 
-        env_generator = lambda : gym.make('pressureplate-linear-4p-v0')
+        env_generator = lambda : \
+            MultiAgentGymWrapper(gym.make('pressureplate-linear-4p-v0'))
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1560,34 +1582,41 @@ class PressurePlateLauncher(EnvironmentLauncher):
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
     
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
         #
-        # Each rank has 4 agents, which will be interpreted as individual
-        # environments, so (internally) we multiply our ts_per_rollout by
-        # the number of agents. We want each rank to see ~E episodes =>
-        # num_ranks * E * <max epsiode length>.
+        # All agents use the same policy, so we can use the basics here.
         #
-        E = 8
-        ts_per_rollout = num_procs * E * 64
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            policy_name   = "pressure-plate",
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        #FIXME: Debugging
+        #ts_per_rollout = num_procs * 512
+        ts_per_rollout = 1
     
-        self.run_ppo(env_generator       = env_generator,
+        self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     actor_kw_args       = actor_kw_args,
-                     critic_kw_args      = critic_kw_args,
-                     batch_size          = 10000,
-                     epochs_per_iter     = 5,
-                     max_ts_per_ep       = 16,
-                     ts_per_rollout      = ts_per_rollout,
-                     use_gae             = True,
-                     normalize_values    = True,
-                     normalize_obs       = False,
-                     obs_clip            = None,
-                     normalize_rewards   = False,
-                     reward_clip         = None,
-                     entropy_weight      = entropy_weight,
-                     min_entropy_weight  = min_entropy_weight,
-                     entropy_dec         = entropy_dec,
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
+                     batch_size         = 10000,
+                     epochs_per_iter    = 3,
+                     max_ts_per_ep      = 16,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_values   = True,
+                     normalize_obs      = False,
+                     obs_clip           = None,
+                     normalize_rewards  = False,
+                     reward_clip        = None,
+                     entropy_weight     = entropy_weight,
+                     min_entropy_weight = min_entropy_weight,
+                     entropy_dec        = entropy_dec,
+                     lr_dec             = lr_dec,
+                     lr                 = lr,
+                     min_lr             = min_lr,
                      **self.kw_launch_args)
