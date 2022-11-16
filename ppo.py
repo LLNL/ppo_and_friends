@@ -278,6 +278,7 @@ class PPO(object):
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
+        self.envs_per_proc       = envs_per_proc#FIXME: integrate in place of shape
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -416,6 +417,57 @@ class PPO(object):
 
         rank_print("Can clone environment: {}".format(self.can_clone_env))
 
+    def get_policy_batches(self, obs, component):
+        """
+        """
+        #FIXME: bad naming
+        assert component in ["actor", "critic"]
+
+        policy_batches = {}
+        policy_agents  = {}
+        agent_counts   = {p_id : 0 for p_id in self.policies}
+
+        for a_id in obs:
+            policy_id = self.policy_mapping_fn(a_id)
+            agent_counts[policy_id] += 1
+
+            if policy_id not in policy_agents:
+                policy_agents[policy_id] = []
+
+            policy_agents[policy_id].append(a_id)
+
+        for policy_id in agent_counts:
+            if component == "actor":
+                policy_shape = self.policies[policy_id].actor_obs_space.shape
+            elif component == "critic":
+                policy_shape = self.policies[policy_id].critic_obs_space.shape
+
+            batch_shape  = (agent_counts[policy_id], self.envs_per_proc) +\
+                policy_shape
+
+            if component == "actor":
+                policy_batches[policy_id] = np.zeros(batch_shape).astype(
+                    self.policies[policy_id].actor_obs_space.dtype)
+            elif component == "critic":
+                policy_batches[policy_id] = np.zeros(batch_shape).astype(
+                    self.policies[policy_id].critic_obs_space.dtype)
+
+            policy_agents[policy_id] = tuple(policy_agents[policy_id])
+
+        policy_idxs = {p_id : 0 for p_id in policy_batches}
+
+        for a_id in obs:
+            policy_id = self.policy_mapping_fn(a_id)
+            b_idx     = policy_idxs[policy_id]
+
+            policy_batches[policy_id][b_idx] = \
+                obs[a_id]
+
+            policy_idxs[policy_id] += 1
+
+        return policy_agents, policy_batches
+
+    #FIXME: these changes broke learning (cartpole).
     def get_policy_actions(self, obs):
         """
         """
@@ -423,18 +475,47 @@ class PPO(object):
         actions     = {}
         log_probs   = {}
 
-        for agent_id in obs:
-            policy_id = self.policy_mapping_fn(agent_id)
+        #FIXME: testing
+        #raw_actions_0 = {}
+        #actions_0     = {}
+        #log_probs_0   = {}
+        #for agent_id in obs:
+        #    policy_id = self.policy_mapping_fn(agent_id)
 
-            raw_action, action, log_prob = \
-                self.policies[policy_id].get_action(obs[agent_id])
+        #    raw_action, action, log_prob = \
+        #        self.policies[policy_id].get_action(obs[agent_id])
 
-            raw_actions[agent_id] = raw_action
-            actions[agent_id]     = action
-            log_probs[agent_id]   = log_prob
+        #    raw_actions_0[agent_id] = raw_action
+        #    actions_0[agent_id]     = action
+        #    log_probs_0[agent_id]   = log_prob
+
+        ##return raw_actions_0, actions_0, log_probs_0
+
+        policy_agents, policy_batches = self.get_policy_batches(obs, "actor")
+
+        for policy_id in policy_batches:
+            batch_obs  = policy_batches[policy_id]
+            num_agents = batch_obs.shape[0]
+            batch_obs  = batch_obs.reshape((-1,) + \
+                self.policies[policy_id].actor_obs_space.shape)
+
+            batch_raw_actions, batch_actions, batch_log_probs = \
+                self.policies[policy_id].get_action(batch_obs)
+
+            batch_raw_actions = batch_raw_actions.reshape((num_agents, -1))
+
+            batch_actions = batch_actions.reshape((num_agents, -1))
+
+            batch_log_probs = batch_log_probs.reshape((num_agents, -1))
+
+            for b_idx, a_id in enumerate(policy_agents[policy_id]):
+                raw_actions[a_id] = batch_raw_actions[b_idx]
+                actions[a_id]     = batch_actions[b_idx]
+                log_probs[a_id]   = batch_log_probs[b_idx]
 
         return raw_actions, actions, log_probs
 
+    #FIXME: update to use batched agents.
     def get_policy_actions_from_aug_obs(self, obs):
         """
         """
@@ -455,15 +536,35 @@ class PPO(object):
 
         return raw_actions, actions, log_probs
 
+    #FIXME: these changes broke learning (cartpole).
     def get_policy_values(self, obs):
         """
         """
         values = {}
 
-        for agent_id in obs:
-            policy_id        = self.policy_mapping_fn(agent_id)
-            value            = self.policies[policy_id].critic(obs[agent_id])
-            values[agent_id] = value
+        policy_agents, policy_batches = self.get_policy_batches(obs, "critic")
+        policy_batches = self.np_dict_to_tensor_dict(policy_batches)
+
+        for policy_id in policy_batches:
+            batch_obs  = policy_batches[policy_id]
+            num_agents = batch_obs.shape[0]
+            batch_obs  = batch_obs.reshape((-1,) + \
+                self.policies[policy_id].critic_obs_space.shape)
+
+            batch_values = self.policies[policy_id].critic(batch_obs)
+
+            batch_values = batch_values.reshape((num_agents, -1))
+
+            for b_idx, a_id in enumerate(policy_agents[policy_id]):
+                values[a_id] = batch_values[b_idx]
+
+        #FIXME: testing
+        #obs = self.np_dict_to_tensor_dict(obs)
+        #for agent_id in obs:
+        #    policy_id        = self.policy_mapping_fn(agent_id)
+        #    print(obs[agent_id].shape)
+        #    value            = self.policies[policy_id].critic(obs[agent_id])
+        #    values[agent_id] = value
 
         return values
 
@@ -800,7 +901,9 @@ class PPO(object):
             total_rollout_ts += env_batch_size
             episode_lengths  += 1
 
-            start = time.time()#FIXME
+            # FIXME: inference is dramatically slower when we infer
+            # on each agent separately!
+            #start = time.time()#FIXME
 
             if self.obs_augment:
                 raw_action, action, log_prob = \
@@ -809,12 +912,13 @@ class PPO(object):
                 raw_action, action, log_prob = \
                     self.get_policy_actions(obs)
 
-            stop = time.time()#FIXME
-            print(f"time: {stop - start}")
+            #stop = time.time()#FIXME
+            #print(f"time: {stop - start}")
 
-            critic_obs = self.np_dict_to_tensor_dict(global_obs)
-
-            value = self.get_policy_values(critic_obs)
+            #FIXME:
+            #critic_obs = self.np_dict_to_tensor_dict(global_obs)
+            #value = self.get_policy_values(critic_obs)
+            value = self.get_policy_values(global_obs)
 
             if self.normalize_values:
                 value = self.get_denormalized_values(value)
@@ -834,6 +938,10 @@ class PPO(object):
             # to np arrays. Each element of the numpy array represents
             # the results from a single environment.
             #
+            # FIXME: should we change the returns to map policy ids to
+            # results? This would allow us to batch agents together for
+            # faster computation (inference). We would need to somehow
+            # mix vectorized environments and multiple agents together.
             obs, global_obs, ext_reward, done, info = self.env.step(action)
 
             #
@@ -1026,8 +1134,10 @@ class PPO(object):
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                critic_obs  = self.np_dict_to_tensor_dict(global_obs)
-                next_value  = self.get_policy_values(critic_obs)
+                #FIXME:
+                #critic_obs  = self.np_dict_to_tensor_dict(global_obs)
+                #next_value  = self.get_policy_values(critic_obs)
+                next_value  = self.get_policy_values(global_obs)
 
                 if self.normalize_values:
                     next_value = self.get_denormalized_values(next_value)
