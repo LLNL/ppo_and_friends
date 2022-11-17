@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     args               = parser.parse_args()
     test               = args.test
-    explore            = args.explore
+    test_explore       = args.test_explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
     env_name           = args.environment
@@ -158,16 +158,16 @@ if __name__ == "__main__":
     launcher_class = getattr(sys.modules[__name__], class_name)
 
     launcher = launcher_class(
-        random_seed        = random_seed,
-        state_path         = state_path,
-        load_state         = load_state,
-        render             = render,
-        render_gif         = render_gif,
-        num_timesteps      = num_timesteps,
-        device             = device,
-        envs_per_proc      = envs_per_proc,
-        test               = test,
-        explore_while_test = explore,
-        num_test_runs      = num_test_runs)
+        random_seed           = random_seed,
+        state_path            = state_path,
+        load_state            = load_state,
+        render                = render,
+        render_gif            = render_gif,
+        num_timesteps         = num_timesteps,
+        device                = device,
+        envs_per_proc         = envs_per_proc,
+        test                  = test,
+        explore_while_testing = test_explore,
+        num_test_runs         = num_test_runs)
 
     launcher.launch()

@@ -54,11 +54,11 @@ class EnvironmentLauncher(ABC):
                 policy_mapping_fn,
                 env_generator,
                 device,
-                test               = False,
-                explore_while_test = False,
-                num_timesteps      = 1_000_000,
-                render_gif         = False,
-                num_test_runs      = 1,
+                test                  = False,
+                explore_while_testing = False,
+                num_timesteps         = 1_000_000,
+                render_gif            = False,
+                num_test_runs         = 1,
                 **kw_args):
 
         """
@@ -74,7 +74,7 @@ class EnvironmentLauncher(ABC):
     
         if test:
             test_policy(ppo,
-                        explore_while_test,
+                        explore_while_testing,
                         render_gif,
                         num_test_runs,
                         device)
