@@ -47,7 +47,7 @@ python main.py --help
 
 To train an already supported environment, use the following command:
 ```
-python main.py -e <env_name> --num_timesteps <max_num_timesteps>
+python main.py -e <env_name> --num-timesteps <max_num_timesteps>
 ```
 
 Running the same command again will result in loading the previously
@@ -56,7 +56,7 @@ saved state. You can re-run from scratch by using the `--clobber` option.
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-python main.py -e <env_name> --num_test_runs <num_test_runs> --render
+python main.py -e <env_name> --num-test_runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render_gif` flag.
 
@@ -86,12 +86,12 @@ networks that can benefit from GPUs (convolutions, for example).
 
 mpirun:
 ```
-mpirun -n {num_procs} python main.py -e {env_name} --envs_per_proc {envs_per_proc} ...
+mpirun -n {num_procs} python main.py -e {env_name} --envs-per-proc {envs_per_proc} ...
 ```
 
 srun:
 ```
-srun -N1 -n {num_procs} python main.py -e {env_name} --envs_per_proc {envs_per_proc} ...
+srun -N1 -n {num_procs} python main.py -e {env_name} --envs-per-proc {envs_per_proc} ...
 ```
 
 Some things to note:
