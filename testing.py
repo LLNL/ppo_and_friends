@@ -5,6 +5,7 @@ from ppo_and_friends.utils.render import save_frames_as_gif
 import os
 
 def test_policy(ppo,
+                explore,
                 render_gif,
                 num_test_runs,
                 device):
@@ -13,6 +14,8 @@ def test_policy(ppo,
 
         Arguments:
             ppo            An instance of PPO from ppo.py.
+            explore        Bool determining whether or not exploration should
+                           be enabled while testing.
             render_gif     Create a gif from the renderings.
             num_test_runs  How many times should we run in the environment?
             device         The device to infer on.
@@ -63,15 +66,23 @@ def test_policy(ppo,
                 obs[agent_id] = obs[agent_id].unsqueeze(0)
                 policy_id     = policy_map(agent_id)
 
-                with torch.no_grad():
-                    actions[agent_id] = \
-                        policies[policy_id].actor.get_result(
-                            obs[agent_id]).detach().cpu()
+                if explore:
+                    with torch.no_grad():
+                         _, agent_action, _ = policies[policy_id].get_action(
+                             obs[agent_id])
+                         actions[agent_id]  = agent_action
 
-                if action_dtype[agent_id] == "discrete":
-                    actions[agent_id] = torch.argmax(actions[agent_id], axis=-1).numpy()
                 else:
-                    actions[agent_id] = actions[agent_id].numpy()
+                    with torch.no_grad():
+                        actions[agent_id] = \
+                            policies[policy_id].actor.get_result(
+                                obs[agent_id]).detach().cpu()
+
+                    if action_dtype[agent_id] == "discrete":
+                        actions[agent_id] = torch.argmax(
+                            actions[agent_id], axis=-1).numpy()
+                    else:
+                        actions[agent_id] = actions[agent_id].numpy()
 
             obs, _, reward, done, info = env.step(actions)
 

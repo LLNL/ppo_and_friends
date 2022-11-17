@@ -475,22 +475,6 @@ class PPO(object):
         actions     = {}
         log_probs   = {}
 
-        #FIXME: testing
-        #raw_actions_0 = {}
-        #actions_0     = {}
-        #log_probs_0   = {}
-        #for agent_id in obs:
-        #    policy_id = self.policy_mapping_fn(agent_id)
-
-        #    raw_action, action, log_prob = \
-        #        self.policies[policy_id].get_action(obs[agent_id])
-
-        #    raw_actions_0[agent_id] = raw_action
-        #    actions_0[agent_id]     = action
-        #    log_probs_0[agent_id]   = log_prob
-
-        ##return raw_actions_0, actions_0, log_probs_0
-
         policy_agents, policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
@@ -536,7 +520,6 @@ class PPO(object):
 
         return raw_actions, actions, log_probs
 
-    #FIXME: these changes broke learning (cartpole).
     def get_policy_values(self, obs):
         """
         """
@@ -708,6 +691,7 @@ class PPO(object):
         batch_size = dones[first_id].size
         done_envs  = np.zeros(batch_size).astype(bool)
 
+        # FIXME: is this still true?
         #
         # Because we always death mask, any agent that has a done environment
         # means that all agents are done in that same environment.
@@ -901,10 +885,6 @@ class PPO(object):
             total_rollout_ts += env_batch_size
             episode_lengths  += 1
 
-            # FIXME: inference is dramatically slower when we infer
-            # on each agent separately!
-            #start = time.time()#FIXME
-
             if self.obs_augment:
                 raw_action, action, log_prob = \
                     self.get_policy_actions_from_aug_obs(obs)
@@ -912,12 +892,6 @@ class PPO(object):
                 raw_action, action, log_prob = \
                     self.get_policy_actions(obs)
 
-            #stop = time.time()#FIXME
-            #print(f"time: {stop - start}")
-
-            #FIXME:
-            #critic_obs = self.np_dict_to_tensor_dict(global_obs)
-            #value = self.get_policy_values(critic_obs)
             value = self.get_policy_values(global_obs)
 
             if self.normalize_values:
@@ -938,10 +912,6 @@ class PPO(object):
             # to np arrays. Each element of the numpy array represents
             # the results from a single environment.
             #
-            # FIXME: should we change the returns to map policy ids to
-            # results? This would allow us to batch agents together for
-            # faster computation (inference). We would need to somehow
-            # mix vectorized environments and multiple agents together.
             obs, global_obs, ext_reward, done, info = self.env.step(action)
 
             #
@@ -1002,6 +972,7 @@ class PPO(object):
                 obs,
                 action)
 
+            #FIXME: do we really want to do this?
             ep_obs = deepcopy(obs)
 
             where_done, where_not_done = self.get_done_envs(done)
@@ -1067,9 +1038,6 @@ class PPO(object):
                 #
                 # Every agent has at least one done environment.
                 #
-                # FIXME: agents now share episodes, so no single agent can end
-                # an episode.
-                # NOTE: if one agent is done, they're all done (death masking).
                 for agent_id in done:
                     policy_id = self.policy_mapping_fn(agent_id)
 

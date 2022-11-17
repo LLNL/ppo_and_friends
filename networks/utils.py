@@ -82,6 +82,7 @@ class CategoricalDistribution(object):
         """
         return dist.entropy()
 
+    #FIXME: inherit from ABC
     def refine_sample(self,
                       sample,
                       testing = False):
@@ -218,6 +219,7 @@ class GaussianDistribution(nn.Module):
             (self.dist_max - self.dist_min) + self.dist_min
         return sample
 
+    #FIXME: inherit from ABC
     def refine_sample(self,
                       sample,
                       testing = False):

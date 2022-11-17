@@ -21,6 +21,11 @@ if __name__ == "__main__":
     parser.add_argument("--test", action="store_true",
         help="Test out an existing policy.")
 
+    parser.add_argument("--explore", action="store_true",
+        help="Enable exploration while testing. Note that this flag"
+        "only has an effect while in test mode. Exploration is always"
+        "enabled during training.")
+
     parser.add_argument("--num_test_runs", type=int, default=1,
         help="If used with --test, this will define the number of test "
         "iterations that are run. The min, max, and average scores will "
@@ -87,6 +92,7 @@ if __name__ == "__main__":
 
     args               = parser.parse_args()
     test               = args.test
+    explore            = args.explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
     env_name           = args.environment
@@ -161,6 +167,7 @@ if __name__ == "__main__":
         device             = device,
         envs_per_proc      = envs_per_proc,
         test               = test,
+        explore_while_test = explore,
         num_test_runs      = num_test_runs)
 
     launcher.launch()

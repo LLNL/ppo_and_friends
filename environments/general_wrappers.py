@@ -50,7 +50,8 @@ class IdentityWrapper(ABC):
         self.action_space             = env.action_space
         self.null_actions             = env.null_actions
 
-        self.agent_ids = {agent_id for agent_id in self.action_space.keys()}
+        self.agent_ids = tuple(agent_id for agent_id in
+            self.action_space.keys())
 
         if (callable(getattr(self.env, "augment_observation", None)) and
             callable(getattr(self.env, "augment_global_observation", None))):
@@ -428,7 +429,6 @@ class PPOEnvironmentWrapper(ABC):
     def _add_agent_ids_to_obs(self, obs):
         """
         """
-        #FIXME: should id norm be optional?
         for a_id in obs:
             obs[a_id] = np.concatenate((obs[a_id],
                 (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
@@ -719,7 +719,7 @@ class SingleAgentGymWrapper(PPOGymWrapper):
                  **kw_args):
         """
         """
-        self.agent_ids = {"agent0"}
+        self.agent_ids = ("agent0",)
 
         super(SingleAgentGymWrapper, self).__init__(
             env,
@@ -754,7 +754,7 @@ class SingleAgentGymWrapper(PPOGymWrapper):
             rank_print(msg)
             comm.Abort()
 
-        return tuple(self.agent_ids)[0]
+        return self.agent_ids[0]
 
     def _unwrap_action(self,
                        action):
@@ -838,7 +838,7 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         """
         """
         self.num_agents = len(env.observation_space)
-        self.agent_ids  = {f"agent{i}" for i in range(self.num_agents)}
+        self.agent_ids  = tuple(f"agent{i}" for i in range(self.num_agents))
 
         super(MultiAgentGymWrapper, self).__init__(
             env,
@@ -951,6 +951,8 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
         if np.array(done).all():
             self.all_done = True
+        else:
+            self.all_done = False
 
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
@@ -1004,7 +1006,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         support this second idea.
     """
 
-    #FIXME: add some of the multi-agent options (add ids, etc.)
     def __init__(self,
                  env_generator,
                  num_envs = 1,
@@ -1077,8 +1078,12 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         """
         obs, global_obs, reward, done, info = self.env.step(action)
 
+        # FIXME: how do we handle agent death now? If one but not all are done,
+        # and the done agents are still receiving observations, we should
+        # probably death mask.
         if self.env.get_all_done():
             for agent_id in info:
+                #FIXME: deepcopy  might not be needed here.
                 info[agent_id]["terminal observation"] = deepcopy(obs[agent_id])
 
             obs, global_obs = self.env.reset()
@@ -1161,7 +1166,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 batch_dones[agent_id][env_idx]      = done[agent_id]
                 batch_infos[agent_id][env_idx]      = info[agent_id]
 
-        #FIXME: integrate soft resets into this class
         self.obs_cache = deepcopy(batch_obs)
         self.global_obs_cache = deepcopy(batch_global_obs)
         self.need_hard_reset = False

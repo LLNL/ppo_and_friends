@@ -54,10 +54,11 @@ class EnvironmentLauncher(ABC):
                 policy_mapping_fn,
                 env_generator,
                 device,
-                test          = False,
-                num_timesteps = 1_000_000,
-                render_gif    = False,
-                num_test_runs = 1,
+                test               = False,
+                explore_while_test = False,
+                num_timesteps      = 1_000_000,
+                render_gif         = False,
+                num_test_runs      = 1,
                 **kw_args):
 
         """
@@ -73,6 +74,7 @@ class EnvironmentLauncher(ABC):
     
         if test:
             test_policy(ppo,
+                        explore_while_test,
                         render_gif,
                         num_test_runs,
                         device)
@@ -1566,27 +1568,29 @@ class PressurePlateLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
     
-        lr     = 0.001
+        lr     = 0.0003
         min_lr = 0.0001
     
         lr_dec = LinearDecrementer(
-            max_iteration = 2000,
+            max_iteration = 1500,
             max_value     = lr,
             min_value     = min_lr)
     
-        entropy_weight     = 0.05
-        min_entropy_weight = 0.01
+        #FIXME
+        #entropy_weight     = 0.03
+        #min_entropy_weight = 0.01
     
-        entropy_dec = LinearDecrementer(
-            max_iteration = 2000,
-            max_value     = entropy_weight,
-            min_value     = min_entropy_weight)
+        #entropy_dec = LinearDecrementer(
+        #    max_iteration = 500,
+        #    max_value     = entropy_weight,
+        #    min_value     = min_entropy_weight)
     
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "bootstrap_clip"   : (-3, 0),
         }
 
         #
@@ -1597,25 +1601,29 @@ class PressurePlateLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        #FIXME: Debugging
-        #ts_per_rollout = num_procs * 512
-        ts_per_rollout = 1
+        ts_per_rollout = num_procs * 512
     
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 10000,
-                     epochs_per_iter    = 3,
-                     max_ts_per_ep      = 16,
+                     epochs_per_iter    = 5,
+                     max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     entropy_weight     = entropy_weight,
-                     min_entropy_weight = min_entropy_weight,
-                     entropy_dec        = entropy_dec,
+
+                     #FIXME: testing
+                     use_soft_resets    = True,
+
+                     #FIXME: testing
+                     #entropy_weight     = entropy_weight,
+                     #min_entropy_weight = min_entropy_weight,
+                     #entropy_dec        = entropy_dec,
+
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
