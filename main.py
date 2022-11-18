@@ -88,7 +88,9 @@ if __name__ == "__main__":
                  "RobotWarehouseTiny",
                  "RobotWarehouseSmall",
                  "LevelBasedForaging",
-                 "PressurePlate",])
+                 "PressurePlate",
+                 "AbmarlMaze",
+                 ])
 
     args               = parser.parse_args()
     test               = args.test

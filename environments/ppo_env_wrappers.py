@@ -10,7 +10,7 @@ import os
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
-from gym.spaces import Dict, Tuple
+from gym.spaces import Dict, Tuple, Box
 import gym
 
 from mpi4py import MPI
@@ -365,6 +365,43 @@ class PPOEnvironmentWrapper(ABC):
         for a_idx, a_id in enumerate(self.agent_ids):
             self.agent_int_ids[a_id] = a_idx
 
+    def _expand_space_for_ids(self, space):
+        """
+        """
+        if issubclass(type(space), Box):
+            low   = space.low
+            high  = space.high
+            shape = space.shape
+
+            low   = low.flatten()
+            high  = high.flatten()
+            shape = (reduce(lambda a, b: a * b, shape) + 1,)
+
+            low   = np.concatenate((low, (0,)))
+
+            #
+            # NOTE: because we normalize ids, we set the cap
+            # to 1.
+            #
+            high  = np.concatenate((high, (1,)))
+
+            return Box(
+                low   = low,
+                high  = high,
+                shape = shape,
+                dtype = space.dtype)
+
+        elif issubclass(type(space), Discrete):
+            msg  = "ERROR: we do not support adding agent ids to "
+            msg += "Discrete space observations."
+            rank_print(msg)
+            comm.Abort()
+        else:
+            msg  = f"ERROR: spaces of type {type(space)} are not "
+            msg += "currently supported."
+            rank_print(msg)
+            comm.Abort()
+
     def _apply_death_mask(self, obs, done):
         """
         """
@@ -425,7 +462,7 @@ class PPOEnvironmentWrapper(ABC):
             for a_id in self.agent_ids:
                 policy_id = self.policy_mapping_fn(a_id)
 
-                if a_id not in self.policy_spaces:
+                if policy_id not in self.policy_spaces:
                     self.policy_spaces[policy_id] = []
 
                 self.policy_spaces[policy_id].append(
@@ -446,6 +483,10 @@ class PPOEnvironmentWrapper(ABC):
                 policy_id = self.policy_mapping_fn(a_id)
                 self.critic_observation_space[a_id] = \
                     self.policy_spaces[policy_id]
+
+        else:
+            rank_print(f"ERROR: unknown critic_view, {self.critic_view}")
+            comm.Abort()
 
     def _construct_global_critic_observation(self,
                                              obs,
@@ -515,7 +556,7 @@ class PPOEnvironmentWrapper(ABC):
             data = np.zeros((1, reduce(lambda a, b : a * b,
                 self.policy_spaces[policy_id].shape)))
 
-            data = critic_obs_data.astype(
+            data = data.astype(
                 self.policy_spaces[policy_id].dtype)
 
             policy_data[policy_id] = {"start" : 0, "data" : data}
@@ -525,7 +566,6 @@ class PPOEnvironmentWrapper(ABC):
         #
         for a_id in self.agent_ids:
             policy_id = self.policy_mapping_fn(a_id)
-
 
             obs_size = reduce(lambda a, b: a * b,
                 self.observation_space[a_id].shape)

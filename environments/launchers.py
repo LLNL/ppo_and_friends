@@ -16,6 +16,8 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
+from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
+from ppo_and_friends.environments.abmarl.maze import abmarl_maze_env
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
@@ -1323,7 +1325,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            MultiAgentGymWrapper(gym.make('rware-tiny-3ag-v1'))
+            MultiAgentGymWrapper(gym.make('rware-tiny-3ag-v1'), critic_view="policy", policy_mapping_fn = lambda *args : "rware")
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1584,6 +1586,73 @@ class PressurePlateLauncher(EnvironmentLauncher):
             policy_name   = "pressure-plate",
             env_generator = env_generator,
             policy_args   = policy_args)
+
+        ts_per_rollout = num_procs * 512
+    
+        self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 10000,
+                     epochs_per_iter    = 5,
+                     max_ts_per_ep      = 128,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_values   = True,
+                     normalize_obs      = False,
+                     obs_clip           = None,
+                     normalize_rewards  = False,
+                     reward_clip        = None,
+                     use_soft_resets    = True,
+                     lr_dec             = lr_dec,
+                     lr                 = lr,
+                     min_lr             = min_lr,
+                     **self.kw_launch_args)
+
+
+###############################################################################
+#                               Abmarl                                        #
+###############################################################################
+
+class AbmarlMazeLauncher(EnvironmentLauncher):
+
+    def launch(self):
+    
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 128
+    
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 256
+    
+        lr     = 0.0003
+        min_lr = 0.0001
+    
+        lr_dec = LinearDecrementer(
+            max_iteration = 1500,
+            max_value     = lr,
+            min_value     = min_lr)
+    
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+            "bootstrap_clip"   : (-1, 1),
+        }
+
+        policy_name = "abmarl-maze"
+        policy_mapping_fn = lambda *args : policy_name
+
+        env_generator = lambda : \
+            AbmarlWrapper(env               = abmarl_maze_env,
+                          policy_mapping_fn = policy_mapping_fn)
+
+        policy_settings = { policy_name : \
+            (None,
+             env_generator().observation_space["navigator"],
+             env_generator().critic_observation_space["navigator"],
+             env_generator().action_space["navigator"],
+             policy_args)
+        }
 
         ts_per_rollout = num_procs * 512
     

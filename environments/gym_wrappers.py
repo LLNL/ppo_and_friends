@@ -223,30 +223,6 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
             self.action_space[a_id] = self.env.action_space[a_idx]
 
-    def _expand_space_for_ids(self, space):
-        """
-        """
-        if issubclass(type(space), Box):
-            low   = space.low
-            high  = space.high
-            shape = space.shape
-
-            low   = low.flatten()
-            high  = high.flatten()
-            shape = (reduce(lambda a, b: a * b, shape) + 1,)
-
-            low   = np.concatenate((low, (0,)))
-            high  = np.concatenate((high, (self.num_agents,)))
-
-            return Box(
-                low   = low,
-                high  = high,
-                shape = shape,
-                dtype = space.dtype)
-
-        elif issubclass(type(space), Discrete):
-            return Discrete(space.n + 1)
-
     def _unwrap_action(self,
                        actions):
         """
@@ -305,8 +281,8 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
-        obs        = self._apply_death_mask(obs, done)
-        global_obs = self._construct_critic_observation(
+        wrapped_obs = self._apply_death_mask(wrapped_obs, wrapped_done)
+        global_obs  = self._construct_critic_observation(
             wrapped_obs, wrapped_done)
 
         return (wrapped_obs, global_obs,
