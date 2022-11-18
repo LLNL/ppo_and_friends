@@ -373,7 +373,7 @@ class PPOEnvironmentWrapper(ABC):
         """
         """
         if np.array(done).all():
-            return
+            return obs
 
         #
         # TODO: we may want to allow users to define what
@@ -381,7 +381,8 @@ class PPOEnvironmentWrapper(ABC):
         #
         for agent_id in done:
             if done[agent_id]:
-                obs[agent_id] = np.zeros_like(obs[agent_id])
+                obs[agent_id]  = np.zeros_like(obs[agent_id])
+                done[agent_id] = False
 
         return obs
 
@@ -778,7 +779,7 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         obs = obs.reshape(self.observation_space[agent_id].shape)
         obs = {agent_id : obs}
 
-        done       = {agent_id : False}
+        done = {agent_id : False}
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
