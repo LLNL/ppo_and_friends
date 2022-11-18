@@ -200,34 +200,11 @@ class PPO(object):
             self.save_env_info = True
 
         #
-        # FIXME: If we vectorize multi-agent environments, we'll need to
-        # change this here. I think it will actually be simpler, because we
-        # won't be treating agents as environments.
-        #
-        # Funny business: we're taking over our "environments per processor"
-        # code when using multi-agent environments. Each agent is basically
-        # thought of as an environment instance. As a result, our timesteps
-        # will be divided by the number of agents during the rollout, which
-        # is what we want when envs_per_proc > 1, but it's not what we
-        # want when num_agents > 1.
-        #
-        #if #is_multi_agent:
-        #   # ts_per_rollout *= env.get_num_agents()
-        #   # self.num_agents = env.get_num_agents()
-
-        #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
         #
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
-
-        #
-        # FIXME: we need to handle multiple agent classes with
-        # different action spaces. I think we want the observation
-        # spaces to remain consistent, though.
-        #
-        action_space = env.action_space
 
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(
@@ -467,7 +444,6 @@ class PPO(object):
 
         return policy_agents, policy_batches
 
-    #FIXME: these changes broke learning (cartpole).
     def get_policy_actions(self, obs):
         """
         """
@@ -499,7 +475,6 @@ class PPO(object):
 
         return raw_actions, actions, log_probs
 
-    #FIXME: update to use batched agents.
     def get_policy_actions_from_aug_obs(self, obs):
         """
         """
@@ -507,6 +482,7 @@ class PPO(object):
         actions     = {}
         log_probs   = {}
 
+        #TODO: update this to use policy batches.
         for agent_id in obs:
             policy_id = self.policy_mapping_fn(agent_id)
 
@@ -541,14 +517,6 @@ class PPO(object):
             for b_idx, a_id in enumerate(policy_agents[policy_id]):
                 values[a_id] = batch_values[b_idx]
 
-        #FIXME: testing
-        #obs = self.np_dict_to_tensor_dict(obs)
-        #for agent_id in obs:
-        #    policy_id        = self.policy_mapping_fn(agent_id)
-        #    print(obs[agent_id].shape)
-        #    value            = self.policies[policy_id].critic(obs[agent_id])
-        #    values[agent_id] = value
-
         return values
 
     def get_natural_reward(self, info):
@@ -573,7 +541,6 @@ class PPO(object):
 
         return have_nat_reward, natural_reward
 
-    #FIXME: should we perform these operations in-place instead?
     def get_detached_dict(self, attached):
         """
         """
@@ -691,7 +658,6 @@ class PPO(object):
         batch_size = dones[first_id].size
         done_envs  = np.zeros(batch_size).astype(bool)
 
-        # FIXME: is this still true?
         #
         # Because we always death mask, any agent that has a done environment
         # means that all agents are done in that same environment.
@@ -812,22 +778,6 @@ class PPO(object):
         else:
             initial_reset_func = self.env.reset
 
-        #
-        # FIXME: In the single agent case, env_batch_size is the number
-        # environments per processor (vectorized environment). In the
-        # multi-agent case, env_batch_size is the number of agents in
-        # the environment.
-        # In the refactored MA setting, agents don't need to all step
-        # at once. We'll also have a dictionary mapping agents to their
-        # observations. Since there might be situations where only a
-        # single agent acts, we might want to revisit vectorizing the
-        # multi-agent environments.
-        #
-        # ALSO, our env_batch_size might not be adhered to when agents
-        # aren't stepping in sync... How do we handle that case?
-        # Maybe we keep track of the max number of agents that could
-        # step at one time...
-        #
         obs, global_obs    = initial_reset_func()
         env_batch_size     = self.env.get_batch_size()
 
@@ -1102,9 +1052,6 @@ class PPO(object):
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                #FIXME:
-                #critic_obs  = self.np_dict_to_tensor_dict(global_obs)
-                #next_value  = self.get_policy_values(critic_obs)
                 next_value  = self.get_policy_values(global_obs)
 
                 if self.normalize_values:

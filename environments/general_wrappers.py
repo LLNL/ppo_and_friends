@@ -1049,14 +1049,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
         return obs, global_obs, reward, done, info
 
-    #FIXME: need to integrate this with MAPPO somehow. Each environment instance
-    # will have the same agents.
-    # When calling step(), we'll expect to get the standard tuple of obs, reward, etc.
-    # but each one will be a dictionary mapping agent ids to their obs, reward, etc.
-    # For vectorized environemnts, could we just return arrays of dictionaries?
-    # We could always vectorize (which is what we did in the non-mappo case), which
-    # would result in an array of size 1 when num_envs == 1. This would homogenize
-    # things.
     def batch_step(self, actions):
         """
             Take a step in our environment with the given actions.

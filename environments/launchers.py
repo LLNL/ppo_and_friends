@@ -1332,19 +1332,19 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
     
-        lr     = 0.001
-        min_lr = 0.00001
+        lr     = 0.0003
+        min_lr = 0.0001
     
         lr_dec = LinearDecrementer(
             max_timestep  = 40000000,
             max_value     = lr,
             min_value     = min_lr)
     
-        entropy_weight     = 0.05
+        entropy_weight     = 0.03
         min_entropy_weight = 0.01
     
         entropy_dec = LinearDecrementer(
-            max_timestep  = 40000000,
+            max_timestep  = 9000000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
 
@@ -1353,6 +1353,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "bootstrap_clip"   : (-1, 1),
         }
 
         #
@@ -1363,7 +1364,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = num_procs * 1024
     
         #
         # This environment comes from arXiv:2006.07869v4.
@@ -1387,6 +1388,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 epochs_per_iter    = 5,
                 max_ts_per_ep      = 512,
                 ts_per_rollout     = ts_per_rollout,
+                use_soft_resets    = True,
                 normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
@@ -1414,8 +1416,8 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
     
-        lr     = 0.001
-        min_lr = 0.00001
+        lr     = 0.0003
+        min_lr = 0.0001
     
         lr_dec = LinearDecrementer(
             max_iteration = 6000,
@@ -1464,6 +1466,7 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 10000,
+                     use_soft_resets    = True,
                      epochs_per_iter    = 5,
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
@@ -1495,27 +1498,20 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        lr     = 0.001
+        lr     = 0.0003
         min_lr = 0.0001
 
         lr_dec = LinearDecrementer(
-            max_iteration = 2000,
+            max_iteration = 1500,
             max_value     = lr,
             min_value     = min_lr)
-
-        entropy_weight     = 0.05
-        min_entropy_weight = 0.01
-
-        entropy_dec = LinearDecrementer(
-            max_iteration = 2000,
-            max_value     = entropy_weight,
-            min_value     = min_entropy_weight)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "bootstrap_clip"   : (0, 1),
         }
 
         #
@@ -1526,23 +1522,20 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 50
+        ts_per_rollout = num_procs * 256
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 10000,
                      epochs_per_iter    = 5,
-                     max_ts_per_ep      = 16,
+                     max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     entropy_weight     = entropy_weight,
-                     min_entropy_weight = min_entropy_weight,
-                     entropy_dec        = entropy_dec,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
@@ -1576,15 +1569,6 @@ class PressurePlateLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
     
-        #FIXME
-        #entropy_weight     = 0.03
-        #min_entropy_weight = 0.01
-    
-        #entropy_dec = LinearDecrementer(
-        #    max_iteration = 500,
-        #    max_value     = entropy_weight,
-        #    min_value     = min_entropy_weight)
-    
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -1615,15 +1599,7 @@ class PressurePlateLauncher(EnvironmentLauncher):
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-
-                     #FIXME: testing
                      use_soft_resets    = True,
-
-                     #FIXME: testing
-                     #entropy_weight     = entropy_weight,
-                     #min_entropy_weight = min_entropy_weight,
-                     #entropy_dec        = entropy_dec,
-
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
