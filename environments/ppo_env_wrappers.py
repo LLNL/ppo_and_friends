@@ -12,8 +12,8 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
 from gym.spaces import Dict, Tuple
 import gym
-from mpi4py import MPI
 
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
@@ -314,7 +314,6 @@ class IdentityWrapper(ABC):
         return False
 
 
-#FIXME: move to some other file?
 class PPOEnvironmentWrapper(ABC):
     """
         A wrapper that acts exactly like the original environment but also
