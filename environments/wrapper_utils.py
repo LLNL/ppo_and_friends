@@ -1,4 +1,4 @@
-from ppo_and_friends.environments.general_wrappers import VectorizedEnv
+from ppo_and_friends.environments.ppo_env_wrappers import VectorizedEnv
 from ppo_and_friends.environments.filter_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.environments.filter_wrappers import ObservationAugmentingWrapper

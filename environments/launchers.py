@@ -14,10 +14,10 @@ from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
-from ppo_and_friends.environments.general_wrappers import SingleAgentGymWrapper
-from ppo_and_friends.environments.general_wrappers import MultiAgentGymWrapper
+from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
+from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
-from .gym_wrappers import *
+from .atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.iteration_mappers import *
 

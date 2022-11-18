@@ -4,7 +4,7 @@
     augmenting, etc.
 """
 from ppo_and_friends.utils.stats import RunningMeanStd
-from ppo_and_friends.environments.general_wrappers import IdentityWrapper
+from ppo_and_friends.environments.ppo_env_wrappers import IdentityWrapper
 import numpy as np
 from copy import deepcopy
 import pickle
