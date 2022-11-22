@@ -79,13 +79,12 @@ class AgentPolicy():
 
         act_type = type(action_space)
 
-        if (issubclass(act_type, Box) or
-            issubclass(act_type, MultiBinary) or
-            issubclass(act_type, MultiDiscrete)):
-
+        if issubclass(act_type, Box):
             self.act_dim = action_space.shape
 
-        elif issubclass(act_type, Discrete):
+        elif (issubclass(act_type, Discrete) or
+            issubclass(act_type, MultiBinary)):
+
             self.act_dim = action_space.n
 
         else:
@@ -93,12 +92,11 @@ class AgentPolicy():
             rank_print(msg)
             comm.Abort()
 
-        if ((issubclass(act_type, MultiBinary) or
-             issubclass(act_type, MultiDiscrete)) and
-             (not is_multi_agent)):
-            msg  = "WARNING: MultiBinary and MultiDiscrete action spaces "
-            msg += "may not be fully supported. Use at your own risk."
+        if issubclass(act_type, MultiDiscrete):
+            msg  = "ERROR: MultiDiscrete action spaces "
+            msg += "are not yet supported."
             rank_print(msg)
+            comm.Abort()
 
         self.action_dtype = get_action_dtype(self.action_space)
 
