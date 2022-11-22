@@ -462,16 +462,22 @@ class PPO(object):
             batch_raw_actions, batch_actions, batch_log_probs = \
                 self.policies[policy_id].get_action(batch_obs)
 
-            batch_raw_actions = batch_raw_actions.reshape((num_agents, -1))
+            #
+            # We now need to reverse our batching to get actions of
+            # shape (num_agents, num_envs, actions).
+            #
+            actions_shape = (num_agents, self.envs_per_proc) + \
+                self.policies[policy_id].action_space.shape
 
-            batch_actions = batch_actions.reshape((num_agents, -1))
+            batch_raw_actions = batch_raw_actions.reshape(actions_shape)
+            batch_actions     = batch_actions.reshape(actions_shape)
+            batch_log_probs   = batch_log_probs.reshape(num_agents,
+                self.envs_per_proc, -1)
 
-            batch_log_probs = batch_log_probs.reshape((num_agents, -1))
-
-            for b_idx, a_id in enumerate(policy_agents[policy_id]):
-                raw_actions[a_id] = batch_raw_actions[b_idx]
-                actions[a_id]     = batch_actions[b_idx]
-                log_probs[a_id]   = batch_log_probs[b_idx]
+            for p_idx, a_id in enumerate(policy_agents[policy_id]):
+                raw_actions[a_id] = batch_raw_actions[p_idx]
+                actions[a_id]     = batch_actions[p_idx]
+                log_probs[a_id]   = batch_log_probs[p_idx]
 
         return raw_actions, actions, log_probs
 
@@ -862,6 +868,9 @@ class PPO(object):
             # to np arrays. Each element of the numpy array represents
             # the results from a single environment.
             #
+            #print(self.env.action_space)#FIXME
+            #print(f"\nrollout action: {action}")#FIXME
+            #print(f"raw action: {raw_action}")#FIXME
             obs, global_obs, ext_reward, done, info = self.env.step(action)
 
             #
