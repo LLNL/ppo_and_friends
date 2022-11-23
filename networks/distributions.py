@@ -4,17 +4,10 @@ from torch.distributions.normal import Normal
 import numpy as np
 import torch
 import torch.nn as nn
+from abc import ABC, abstractmethod
 
-# TODO: we should probably create an abstract base class to enforce and
-# explain some of these decisions.
 
-class BernoulliDistribution(object):
-    """
-        A module for obtaining a bernoulli probability distribution.
-
-        NOTE: this module is very simple, but it has support structures
-        for more complicated cases.
-    """
+class PPODistribution(object):
 
     def __init__(self,
                  **kw_args):
@@ -23,19 +16,21 @@ class BernoulliDistribution(object):
         """
         pass
 
+    @abstractmethod
     def get_distribution(self, probs):
         """
             Given a set of probabilities, create and return a
-            bernoulli distribution.
+            distribution.
 
             Arguments:
                 probs    The probabilities that require a distribution.
 
             Returns:
-                A PyTorch Bernoulli distribution object.
+                A distribution object.
         """
-        return Bernoulli(probs)
+        return
 
+    @abstractmethod
     def get_log_probs(self, dist, actions):
         """
             Get the log probabilities from a distribution and
@@ -49,7 +44,7 @@ class BernoulliDistribution(object):
                 The log probabilities of the given actions from the
                 given distribution.
         """
-        return dist.log_prob(actions).sum(dim=-1)
+        return
 
     def sample_distribution(self, dist):
         """
@@ -81,7 +76,6 @@ class BernoulliDistribution(object):
         """
         return dist.entropy()
 
-    #FIXME: inherit from ABC
     def refine_sample(self,
                       sample,
                       testing = False):
@@ -98,20 +92,50 @@ class BernoulliDistribution(object):
         return sample
 
 
-class CategoricalDistribution(object):
+class BernoulliDistribution(PPODistribution):
+    """
+        A module for obtaining a bernoulli probability distribution.
+
+        NOTE: this module is very simple, but it has support structures
+        for more complicated cases.
+    """
+
+    def get_distribution(self, probs):
+        """
+            Given a set of probabilities, create and return a
+            bernoulli distribution.
+
+            Arguments:
+                probs    The probabilities that require a distribution.
+
+            Returns:
+                A PyTorch Bernoulli distribution object.
+        """
+        return Bernoulli(probs)
+
+    def get_log_probs(self, dist, actions):
+        """
+            Get the log probabilities from a distribution and
+            a set of actions.
+
+            Arguments:
+                dist        The distribution.
+                actions     The actions to find the log probs of.
+
+            Returns:
+                The log probabilities of the given actions from the
+                given distribution.
+        """
+        return dist.log_prob(actions).sum(dim=-1)
+
+
+class CategoricalDistribution(PPODistribution):
     """
         A module for obtaining a categorical probability distribution.
 
         NOTE: this module is very simple, but it has support structures
         for more complicated cases.
     """
-
-    def __init__(self,
-                 **kw_args):
-        """
-            Nothing to see here...
-        """
-        pass
 
     def get_distribution(self, probs):
         """
@@ -141,54 +165,8 @@ class CategoricalDistribution(object):
         """
         return dist.log_prob(actions)
 
-    def sample_distribution(self, dist):
-        """
-            Given a distribution, return a sample from that distribution.
-            Tricky business: some distributions will alter one of the
-            returned samples. In that case, we still need access to the
-            original sample. This distribution does not perform any
-            alterations, so we just return the same sample twice.
 
-            Arguments:
-                dist    The distribution to sample from.
-
-            Returns:
-                A tuple of form (sample, sample), where each item
-                is an identical sample from the distribution.
-        """
-        sample = dist.sample()
-        return sample, sample
-
-    def get_entropy(self, dist, _):
-        """
-            Get the entropy of a categorical distribution.
-
-            Arguments:
-                dist    The distribution to get the entropy of.
-
-            Returns:
-                The distributions entropy.
-        """
-        return dist.entropy()
-
-    #FIXME: inherit from ABC
-    def refine_sample(self,
-                      sample,
-                      testing = False):
-        """
-            Given a sample from the distribution, refine this
-            sample. In our case, we have no refinements yet.
-
-            Arguments:
-                sample    The sample to refine.
-
-            Returns:
-                The refined sample.
-        """
-        return sample
-
-
-class GaussianDistribution(nn.Module):
+class GaussianDistribution(nn.Module, PPODistribution):
     """
         A module for obtaining a Gaussian distribution.
 
@@ -308,7 +286,6 @@ class GaussianDistribution(nn.Module):
             (self.dist_max - self.dist_min) + self.dist_min
         return sample
 
-    #FIXME: inherit from ABC
     def refine_sample(self,
                       sample,
                       testing = False):
