@@ -81,6 +81,12 @@ def test_policy(ppo,
                     if action_dtype[agent_id] == "discrete":
                         actions[agent_id] = torch.argmax(
                             actions[agent_id], axis=-1).numpy()
+
+                    elif action_dtype[agent_id] == "multi-binary":
+                        actions[agent_id][actions[agent_id] < 0.5] = 0.0
+                        actions[agent_id][actions[agent_id] > 0.5] = 1.0
+                        actions[agent_id] = actions[agent_id].numpy()
+
                     else:
                         actions[agent_id] = actions[agent_id].numpy()
 

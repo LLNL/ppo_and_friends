@@ -434,8 +434,8 @@ class BreakoutEnvWrapper():
         #
         self.action_space = Discrete(3)
 
-        self.action_map        = [0, 2, 3]
-        self.cur_lives         = self.env.ale.lives()
+        self.action_map = [0, 2, 3]
+        self.cur_lives  = self.env.ale.lives()
 
     def _set_random_start_pos(self):
         #

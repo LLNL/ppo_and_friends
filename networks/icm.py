@@ -7,7 +7,7 @@ import torch.nn as nn
 from functools import reduce
 from .utils import init_layer
 from .ppo_networks import PPONetwork
-import torch.nn.functional as t_func
+import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
 
 class LinearInverseModel(nn.Module):
@@ -40,9 +40,12 @@ class LinearInverseModel(nn.Module):
             out_size     = out_dim
             self.out_dim = (out_dim,)
 
-        self.need_softmax = False
+        self.output_func = lambda x : x
+
         if action_dtype == "discrete":
-            self.need_softmax = True
+            self.output_func = lambda x : t_functional.softmax(x, dim=-1)
+        elif action_dtype == "multi-discrete":
+            self.output_func = t_functional.sigmoid
 
         self.activation = activation
 
@@ -68,8 +71,7 @@ class LinearInverseModel(nn.Module):
 
         out = self.inv_3(out)
 
-        if self.need_softmax:
-            out = t_func.softmax(out, dim=-1)
+        out = self.output_func(out)
 
         out_shape = (out.shape[0],) + self.out_dim
         out = out.reshape(out_shape)

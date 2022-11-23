@@ -28,7 +28,10 @@ def get_action_dtype(action_space):
     if np.issubdtype(action_space.dtype, np.floating):
         return "continuous"
     elif np.issubdtype(action_space.dtype, np.integer):
-        return "discrete"
+        if type(action_space) == Discrete:
+            return "discrete"
+        elif type(action_space) == MultiBinary:
+            return "multi-binary"
     return "unknown"
 
 

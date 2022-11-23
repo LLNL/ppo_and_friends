@@ -82,10 +82,17 @@ class AgentPolicy():
         if issubclass(act_type, Box):
             self.act_dim = action_space.shape
 
-        elif (issubclass(act_type, Discrete) or
-            issubclass(act_type, MultiBinary)):
+        #FIXME: testing
+        #elif (issubclass(act_type, Discrete) or
+        #    issubclass(act_type, MultiBinary)):
 
+        #    self.act_dim = action_space.n
+        elif issubclass(act_type, Discrete):
             self.act_dim = action_space.n
+
+        elif issubclass(act_type, MultiBinary):
+            self.act_dim = action_space.n
+            #self.act_dim = (action_space.n, 2)
 
         else:
             msg = "ERROR: unsupported action space {}".format(action_space)

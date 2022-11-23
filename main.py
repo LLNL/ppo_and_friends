@@ -90,6 +90,9 @@ if __name__ == "__main__":
                  "LevelBasedForaging",
                  "PressurePlate",
                  "AbmarlMaze",
+                 "AirstrikerRAM",
+                 "BinaryCartPole",
+                 "BinaryLunarLander",
                  ])
 
     args               = parser.parse_args()

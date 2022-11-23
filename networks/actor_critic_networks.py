@@ -155,8 +155,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
         if self.is_embedded:
             return self.activation(out)
 
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
+        out = self.output_func(out)
 
         out_shape = (out.shape[0],) + self.out_dim
         out = out.reshape(out_shape)
@@ -391,8 +390,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
 
         out = self.l2(out)
 
-        if self.need_softmax:
-            out = F.softmax(out, dim=-1)
+        out = self.output_func(out)
 
         return out
 

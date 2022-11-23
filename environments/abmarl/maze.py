@@ -32,16 +32,17 @@ file_name = os.path.join(os.path.realpath(os.path.dirname(__file__)), "maze.txt"
 
 sim = MultiAgentWrapper(
         AllStepManager(
+            FlattenWrapper(
             #RavelDiscreteWrapper(
             #RavelDiscreteActionWrapper(
             #RavelDiscreteObservationWrapper(
-            FlattenWrapper(
                MazeNavigationSim.build_sim_from_file(
                    file_name,
                    object_registry,
                    overlapping={1: [3], 3: [1]},
                    observe=observe,
                )
+            #)
             )
         )
 )

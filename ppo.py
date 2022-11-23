@@ -1464,7 +1464,6 @@ class PPO(object):
                 rank_print("actions min, max: {}, {}".format(
                     act_min, act_max))
 
-                #FIXME
                 std = nn.functional.softplus(self.policies[policy_id].actor.distribution.log_std)
                 rank_print("actor std: {}".format(std))
 
