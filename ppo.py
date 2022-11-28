@@ -1108,7 +1108,8 @@ class PPO(object):
 
                         ism = self.status_dict[policy_id]["intrinsic score avg"]
                         surprise = intr_rewards[agent_id][where_maxed] - ism
-                        next_reward[agent_id] += surprise
+
+                        next_reward[agent_id] += surprise.flatten()
                     
                     self.policies[policy_id].end_episodes(
                         agent_id        = agent_id,
