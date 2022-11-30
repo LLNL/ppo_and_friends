@@ -2,7 +2,7 @@ from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
 from gym.spaces import Dict
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 class AbmarlWrapper(PPOEnvironmentWrapper):
 
@@ -15,6 +15,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
                  **kw_args):
         """
         """
+        self.fig, _ = plt.subplots()
+
         self.agent_ids = tuple(agent.id for agent in env.sim.agents.values() if
             isinstance(agent, Agent))
 
@@ -29,11 +31,14 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
     def _define_multi_agent_spaces(self):
         """
         """
-        self.observation_space = Dict({
-            agent.id: agent.observation_space
-            for agent in self.env.sim.agents.values()
-            if isinstance(agent, ObservingAgent)
-        })
+        if getattr(self.env, "observation_space", None) is not None:
+            self.observation_space = self.env.observation_space
+        else:
+            self.observation_space = Dict({
+                agent.id: agent.observation_space
+                for agent in self.env.sim.agents.values()
+                if isinstance(agent, ObservingAgent)
+            })
 
         if self.add_agent_ids:
             for a_id in self.observation_space:
@@ -41,11 +46,14 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
                     self._expand_space_for_ids(
                         self.observation_space[a_id])
 
-        self.action_space = Dict({
-            agent.id: agent.action_space
-            for agent in self.env.sim.agents.values()
-            if isinstance(agent, ActingAgent)
-        })
+        if getattr(self.env, "action_space", None) is not None:
+            self.action_space = self.env.action_space
+        else:
+            self.action_space = Dict({
+                agent.id: agent.action_space
+                for agent in self.env.sim.agents.values()
+                if isinstance(agent, ActingAgent)
+            })
 
         obs_keys    = set(self.observation_space.keys())
         action_keys = set(self.action_space.keys())
@@ -99,7 +107,9 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
 
         return obs, critic_obs
 
-    def render(*args, **kw_args):
+    def render(self, **kw_args):
         """
         """
-        self.env.render(*args, **kw_args)
+        self.env.render(fig=self.fig)
+        #self.env.render(**kw_args)
+
