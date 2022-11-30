@@ -1096,29 +1096,44 @@ class PPO(object):
                 #
                 maxed_count = where_maxed.size
 
-                for agent_id in next_reward:
-                    policy_id = self.policy_mapping_fn(agent_id)
+                # FIXME: cleanup
+                if maxed_count > 0:
+                    for agent_id in next_reward:
+                        policy_id = self.policy_mapping_fn(agent_id)
 
-                    if self.policies[policy_id].enable_icm:
-                        if self.can_clone_env:
-                            intr_rewards[agent_id] = \
-                                self.policies[policy_id].get_cloned_intrinsic_reward(
-                                    obs            = obs[agent_id],
-                                    obs_augment    = self.obs_augment)
+                        if self.policies[policy_id].enable_icm:
+                            if self.can_clone_env:
+                                intr_rewards[agent_id] = \
+                                    self.policies[policy_id].get_cloned_intrinsic_reward(
+                                        obs            = obs[agent_id],
+                                        obs_augment    = self.obs_augment)
 
-                        ism = self.status_dict[policy_id]["intrinsic score avg"]
-                        surprise = intr_rewards[agent_id][where_maxed] - ism
+                            ism = self.status_dict[policy_id]["intrinsic score avg"]
+                            surprise = intr_rewards[agent_id][where_maxed] - ism
 
-                        next_reward[agent_id] += surprise.flatten()
-                    
-                    self.policies[policy_id].end_episodes(
-                        agent_id        = agent_id,
-                        env_idxs        = where_maxed,
-                        episode_lengths = episode_lengths,
-                        terminal        = np.zeros(maxed_count).astype(bool),
-                        ending_values   = next_value[agent_id],
-                        ending_rewards  = next_reward[agent_id],
-                        status_dict     = self.status_dict)
+                            # FIXME: I've seen an edge case bug happen here. It's
+                            # unclear what the triggerse are.
+                            if surprise.size == 0:
+                                debug  = "ERROR: suprise is size 0. "
+                                debug += "\nintr_rewards[agent_id].shape == "
+                                debug += f"{intr_rewards[agent_id].shape}. "
+                                debug += f"\nwhere_maxed == {where_maxed}. "
+                                debug += f"\nep_max_reached == {ep_max_reached}. "
+                                debug += f"\ntotal_rollout_ts == {total_rollout_ts}. "
+                                debug += f"\nts_per_rollout == {self.ts_per_rollout}. "
+                                debug += f"\nwhere_done == {where_done}. "
+                                rank_print(debug)
+
+                            next_reward[agent_id] += surprise.flatten()
+                        
+                        self.policies[policy_id].end_episodes(
+                            agent_id        = agent_id,
+                            env_idxs        = where_maxed,
+                            episode_lengths = episode_lengths,
+                            terminal        = np.zeros(maxed_count).astype(bool),
+                            ending_values   = next_value[agent_id],
+                            ending_rewards  = next_reward[agent_id],
+                            status_dict     = self.status_dict)
 
                 if total_rollout_ts >= self.ts_per_rollout:
 
