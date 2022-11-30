@@ -131,7 +131,7 @@ class LinearForwardModel(nn.Module):
             # multi-dimensional discrete action space, we can create a multi-
             # dimensional one-hot encoding, but we then need to flatten it.
             #
-            actions = t_func.one_hot(actions,
+            actions = t_functional.one_hot(actions,
                 num_classes=self.act_dim[-1]).float().flatten(start_dim = 1)
 
         _input = torch.cat((enc_obs_1, actions), dim=1)
