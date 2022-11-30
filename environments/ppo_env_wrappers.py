@@ -315,10 +315,6 @@ class IdentityWrapper(ABC):
 
 
 class PPOEnvironmentWrapper(ABC):
-    """
-        A wrapper that acts exactly like the original environment but also
-        has a few extra bells and whistles.
-    """
 
     def __init__(self,
                  env,
@@ -697,6 +693,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         self.num_envs = num_envs
         self.envs     = np.array([None] * self.num_envs, dtype=object)
         self.iter_idx = 0
+        self.steps    = np.zeros(self.num_envs, dtype=np.int32)
 
         if self.num_envs == 1:
             self.envs[0] = self.env
@@ -807,12 +804,16 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             obs, global_obs, reward, done, info = self.envs[env_idx].step(act)
 
+            self.steps[env_idx] += 1
+
             if self.envs[env_idx].get_all_done():
                 for agent_id in info:
                     info[agent_id]["terminal observation"] = \
                         deepcopy(obs[agent_id])
 
                 obs, global_obs = self.envs[env_idx].reset()
+
+                self.steps[env_idx] = 0
 
             for agent_id in obs:
                 batch_obs[agent_id][env_idx]        = obs[agent_id]
@@ -868,6 +869,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
         for env_idx in range(self.num_envs):
             obs, global_obs = self.envs[env_idx].reset()
+
+            self.steps[env_idx] = 0
 
             for agent_id in obs:
                 if agent_id not in batch_obs:
