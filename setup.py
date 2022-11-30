@@ -35,6 +35,6 @@ setup(name             = "ppo_and_friends",
       license          = "MIT",
       package_dir      = package_dirs,
       packages         = list(package_dirs.keys()),
-      package_data     = {"" : ["environments/abmarl/maze.txt"]},
+      package_data     = {"" : ["environments/abmarl_envs/maze.txt"]},
       install_requires = dependencies,
       zip_safe         = False)
