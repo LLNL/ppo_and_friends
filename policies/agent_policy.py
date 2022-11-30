@@ -82,17 +82,9 @@ class AgentPolicy():
         if issubclass(act_type, Box):
             self.act_dim = action_space.shape
 
-        #FIXME: testing
-        #elif (issubclass(act_type, Discrete) or
-        #    issubclass(act_type, MultiBinary)):
-
-        #    self.act_dim = action_space.n
-        elif issubclass(act_type, Discrete):
+        elif (issubclass(act_type, Discrete) or
+            issubclass(act_type, MultiBinary)):
             self.act_dim = action_space.n
-
-        elif issubclass(act_type, MultiBinary):
-            self.act_dim = action_space.n
-            #self.act_dim = (action_space.n, 2)
 
         else:
             msg = "ERROR: unsupported action space {}".format(action_space)
@@ -108,7 +100,10 @@ class AgentPolicy():
         self.action_dtype = get_action_dtype(self.action_space)
 
         if self.action_dtype == "unknown":
-            rank_print("ERROR: unknown action type!")
+            msg  = "ERROR: unknown action type: "
+            msg += f"{type(self.action_space)} with dtype "
+            msg += f"{self.action_space.dtype}."
+            rank_print(msg)
             comm.Abort()
         else:
             rank_print("Using {} actions.".format(self.action_dtype))
@@ -226,8 +221,19 @@ class AgentPolicy():
                 **critic_kw_args)
 
         else:
-            actor_obs_dim  = self.actor_obs_space.shape[0]
-            critic_obs_dim = self.critic_obs_space.shape[0]
+            if type(self.actor_obs_space) == Box:
+                actor_obs_dim  = self.actor_obs_space.shape[0]
+                critic_obs_dim = self.critic_obs_space.shape[0]
+
+            elif type(self.actor_obs_space) == Discrete:
+                actor_obs_dim  = self.actor_obs_space.n
+                critic_obs_dim = self.critic_obs_space.n
+
+            else:
+                msg  = f"ERROR: {type(self.actor_obs_space)} is not a "
+                msg += "supported observation space."
+                rank_print(msg)
+                comm.Abort()
 
             self.actor = ac_network(
                 name         = "actor", 
