@@ -5,7 +5,6 @@ from ppo_and_friends.environments.filter_wrappers import ObservationAugmentingWr
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
 
-#FIXME: incorporate add_agent_ids.
 def wrap_environment(
     env_generator,
     add_agent_ids         = False,
