@@ -1579,7 +1579,8 @@ class PPO(object):
 
             torch.cuda.empty_cache()
 
-            actions = actions.unsqueeze(1)
+            if len(actions.shape) != 2:
+                actions = actions.unsqueeze(1)
 
             _, inv_loss, f_loss = self.policies[policy_id].icm_model(obs, next_obs, actions)
 
