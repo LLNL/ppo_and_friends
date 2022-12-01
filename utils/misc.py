@@ -21,6 +21,16 @@ def get_action_dtype(action_space):
         Returns:
             A string representing the action space dtype.
     """
+    if (type(action_space) == Box and
+        np.issubtype(action_space.dtype, np.floating)):
+
+        msg  = "ERROR: action spaces of type Box int are not "
+        msg += "directly supported. Please wrap your action space "
+        msg += "in a MultiDiscrete wrapper. See "
+        msg += "environments/action_wrappers for support."
+        rank_prin(msg)
+        comm.Abort()
+
     if np.issubdtype(action_space.dtype, np.floating):
         return "continuous"
     elif np.issubdtype(action_space.dtype, np.integer):
