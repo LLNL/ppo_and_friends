@@ -264,10 +264,12 @@ class AgentPolicy():
 
         if enable_icm:
             obs_dim = self.actor_obs_space.shape[0]
+
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_dim      = obs_dim,
                 act_dim      = self.act_dim,
+                action_nvec  = self.act_nvec,
                 action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
