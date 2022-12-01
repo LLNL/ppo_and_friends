@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import torch
+from functools import reduce
 from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
 from ppo_and_friends.networks.icm import ICM
@@ -78,6 +79,7 @@ class AgentPolicy():
         self.episodes           = {}
 
         act_type = type(action_space)
+        self.act_nvec = None
 
         if issubclass(act_type, Box):
             self.act_dim = action_space.shape
@@ -86,14 +88,12 @@ class AgentPolicy():
             issubclass(act_type, MultiBinary)):
             self.act_dim = action_space.n
 
+        elif issubclass(act_type, MultiDiscrete):
+            self.act_dim  = reduce(lambda a, b: a+b, action_space.nvec)
+            self.act_nvec = action_space.nvec
+
         else:
             msg = "ERROR: unsupported action space {}".format(action_space)
-            rank_print(msg)
-            comm.Abort()
-
-        if issubclass(act_type, MultiDiscrete):
-            msg  = "ERROR: MultiDiscrete action spaces "
-            msg += "are not yet supported."
             rank_print(msg)
             comm.Abort()
 
@@ -207,6 +207,7 @@ class AgentPolicy():
                 in_shape     = self.actor_obs_space.shape,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
+                action_nvec  = self.act_nvec,
                 action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **actor_kw_args)
@@ -240,6 +241,7 @@ class AgentPolicy():
                 in_dim       = actor_obs_dim,
                 out_dim      = self.act_dim, 
                 out_init     = 0.01,
+                action_nvec  = self.act_nvec,
                 action_dtype = self.action_dtype,
                 test_mode    = self.test_mode,
                 **actor_kw_args)
@@ -577,11 +579,11 @@ class AgentPolicy():
         obs_2 = torch.tensor(obs,
             dtype=torch.float).to(self.device)
 
-        if self.action_dtype == "discrete":
+        if self.action_dtype in ["discrete", "multi-discrete"]:
             action = torch.tensor(action,
                 dtype=torch.long).to(self.device)
 
-        elif self.action_dtype == "continuous":
+        elif self.action_dtype in ["continuous", "multi-binary"]:
             action = torch.tensor(action,
                 dtype=torch.float).to(self.device)
 

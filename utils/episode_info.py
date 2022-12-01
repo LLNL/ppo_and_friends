@@ -551,14 +551,14 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_dtype == "continuous":
+        if self.action_dtype in ["continuous", "multi-binary"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.float).to(self.device)
 
-        elif self.action_dtype == "discrete":
+        elif self.action_dtype in ["discrete", "multi-discrete"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,

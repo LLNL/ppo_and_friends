@@ -14,11 +14,7 @@ num_procs = comm.Get_size()
 
 def get_action_dtype(action_space):
     """
-        Get our action space data type. Options are continuous
-        and discrete. Note that "discrete" in this case is NOT
-        the same as a "Discrete" gym space. A Box space can
-        have a discrete data type.
-
+        Get our action space data type.
         Arguments:
             env    The action space to query.
 
@@ -32,6 +28,8 @@ def get_action_dtype(action_space):
             return "discrete"
         elif type(action_space) == MultiBinary:
             return "multi-binary"
+        elif type(action_space) == MultiDiscrete:
+            return "multi-discrete"
     return "unknown"
 
 

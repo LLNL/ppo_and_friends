@@ -67,6 +67,7 @@ class PPOActorCriticNetwork(PPONetwork):
     def __init__(self,
                  action_dtype,
                  out_dim,
+                 action_nvec = None,
                  **kw_args):
         """
             NOTE: if this class is to behave as a PPO actor, it should be
@@ -79,7 +80,9 @@ class PPOActorCriticNetwork(PPONetwork):
 
         super(PPOActorCriticNetwork, self).__init__(**kw_args)
 
-        if action_dtype not in ["discrete", "continuous", "multi-binary"]:
+        if action_dtype not in ["discrete", "continuous",
+            "multi-binary", "multi-discrete"]:
+
             msg = "ERROR: unknown action type {}".format(action_dtype)
             rank_print(msg)
             comm.Abort()
@@ -94,6 +97,11 @@ class PPOActorCriticNetwork(PPONetwork):
 
             if action_dtype == "discrete":
                 self.distribution = CategoricalDistribution(**kw_args)
+                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
+
+            if action_dtype == "multi-discrete":
+                self.distribution = MultiCategoricalDistribution(
+                    nvec = action_nvec, **kw_args)
                 self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
 
             elif action_dtype == "continuous":
