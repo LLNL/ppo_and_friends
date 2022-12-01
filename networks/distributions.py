@@ -166,6 +166,102 @@ class CategoricalDistribution(PPODistribution):
         return dist.log_prob(actions)
 
 
+class MultiCategoricalDistribution(PPODistribution):
+    """
+        A multi-categorical distribution for supporting MultiDiscrete
+        action spaces. This is basically the same as the Categorical
+        distribution, except that we create lists of distributions.
+    """
+
+    def __init__(self, nvec, **kw_args):
+        """
+            Arguments:
+                nvec    The result of calling <action_space>.nvec on a
+                        MultiDiscrete action space. This is a numpy array
+                        containing the number of choices for each action.
+        """
+        super(MultiCategoricalDistribution, self).__init__(**kw_args)
+        self.nvec = nvec
+
+    def get_distribution(self, probs):
+        """
+            Given a set of probabilities, create and return a
+            multi-categorical distribution, which is an array
+            of categorical distributions.
+
+            Arguments:
+                probs    The probabilities that require a distribution.
+
+            Returns:
+                A numpy array of PyTorch Categorical distribution objects.
+        """
+        dists  = []
+        start = 0
+        for dim in self.nvec:
+            stop = start + dim
+
+            sub_probs = probs[:, start : stop]
+            dists.append(Categorical(sub_probs))
+
+            start = stop
+
+        return np.array(dists)
+
+    def get_log_probs(self, dists, actions):
+        """
+            Get the log probabilities from an array of distributions and
+            a set of actions.
+
+            Arguments:
+                dists        The distributions.
+                actions      The actions to find the log probs of.
+
+            Returns:
+                The log probabilities of the given actions from the
+                given distributions.
+        """
+        log_probs = []
+        for dist, act in zip(dists, torch.split(actions, 1, dim=-1)):
+            log_probs.append(dist.log_prob(act.squeeze(-1)))
+
+        return torch.stack(log_probs, dim=-1).sum(dim=-1)
+
+    def sample_distribution(self, dists):
+        """
+            Given a distribution, return a sample from that distribution.
+            Tricky business: some distributions will alter one of the
+            returned samples. In that case, we still need access to the
+            original sample. This distribution does not perform any
+            alterations, so we just return the same sample twice.
+
+            Arguments:
+                dists    The distributions to sample from.
+
+            Returns:
+                A tuple of form (sample, sample), where each item
+                is an identical sample from the distributions.
+        """
+        sample = []
+        for idx in range(len(dists)):
+            sample.append(dists[idx].sample())
+
+        sample = torch.unsqueeze(torch.cat(sample), 0)
+
+        return sample, sample
+
+    def get_entropy(self, dists, _):
+        """
+            Get the entropy of the categorical distributions.
+
+            Arguments:
+                dists    The distributions to get the entropy of.
+
+            Returns:
+                The distributions entropy.
+        """
+        return torch.stack([d.entropy() for d in dists], dim=-1).sum(dim=-1)
+
+
 class GaussianDistribution(nn.Module, PPODistribution):
     """
         A module for obtaining a Gaussian distribution.
