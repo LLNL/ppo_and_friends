@@ -60,6 +60,17 @@ python main.py -e <env_name> --num-test_runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render_gif` flag.
 
+By default, exploration is disabled during testing, but you can enable it
+with the `--test-explore` flag. Example:
+
+```
+python main.py -e <env_name> --num-test_runs <num_test_runs> --render --test-explore
+```
+
+Note that enabling exploration during testing will have varied results. I've found
+that most of the environments I've tested perform better without exploration, but
+there are some environments that will not perform at all without it.
+
 
 # Documentation
 
