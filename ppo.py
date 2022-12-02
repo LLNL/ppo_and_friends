@@ -65,7 +65,6 @@ class PPO(object):
                  random_seed          A random seed to use.
                  envs_per_proc        The number of environment instances each
                                       processor owns.
-                 icm_network          The network to use for ICM applications.
                  lr                   The initial learning rate.
                  max_ts_per_ep        The maximum timesteps to allow per
                                       episode.
@@ -325,14 +324,13 @@ class PPO(object):
         # Some methods (ICM) perform best if we can clone the environment,
         # but not all environments support this.
         #
-        #FIXME: make sure we can still clone some environments.
         if test_mode:
             self.can_clone_env = False
         else:
             try:
-                obs = self.env.reset()
-                _, actions, _ = self.get_policy_actions(obs)
-                cloned_env   = deepcopy(self.env)
+                obs, critic_obs = self.env.reset()
+                _, actions, _   = self.get_policy_actions(obs)
+                cloned_env      = deepcopy(self.env)
                 cloned_env.step(actions)
                 self.can_clone_env = True
             except:
