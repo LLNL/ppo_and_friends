@@ -255,7 +255,7 @@ class PPO(object):
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
-        self.envs_per_proc       = envs_per_proc#FIXME: integrate in place of shape
+        self.envs_per_proc       = envs_per_proc
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -930,7 +930,6 @@ class PPO(object):
                 obs,
                 action)
 
-            #FIXME: do we really want to do this?
             ep_obs = deepcopy(obs)
 
             where_done, where_not_done = self.get_done_envs(done)
@@ -1095,7 +1094,6 @@ class PPO(object):
                 #
                 maxed_count = where_maxed.size
 
-                # FIXME: cleanup
                 if maxed_count > 0:
                     for agent_id in next_reward:
                         policy_id = self.policy_mapping_fn(agent_id)
@@ -1109,19 +1107,6 @@ class PPO(object):
 
                             ism = self.status_dict[policy_id]["intrinsic score avg"]
                             surprise = intr_rewards[agent_id][where_maxed] - ism
-
-                            # FIXME: I've seen an edge case bug happen here. It's
-                            # unclear what the triggerse are.
-                            if surprise.size == 0:
-                                debug  = "ERROR: suprise is size 0. "
-                                debug += "\nintr_rewards[agent_id].shape == "
-                                debug += f"{intr_rewards[agent_id].shape}. "
-                                debug += f"\nwhere_maxed == {where_maxed}. "
-                                debug += f"\nep_max_reached == {ep_max_reached}. "
-                                debug += f"\ntotal_rollout_ts == {total_rollout_ts}. "
-                                debug += f"\nts_per_rollout == {self.ts_per_rollout}. "
-                                debug += f"\nwhere_done == {where_done}. "
-                                rank_print(debug)
 
                             next_reward[agent_id] += surprise.flatten()
                         
@@ -1504,18 +1489,21 @@ class PPO(object):
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
             #
-            #FIXME: cleanup
             self.policies[policy_id].actor_optim.zero_grad()
-            actor_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+            actor_loss.backward(
+                retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].actor)
-            nn.utils.clip_grad_norm_(self.policies[policy_id].actor.parameters(),
+            nn.utils.clip_grad_norm_(
+                self.policies[policy_id].actor.parameters(),
                 self.gradient_clip)
             self.policies[policy_id].actor_optim.step()
 
             self.policies[policy_id].critic_optim.zero_grad()
-            critic_loss.backward(retain_graph = self.policies[policy_id].using_lstm)
+            critic_loss.backward(
+                retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].critic)
-            nn.utils.clip_grad_norm_(self.policies[policy_id].critic.parameters(),
+            nn.utils.clip_grad_norm_(
+                self.policies[policy_id].critic.parameters(),
                 self.gradient_clip)
             self.policies[policy_id].critic_optim.step()
 
