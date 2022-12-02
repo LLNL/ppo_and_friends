@@ -52,7 +52,3 @@ def get_single_policy_defaults(
     policy_mapping_fn = lambda *args : policy_name
 
     return policy_settings, policy_mapping_fn
-
-
-#FIXME: create a policy spec?
-#def PolicySpec
