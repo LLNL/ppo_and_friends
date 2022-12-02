@@ -313,6 +313,9 @@ class IdentityWrapper(ABC):
 
         return False
 
+    def seed(self, seed):
+        self.set_random_seed(seed)
+
 
 class PPOEnvironmentWrapper(ABC):
 
@@ -710,7 +713,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         """
         for env_idx in range(self.num_envs):
             self.envs[env_idx].seed(seed)
-            self.envs[env_idx].action_space.seed(seed)
+            for agent_id in self.envs[env_idx].action_space:
+                self.envs[env_idx].action_space[agent_id].seed(seed)
 
     def step(self, action):
         """
