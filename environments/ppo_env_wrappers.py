@@ -753,7 +753,6 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
         if self.env.get_all_done():
             for agent_id in info:
-                #FIXME: deepcopy  might not be needed here.
                 info[agent_id]["terminal observation"] = deepcopy(obs[agent_id])
 
             obs, critic_obs = self.env.reset()

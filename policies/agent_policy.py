@@ -282,15 +282,6 @@ class AgentPolicy():
         """
         """
         #
-        # FIXME: when tracking episode infos in the policy (or wherever)
-        # we need to map TWO things to EpisodeInfo objects:
-        #    1. Agents
-        #    2. Environment instances!
-        #
-        # The policy could keep arrays of dictionaries s.t. each dict
-        # in the array is an env instance, and each dict maps agents
-        # to episodes.
-        #
         # NOTE that different agents will map to different polices, meaning
         # that our dictionaries can be different sizes for each policy, but
         # the number of environment instances will be consistent.
@@ -474,11 +465,6 @@ class AgentPolicy():
         self.dataset  = None
         self.episodes = {}
 
-    #FIXME: obs will be a dictionary in the multi-agent case. Do we want this to
-    # be handed by a multi-agent mode, or do we want to wrap single agent
-    # envs so that they also return dictionaries? OR we could just make sure to
-    # only pass observations from the correct agents into this function... Maybe
-    # that makes the most sense.
     def get_action(self, obs):
         """
             Given an observation from our environment, determine what the
