@@ -1,10 +1,11 @@
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
+from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
-from gym.spaces import Dict
+from gym.spaces import Dict, Box
 import numpy as np
 import matplotlib.pyplot as plt
 
-class AbmarlWrapper(PPOEnvironmentWrapper):
+class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def __init__(self,
                  env,
@@ -27,6 +28,16 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
             critic_view       = critic_view,
             policy_mapping_fn = policy_mapping_fn,
             *kw_args)
+
+        self.need_action_wrap = False
+
+        for agent_id in self.action_space:
+            space = self.action_space[agent_id]
+
+            if type(space) == Box and np.issubdtype(space.dtype, np.integer):
+                self._wrap_action_space(self.action_space)
+                self.need_action_wrap = True
+                break
 
     def _define_multi_agent_spaces(self):
         """
@@ -79,7 +90,11 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
         """
         """
         # FIXME: need to add agents that are missing (death or turns)
-        obs, reward, done, info = self.env.step(actions)
+
+        if self.need_action_wrap:
+            obs, reward, done, info = self._action_wrapped_step(actions)
+        else:
+            obs, reward, done, info = self.env.step(actions)
 
         self.all_done = self._get_all_done(done)
 
@@ -110,6 +125,6 @@ class AbmarlWrapper(PPOEnvironmentWrapper):
     def render(self, **kw_args):
         """
         """
+        #FIXME: there are still some issues with this.
         self.env.render(fig=self.fig)
-        #self.env.render(**kw_args)
 
