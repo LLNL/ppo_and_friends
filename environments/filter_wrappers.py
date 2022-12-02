@@ -24,12 +24,12 @@ class ObservationFilter(IdentityWrapper, ABC):
     """
 
     @abstractmethod
-    def _filter_global_observation(self, global_obs):
+    def _filter_critic_observation(self, critic_obs):
         """
-            Perform the local filtering on the global observation.
+            Perform the local filtering on the critic observation.
 
             Arguments:
-                global_obs    The global observation to filter.
+                critic_obs    The critic observation to filter.
 
             Returns:
                 The filtered observation.
@@ -49,12 +49,12 @@ class ObservationFilter(IdentityWrapper, ABC):
         """
         return
 
-    def _apply_filters(self, local_obs, global_obs):
+    def _apply_filters(self, local_obs, critic_obs):
         """
         """
         local_obs  = self._filter_local_observation(local_obs)
-        global_obs = self._filter_global_observation(global_obs)
-        return local_obs, global_obs
+        critic_obs = self._filter_critic_observation(critic_obs)
+        return local_obs, critic_obs
 
     def step(self, action):
         """
@@ -68,9 +68,9 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, global_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, done, info = self.env.step(action)
 
-        obs, global_obs = self._apply_filters(obs, global_obs)
+        obs, critic_obs = self._apply_filters(obs, critic_obs)
 
         #
         # We need to cache the observation in case our lower level
@@ -79,7 +79,7 @@ class ObservationFilter(IdentityWrapper, ABC):
         self.obs_cache = deepcopy(obs)
         self.need_hard_reset = False
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def reset(self):
         """
@@ -88,8 +88,8 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation.
         """
-        obs, global_obs = self.env.reset()
-        return self._apply_filters(obs, global_obs)
+        obs, critic_obs = self.env.reset()
+        return self._apply_filters(obs, critic_obs)
 
     def soft_reset(self):
         """
@@ -98,8 +98,8 @@ class ObservationFilter(IdentityWrapper, ABC):
             Returns:
                 The resulting observation.
         """
-        obs, global_obs = self._env_soft_reset()
-        return self._apply_filters(obs, global_obs)
+        obs, critic_obs = self._env_soft_reset()
+        return self._apply_filters(obs, critic_obs)
 
 
 class ObservationNormalizer(ObservationFilter):
@@ -160,22 +160,22 @@ class ObservationNormalizer(ObservationFilter):
 
         return self.local_normalize(obs)
 
-    def _filter_global_observation(self, global_obs):
+    def _filter_critic_observation(self, critic_obs):
         """
-            Send a global observation through the normalization process. This may
-            called recursively by filter_global_observation().
+            Send a critic observation through the normalization process. This may
+            called recursively by filter_critic_observation().
 
             Arguments:
-                global_obs    The global observation to normalize.
+                critic_obs    The critic observation to normalize.
 
             Returns:
                 The normalized observation.
         """
         if self.update_stats:
-            for agent_id in global_obs:
-                self.critic_running_stats[agent_id].update(global_obs[agent_id])
+            for agent_id in critic_obs:
+                self.critic_running_stats[agent_id].update(critic_obs[agent_id])
 
-        return self.global_normalize(global_obs)
+        return self.critic_normalize(critic_obs)
 
     def local_normalize(self, obs):
         """
@@ -213,13 +213,13 @@ class ObservationNormalizer(ObservationFilter):
             np.sqrt(self.actor_running_stats[agent_id].variance + self.epsilon)
         return agent_obs
 
-    def global_normalize(self, obs):
+    def critic_normalize(self, obs):
         """
-            A simple wrapper around self._global_normalize() that mitigates
+            A simple wrapper around self._critic_normalize() that mitigates
             issues with memory references.
 
             Arguments:
-                obs    The global observation to normalize.
+                obs    The critic observation to normalize.
 
             Returns:
                 The normalized observation.
@@ -234,13 +234,13 @@ class ObservationNormalizer(ObservationFilter):
 
         return obs
 
-    def _global_normalize(self, obs):
+    def _critic_normalize(self, obs):
         """
-            Normalize a global observation using our running stats.
+            Normalize a critic observation using our running stats.
 
             Arguments:
                 agent_id     The assocated agent id.
-                obs          The global observation to normalize.
+                obs          The critic observation to normalize.
 
             Returns:
                 The normalized observation.
@@ -395,7 +395,7 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, done, and info tuple.
         """
 
-        obs, global_obs, reward, done, info = self._cache_step(action)
+        obs, critic_obs, reward, done, info = self._cache_step(action)
 
         for agent_id in reward:
 
@@ -433,7 +433,7 @@ class RewardNormalizer(IdentityWrapper):
 
             reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def normalize(self, agent_id, agent_reward):
         """
@@ -629,9 +629,9 @@ class ObservationClipper(ObservationFilter, GenericClipper):
             clip_range  = clip_range,
             **kw_args)
 
-    def _filter_global_observation(self, obs):
+    def _filter_critic_observation(self, obs):
         """
-            A simple wrapper for clipping the global observation.
+            A simple wrapper for clipping the critic observation.
 
             Arguments:
                 obs    The observation to clip.
@@ -689,10 +689,10 @@ class RewardClipper(GenericClipper):
                 actions    A dictionary mapping agent ids to their actions.
 
             Returns:
-                The resulting observation, global_observation, reward, done,
+                The resulting observation, critic_observation, reward, done,
                 and info tuple.
         """
-        obs, global_obs, reward, done, info = self._cache_step(actions)
+        obs, critic_obs, reward, done, info = self._cache_step(actions)
 
         for agent_id in reward:
             #
@@ -713,7 +713,7 @@ class RewardClipper(GenericClipper):
 
         reward = self._apply_agent_clipping(reward)
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
 
 class ObservationAugmentingWrapper(IdentityWrapper):
@@ -790,10 +790,10 @@ class ObservationAugmentingWrapper(IdentityWrapper):
         """
         # TODO: update for soft resets.
         # FIXME: this needs to be tested after MA refactor.
-        obs, global_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, done, info = self.env.step(action)
 
         batch_obs        = self.env.augment_observation(obs)
-        batch_global_obs = self.env.augment_global_observation(global_obs)
+        batch_critic_obs = self.env.augment_critic_observation(critic_obs)
         batch_size       = batch_obs.shape[0]
 
         batch_rewards = {}
@@ -825,7 +825,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 batch_dones[agent_id].reshape((batch_size, 1))
             batch_infos[agent_id] = batch_infos[agent_id].reshape((batch_size))
 
-        return (batch_obs, batch_global_obs, batch_rewards,
+        return (batch_obs, batch_critic_obs, batch_rewards,
             batch_dones, batch_infos)
 
     def aug_test_step(self, action):
@@ -844,10 +844,10 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 Observation, reward, done, and info (possibly augmented).
         """
-        obs, global_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, done, info = self.env.step(action)
 
         batch_obs        = self.env.augment_observation(obs)
-        batch_global_obs = self.env.augment_global_observation(global_obs)
+        batch_critic_obs = self.env.augment_critic_observation(critic_obs)
         batch_size       = batch_obs.shape[0]
 
         if self.test_idx < 0:
@@ -855,8 +855,8 @@ class ObservationAugmentingWrapper(IdentityWrapper):
 
         for agent_id in batch_obs:
             batch_obs[agent_id] = batch_obs[agent_id][self.test_idx]
-            batch_global_obs[agent_id] = \
-                batch_global_obs[agent_id][self.test_idx]
+            batch_critic_obs[agent_id] = \
+                batch_critic_obs[agent_id][self.test_idx]
 
         for agent_id in info:
             if "terminal observation" in info[agent_id]:
@@ -865,7 +865,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 info[agent_id]["terminal observation"] = \
                     deepcopy(terminal_obs[self.test_idx])
 
-        return batch_obs, batch_global_obs, reward, done, info
+        return batch_obs, batch_critic_obs, reward, done, info
 
     def reset(self):
         """
@@ -886,12 +886,12 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 The resulting observations.
         """
-        obs, global_obs = self.env.reset()
+        obs, critic_obs = self.env.reset()
 
         obs = self.env.augment_observation(obs)
-        global_obs = self.env.augment_global_observation(global_obs)
+        critic_obs = self.env.augment_critic_observation(critic_obs)
 
-        return obs, global_obs
+        return obs, critic_obs
 
     def aug_test_reset(self):
         """
@@ -901,10 +901,10 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             Returns:
                 The resulting observation (possibly augmented).
         """
-        obs, global_obs = self.env.reset()
+        obs, critic_obs = self.env.reset()
 
         obs = self.env.augment_observation(obs)
-        global_obs = self.env.augment_global_observation(global_obs)
+        critic_obs = self.env.augment_critic_observation(critic_obs)
         batch_size = obs.shape[0]
 
         if self.test_idx < 0:
@@ -912,9 +912,9 @@ class ObservationAugmentingWrapper(IdentityWrapper):
 
         for agent_id in obs:
             obs[agent_id] = obs[agent_id][self.test_idx]
-            global_obs[agent_id] = global_obs[agent_id][self.test_idx]
+            critic_obs[agent_id] = critic_obs[agent_id][self.test_idx]
 
-        return obs, global_obs
+        return obs, critic_obs
 
     def get_batch_size(self):
         """

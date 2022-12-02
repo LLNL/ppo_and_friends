@@ -344,7 +344,7 @@ class AgentPolicy():
     def add_episode_info(
         self, 
         agent_id,
-        global_observations,
+        critic_observations,
         observations,
         next_observations,
         raw_actions, 
@@ -406,7 +406,7 @@ class AgentPolicy():
 
         for ei_idx in range(env_batch_size):
             self.episodes[agent_id][ei_idx].add_info(
-                global_observation = global_observations[ei_idx],
+                critic_observation = critic_observations[ei_idx],
                 observation        = observations[ei_idx],
                 next_observation   = next_observations[ei_idx],
                 raw_action         = raw_actions[ei_idx],

@@ -51,7 +51,7 @@ class IdentityWrapper(ABC):
             self.action_space.keys())
 
         if (callable(getattr(self.env, "augment_observation", None)) and
-            callable(getattr(self.env, "augment_global_observation", None))):
+            callable(getattr(self.env, "augment_critic_observation", None))):
             self.can_augment_obs = True
 
     def get_all_done(self):
@@ -97,13 +97,13 @@ class IdentityWrapper(ABC):
             Returns:
                 The resulting observation, reward, done, and info tuple.
         """
-        obs, global_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, done, info = self.env.step(action)
 
         self.obs_cache        = deepcopy(obs)
-        self.global_obs_cache = deepcopy(global_obs)
+        self.critic_obs_cache = deepcopy(critic_obs)
         self.need_hard_reset  = False
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def step(self, action):
         """
@@ -125,8 +125,8 @@ class IdentityWrapper(ABC):
             Returns:
                 The resulting observation.
         """
-        obs, global_state = self.env.reset()
-        return obs, global_state
+        obs, critic_obs = self.env.reset()
+        return obs, critic_obs
 
     def _env_soft_reset(self):
         """
@@ -148,7 +148,7 @@ class IdentityWrapper(ABC):
         #
         #   When we call 'env.soft_reset()', we are calling
         #   ObservationClipper.soft_reset(). In this case, though, the clipper
-        #   does not have direct access to the global observations from the
+        #   does not have direct access to the critic observations from the
         #   MultiAgentWrapper. So, we recursively travel back to the base
         #   wrapper, and return its soft_reset() results. Those results will
         #   then travel back up through the normalizer and clipper, being
@@ -163,7 +163,7 @@ class IdentityWrapper(ABC):
         if callable(soft_reset):
             return soft_reset()
 
-        return self.obs_cache, self.global_obs_cache
+        return self.obs_cache, self.critic_obs_cache
 
     def soft_reset(self):
         """
@@ -220,9 +220,9 @@ class IdentityWrapper(ABC):
         else:
             raise NotImplementedError
 
-    def augment_global_observation(self, obs):
+    def augment_critic_observation(self, obs):
         """
-            If our environment has defined a global observation augmentation
+            If our environment has defined a critic observation augmentation
             method, we can access it here.
 
             Arguments:
@@ -232,7 +232,7 @@ class IdentityWrapper(ABC):
                 The batch of augmented observations.
         """
         if self.can_augment_obs:
-            return self.env.augment_global_observation(obs)
+            return self.env.augment_critic_observation(obs)
         else:
             raise NotImplementedError
 
@@ -749,16 +749,16 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation, reward, done, and info
                 tuple.
         """
-        obs, global_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, done, info = self.env.step(action)
 
         if self.env.get_all_done():
             for agent_id in info:
                 #FIXME: deepcopy  might not be needed here.
                 info[agent_id]["terminal observation"] = deepcopy(obs[agent_id])
 
-            obs, global_obs = self.env.reset()
+            obs, critic_obs = self.env.reset()
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def batch_step(self, actions):
         """
@@ -776,7 +776,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 tuple.
         """
         batch_obs        = {}
-        batch_global_obs = {}
+        batch_critic_obs = {}
         batch_rewards    = {}
         batch_dones      = {}
         batch_infos      = {}
@@ -788,12 +788,12 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             obs_shape = (self.num_envs,) + \
                 self.observation_space[agent_id].shape
 
-            global_obs_shape = \
+            critic_obs_shape = \
                 (self.num_envs,) + \
                  self.critic_observation_space[agent_id].shape
 
             batch_obs[agent_id]        = np.zeros(obs_shape)
-            batch_global_obs[agent_id] = np.zeros(global_obs_shape)
+            batch_critic_obs[agent_id] = np.zeros(critic_obs_shape)
             batch_rewards[agent_id] = np.zeros((self.num_envs, 1))
             batch_dones[agent_id]   = np.zeros((self.num_envs, 1)).astype(bool)
             batch_infos[agent_id]   = np.array([None] * self.num_envs)
@@ -806,7 +806,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         for env_idx in range(self.num_envs):
             act = env_actions[env_idx]
 
-            obs, global_obs, reward, done, info = self.envs[env_idx].step(act)
+            obs, critic_obs, reward, done, info = self.envs[env_idx].step(act)
 
             self.steps[env_idx] += 1
 
@@ -815,22 +815,22 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                     info[agent_id]["terminal observation"] = \
                         deepcopy(obs[agent_id])
 
-                obs, global_obs = self.envs[env_idx].reset()
+                obs, critic_obs = self.envs[env_idx].reset()
 
                 self.steps[env_idx] = 0
 
             for agent_id in obs:
                 batch_obs[agent_id][env_idx]        = obs[agent_id]
-                batch_global_obs[agent_id][env_idx] = global_obs[agent_id]
+                batch_critic_obs[agent_id][env_idx] = critic_obs[agent_id]
                 batch_rewards[agent_id][env_idx]    = reward[agent_id]
                 batch_dones[agent_id][env_idx]      = done[agent_id]
                 batch_infos[agent_id][env_idx]      = info[agent_id]
 
         self.obs_cache = deepcopy(batch_obs)
-        self.global_obs_cache = deepcopy(batch_global_obs)
+        self.critic_obs_cache = deepcopy(batch_critic_obs)
         self.need_hard_reset = False
 
-        return (batch_obs, batch_global_obs,
+        return (batch_obs, batch_critic_obs,
             batch_rewards, batch_dones, batch_infos)
 
     def reset(self):
@@ -849,7 +849,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         """
         if self.need_hard_reset:
             return self.reset()
-        return self.obs_cache, self.global_obs_cache
+        return self.obs_cache, self.critic_obs_cache
 
     def single_reset(self):
         """
@@ -858,8 +858,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Returns:
                 The resulting observation.
         """
-        obs, global_obs = self.env.reset()
-        return obs, global_obs
+        obs, critic_obs = self.env.reset()
+        return obs, critic_obs
 
     def batch_reset(self):
         """
@@ -869,10 +869,10 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation.
         """
         batch_obs        = {}
-        batch_global_obs = {}
+        batch_critic_obs = {}
 
         for env_idx in range(self.num_envs):
-            obs, global_obs = self.envs[env_idx].reset()
+            obs, critic_obs = self.envs[env_idx].reset()
 
             self.steps[env_idx] = 0
 
@@ -880,18 +880,18 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 if agent_id not in batch_obs:
                     obs_shape = (self.num_envs,) + \
                         self.observation_space[agent_id].shape
-                    global_obs_shape = \
+                    critic_obs_shape = \
                         (self.num_envs,) + \
                          self.critic_observation_space[agent_id].shape
 
                     batch_obs[agent_id] = np.zeros(obs_shape).astype(np.float32)
-                    batch_global_obs[agent_id] = \
-                        np.zeros(global_obs_shape).astype(np.float32)
+                    batch_critic_obs[agent_id] = \
+                        np.zeros(critic_obs_shape).astype(np.float32)
 
                 batch_obs[agent_id][env_idx]        = obs[agent_id]
-                batch_global_obs[agent_id][env_idx] = global_obs[agent_id]
+                batch_critic_obs[agent_id][env_idx] = critic_obs[agent_id]
 
-        return batch_obs, batch_global_obs
+        return batch_obs, batch_critic_obs
 
     def __len__(self):
         """

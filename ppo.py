@@ -397,7 +397,6 @@ class PPO(object):
     def get_policy_batches(self, obs, component):
         """
         """
-        #FIXME: bad naming
         assert component in ["actor", "critic"]
 
         policy_batches = {}
@@ -715,10 +714,6 @@ class PPO(object):
         for key in self.policies:
             self.policies[key].update_learning_rate(self.lr)
 
-        # FIXME: do we really need this anymore? It's really just a way
-        # of debugging. If our status dict changes to show info for each
-        # policy, then we could still use this.
-        #self.status_dict["lr"] = self.policy.actor_optim.param_groups[0]["lr"]
         self.status_dict["general"]["lr"] = self.lr
 
     def update_entropy_weight(self,
@@ -784,7 +779,7 @@ class PPO(object):
         else:
             initial_reset_func = self.env.reset
 
-        obs, global_obs    = initial_reset_func()
+        obs, critic_obs    = initial_reset_func()
         env_batch_size     = self.env.get_batch_size()
 
         top_rollout_score  = {}
@@ -848,30 +843,27 @@ class PPO(object):
                 raw_action, action, log_prob = \
                     self.get_policy_actions(obs)
 
-            value = self.get_policy_values(global_obs)
+            value = self.get_policy_values(critic_obs)
 
             if self.normalize_values:
                 value = self.get_denormalized_values(value)
 
             #
-            # Note that we have global observations as well as local.
+            # Note that we have critic observations as well as local.
             # When we're learning from a multi-agent environment, we
             # feed a "global state" to the critic. This is called
             # Centralized Training Decentralized Execution (CTDE).
             # arXiv:2006.07869v4
             #
             prev_obs        = deepcopy(obs)
-            prev_global_obs = deepcopy(global_obs)
+            prev_critic_obs = deepcopy(critic_obs)
 
             #
             # The returned objects are dictionaries mapping agent ids
             # to np arrays. Each element of the numpy array represents
             # the results from a single environment.
             #
-            #print(self.env.action_space)#FIXME
-            #print(f"\nrollout action: {action}")#FIXME
-            #print(f"raw action: {raw_action}")#FIXME
-            obs, global_obs, ext_reward, done, info = self.env.step(action)
+            obs, critic_obs, ext_reward, done, info = self.env.step(action)
 
             #
             # Non-terminal dones are interesting cases. We need to
@@ -893,19 +885,26 @@ class PPO(object):
             # actions into batches as well.
             #
             if self.obs_augment:
-                #FIXME: refactor this
-                batch_size   = obs.shape[0]
 
-                action_shape = (batch_size,) + action.shape[1:]
-                action       = np.tile(action.flatten(), batch_size)
-                action       = action.reshape(action_shape)
+                for agent_id in obs:
+                    batch_size   = obs[agent_id].shape[0]
 
-                raw_action   = np.tile(raw_action.flatten(), batch_size)
-                raw_action   = raw_action.reshape(action_shape)
+                    action_shape = (batch_size,) + action[agent_id].shape[1:]
 
-                lp_shape     = (batch_size,) + log_prob.shape[1:]
-                log_prob     = np.tile(log_prob.flatten(), batch_size)
-                log_prob     = log_prob.reshape(lp_shape)
+                    action[agent_id] = np.tile(
+                        action[agent_id].flatten(), batch_size)
+                    action[agent_id] = action[agent_id].reshape(action_shape)
+
+                    raw_action[agent_id] = np.tile(
+                        raw_action[agent_id].flatten(), batch_size)
+                    raw_action[agent_id] = \
+                        raw_action[agent_id].reshape(action_shape)
+
+                    lp_shape = (batch_size,) + log_prob[agent_id].shape[1:]
+
+                    log_prob[agent_id] = np.tile(
+                        log_prob[agent_id].flatten(), batch_size)
+                    log_prob[agent_id] = log_prob[agent_id].reshape(lp_shape)
 
             value = self.get_detached_dict(value)
 
@@ -947,7 +946,7 @@ class PPO(object):
 
                 self.policies[policy_id].add_episode_info(
                     agent_id             = agent_id,
-                    global_observations  = prev_global_obs[agent_id],
+                    critic_observations  = prev_critic_obs[agent_id],
                     observations         = prev_obs[agent_id],
                     next_observations    = ep_obs[agent_id],
                     raw_actions          = raw_action[agent_id],
@@ -1061,7 +1060,7 @@ class PPO(object):
                 where_maxed = np.concatenate((where_maxed, where_non_terminal))
                 where_maxed = np.unique(where_maxed)
 
-                next_value  = self.get_policy_values(global_obs)
+                next_value  = self.get_policy_values(critic_obs)
 
                 if self.normalize_values:
                     next_value = self.get_denormalized_values(next_value)

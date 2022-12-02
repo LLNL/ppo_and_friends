@@ -19,7 +19,7 @@ from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
 from ppo_and_friends.environments.retro_wrappers import RetroDeathWrapper
 from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-from ppo_and_friends.environments.abmarl.maze import abmarl_maze_env
+from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
 from ppo_and_friends.environments.action_wrappers import MultiBinaryCartPoleWrapper
 from ppo_and_friends.environments.action_wrappers import MultiBinaryLunarLanderWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
@@ -269,7 +269,6 @@ class MountainCarLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "dynamic_bs_clip"  : True,
             "bootstrap_clip"   : (-10, 10),
             "enable_icm"       : True,
         }
@@ -286,7 +285,8 @@ class MountainCarLauncher(EnvironmentLauncher):
         # doesn't seem to exhibit this behavior, so it's unlikely an issue
         # with ICM.
         # Also, the extrinsic reward weight fraction is very important
-        # for good performance.
+        # for good performance, and using soft resets results in slightly
+        # faster learning.
         #
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -300,6 +300,7 @@ class MountainCarLauncher(EnvironmentLauncher):
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
+                     use_soft_resets    = True,
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)
@@ -330,13 +331,12 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             min_value     = min_lr)
 
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "dynamic_bs_clip"  : True,
-            "bootstrap_clip"   : (-10, 10),
-            "enable_icm"       : True,
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : lr,
+            "bootstrap_clip"     : (-10, 10),
+            "enable_icm"         : True,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -351,18 +351,17 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     max_ts_per_ep      = 128,
-                     batch_size         = 512,
+                     max_ts_per_ep      = 200,
+                     ext_reward_weight  = 1./100.,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
+                     use_soft_resets    = True,
                      obs_clip           = None,
                      reward_clip        = None,
-                     ext_reward_weight  = 1./100.,
-                     intr_reward_weight = 50.,
                      **self.kw_launch_args)
 
 
@@ -1449,7 +1448,11 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            MultiAgentGymWrapper(gym.make('rware-tiny-3ag-v1'), critic_view="policy", policy_mapping_fn = lambda *args : "rware")
+            MultiAgentGymWrapper(
+                gym.make('rware-tiny-3ag-v1'),
+                critic_view = "policy",
+                policy_mapping_fn = lambda *args : "rware",
+                add_agent_ids = True)
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1533,7 +1536,9 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            MultiAgentGymWrapper(gym.make('rware-small-4ag-v1'))
+            MultiAgentGymWrapper(
+                gym.make('rware-small-4ag-v1'),
+                add_agent_ids = True)
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1742,33 +1747,33 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
+        actor_kw_args["hidden_size"] = 32
     
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-    
+        critic_kw_args["hidden_size"] = 64
+
         lr     = 0.0003
         min_lr = 0.0001
-    
+
         lr_dec = LinearDecrementer(
-            max_iteration = 1500,
-            max_value     = lr,
-            min_value     = min_lr)
+            max_iteration  = 300,
+            max_value      = lr,
+            min_value      = min_lr)
     
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "bootstrap_clip"   : (-1, 1),
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : lr,
+            "bootstrap_clip"     : (-1, 1),
         }
 
         policy_name = "abmarl-maze"
         policy_mapping_fn = lambda *args : policy_name
 
         env_generator = lambda : \
-            AbmarlWrapper(env               = abmarl_maze_env,
-                          policy_mapping_fn = policy_mapping_fn)
+                AbmarlWrapper(env               = abmarl_maze_env,
+                              policy_mapping_fn = policy_mapping_fn)
 
         policy_settings = { policy_name : \
             (None,
@@ -1778,21 +1783,20 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = num_procs * 128
     
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 10000,
-                     epochs_per_iter    = 5,
+                     batch_size         = 128,
+                     epochs_per_iter    = 20,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
-                     obs_clip           = None,
                      normalize_rewards  = False,
+                     obs_clip           = None,
                      reward_clip        = None,
-                     use_soft_resets    = True,
                      lr_dec             = lr_dec,
                      lr                 = lr,
                      min_lr             = min_lr,
@@ -1803,6 +1807,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
 #                                 Retro                                       #
 ###############################################################################
 
+#FIXME: this environment doesn't seem to do so well.
 class AirstrikerRAMLauncher(EnvironmentLauncher):
 
     def launch(self):
@@ -1852,7 +1857,7 @@ class AirstrikerRAMLauncher(EnvironmentLauncher):
                      use_soft_resets    = True,
 
                      #obs_clip           = (-10, 10.),
-                     reward_clip        = (-1., 1.),
+                     reward_clip        = (-10., 10.),
                      normalize_obs      = True,
                      normalize_rewards  = True,
                      normalize_adv      = True,

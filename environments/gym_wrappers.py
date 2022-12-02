@@ -20,17 +20,17 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
     def step(self, actions):
         """
         """
-        obs, global_obs, reward, done, info = \
+        obs, critic_obs, reward, done, info = \
             self._wrap_gym_step(*self.env.step(
                 self._unwrap_action(actions)))
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def reset(self):
         """
         """
-        obs, global_obs = self._wrap_gym_reset(self.env.reset())
-        return obs, global_obs
+        obs, critic_obs = self._wrap_gym_reset(self.env.reset())
+        return obs, critic_obs
 
     @abstractmethod
     def _unwrap_action(self,
@@ -149,9 +149,9 @@ class SingleAgentGymWrapper(PPOGymWrapper):
             obs = self._add_agent_ids_to_obs(obs)
 
         obs        = self._apply_death_mask(obs, done)
-        global_obs = self._construct_critic_observation(obs, done)
+        critic_obs = self._construct_critic_observation(obs, done)
 
-        return obs, global_obs, reward, done, info
+        return obs, critic_obs, reward, done, info
 
     def _wrap_gym_reset(self,
                         obs):
@@ -171,9 +171,9 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        global_obs = self._construct_critic_observation(obs, done)
+        critic_obs = self._construct_critic_observation(obs, done)
 
-        return obs, global_obs
+        return obs, critic_obs
 
 
 # FIXME: we need to make a note of the fact that this
@@ -282,10 +282,10 @@ class MultiAgentGymWrapper(PPOGymWrapper):
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
         wrapped_obs = self._apply_death_mask(wrapped_obs, wrapped_done)
-        global_obs  = self._construct_critic_observation(
+        critic_obs  = self._construct_critic_observation(
             wrapped_obs, wrapped_done)
 
-        return (wrapped_obs, global_obs,
+        return (wrapped_obs, critic_obs,
             wrapped_reward, wrapped_done, wrapped_info)
 
     def _wrap_gym_reset(self,
@@ -310,7 +310,7 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
-        global_obs = self._construct_critic_observation(
+        critic_obs = self._construct_critic_observation(
             wrapped_obs, wrapped_done)
 
-        return wrapped_obs, global_obs
+        return wrapped_obs, critic_obs
