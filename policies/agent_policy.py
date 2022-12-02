@@ -31,6 +31,8 @@ class AgentPolicy():
                  critic_kw_args      = {},
                  icm_kw_args         = {},
                  target_kl           = 100.,
+                 surr_clip           = 0.2,
+                 gradient_clip       = 0.5,
                  lr                  = 3e-4,
                  lr_dec              = None,
                  entropy_weight      = 0.01,
@@ -49,6 +51,10 @@ class AgentPolicy():
                  target_kl            KL divergence used for early stopping.
                                       This is typically set in the range
                                       [0.1, 0.5]. Use high values to disable.
+                 surr_clip            The clip value applied to the surrogate
+                                      (standard PPO approach).
+                 gradient_clip        A clip value to use on the gradient
+                                      update.
                  lr                   The initial learning rate.
                  lr_dec               A class that inherits from the
                                       IterationMapper class located in
@@ -105,6 +111,8 @@ class AgentPolicy():
         self.entropy_weight     = entropy_weight
         self.icm_beta           = icm_beta
         self.target_kl          = target_kl
+        self.surr_clip          = surr_clip
+        self.gradient_clip      = gradient_clip
 
         if lr_dec == None:
             self.lr_dec = LinearDecrementer(

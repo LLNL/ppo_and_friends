@@ -25,10 +25,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-# FIXME:
-#  1. let's allow each policy to have its own lr,
-#     reward weights,
-#     surr_clip, gradient_clip, bootstrap_clip, 
 class PPO(object):
 
     def __init__(self,
@@ -43,8 +39,6 @@ class PPO(object):
                  ts_per_rollout      = num_procs * 1024,
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
-                 surr_clip           = 0.2,
-                 gradient_clip       = 0.5,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
                  normalize_adv       = True,
@@ -91,10 +85,6 @@ class PPO(object):
                                       epochs_per_iter is the number of updates
                                       to perform after a single rollout (which
                                       may contain multiple episodes).
-                 surr_clip            The clip value applied to the surrogate
-                                      (standard PPO approach).
-                 gradient_clip        A clip value to use on the gradient
-                                      update.
                  ext_reward_weight    An optional weight for the extrinsic
                                       reward.
                  intr_reward_weight   an optional weight for the intrinsic
@@ -194,8 +184,6 @@ class PPO(object):
         self.ts_per_rollout      = ts_per_rollout
         self.gamma               = gamma
         self.epochs_per_iter     = epochs_per_iter
-        self.surr_clip           = surr_clip
-        self.gradient_clip       = gradient_clip
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_every          = save_every
         self.normalize_adv       = normalize_adv
@@ -1395,7 +1383,8 @@ class PPO(object):
             ratios = torch.exp(curr_log_probs - log_probs)
             surr1  = ratios * advantages
             surr2  = torch.clamp(
-                ratios, 1 - self.surr_clip, 1 + self.surr_clip) * advantages
+                ratios, 1 - self.policies[policy_id].surr_clip,
+                    1 + self.policies[policy_id].surr_clip) * advantages
 
             total_kl += (log_probs - curr_log_probs).mean().item()
 
@@ -1454,7 +1443,7 @@ class PPO(object):
             mpi_avg_gradients(self.policies[policy_id].actor)
             nn.utils.clip_grad_norm_(
                 self.policies[policy_id].actor.parameters(),
-                self.gradient_clip)
+                self.policies[policy_id].gradient_clip)
             self.policies[policy_id].actor_optim.step()
 
             self.policies[policy_id].critic_optim.zero_grad()
@@ -1463,7 +1452,7 @@ class PPO(object):
             mpi_avg_gradients(self.policies[policy_id].critic)
             nn.utils.clip_grad_norm_(
                 self.policies[policy_id].critic.parameters(),
-                self.gradient_clip)
+                self.policies[policy_id].gradient_clip)
             self.policies[policy_id].critic_optim.step()
 
             #
