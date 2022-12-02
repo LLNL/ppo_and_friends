@@ -11,6 +11,7 @@ from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.utils.iteration_mappers import LinearDecrementer
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -24,22 +25,44 @@ class AgentPolicy():
                  action_space,
                  actor_observation_space,
                  critic_observation_space,
-                 bootstrap_clip     = (-10., 10.),
-                 ac_network         = FeedForwardNetwork,
-                 actor_kw_args      = {},
-                 critic_kw_args     = {},
-                 icm_kw_args        = {},
-                 lr                 = 3e-4,
-                 use_gae            = True,
-                 gamma              = 0.99,
-                 lambd              = 0.95,
-                 dynamic_bs_clip    = False,
-                 enable_icm         = False,
-                 icm_network        = ICM,
-                 intr_reward_weight = 1.0,
-                 test_mode          = False):
+                 bootstrap_clip      = (-10., 10.),
+                 ac_network          = FeedForwardNetwork,
+                 actor_kw_args       = {},
+                 critic_kw_args      = {},
+                 icm_kw_args         = {},
+                 target_kl           = 100.,
+                 lr                  = 3e-4,
+                 lr_dec              = None,
+                 entropy_weight      = 0.01,
+                 entropy_dec         = None,
+                 use_gae             = True,
+                 gamma               = 0.99,
+                 lambd               = 0.95,
+                 dynamic_bs_clip     = False,
+                 enable_icm          = False,
+                 icm_network         = ICM,
+                 intr_reward_weight  = 1.0,
+                 icm_beta            = 0.8,
+                 test_mode           = False):
         """
             Arguments:
+                 target_kl            KL divergence used for early stopping.
+                                      This is typically set in the range
+                                      [0.1, 0.5]. Use high values to disable.
+                 lr                   The initial learning rate.
+                 lr_dec               A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
+                                      This class has a decrement function that
+                                      will be used to updated the learning rate.
+                 entropy_weight       An optional weight to apply to our
+                                      entropy.
+                 entropy_dec          A class that inherits from the
+                                      IterationMapper class located in
+                                      utils/iteration_mappers.py.
+                                      This class has a decrement function that
+                                      will be used to updated the entropy
+                                      weight.
                  lambd                The 'lambda' value for calculating GAEs.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
@@ -59,6 +82,7 @@ class AgentPolicy():
                                       values thereafter will be taken from the
                                       global min and max rewards that have been
                                       seen so far.
+                 icm_beta             The beta value used within the ICM.
 
         """
         self.name               = name
@@ -77,6 +101,26 @@ class AgentPolicy():
         self.device             = torch.device("cpu")
         self.agent_ids          = set()
         self.episodes           = {}
+        self.lr                 = lr
+        self.entropy_weight     = entropy_weight
+        self.icm_beta           = icm_beta
+        self.target_kl          = target_kl
+
+        if lr_dec == None:
+            self.lr_dec = LinearDecrementer(
+                max_iteration = 1,
+                max_value     = lr,
+                min_value     = lr)
+        else:
+            self.lr_dec = lr_dec
+
+        if entropy_dec == None:
+            self.entropy_dec = LinearDecrementer(
+                max_iteration = 1,
+                max_value     = entropy_weight,
+                min_value     = entropy_weight)
+        else:
+            self.entropy_dec = entropy_dec
 
         act_type = type(action_space)
         self.act_nvec = None
@@ -588,14 +632,32 @@ class AgentPolicy():
 
         return intr_reward
 
-    def update_learning_rate(self, lr):
+    def update_learning_rate(self, iteration, timestep):
         """
         """
-        update_optimizer_lr(self.actor_optim, lr)
-        update_optimizer_lr(self.critic_optim, lr)
+        self.lr = self.lr_dec(
+            iteration = iteration,
+            timestep  = timestep)
+
+        update_optimizer_lr(self.actor_optim, self.lr)
+        update_optimizer_lr(self.critic_optim, self.lr)
 
         if self.enable_icm:
-            update_optimizer_lr(self.icm_optim, lr)
+            update_optimizer_lr(self.icm_optim, self.lr)
+
+    def update_entropy_weight(self,
+                              iteration,
+                              timestep):
+        """
+            Update the entropy weight. This relies on the entropy_dec function,
+            which expects an iteration and returns an updated entropy weight.
+
+            Arguments:
+                iteration    The current iteration of training.
+        """
+        self.entropy_weight = self.entropy_dec(
+            iteration = iteration,
+            timestep  = timestep)
 
     def get_bs_clip_range(self, ep_rewards, status_dict):
         """

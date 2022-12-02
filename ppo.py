@@ -25,9 +25,9 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-# TODO:
+# FIXME:
 #  1. let's allow each policy to have its own lr,
-#     entropy_weight, gamma, icm_beta, reward weights, target_kl,
+#     reward weights,
 #     surr_clip, gradient_clip, bootstrap_clip, 
 class PPO(object):
 
@@ -38,12 +38,6 @@ class PPO(object):
                  policy_settings,
                  policy_mapping_fn,
                  envs_per_proc       = 1,
-                 lr                  = 3e-4,
-                 min_lr              = 1e-4,
-                 lr_dec              = None,
-                 entropy_weight      = 0.01,
-                 min_entropy_weight  = 0.01,
-                 entropy_dec         = None,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
                  ts_per_rollout      = num_procs * 1024,
@@ -51,10 +45,8 @@ class PPO(object):
                  epochs_per_iter     = 10,
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
-                 icm_beta            = 0.8,
                  ext_reward_weight   = 1.0,
                  intr_reward_weight  = 1.0,
-                 target_kl           = 100.,
                  normalize_adv       = True,
                  normalize_obs       = True,
                  normalize_rewards   = True,
@@ -81,18 +73,6 @@ class PPO(object):
                                       processor owns.
                  icm_network          The network to use for ICM applications.
                  lr                   The initial learning rate.
-                 min_lr               The minimum learning rate.
-                 lr_dec               A class that inherits from the
-                                      IterationMapper class located in
-                                      utils/iteration_mappers.py.
-                                      This class has a decrement function that
-                                      will be used to updated the learning rate.
-                 entropy_dec          A class that inherits from the
-                                      IterationMapper class located in
-                                      utils/iteration_mappers.py.
-                                      This class has a decrement function that
-                                      will be used to updated the entropy
-                                      weight.
                  max_ts_per_ep        The maximum timesteps to allow per
                                       episode.
                  batch_size           The batch size to use when training/
@@ -115,16 +95,10 @@ class PPO(object):
                                       (standard PPO approach).
                  gradient_clip        A clip value to use on the gradient
                                       update.
-                 icm_beta             The beta value used within the ICM.
                  ext_reward_weight    An optional weight for the extrinsic
                                       reward.
                  intr_reward_weight   an optional weight for the intrinsic
                                       reward.
-                 entropy_weight       An optional weight to apply to our
-                                      entropy.
-                 target_kl            KL divergence used for early stopping.
-                                      This is typically set in the range
-                                      [0.1, 0.5]. Use high values to disable.
                  normalize_adv        Should we normalize the advantages? This
                                       occurs at the minibatch level.
                  normalize_obs        Should we normalize the observations?
@@ -206,22 +180,6 @@ class PPO(object):
         self.test_mode_dependencies = [env]
         self.pickle_safe_test_mode_dependencies = []
 
-        if lr_dec == None:
-            self.lr_dec = LinearDecrementer(
-                max_iteration = 1,
-                max_value     = lr,
-                min_value     = min_lr)
-        else:
-            self.lr_dec = lr_dec
-
-        if entropy_dec == None:
-            self.entropy_dec = LinearDecrementer(
-                max_iteration = 1,
-                max_value     = entropy_weight,
-                min_value     = min_entropy_weight)
-        else:
-            self.entropy_dec = entropy_dec
-
         #
         # Establish some class variables.
         #
@@ -229,27 +187,21 @@ class PPO(object):
         self.device              = device
         self.state_path          = state_path
         self.render              = render
-        self.icm_beta            = icm_beta
         self.ext_reward_weight   = ext_reward_weight
         self.intr_reward_weight  = intr_reward_weight
-        self.min_lr              = min_lr
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
         self.ts_per_rollout      = ts_per_rollout
         self.gamma               = gamma
-        self.target_kl           = target_kl
         self.epochs_per_iter     = epochs_per_iter
         self.surr_clip           = surr_clip
         self.gradient_clip       = gradient_clip
-        self.entropy_weight      = entropy_weight
-        self.min_entropy_weight  = min_entropy_weight
         self.prev_top_window     = -np.finfo(np.float32).max
         self.save_every          = save_every
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
-        self.lr                  = lr
         self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
@@ -288,17 +240,19 @@ class PPO(object):
         self.status_dict["general"]["train time"]     = 0
         self.status_dict["general"]["running time"]   = 0
         self.status_dict["general"]["timesteps"]      = 0
-        self.status_dict["general"]["lr"]             = self.lr
-        self.status_dict["general"]["entropy weight"] = self.entropy_weight
         self.status_dict["general"]["total episodes"] = 0
         self.status_dict["general"]["longest run"]    = 0
 
         for policy_id in self.policies:
+            policy = self.policies[policy_id]
+
             self.status_dict[policy_id] = {}
             self.status_dict[policy_id]["episode reward avg"]  = 0
             self.status_dict[policy_id]["extrinsic score avg"] = 0
             self.status_dict[policy_id]["top score"]           = -max_int
             self.status_dict[policy_id]["weighted entropy"]    = 0
+            self.status_dict[policy_id]["entropy weight"]      = policy.entropy_weight
+            self.status_dict[policy_id]["lr"]                  = policy.lr
             self.status_dict[policy_id]["actor loss"]          = 0
             self.status_dict[policy_id]["critic loss"]         = 0
             self.status_dict[policy_id]["kl avg"]              = 0
@@ -354,8 +308,12 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                self.lr= min(self.status_dict["general"]["lr"], self.lr)
-                self.status_dict["general"]["lr"] = self.lr
+                for policy_id in self.policies:
+                    policy    = self.policies[policy_id]
+                    policy.lr = min(self.status_dict[policy_id]["lr"],
+                        policy.lr)
+
+                    self.status_dict[policy]["lr"] = policy.lr
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -706,15 +664,10 @@ class PPO(object):
             Arguments:
                 iteration    The current iteration of training.
         """
-
-        self.lr = self.lr_dec(
-            iteration = iteration,
-            timestep  = timestep)
-
-        for key in self.policies:
-            self.policies[key].update_learning_rate(self.lr)
-
-        self.status_dict["general"]["lr"] = self.lr
+        for policy_id in self.policies:
+            self.policies[policy_id].update_learning_rate(
+                iteration, timestep)
+            self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr
 
     def update_entropy_weight(self,
                               iteration,
@@ -726,11 +679,10 @@ class PPO(object):
             Arguments:
                 iteration    The current iteration of training.
         """
-        self.entropy_weight = self.entropy_dec(
-            iteration = iteration,
-            timestep  = timestep)
-
-        self.status_dict["general"]["entropy weight"] = self.entropy_weight
+        for policy_id in self.policies:
+            self.policies[policy_id].update_entropy_weight(iteration, timestep)
+            self.status_dict[policy_id]["entropy weight"] = \
+                self.policies[policy_id].entropy_weight
 
     def rollout(self):
         """
@@ -1322,9 +1274,10 @@ class PPO(object):
                     #
                     comm.barrier()
                     if (self.status_dict[policy_id]["kl avg"] >
-                        (1.5 * self.target_kl)):
+                        (1.5 * self.policies[policy_id].target_kl)):
 
-                        msg  = "\nTarget KL of {} ".format(1.5 * self.target_kl)
+                        kl = 1.5 * self.policies[policy_id].target_kl
+                        msg  = "\nTarget KL of {} ".format(kl)
                         msg += "has been reached. "
                         msg += "Ending early (after "
                         msg += "{} epochs)".format(epoch_idx + 1)
@@ -1359,7 +1312,12 @@ class PPO(object):
                 self.save()
 
             comm.barrier()
-            if self.lr <= 0.0:
+
+            lr_sum = 0.0
+            for policy_id in self.policies:
+                lr_sum += self.policies[policy_id].lr
+
+            if lr_sum <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
 
@@ -1475,9 +1433,10 @@ class PPO(object):
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
 
-            if self.entropy_weight != 0.0:
+            if self.policies[policy_id].entropy_weight != 0.0:
                 total_entropy += entropy.mean().item()
-                actor_loss    -= self.entropy_weight * entropy.mean()
+                actor_loss -= \
+                    self.policies[policy_id].entropy_weight * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
@@ -1537,7 +1496,7 @@ class PPO(object):
         total_actor_loss  = comm.allreduce(total_actor_loss, MPI.SUM)
         total_critic_loss = comm.allreduce(total_critic_loss, MPI.SUM)
         total_kl          = comm.allreduce(total_kl, MPI.SUM)
-        w_entropy         = total_entropy * self.entropy_weight
+        w_entropy = total_entropy * self.policies[policy_id].entropy_weight
 
         self.status_dict[policy_id]["weighted entropy"] = w_entropy / counter
         self.status_dict[policy_id]["actor loss"] = \
@@ -1569,10 +1528,11 @@ class PPO(object):
             if len(actions.shape) != 2:
                 actions = actions.unsqueeze(1)
 
-            _, inv_loss, f_loss = self.policies[policy_id].icm_model(obs, next_obs, actions)
+            _, inv_loss, f_loss = self.policies[policy_id].icm_model(
+                obs, next_obs, actions)
 
-            icm_loss = (((1.0 - self.icm_beta) * f_loss) +
-                (self.icm_beta * inv_loss))
+            icm_loss = (((1.0 - self.policies[policy_id].icm_beta) * f_loss) +
+                (self.policies[policy_id].icm_beta * inv_loss))
 
             total_icm_loss += icm_loss.item()
 

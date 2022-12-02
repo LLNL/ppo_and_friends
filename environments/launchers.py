@@ -114,6 +114,7 @@ class CartPoleLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -131,10 +132,7 @@ class CartPoleLauncher(EnvironmentLauncher):
                      reward_clip        = (-10., 10.),
                      normalize_obs      = True,
                      normalize_rewards  = True,
-                     normalize_adv      = True,
-                     lr                 = lr,
-                     min_lr             = min_lr,
-                     lr_dec             = lr_dec)
+                     normalize_adv      = True)
 
 
 class BinaryCartPoleLauncher(EnvironmentLauncher):
@@ -167,6 +165,7 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -184,10 +183,7 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
                      reward_clip        = (-10., 10.),
                      normalize_obs      = True,
                      normalize_rewards  = True,
-                     normalize_adv      = True,
-                     lr                 = lr,
-                     min_lr             = min_lr,
-                     lr_dec             = lr_dec)
+                     normalize_adv      = True)
 
 
 class PendulumLauncher(EnvironmentLauncher):
@@ -218,6 +214,7 @@ class PendulumLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "dynamic_bs_clip"  : True,
         }
 
@@ -234,9 +231,6 @@ class PendulumLauncher(EnvironmentLauncher):
                      reward_clip        = None,
                      normalize_obs      = False,
                      normalize_rewards  = False,
-                     lr                 = lr,
-                     min_lr             = min_lr,
-                     lr_dec             = lr_dec,
                      **self.kw_launch_args)
 
 
@@ -267,6 +261,7 @@ class MountainCarLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10, 10),
             "enable_icm"       : True,
         }
@@ -292,9 +287,6 @@ class MountainCarLauncher(EnvironmentLauncher):
                      epochs_per_iter    = 32, 
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
@@ -333,6 +325,7 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"     : (-10, 10),
             "enable_icm"         : True,
         }
@@ -351,9 +344,6 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
@@ -391,6 +381,7 @@ class AcrobotLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10., 10.),
         }
 
@@ -403,9 +394,6 @@ class AcrobotLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      normalize_obs      = True,
                      normalize_rewards  = True,
                      obs_clip           = (-10., 10.),
@@ -457,6 +445,7 @@ class LunarLanderLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -473,9 +462,6 @@ class LunarLanderLauncher(EnvironmentLauncher):
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
                      **self.kw_launch_args)
 
 
@@ -524,6 +510,7 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -540,9 +527,6 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
                      **self.kw_launch_args)
 
 
@@ -591,7 +575,9 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10., 10.),
+            "target_kl"        : 0.015,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -609,10 +595,6 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-10., 10.),
-                     target_kl           = 0.015,
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
                      **self.kw_launch_args)
 
 
@@ -665,6 +647,7 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-1., 10.),
         }
 
@@ -688,9 +671,6 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
                      normalize_rewards   = True,
                      obs_clip            = (-10., 10.),
                      reward_clip         = (-1., 10.),
-                     lr_dec              = lr_dec,
-                     lr                  = lr,
-                     min_lr              = min_lr,
                      **self.kw_launch_args)
 
 
@@ -762,6 +742,7 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (bs_clip_min, 10.),
         }
 
@@ -781,9 +762,6 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
                      normalize_rewards  = True,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (reward_clip_min, 10.),
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -838,7 +816,9 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-1., 1.),
+            "target_kl"        : 0.2,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -855,10 +835,6 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
                      max_ts_per_ep      = 64,
                      epochs_per_iter    = 30,
                      reward_clip        = (-1., 1.),
-                     target_kl          = 0.2,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -911,7 +887,9 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-1., 1.),
+            "target_kl"        : 0.2,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -928,10 +906,6 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
                      max_ts_per_ep      = 64,
                      epochs_per_iter    = 30,
                      reward_clip        = (-1., 1.),
-                     target_kl          = 0.2,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -998,7 +972,9 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10., 10.),
+            "entropy_weight"   : 0.0,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1015,10 +991,6 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
                      ts_per_rollout     = ts_per_rollout,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
-                     entropy_weight     = 0.0,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 class AntLauncher(EnvironmentLauncher):
@@ -1053,7 +1025,9 @@ class AntLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10., 10.),
+            "target_kl"        : 0.015,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1068,13 +1042,9 @@ class AntLauncher(EnvironmentLauncher):
                      batch_size         = 512,
                      max_ts_per_ep      = 64,
                      epochs_per_iter    = 8,
-                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
                      obs_clip           = (-30., 30.),
                      reward_clip        = (-10., 10.),
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1133,6 +1103,8 @@ class HumanoidLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
+            "target_kl"        : 0.015,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1146,13 +1118,9 @@ class HumanoidLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      epochs_per_iter    = 8,
-                     target_kl          = 0.015,
                      max_ts_per_ep      = 16,
                      ts_per_rollout     = ts_per_rollout,
                      reward_clip        = (-10., 10.),
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1199,6 +1167,8 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
+            "target_kl"        : 0.015,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1213,13 +1183,9 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
                      batch_size         = 512,
                      max_ts_per_ep      = 32,
                      epochs_per_iter    = 8,
-                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
                      obs_clip           = None,
                      reward_clip        = (-10., 10.),
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1249,6 +1215,9 @@ class Walker2DLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
+            "entropy_weight"   : 0.0,
+            "target_kl"        : 0.015,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1266,15 +1235,10 @@ class Walker2DLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      max_ts_per_ep      = 16,
-                     target_kl          = 0.015,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = False,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
-                     entropy_weight     = 0.0,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1305,6 +1269,8 @@ class HopperLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
+            "entropy_weight"   : 0.0,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1328,10 +1294,6 @@ class HopperLauncher(EnvironmentLauncher):
                 normalize_values   = False,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
-                entropy_weight     = 0.0,
-                lr_dec             = lr_dec,
-                lr                 = lr,
-                min_lr             = min_lr,
                 **self.kw_launch_args)
 
 
@@ -1362,6 +1324,7 @@ class HalfCheetahLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1382,9 +1345,6 @@ class HalfCheetahLauncher(EnvironmentLauncher):
                 ts_per_rollout     = ts_per_rollout,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
-                lr_dec             = lr_dec,
-                lr                 = lr,
-                min_lr             = min_lr,
                 **self.kw_launch_args)
 
 
@@ -1414,6 +1374,7 @@ class SwimmerLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1431,9 +1392,6 @@ class SwimmerLauncher(EnvironmentLauncher):
                 ts_per_rollout     = ts_per_rollout,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),
-                lr_dec             = lr_dec,
-                lr                 = lr,
-                min_lr             = min_lr,
                 **self.kw_launch_args)
 
 
@@ -1480,7 +1438,10 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-1, 1),
+            "entropy_weight"   : entropy_weight,
+            "entropy_dec"      : entropy_dec,
         }
 
         #
@@ -1520,12 +1481,6 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 obs_clip           = None,
                 normalize_rewards  = False,
                 reward_clip        = None,
-                entropy_weight     = entropy_weight,
-                min_entropy_weight = min_entropy_weight,
-                entropy_dec        = entropy_dec,
-                lr_dec             = lr_dec,
-                lr                 = lr,
-                min_lr             = min_lr,
                 **self.kw_launch_args)
 
 
@@ -1566,6 +1521,9 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "lr_dec"           : lr_dec,
+            "entropy_weight"   : entropy_weight,
+            "entropy_dec"      : entropy_dec,
         }
 
         #
@@ -1604,12 +1562,6 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     entropy_weight     = entropy_weight,
-                     min_entropy_weight = min_entropy_weight,
-                     entropy_dec        = entropy_dec,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1640,6 +1592,7 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+	    "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (0, 1),
         }
 
@@ -1665,9 +1618,6 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1703,6 +1653,7 @@ class PressurePlateLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+	    "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-3, 0),
         }
 
@@ -1729,9 +1680,6 @@ class PressurePlateLauncher(EnvironmentLauncher):
                      normalize_rewards  = False,
                      reward_clip        = None,
                      use_soft_resets    = True,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
 
 
@@ -1763,6 +1711,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
+	    "lr_dec"           : lr_dec,
             "bootstrap_clip"     : (-1, 1),
         }
 
@@ -1795,7 +1744,4 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
                      normalize_rewards  = False,
                      obs_clip           = None,
                      reward_clip        = None,
-                     lr_dec             = lr_dec,
-                     lr                 = lr,
-                     min_lr             = min_lr,
                      **self.kw_launch_args)
