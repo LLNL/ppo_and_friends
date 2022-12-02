@@ -3,7 +3,6 @@
     that initialize training for a specific environment.
 """
 import gym
-import retro
 from abc import ABC, abstractmethod
 import lbforaging
 import rware
@@ -17,7 +16,6 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
-from ppo_and_friends.environments.retro_wrappers import RetroDeathWrapper
 from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
 from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
 from ppo_and_friends.environments.action_wrappers import MultiBinaryCartPoleWrapper
@@ -1801,67 +1799,3 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
                      lr                 = lr,
                      min_lr             = min_lr,
                      **self.kw_launch_args)
-
-
-###############################################################################
-#                                 Retro                                       #
-###############################################################################
-
-#FIXME: this environment doesn't seem to do so well.
-class AirstrikerRAMLauncher(EnvironmentLauncher):
-
-    def launch(self):
-        env_generator = lambda : \
-            SingleAgentGymWrapper(RetroDeathWrapper(retro.make(
-                game='Airstriker-Genesis',
-                obs_type=retro.Observations.RAM)))
-
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
-    
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
-        lr     = 0.0003
-        min_lr = 0.0001
-
-        lr_dec = LinearDecrementer(
-            max_iteration  = 20000,
-            max_value      = lr,
-            min_value      = min_lr)
-
-        ts_per_rollout = num_procs * 512
-
-        policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "bootstrap_clip"   : (-1.0, 1.0)
-        }
-
-        policy_settings, policy_mapping_fn = get_single_policy_defaults(
-            env_generator = env_generator,
-            policy_args   = policy_args)
-
-        self.run_ppo(**self.kw_launch_args,
-                     env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 512,
-                     ts_per_rollout     = ts_per_rollout,
-                     max_ts_per_ep      = 32,
-                     epochs_per_iter    = 30,
-
-                     use_soft_resets    = True,
-
-                     #obs_clip           = (-10, 10.),
-                     reward_clip        = (-10., 10.),
-                     normalize_obs      = True,
-                     normalize_rewards  = True,
-                     normalize_adv      = True,
-                     lr                 = lr,
-                     min_lr             = min_lr,
-                     lr_dec             = lr_dec)
-
