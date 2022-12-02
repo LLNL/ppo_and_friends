@@ -22,7 +22,7 @@ def get_action_dtype(action_space):
             A string representing the action space dtype.
     """
     if (type(action_space) == Box and
-        np.issubtype(action_space.dtype, np.floating)):
+        np.issubdtype(action_space.dtype, np.floating)):
 
         msg  = "ERROR: action spaces of type Box int are not "
         msg += "directly supported. Please wrap your action space "
