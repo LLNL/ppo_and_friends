@@ -160,7 +160,8 @@ class AgentPolicy():
             rank_print(msg)
             comm.Abort()
         else:
-            rank_print("Using {} actions.".format(self.action_dtype))
+            rank_print("{} policy using {} actions.".format(
+                self.name, self.action_dtype))
 
         #
         # One or both of our bootstrap clip ends might be a function of
