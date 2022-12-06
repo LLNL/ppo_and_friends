@@ -16,8 +16,6 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
-from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
 from ppo_and_friends.environments.action_wrappers import MultiBinaryCartPoleWrapper
 from ppo_and_friends.environments.action_wrappers import MultiBinaryLunarLanderWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
@@ -30,6 +28,13 @@ try:
     HAVE_PRESSURE_PLATE = True
 except:
     HAVE_PRESSURE_PLATE = False
+
+try:
+    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
+    from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
+    HAVE_ABMARL = True
+except:
+    HAVE_ABMARL = False
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -1695,6 +1700,11 @@ class PressurePlateLauncher(EnvironmentLauncher):
 class AbmarlMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
+        if not HAVE_ABMARL:
+            msg  = "ERROR: unable to import the Abmarl environments. "
+            msg += "This environment is installed from its git repository."
+            rank_print(msg)
+            comm.Abort()
     
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
