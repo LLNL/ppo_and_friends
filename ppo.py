@@ -300,7 +300,7 @@ class PPO(object):
                     policy.lr = min(self.status_dict[policy_id]["lr"],
                         policy.lr)
 
-                    self.status_dict[policy]["lr"] = policy.lr
+                    self.status_dict[policy_id]["lr"] = policy.lr
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -340,6 +340,23 @@ class PPO(object):
 
     def get_policy_batches(self, obs, component):
         """
+            This method will take all of the observations from a step
+            and compress them into numpy array batches. This allows for
+            much faster inference during rollouts.
+
+            Arguments:
+                obs        The observations to create batches from. This
+                           should be a dictionary mapping agent ids to
+                           their observations.
+                component  The network component these observations are
+                           associated with. This can be set to "actor"
+                           or "critic".
+
+            Returns:
+                A tuple containing two dictionaries. The first maps
+                policy ids to agent ids, and the second maps policy
+                ids to batches of observations (which can span
+                multiple agents).
         """
         assert component in ["actor", "critic"]
 
@@ -347,6 +364,11 @@ class PPO(object):
         policy_agents  = {}
         agent_counts   = {p_id : 0 for p_id in self.policies}
 
+        #
+        # First, create our dictionary  mapping policy ids to
+        # to agent ids. This can be used to later reconstruct
+        # "non-batched" data.
+        #
         for a_id in obs:
             policy_id = self.policy_mapping_fn(a_id)
             agent_counts[policy_id] += 1
@@ -356,13 +378,17 @@ class PPO(object):
 
             policy_agents[policy_id].append(a_id)
 
+        #
+        # Next, combine observations from all agents that share policies.
+        # We'll add these to our dictionary mapping policy ids to batches.
+        #
         for policy_id in agent_counts:
             if component == "actor":
                 policy_shape = self.policies[policy_id].actor_obs_space.shape
             elif component == "critic":
                 policy_shape = self.policies[policy_id].critic_obs_space.shape
 
-            batch_shape  = (agent_counts[policy_id], self.envs_per_proc) +\
+            batch_shape = (agent_counts[policy_id], self.envs_per_proc) +\
                 policy_shape
 
             if component == "actor":
@@ -389,11 +415,25 @@ class PPO(object):
 
     def get_policy_actions(self, obs):
         """
+            Given a dictionary mapping agent ids to observations,
+            generate an dictionary of actions from our policy.
+
+            Arguments:
+                obs    A dictionary mapping agent ids to observations.
+
+            Returns:
+                A tuple of the form (raw_actions, actions, log_probs).
+                'actions' have potentially been altered for the environment,
+                but 'raw_actions' are guaranteed to be unaltered.
         """
         raw_actions = {}
         actions     = {}
         log_probs   = {}
 
+        #
+        # Performing inference on each agent individually is VERY slow.
+        # Instead, we can batch all shared policy observations.
+        #
         policy_agents, policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
@@ -426,6 +466,17 @@ class PPO(object):
 
     def get_policy_actions_from_aug_obs(self, obs):
         """
+            Given a dictionary mapping agent ids to augmented
+            batches of observations,
+            generate an dictionary of actions from our policy.
+
+            Arguments:
+                obs    A dictionary mapping agent ids to observations.
+
+            Returns:
+                A tuple of the form (raw_actions, actions, log_probs).
+                'actions' have potentially been altered for the environment,
+                but 'raw_actions' are guaranteed to be unaltered.
         """
         raw_actions = {} 
         actions     = {}
@@ -450,6 +501,10 @@ class PPO(object):
         """
         values = {}
 
+        #
+        # Performing inference on each agent individually is VERY slow.
+        # Instead, we can batch all shared policy observations.
+        #
         policy_agents, policy_batches = self.get_policy_batches(obs, "critic")
         policy_batches = self.np_dict_to_tensor_dict(policy_batches)
 
