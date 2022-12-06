@@ -327,14 +327,17 @@ class PPO(object):
         if test_mode:
             self.can_clone_env = False
         else:
-            try:
-                obs, critic_obs = self.env.reset()
-                _, actions, _   = self.get_policy_actions(obs)
-                cloned_env      = deepcopy(self.env)
-                cloned_env.step(actions)
-                self.can_clone_env = True
-            except:
-                self.can_clone_env = False
+            # FIXME: we need to refactor our cloning process. Disabling
+            # for now.
+            self.can_clone_env = False
+            #try:
+            #    obs, critic_obs = self.env.reset()
+            #    _, actions, _   = self.get_policy_actions(obs)
+            #    cloned_env      = deepcopy(self.env)
+            #    cloned_env.step(actions)
+            #    self.can_clone_env = True
+            #except:
+            #    self.can_clone_env = False
 
         rank_print("Can clone environment: {}".format(self.can_clone_env))
 

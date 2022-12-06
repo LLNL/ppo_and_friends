@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import torch
+from copy import deepcopy
 from functools import reduce
 from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
@@ -699,6 +700,8 @@ class AgentPolicy():
 
         return (bs_min, bs_max)
 
+    # FIXME: this doesn't work. We need to calculate actions from all
+    # policies and take a step using that. This will NOT be policy specific.
     def get_cloned_intrinsic_reward(
         self,
         obs,
@@ -713,7 +716,7 @@ class AgentPolicy():
             env_batch_size = obs.shape[0]
 
         clone_prev_obs = obs.copy()
-        cloned_env = deepcopy(self.env)
+        cloned_env = deepcopy(env)
         clone_obs, _, _, clone_info = cloned_env.step(clone_action)
         del cloned_env
 
