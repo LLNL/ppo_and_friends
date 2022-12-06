@@ -88,6 +88,7 @@ class AgentPolicy():
                                       values thereafter will be taken from the
                                       global min and max rewards that have been
                                       seen so far.
+                 icm_network          The network to use for ICM applications.
                  icm_beta             The beta value used within the ICM.
 
         """
@@ -736,6 +737,8 @@ class AgentPolicy():
 
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
+
+        comm.barrier()
 
         self.actor.save(policy_save_path)
         self.critic.save(policy_save_path)
