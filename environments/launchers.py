@@ -1421,27 +1421,31 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         min_lr = 0.0001
     
         lr_dec = LinearDecrementer(
-            max_timestep  = 40000000,
+            max_timestep  = 1000000,
             max_value     = lr,
             min_value     = min_lr)
     
-        entropy_weight     = 0.03
+        #FIXME: testing replacing with ICM
+        #entropy_weight     = 0.015
+        entropy_weight     = 0.01
         min_entropy_weight = 0.01
     
         entropy_dec = LinearDecrementer(
-            max_timestep  = 9000000,
+            max_timestep  = 1000000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
 
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "lr_dec"           : lr_dec,
-            "bootstrap_clip"   : (-1, 1),
-            "entropy_weight"   : entropy_weight,
-            "entropy_dec"      : entropy_dec,
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : lr,
+            "lr_dec"             : lr_dec,
+            "bootstrap_clip"     : (-1, 1),
+            "entropy_weight"     : entropy_weight,
+            "entropy_dec"        : entropy_dec,
+            "enable_icm"         : True,#FIXME: testing
+            "intr_reward_weight" : 0.001,
         }
 
         #
@@ -1473,10 +1477,11 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 policy_settings    = policy_settings,
                 policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 10000,
+                ext_reward_weight  = 10.,
                 epochs_per_iter    = 5,
-                max_ts_per_ep      = 512,
+                max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                use_soft_resets    = True,
+                use_soft_resets    = False,
                 normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
