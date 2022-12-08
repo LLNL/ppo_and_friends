@@ -52,7 +52,9 @@ class ObservationFilter(IdentityWrapper, ABC):
     def _apply_filters(self, local_obs, critic_obs):
         """
         """
+        print("\nApplying local filters")
         local_obs  = self._filter_local_observation(local_obs)
+        print("\nApplying critic filters")
         critic_obs = self._filter_critic_observation(critic_obs)
         return local_obs, critic_obs
 
@@ -209,6 +211,7 @@ class ObservationNormalizer(ObservationFilter):
             Returns:
                 The normalized observation.
         """
+        print(f"\nnormalizing agent {agent_id} with obs shape {agent_obs.shape}")
         agent_obs = (agent_obs - self.actor_running_stats[agent_id].mean) / \
             np.sqrt(self.actor_running_stats[agent_id].variance + self.epsilon)
         return agent_obs
@@ -226,15 +229,15 @@ class ObservationNormalizer(ObservationFilter):
         """
         for agent_id in obs:
             if type(obs[agent_id]) == np.ndarray:
-                obs[agent_id] = self._local_normalize(
+                obs[agent_id] = self._critic_normalize(
                     agent_id, deepcopy(obs[agent_id]))
             else:
-                obs[agent_id] = self._local_normalize(
+                obs[agent_id] = self._critic_normalize(
                     agent_id, obs[agent_id])
 
         return obs
 
-    def _critic_normalize(self, obs):
+    def _critic_normalize(self, agent_id, obs):
         """
             Normalize a critic observation using our running stats.
 
@@ -245,9 +248,9 @@ class ObservationNormalizer(ObservationFilter):
             Returns:
                 The normalized observation.
         """
-        agent_obs = (agent_obs - self.critic_running_stats[agent_id].mean) / \
+        obs = (obs - self.critic_running_stats[agent_id].mean) / \
             np.sqrt(self.critic_running_stats[agent_id].variance + self.epsilon)
-        return agent_obs
+        return obs
 
     def _save_stats(self, path, file_name, stats):
         """
