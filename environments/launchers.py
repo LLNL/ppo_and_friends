@@ -1799,6 +1799,9 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
                 AbmarlWrapper(env               = abmarl_rtt_env,
                               policy_mapping_fn = policy_mapping_fn)
 
+        #
+        # This environment is multi-agent and requires different policies.
+        #
         policy_settings = { "target" : \
             (None,
              env_generator().observation_space["target"],
