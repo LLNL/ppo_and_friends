@@ -42,16 +42,4 @@ sim = MultiAgentWrapper(
         )
     )
 
-policies = {
-    'navigator': (
-        None,
-        sim.sim.agents['navigator'].observation_space,
-        sim.sim.agents['navigator'].action_space,
-        {}
-    )
-}
-
-def policy_mapping_fn(agent_id):
-    return 'navigator'
-
 abmarl_maze_env = sim
