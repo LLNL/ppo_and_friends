@@ -320,27 +320,6 @@ class PPO(object):
 
         comm.barrier()
 
-        #
-        # Some methods (ICM) perform best if we can clone the environment,
-        # but not all environments support this.
-        #
-        if test_mode:
-            self.can_clone_env = False
-        else:
-            # FIXME: we need to refactor our cloning process. Disabling
-            # for now.
-            self.can_clone_env = False
-            #try:
-            #    obs, critic_obs = self.env.reset()
-            #    _, actions, _   = self.get_policy_actions(obs)
-            #    cloned_env      = deepcopy(self.env)
-            #    cloned_env.step(actions)
-            #    self.can_clone_env = True
-            #except:
-            #    self.can_clone_env = False
-
-        rank_print("Can clone environment: {}".format(self.can_clone_env))
-
     def get_policy_batches(self, obs, component):
         """
             This method will take all of the observations from a step
@@ -674,6 +653,28 @@ class PPO(object):
 
         return where_done, where_not_done
 
+    def _tile_aug_results(self, action, raw_action, obs, log_prob):
+        """
+        """
+        for agent_id in obs:
+            batch_size   = obs[agent_id].shape[0]
+
+            action_shape = (batch_size,) + action[agent_id].shape[1:]
+
+            action[agent_id] = np.tile(
+                action[agent_id].flatten(), batch_size)
+            action[agent_id] = action[agent_id].reshape(action_shape)
+
+            raw_action[agent_id] = np.tile(
+                raw_action[agent_id].flatten(), batch_size)
+            raw_action[agent_id] = \
+                raw_action[agent_id].reshape(action_shape)
+
+            lp_shape = (batch_size,) + log_prob[agent_id].shape[1:]
+
+            log_prob[agent_id] = np.tile(
+                log_prob[agent_id].flatten(), batch_size)
+            log_prob[agent_id] = log_prob[agent_id].reshape(lp_shape)
 
     def print_status(self):
         """
@@ -881,26 +882,7 @@ class PPO(object):
             # actions into batches as well.
             #
             if self.obs_augment:
-
-                for agent_id in obs:
-                    batch_size   = obs[agent_id].shape[0]
-
-                    action_shape = (batch_size,) + action[agent_id].shape[1:]
-
-                    action[agent_id] = np.tile(
-                        action[agent_id].flatten(), batch_size)
-                    action[agent_id] = action[agent_id].reshape(action_shape)
-
-                    raw_action[agent_id] = np.tile(
-                        raw_action[agent_id].flatten(), batch_size)
-                    raw_action[agent_id] = \
-                        raw_action[agent_id].reshape(action_shape)
-
-                    lp_shape = (batch_size,) + log_prob[agent_id].shape[1:]
-
-                    log_prob[agent_id] = np.tile(
-                        log_prob[agent_id].flatten(), batch_size)
-                    log_prob[agent_id] = log_prob[agent_id].reshape(lp_shape)
+                self._tile_aug_results(self, action, raw_action, obs, log_prob)
 
             value = self.get_detached_dict(value)
 
@@ -1074,16 +1056,14 @@ class PPO(object):
                 #        max ts per episode is long enough, we'll
                 #        hopefully see enough intrinsic reward to
                 #        learn a good policy. In my experience, this
-                #        works, but the learned policies can be a bit
-                #        unstable.
+                #        works best.
                 #     2. If we can clone the environment, we can take
                 #        an extra step with the clone to get the
                 #        intrinsic reward, and we can decide what to
-                #        do with this. Approaches that integrate this
-                #        method tend to learn more stable policies.
+                #        do with this. I've tested this out as well,
+                #        but I haven't seen much advantage.
                 #
-                # If we have this intrinsic reward from a clone step,
-                # we can hand wavily calcluate a "surprise" by taking
+                # We can hand wavily calcluate a "surprise" by taking
                 # the difference between the average intrinsic reward
                 # and the one we get. Adding that to the critic's
                 # output can act as an extra surprise bonus.
@@ -1095,12 +1075,6 @@ class PPO(object):
                         policy_id = self.policy_mapping_fn(agent_id)
 
                         if self.policies[policy_id].enable_icm:
-                            if self.can_clone_env:
-                                intr_rewards[agent_id] = \
-                                    self.policies[policy_id].get_cloned_intrinsic_reward(
-                                        obs            = obs[agent_id],
-                                        obs_augment    = self.obs_augment)
-
                             ism = self.status_dict[policy_id]["intrinsic score avg"]
                             surprise = intr_rewards[agent_id][where_maxed] - ism
 

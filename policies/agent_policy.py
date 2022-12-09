@@ -701,38 +701,6 @@ class AgentPolicy():
 
         return (bs_min, bs_max)
 
-    # FIXME: this doesn't work. We need to calculate actions from all
-    # policies and take a step using that. This will NOT be policy specific.
-    def get_cloned_intrinsic_reward(
-        self,
-        obs,
-        obs_augment):
-        """
-        """
-        if obs_augment:
-            _, clone_action, _ = self.get_action(obs[0:1])
-            env_batch_size = obs[0:1].shape[0]
-        else:
-            _, clone_action, _ = self.get_action(obs)
-            env_batch_size = obs.shape[0]
-
-        clone_prev_obs = obs.copy()
-        cloned_env = deepcopy(env)
-        clone_obs, _, _, clone_info = cloned_env.step(clone_action)
-        del cloned_env
-
-        if obs_augment:
-            action_shape = (env_batch_size,) + clone_action.shape[1:]
-            clone_action = np.tile(clone_action.flatten(), env_batch_size)
-            clone_action = clone_action.reshape(action_shape)
-
-        intr_reward = self.get_intrinsic_reward(
-            clone_prev_obs,
-            clone_obs,
-            clone_action)
-
-        return intr_reward
-
     def save(self, save_path):
         """
         """
