@@ -74,21 +74,21 @@ class EnvironmentLauncher(ABC):
         """
             Run the PPO algorithm.
         """
-    
+
         ppo = PPO(policy_settings   = policy_settings,
                   policy_mapping_fn = policy_mapping_fn,
                   env_generator     = env_generator,
                   device            = device,
                   test_mode         = test,
                   **kw_args)
-    
+
         if test:
             test_policy(ppo,
                         explore_while_testing,
                         render_gif,
                         num_test_runs,
                         device)
-        else: 
+        else:
             ppo.learn(num_timesteps)
 
 
@@ -290,7 +290,7 @@ class MountainCarLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     epochs_per_iter    = 32, 
+                     epochs_per_iter    = 32,
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
                      normalize_obs      = False,
@@ -853,7 +853,7 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             # They have more advanced ways of rendering.
             #
             self.kw_launch_args["render"] = False
-    
+
             gym_generator = lambda : gym.make(
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
@@ -864,7 +864,7 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
                 'Breakout-ram-v0',
                 repeat_action_probability = 0.0,
                 frameskip = 1)
-    
+
         breakout_generator = lambda : BreakoutRAMEnvWrapper(
             env              = gym_generator(),
             allow_life_loss  = self.kw_launch_args["test"],
@@ -872,17 +872,17 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             skip_k_frames    = 4)
 
         env_generator = lambda : SingleAgentGymWrapper(breakout_generator())
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 128
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
-    
+
         lr     = 0.0003
         min_lr = 0.0
-    
+
         lr_dec = LinearDecrementer(
             max_iteration = 4000,
             max_value     = lr,
@@ -901,9 +901,9 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
-    
+
         ts_per_rollout = num_procs * 512
-    
+
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
@@ -1138,7 +1138,7 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         #
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('HumanoidStandup-v2'))
-    
+
         #
         #    Positions: 22
         #    Velocities: 23
@@ -1156,13 +1156,13 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         actor_kw_args["distribution_min"] = -0.4
         actor_kw_args["distribution_max"] = 0.4
         actor_kw_args["hidden_size"]      = 256
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
-    
+
         lr     = 0.0003
         min_lr = 0.0001
-    
+
         lr_dec = LinearDecrementer(
             max_iteration = 200.0,
             max_value     = lr,
@@ -1180,9 +1180,9 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
-    
+
         ts_per_rollout = num_procs * 512
-    
+
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
@@ -1415,27 +1415,27 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 critic_view = "policy",
                 policy_mapping_fn = lambda *args : "rware",
                 add_agent_ids = True)
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 256
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
-    
+
         lr     = 0.0003
         min_lr = 0.0001
-    
+
         lr_dec = LinearDecrementer(
             max_timestep  = 1000000,
             max_value     = lr,
             min_value     = min_lr)
-    
+
         #FIXME: testing replacing with ICM
         #entropy_weight     = 0.015
         entropy_weight     = 0.01
         min_entropy_weight = 0.01
-    
+
         entropy_dec = LinearDecrementer(
             max_timestep  = 1000000,
             max_value     = entropy_weight,
@@ -1463,7 +1463,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             policy_args   = policy_args)
 
         ts_per_rollout = num_procs * 1024
-    
+
         #
         # This environment comes from arXiv:2006.07869v4.
         # This is a very sparse reward environment, and there are series of
@@ -1503,25 +1503,25 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
             MultiAgentGymWrapper(
                 gym.make('rware-small-4ag-v1'),
                 add_agent_ids = True)
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 256
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
-    
+
         lr     = 0.0003
         min_lr = 0.0001
-    
+
         lr_dec = LinearDecrementer(
             max_iteration = 6000,
             max_value     = lr,
             min_value     = min_lr)
-    
+
         entropy_weight     = 0.05
         min_entropy_weight = 0.01
-    
+
         entropy_dec = LinearDecrementer(
             max_iteration = 6000,
             max_value     = entropy_weight,
@@ -1544,9 +1544,9 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
             policy_name   = "rware",
             env_generator = env_generator,
             policy_args   = policy_args)
-    
+
         ts_per_rollout = num_procs * 512
-    
+
         #
         # This is a very sparse reward environment, and there are series of
         # complex actions that must occur in between rewards. Because of this,
@@ -1643,22 +1643,22 @@ class PressurePlateLauncher(EnvironmentLauncher):
 
         env_generator = lambda : \
             MultiAgentGymWrapper(gym.make('pressureplate-linear-4p-v0'))
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 128
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
-    
+
         lr     = 0.0003
         min_lr = 0.0001
-    
+
         lr_dec = LinearDecrementer(
             max_iteration = 1500,
             max_value     = lr,
             min_value     = min_lr)
-    
+
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -1677,7 +1677,7 @@ class PressurePlateLauncher(EnvironmentLauncher):
             policy_args   = policy_args)
 
         ts_per_rollout = num_procs * 512
-    
+
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
@@ -1706,11 +1706,11 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
             msg += "This environment is installed from its git repository."
             rank_print(msg)
             comm.Abort()
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 32
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 64
 
@@ -1721,7 +1721,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
             max_iteration  = 300,
             max_value      = lr,
             min_value      = min_lr)
-    
+
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
@@ -1747,7 +1747,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         }
 
         ts_per_rollout = num_procs * 128
-    
+
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
@@ -1771,11 +1771,11 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
             msg += "This environment is installed from its git repository."
             rank_print(msg)
             comm.Abort()
-    
+
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 64
-    
+
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 128
 
@@ -1786,7 +1786,7 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
             max_iteration  = 300,
             max_value      = lr,
             min_value      = min_lr)
-    
+
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
@@ -1820,7 +1820,7 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
         }
 
         ts_per_rollout = num_procs * 256
-    
+
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
