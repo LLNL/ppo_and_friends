@@ -1431,9 +1431,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             max_value     = lr,
             min_value     = min_lr)
 
-        #FIXME: testing replacing with ICM
-        #entropy_weight     = 0.015
-        entropy_weight     = 0.01
+        entropy_weight     = 0.015
         min_entropy_weight = 0.01
 
         entropy_dec = LinearDecrementer(
@@ -1447,11 +1445,9 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
             "lr_dec"             : lr_dec,
-            "bootstrap_clip"     : (-1, 1),
+            "bootstrap_clip"     : (0., 10.),
             "entropy_weight"     : entropy_weight,
             "entropy_dec"        : entropy_dec,
-            "enable_icm"         : True,#FIXME: testing
-            "intr_reward_weight" : 0.001,
         }
 
         #
@@ -1483,7 +1479,6 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 policy_settings    = policy_settings,
                 policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 10000,
-                ext_reward_weight  = 10.,
                 epochs_per_iter    = 5,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
