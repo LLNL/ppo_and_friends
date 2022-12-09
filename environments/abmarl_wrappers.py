@@ -16,11 +16,6 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
                  **kw_args):
         """
         """
-        self.fig, _ = plt.subplots()
-
-        self.agent_ids = tuple(agent.id for agent in env.sim.agents.values() if
-            isinstance(agent, Agent))
-
         super(AbmarlWrapper, self).__init__(
             env               = env,
             test_mode         = test_mode,
@@ -29,6 +24,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             policy_mapping_fn = policy_mapping_fn,
             *kw_args)
 
+        self.fig = None
         self.need_action_wrap = False
 
         for agent_id in self.action_space:
@@ -38,6 +34,14 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
                 self._wrap_action_space(self.action_space)
                 self.need_action_wrap = True
                 break
+
+    def _define_agent_ids(self):
+        """
+        """
+        self.agent_ids = tuple(agent.id for agent in
+            self.env.sim.agents.values() if isinstance(agent, Agent))
+
+        self.num_agents = len(self.agent_ids)
 
     def _define_multi_agent_spaces(self):
         """
@@ -89,7 +93,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
     def step(self, actions):
         """
         """
-        # FIXME: need to add agents that are missing (death or turns)
+        # TODO: need to implement turn masking.
+        actions = self._filter_done_agent_actions(actions)
 
         if self.need_action_wrap:
             obs, reward, done, info = self._action_wrapped_step(actions)
@@ -97,11 +102,14 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             obs, reward, done, info = self.env.step(actions)
 
         self.all_done = self._get_all_done(done)
+        self._update_done_agents(done)
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        obs        = self._apply_death_mask(obs, done)
+        obs, reward, done, info = self._apply_death_mask(
+            obs, reward, done, info)
+
         critic_obs = self._construct_critic_observation(
             obs, done)
 
@@ -116,6 +124,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             obs = self._add_agent_ids_to_obs(obs)
 
         done = {a_id : False for a_id in obs}
+        self._update_done_agents(done)
 
         critic_obs = self._construct_critic_observation(
             obs, done)
@@ -125,6 +134,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
     def render(self, **kw_args):
         """
         """
-        #FIXME: there are still some issues with this.
+        if self.fig is None:
+            self.fig, _ = plt.subplots()
+
         self.env.render(fig=self.fig)
 

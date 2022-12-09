@@ -20,6 +20,8 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
     def step(self, actions):
         """
         """
+        actions = self._filter_done_agent_actions(actions)
+
         obs, critic_obs, reward, done, info = \
             self._wrap_gym_step(*self.env.step(
                 self._unwrap_action(actions)))
@@ -66,8 +68,6 @@ class SingleAgentGymWrapper(PPOGymWrapper):
                  **kw_args):
         """
         """
-        self.agent_ids = ("agent0",)
-
         super(SingleAgentGymWrapper, self).__init__(
             env,
             test_mode,
@@ -84,6 +84,12 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         # actions to be squeezed before they can be sent to the env.
         #
         self.action_squeeze = need_action_squeeze(self.env)
+
+    def _define_agent_ids(self):
+        """
+        """
+        self.agent_ids  = ("agent0",)
+        self.num_agents = 1
 
     def _define_multi_agent_spaces(self):
         """
@@ -148,7 +154,6 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        obs        = self._apply_death_mask(obs, done)
         critic_obs = self._construct_critic_observation(obs, done)
 
         return obs, critic_obs, reward, done, info
@@ -167,6 +172,7 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         obs = {agent_id : obs}
 
         done = {agent_id : False}
+        self._update_done_agents(done)
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
@@ -188,9 +194,6 @@ class MultiAgentGymWrapper(PPOGymWrapper):
                  **kw_args):
         """
         """
-        self.num_agents = len(env.observation_space)
-        self.agent_ids  = tuple(f"agent{i}" for i in range(self.num_agents))
-
         super(MultiAgentGymWrapper, self).__init__(
             env,
             test_mode,
@@ -202,6 +205,12 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         # actions to be squeezed before they can be sent to the env.
         #
         self.action_squeeze = need_action_squeeze(self.env)
+
+    def _define_agent_ids(self):
+        """
+        """
+        self.num_agents = len(self.env.observation_space)
+        self.agent_ids  = tuple(f"agent{i}" for i in range(self.num_agents))
 
     def _define_multi_agent_spaces(self):
         """
@@ -281,7 +290,12 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
-        wrapped_obs = self._apply_death_mask(wrapped_obs, wrapped_done)
+        self._update_done_agents(wrapped_done)
+
+        wrapped_obs, wrapped_reward, wrapped_done, wrapped_info = \
+            self._apply_death_mask(
+                wrapped_obs, wrapped_reward, wrapped_done, wrapped_info)
+
         critic_obs  = self._construct_critic_observation(
             wrapped_obs, wrapped_done)
 
@@ -306,6 +320,8 @@ class MultiAgentGymWrapper(PPOGymWrapper):
             wrapped_obs[a_id] = agent_obs
 
             wrapped_done[a_id] = False
+
+        self._update_done_agents(wrapped_done)
 
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
