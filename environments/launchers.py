@@ -32,6 +32,7 @@ except:
 try:
     from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
     from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
+    from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
     HAVE_ABMARL = True
 except:
     HAVE_ABMARL = False
@@ -1726,7 +1727,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-	    "lr_dec"           : lr_dec,
+	    "lr_dec"             : lr_dec,
             "bootstrap_clip"     : (-1, 1),
         }
 
@@ -1759,4 +1760,72 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
                      normalize_rewards  = False,
                      obs_clip           = None,
                      reward_clip        = None,
+                     **self.kw_launch_args)
+
+
+class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
+
+    def launch(self):
+        if not HAVE_ABMARL:
+            msg  = "ERROR: unable to import the Abmarl environments. "
+            msg += "This environment is installed from its git repository."
+            rank_print(msg)
+            comm.Abort()
+    
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 64
+    
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 128
+
+        lr     = 0.0003
+        min_lr = 0.0001
+
+        lr_dec = LinearDecrementer(
+            max_iteration  = 300,
+            max_value      = lr,
+            min_value      = min_lr)
+    
+        policy_args = {\
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : lr,
+	    "lr_dec"             : lr_dec,
+            "bootstrap_clip"     : (-10, 10),
+        }
+
+
+        def policy_mapping_fn(agent_id):
+            return 'runner' if agent_id.startswith('runner') else 'target'
+
+        env_generator = lambda : \
+                AbmarlWrapper(env               = abmarl_rtt_env,
+                              policy_mapping_fn = policy_mapping_fn)
+
+        policy_settings = { "target" : \
+            (None,
+             env_generator().observation_space["target"],
+             env_generator().critic_observation_space["target"],
+             env_generator().action_space["target"],
+             policy_args),
+
+            "runner" :
+            (None,
+             env_generator().observation_space["runner0"],
+             env_generator().critic_observation_space["runner0"],
+             env_generator().action_space["runner0"],
+             policy_args)
+        }
+
+        ts_per_rollout = num_procs * 256
+    
+        self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 256,
+                     epochs_per_iter    = 20,
+                     max_ts_per_ep      = 32,
+                     ts_per_rollout     = ts_per_rollout,
                      **self.kw_launch_args)
