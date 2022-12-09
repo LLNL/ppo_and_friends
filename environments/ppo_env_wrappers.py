@@ -3,6 +3,7 @@
     specific to any type of environment.
 """
 import numpy as np
+import numbers
 from copy import deepcopy
 from functools import reduce
 import sys
@@ -325,6 +326,7 @@ class PPOEnvironmentWrapper(ABC):
                  add_agent_ids     = False,
                  critic_view       = "global",
                  policy_mapping_fn = None,
+                 death_mask_reward = 0.0,
                  **kw_args):
         """
             Initialize the wrapper.
@@ -350,6 +352,27 @@ class PPOEnvironmentWrapper(ABC):
         self.critic_view       = critic_view
         self.policy_mapping_fn = policy_mapping_fn
 
+        self._define_agent_ids()
+
+        if type(death_mask_reward) == dict:
+            self.death_mask_reward = death_mask_reward
+
+            for agent_id in self.agent_ids:
+                assert agent_id in self.death_mask_reward
+
+        elif isinstance(death_mask_reward, numbers.Number):
+            self.death_mask_reward = {}
+
+            for agent_id in self.agent_ids:
+                self.death_mask_reward[agent_id] = death_mask_reward
+
+        else:
+            msg  = f"ERROR: unexpected type of {type(death_mask_reward)} "
+            msg += "for death_mask_reward. Expecting type dict, int, or "
+            msg += "float."
+            rank_print(msg)
+            comm.Abort()
+
         self.action_space             = Dict()
         self.observation_space        = Dict()
         self.critic_observation_space = Dict()
@@ -359,6 +382,8 @@ class PPOEnvironmentWrapper(ABC):
 
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
+
+        self.agents_done = {a_id : False for a_id in self.agent_ids}
 
         self.agent_int_ids = {}
         for a_idx, a_id in enumerate(self.agent_ids):
@@ -401,22 +426,59 @@ class PPOEnvironmentWrapper(ABC):
             rank_print(msg)
             comm.Abort()
 
-    def _apply_death_mask(self, obs, done):
+    def _update_done_agents(self, done):
         """
         """
-        if np.array(done).all():
-            return obs
-
-        #
-        # TODO: we may want to allow users to define what
-        # values their death mask uses.
-        #
         for agent_id in done:
-            if done[agent_id]:
-                obs[agent_id]  = np.zeros_like(obs[agent_id])
-                done[agent_id] = False
+            self.agents_done[agent_id] = done[agent_id]
 
-        return obs
+    def _filter_done_agent_actions(self, actions):
+        """
+        """
+        filtered_actions = {}
+
+        for agent_id in actions:
+            if not self.agents_done[agent_id]:
+                filtered_actions[agent_id] = actions[agent_id]
+
+        return filtered_actions
+
+    def _apply_death_mask(self, obs, reward, done, info):
+        """
+        """
+        for agent_id in self.agent_ids:
+            if self.agents_done[agent_id]:
+
+                #
+                # Case 1: an agent has died during the current step. In this
+                # case, we want to keep the reward, observation, and info, but
+                # we need to set done to False.
+                #
+                if agent_id in obs:
+                    done[agent_id] = False
+
+                #
+                # Case 2: the agent died in a previous step. We now need to zero
+                # out the observations and rewards and set info to empty.
+                #
+                else:
+                    obs[agent_id] = np.zeros(
+                        self.observation_space[agent_id].shape)
+                    obs[agent_id] = obs[agent_id].astype(
+                        self.observation_space[agent_id].dtype)
+
+                    reward[agent_id] = self.death_mask_reward[agent_id]
+                    done[agent_id]   = self.all_done
+                    info[agent_id]   = {}
+
+            elif agent_id not in obs:
+                msg  = "ERROR: encountered an agent_id that is not done, but "
+                msg += "it's missing from the observation. This may be a turn "
+                msg += "based game, which is not yet supported."
+                rank_print(msg)
+                comm.Abort()
+
+        return obs, reward, done, info
 
     def _add_agent_ids_to_obs(self, obs):
         """
@@ -581,7 +643,7 @@ class PPOEnvironmentWrapper(ABC):
             #
             if a_id not in obs or (done[a_id] and not self.all_done):
                 mask      = np.zeros(obs_size)
-                mask      = mask.astype(critic_obs_data.dtype)
+                mask      = mask.astype(self.observation_space.dtype)
                 agent_obs = mask.flatten()
 
             elif a_id in obs:
@@ -614,6 +676,12 @@ class PPOEnvironmentWrapper(ABC):
         else:
             rank_print(f"ERROR: unknown critic_view, {self.critic_view}.")
             comm.Abort()
+
+    @abstractmethod
+    def _define_agent_ids(self):
+        """
+        """
+        return
 
     @abstractmethod
     def _define_multi_agent_spaces(self):
