@@ -480,6 +480,15 @@ class PPO(object):
 
     def get_policy_values(self, obs):
         """
+            Given a dictionary mapping agent ids to observations,
+            construct a dictionary mapping agent ids to values
+            predicted by the policy critics.
+
+            Arguments:
+                obs    A dictionary mapping agent ids to observations.
+
+            Returns:
+                A dictionary mapping agent ids to critic values.
         """
         values = {}
 
@@ -507,6 +516,18 @@ class PPO(object):
 
     def get_natural_reward(self, info):
         """
+            Given an info dictionary, construct a dictionary mapping
+            agent ids to their natural rewards.
+
+            Arguments:
+                info    The info dictionary. Each element is a sub-dictionary
+                        mapping agent ids to their info.
+
+            Returns:
+                A tuple of form (have_natural_rewards, natural_rewards) s.t.
+                the first index is a boolean signifying whether or not natural
+                rewards were found, and the second index contains a dictionary
+                mapping agent ids to their natural rewards.
         """
         have_nat_reward = False
         natural_reward  = {}
@@ -529,6 +550,16 @@ class PPO(object):
 
     def get_detached_dict(self, attached):
         """
+            Given a dictionary mapping agent ids to torch
+            tensors, create a replica of this dictionary
+            containing detached numpy arrays.
+
+            Arguments:
+                attached    A dictionary mapping agent ids to
+                            torch tensors.
+
+            Returns:
+                A replication of "attached" that maps to numpy arrays.
         """
         detached = {}
 
@@ -540,6 +571,15 @@ class PPO(object):
 
     def get_denormalized_values(self, values):
         """
+            Given a dictionary mapping agent ids to critic values,
+            return a replica of this dictionary containing de-normalized
+            values.
+
+            Arguments:
+                values    A dictionary mapping agnet ids to values.
+
+            Returns:
+                A replica of "values" mapping to de-normalized values.
         """
         denorm_values = {}
 
@@ -553,6 +593,15 @@ class PPO(object):
 
     def get_normalized_values(self, values):
         """
+            Given a dictionary mapping agent ids to critic values,
+            return a replica of this dictionary containing normalized
+            values.
+
+            Arguments:
+                values    A dictionary mapping agnet ids to values.
+
+            Returns:
+                A replica of "values" mapping to normalized values.
         """
         norm_values = {}
 
@@ -568,6 +617,16 @@ class PPO(object):
                                      info,
                                      dones):
         """
+            Handle non-terminal dones. Non-terminal dones are a special
+            case where an environment can be "done" without it being terminal.
+
+            Arguments:
+                info    The info dictionary.
+                dones   The done dictionary.
+
+            Returns:
+                A numpy array signifying which environments are non-terminally
+                done.
         """
         first_agent = next(iter(dones))
         batch_size  = dones[first_agent].size
@@ -590,13 +649,23 @@ class PPO(object):
 
         return np.where(non_terminal_dones)[0]
 
-    def np_dict_to_tensor_dict(self, obs):
+    def np_dict_to_tensor_dict(self, numpy_dict):
         """
+            Given a dictionary mapping agent ids to numpy arrays,
+            return a replicat of this dictionary mapping to torch
+            tensors.
+
+            Arguments:
+                 numpy_dict    A dictionary mapping agent ids to numpy
+                               arrays.
+
+            Returns:
+                A replica of "numpy_dict" that maps to torch tensors.
         """
         tensor_dict = {}
 
-        for agent_id in obs:
-            tensor_dict[agent_id] = torch.tensor(obs[agent_id],
+        for agent_id in numpy_dict:
+            tensor_dict[agent_id] = torch.tensor(numpy_dict[agent_id],
                 dtype=torch.float).to(self.device)
 
         return tensor_dict
@@ -607,6 +676,20 @@ class PPO(object):
                                 obs,
                                 actions):
         """
+            Apply intrinsic rewards to our extrinsic rewards when using
+            ICM.
+
+            Arguments:
+                rewards    The rewards dictionary.
+                prev_obs   The previous observation dictionary.
+                obs        The current observation dictionary.
+                actions    The actions dictionary.
+
+            Returns:
+                A tuple of form (rewards, intr_rewards) s.t. "rewards" is
+                an updated version of the input rewards that have the intrinsic
+                rewards applied, and "intr_rewards" is a dictionary containing
+                the intrinsic rewards alone.
         """
         intr_rewards = {}
 
@@ -630,6 +713,14 @@ class PPO(object):
                             rewards,
                             weight):
         """
+            Apply a wieght to a reward dictionary.
+
+            Arguments:
+                rewards    The rewards dictionary.
+                weight     A weight to apply to all rewards.
+
+            Returns:
+                The input rewards dictionary after applying the weight.
         """
         for agent_id in rewards:
             rewards[agent_id] *= weight
@@ -639,6 +730,16 @@ class PPO(object):
     def get_done_envs(self,
                       dones):
         """
+            Determine which environments are done. Because we death mask,
+            we will never be in a situation where an agent is done before
+            its associated environment is done.
+
+            Arguments:
+                dones    The done dictionary.
+
+            Returns:
+                A tuple of form (where_done, where_not_done), which contains
+                numpy arrays determining which environments are done/not done.
         """
         first_id   = next(iter(dones))
         batch_size = dones[first_id].size
@@ -655,6 +756,15 @@ class PPO(object):
 
     def _tile_aug_results(self, action, raw_action, obs, log_prob):
         """
+            When in-line augmentation is enabled, we need to tile
+            some of our results from taking a step. The observations
+            are augmented, and the actions remain the same.
+
+            Arguments:
+                action       The action dictionary.
+                raw_action   The raw action dictionary.
+                obs          The observation dictionary.
+                log_prob     The log prob dictionary.
         """
         for agent_id in obs:
             batch_size   = obs[agent_id].shape[0]
