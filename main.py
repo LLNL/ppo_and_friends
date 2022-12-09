@@ -90,7 +90,7 @@ if __name__ == "__main__":
                  "LevelBasedForaging",
                  "PressurePlate",
                  "AbmarlMaze",
-                 "AirstrikerRAM",
+                 "AbmarlReachTheTarget",
                  "BinaryCartPole",
                  "BinaryLunarLander",
                  ])
