@@ -263,6 +263,17 @@ class AgentPolicy():
         critic_kw_args,
         icm_kw_args):
         """
+            Initialize our networks.
+
+            Arguments:
+                ac_network        The network class to use for the actor
+                                  and critic.
+                enable_icm        Whether or not to enable ICM.
+                icm_network       The network class to use for ICM (when
+                                  enabled).
+                actor_kw_args     Keyword args for the actor network.
+                critic_kw_args    Keyword args for the critic network.
+                icm_kw_args       Keyword args for the ICM network.
         """
         #
         # Initialize our networks: actor, critic, and possibly ICM.
@@ -364,13 +375,18 @@ class AgentPolicy():
 
     def initialize_episodes(self, env_batch_size, status_dict):
         """
+            Initialize episodes for rollout collection. This should be called
+            at the start of a rollout.
+
+            Arguments:
+                env_batch_size    The number of environments per processor.
+                status_dict       The status dictionary.
         """
         #
         # NOTE that different agents will map to different polices, meaning
         # that our dictionaries can be different sizes for each policy, but
         # the number of environment instances will be consistent.
         #
-
         self.episodes = {}
         for agent_id in self.agent_ids:
             self.episodes[agent_id] = np.array([None] * env_batch_size,
@@ -388,6 +404,8 @@ class AgentPolicy():
 
     def initialize_dataset(self):
         """
+            Initialize a rollout dataset. This should be called at the
+            onset of a rollout.
         """
         sequence_length = 1
         if self.using_lstm:
@@ -408,6 +426,11 @@ class AgentPolicy():
 
     def validate_agent_id(self, agent_id):
         """
+            Assert that a given agent id is associated with this policy.
+            This will Abort if the id is invalid.
+
+            Arguments:
+                agent_id    The agent id in question.
         """
         if agent_id not in self.agent_ids:
             msg  = f"ERROR: agent {agent_id} has not been registered with "
@@ -429,6 +452,23 @@ class AgentPolicy():
         rewards, 
         where_done):
         """
+            Log information about a single step in an episode during a rollout.
+            Note that our observaionts, etc, will be batched across environment
+            instances, so we can have multiple observations for a single step.
+
+            Arguments:
+                agent_id             The agent id that this episode info is
+                                     associated with.
+                critic_observations  The critic observation(s).
+                observations         The actor observation(s).
+                next_observations    The actor observation(s.
+                raw_actions          The raw action(s).
+                actions              The actions(s) taken in the environment.
+                values               The value(s) from our critic.
+                log_probs            The log_prob(s) of our action distribution.
+                rewards              The reward(s) received.
+                where_done           Indicies mapping to which environments are
+                                     done.
         """
         self.validate_agent_id(agent_id)
         env_batch_size = self.episodes[agent_id].size
@@ -504,6 +544,16 @@ class AgentPolicy():
         ending_rewards,
         status_dict):
         """
+            End a rollout episode.
+
+            Arguments:
+                agent_id         The associated agent id.
+                env_idxs         The associated environment indices.
+                episode_lengths  The lenghts of the ending episode(s).
+                terminal         Which episodes are terminally ending.
+                ending_values    Ending values for the episode(s).
+                ending_rewards   Ending rewards for the episode(s)
+                status_dict      The status dictionary.
         """
         self.validate_agent_id(agent_id)
 
@@ -540,11 +590,15 @@ class AgentPolicy():
 
     def finalize_dataset(self):
         """
+            Build our rollout dataset. This should be called after
+            the rollout has taken place and before training begins.
         """
         self.dataset.build()
 
     def clear_dataset(self):
         """
+            Clear existing datasets. This should be called before
+            a new rollout.
         """
         self.dataset  = None
         self.episodes = {}
@@ -674,6 +728,11 @@ class AgentPolicy():
 
     def update_learning_rate(self, iteration, timestep):
         """
+            Update the learning rate.
+
+            Arguments:
+                iteration        The current training iteration.
+                timestep         The current training timestep.
         """
         self.lr = self.lr_dec(
             iteration = iteration,
@@ -732,6 +791,10 @@ class AgentPolicy():
 
     def save(self, save_path):
         """
+            Save our policy.
+
+            Arguments:
+                save_path    The path to save the policy to.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_save_path = os.path.join(save_path, policy_dir)
@@ -749,6 +812,10 @@ class AgentPolicy():
 
     def load(self, load_path):
         """
+            Load our policy.
+
+            Arguments:
+                load_path    The path to load the policy from.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_load_path = os.path.join(load_path, policy_dir)
@@ -761,6 +828,7 @@ class AgentPolicy():
 
     def eval(self):
         """
+            Set the policy to evaluation mode.
         """
         self.actor.eval()
         self.critic.eval()
@@ -770,6 +838,7 @@ class AgentPolicy():
 
     def train(self):
         """
+            Set the policy to train mode.
         """
         self.actor.train()
         self.critic.train()
@@ -802,6 +871,10 @@ class AgentPolicy():
 
     def __eq__(self, other):
         """
+            Compare two policies.
+
+            Arguments:
+                other        An instance of AgentPolicy.
         """
         #
         # TODO: we currently don't compare optimizers because that
@@ -832,6 +905,7 @@ class AgentPolicy():
 
     def __str__(self):
         """
+            A string representation of the policy.
         """
         str_self  = "AgentPolicy:\n"
         str_self += "    action space: {}\n".format(self.action_space)
