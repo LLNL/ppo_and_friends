@@ -20,6 +20,11 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 class AgentPolicy():
+    """
+        A class representing a policy. A policy can be
+        used by more than one agent, and more than one policy
+        can exist in a given learning environment.
+    """
 
     def __init__(self,
                  name,
@@ -49,6 +54,27 @@ class AgentPolicy():
                  test_mode           = False):
         """
             Arguments:
+                 name                 The name of this policy.
+                 action_space         The action space of this policy.
+
+                 actor_observation_space   The actor's observation space.
+                 critic_observation-space  The critic's observation space.
+
+                 bootstrap_clip       When using GAE, we bootstrap the values
+                                      and rewards when an epsiode is cut off
+                                      before completion. In these cases, we
+                                      clip the bootstrapped reward to a
+                                      specific range. Why is this? Well, our
+                                      estimated reward (from our value network)
+                                      might be way outside of the expected
+                                      range. We also allow the range min/max
+                                      to be callables that take in the
+                                      current iteration.
+                 ac_network           The type of network to use for the actor
+                                      and critic.
+                 actor_kw_args        Keyword arguments for the actor network.
+                 critic_kw_args       Keyword arguments for the critic network.
+                 icm_kw_args          Keyword arguments for the icm network.
                  target_kl            KL divergence used for early stopping.
                                       This is typically set in the range
                                       [0.1, 0.5]. Use high values to disable.
@@ -70,28 +96,23 @@ class AgentPolicy():
                                       This class has a decrement function that
                                       will be used to updated the entropy
                                       weight.
-                 lambd                The 'lambda' value for calculating GAEs.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
                                       vanilla advantage calculation.
-                 bootstrap_clip       When using GAE, we bootstrap the values
-                                      and rewards when an epsiode is cut off
-                                      before completion. In these cases, we
-                                      clip the bootstrapped reward to a
-                                      specific range. Why is this? Well, our
-                                      estimated reward (from our value network)
-                                      might be way outside of the expected
-                                      range. We also allow the range min/max
-                                      to be callables that take in the
-                                      current iteration.
+                 gamma                The gamma parameter used in calculating
+                                      rewards to go.
+                 lambd                The 'lambda' value for calculating GAEs.
                  dynamic_bs_clip      If set to True, bootstrap_clip will be
                                       used as the initial clip values, but all
                                       values thereafter will be taken from the
                                       global min and max rewards that have been
                                       seen so far.
+                 enable_icm           Boolean flag. Enable ICM?
                  icm_network          The network to use for ICM applications.
+                 intr_reward_weight   When using ICM, this weight will be
+                                      applied to the intrinsic reward.
                  icm_beta             The beta value used within the ICM.
-
+                 test_mode            Boolean flag. Are we in test mode?
         """
         self.name               = name
         self.action_space       = action_space
@@ -212,11 +233,19 @@ class AgentPolicy():
 
     def register_agent(self, agent_id):
         """
+            Register an agent with this policy.
+
+            Arguments:
+                agent_id    The id of the agent to register.
         """
         self.agent_ids = self.agent_ids.union({agent_id})
 
     def to(self, device):
         """
+            Send this policy to a specified device.
+
+            Arguments:
+                device    The device to send this policy to.
         """
         self.device    = device
         self.actor     = self.actor.to(self.device)
