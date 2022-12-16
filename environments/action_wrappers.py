@@ -84,7 +84,7 @@ class BoxIntActionWrapper():
         self.range     = space.high - space.low
         self.offsets   = space.low
 
-        self.multi_discrete_space = MultiDiscrete(self.range + 1)
+        self.multi_discrete_space = MultiDiscrete(self.range - space.low)
 
     def sample(self):
         """
