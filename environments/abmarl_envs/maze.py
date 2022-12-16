@@ -1,6 +1,7 @@
 import os
 import numpy as np
-from abmarl.examples import MazeNavigationAgent, MazeNavigationSim
+from ppo_and_friends.environments.abmarl_envs.maze_sim import AlternateMazeNavigationSim
+from abmarl.examples import MazeNavigationAgent
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
 from abmarl.external import MultiAgentWrapper
@@ -32,7 +33,7 @@ file_name = os.path.join(os.path.realpath(
 sim = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
-                MazeNavigationSim.build_sim_from_file(
+                AlternateMazeNavigationSim.build_sim_from_file(
                     file_name,
                     object_registry,
                     overlapping={1: [3], 3: [1]},
