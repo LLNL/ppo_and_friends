@@ -1,9 +1,14 @@
+"""
+    Wrappers for Abmarl environments.
+    https://abmarl.readthedocs.io/en/latest/index.html
+"""
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
 from gym.spaces import Dict, Box
 import numpy as np
 import matplotlib.pyplot as plt
+
 
 class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
@@ -15,6 +20,17 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
                  policy_mapping_fn = None,
                  **kw_args):
         """
+            Initialize our environment.
+
+            NOTE: All Abmarl environments need to be wrapped in the
+            FlattenWrapper, which is provided by Abmarl.
+
+            Arguments:
+                env                An instance of the Abmarl environment.
+                test_mode          Are we in test mode?
+                add_agent_ids      Should we add agent ids to the observations?
+                critic_view        What view should the critic have?
+                policy_mapping_fn  The function mapping agent ids to policy ids.
         """
         super(AbmarlWrapper, self).__init__(
             env               = env,
@@ -27,6 +43,11 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         self.fig = None
         self.need_action_wrap = False
 
+        #
+        # Box int is an odd action space that's very common in Abmarl.
+        # What we really want here is a multi discrete action space,
+        # so we're going to wrap our actions if needed.
+        #
         for agent_id in self.action_space:
             space = self.action_space[agent_id]
 
@@ -37,6 +58,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def _define_agent_ids(self):
         """
+            Define our agent ids.
         """
         self.agent_ids = tuple(agent.id for agent in
             self.env.sim.agents.values() if isinstance(agent, Agent))
@@ -45,6 +67,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def _define_multi_agent_spaces(self):
         """
+            Define our multi-agent observation and action spaces.
         """
         if getattr(self.env, "observation_space", None) is not None:
             self.observation_space = self.env.observation_space
@@ -84,6 +107,13 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def _get_all_done(self, done):
         """
+            Determine whether or not all agents are done.
+
+            Arguments:
+                done    A dictionary mapping agent ids to bools.
+
+            Returns:
+                True iff all agents are done.
         """
         for agent_id in done:
             if not done[agent_id]:
@@ -92,6 +122,14 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def step(self, actions):
         """
+            Take a step in the simulation.
+
+            Arguments:
+                actions    A dictionary mapping agent ids to actions.
+
+            Returns:
+                A tuple of form (actor_observation, critic_observation,
+                reward, done, info)
         """
         # TODO: need to implement turn masking.
         actions = self._filter_done_agent_actions(actions)
@@ -117,6 +155,10 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def reset(self):
         """
+            Reset the environment.
+
+            Returns:
+                A tuple of form (actor_observation, critic_observation).
         """
         obs = self.env.reset()
 
@@ -133,6 +175,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def render(self, **kw_args):
         """
+            Render the environment.
         """
         if self.fig is None:
             self.fig, _ = plt.subplots()
