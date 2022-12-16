@@ -16,6 +16,19 @@ def generate_policy(
     test_mode,
     **kw_args):
     """
+        Generate a policy from our arguments.
+
+        Arguments:
+            policy_name               The name of the policy.
+            policy_class              The class to use for the policy.
+            actor_observation_space   The actor observation space.
+            critic_observation_space  The critic observation space.
+            action_space              The action space.
+            test_mode                 Are we in test mode (bool)?
+            kw_args                   Extra keyword args for the policy.
+
+        Returns:
+            The created policy.
     """
     if policy_class not in [None, AgentPolicy]:
         msg  = "ERROR: AgentPolicy is the only currently supported policy "
@@ -39,6 +52,18 @@ def get_single_policy_defaults(
     policy_args,
     policy_name = "single_agent"):
     """
+        A convenience function for creating a single-agent policy for
+        a single agent environment. This function returns the
+        settings needed to pass to the trainer.
+
+        Arguments:
+            env_generator    A function mapping to an instance of our
+                             environment.
+            policy_args      keyword args for the policy class.
+            policy_name      The name of the policy.
+
+        Returns:
+            A tuple of form (policy_settings, policy_mapping_fn).
     """
 
     policy_settings = { policy_name : \
