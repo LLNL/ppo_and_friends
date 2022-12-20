@@ -7,7 +7,6 @@ from collections.abc import Iterable
 
 def wrap_environment(
     env_generator,
-    add_agent_ids         = False,
     envs_per_proc         = 1,
     random_seed           = 2,
     obs_augment           = False,
@@ -18,6 +17,22 @@ def wrap_environment(
     gamma                 = 0.99,
     test_mode             = False):
     """
+        Apply standard wrappers to an environment.
+
+        Arguments:
+            env_generator        A function outputing instances of our env.
+            envs_per_proc        How many env instances per processor?
+            random_seed          The random seed.
+            obs_augment          Apply the obs augment wrapper?
+            normalize_obs        Apply the normalize obs wrapper?
+            normalize_rewards    Apply the normalize rewards wrapper?
+            obs_clip             Apply the obs clip wrapper?
+            reward_clip          Apply the reward clip wrapper?
+            gamma                The gamma/discount for the reward normalizer.
+            test_mode            Are we testing?
+
+        Returns:
+            The wrapped environment.
     """
     #
     # Begin adding wrappers. Order matters!
