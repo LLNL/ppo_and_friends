@@ -34,6 +34,7 @@ class IdentityWrapper(ABC):
 
             Arguments:
                 env           The environment to wrap.
+                test_mode     Are we in test mode? (bool)
         """
         super(IdentityWrapper, self).__init__(**kw_args)
 
@@ -57,6 +58,10 @@ class IdentityWrapper(ABC):
 
     def get_all_done(self):
         """
+            Are all agents done?
+
+            Returns:
+                Whether or not all agents are done (bool).
         """
         return self.env.get_all_done()
 
@@ -319,6 +324,10 @@ class IdentityWrapper(ABC):
 
 
 class PPOEnvironmentWrapper(ABC):
+    """
+        The primary environment wrapper. ALL environments need to be
+        wrapped in this.
+    """
 
     def __init__(self,
                  env,
@@ -332,7 +341,14 @@ class PPOEnvironmentWrapper(ABC):
             Initialize the wrapper.
 
             Arguments:
-                env           The environment to wrap.
+                env                The environment to wrap.
+                test_mode          Are we in test mode?
+                add_agent_ids      Should we add agent ids to the
+                                   observations?
+                critic_view        The view the critic should take.
+                policy_mapping_fn  A function mapping agent ids to policy
+                                   ids.
+                death_mask_reward  The reward to return for death-masked agents.
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
@@ -391,6 +407,15 @@ class PPOEnvironmentWrapper(ABC):
 
     def _expand_space_for_ids(self, space):
         """
+            Expand a given space to include agent ids.
+
+            NOTE: this currently only works for Box spaces.
+
+            Argument:
+                space    The space to expand.
+
+            Returns:
+                The space expanded for agent ids.
         """
         if issubclass(type(space), Box):
             low   = space.low
