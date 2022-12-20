@@ -26,6 +26,31 @@ Some of our friends:
 * Vectorized environments
 * Observational augmentations
 
+# MAPPO
+
+This implementation of PPO supports multi-agent environments (MAPPO), and,
+as such, there are many design decisions to made. Currently, ppo-and-friends
+follows the standards outlined below.
+
+1. All actions sent to the step function will be wrapped in a dictionary
+   mapping agent ids to actions.
+2. Calling `env.step(actions)` will result in a tuple of the following form:
+   `(obs, critic_obs, reward, info, done)` s.t. each tuple element is a
+   dictionary mapping agent ids to the appropriate data.
+3. Death masking is used at all times, which means that all agents are
+   expected to exist in the `step` results as long as an episode hasn't
+   terminated.
+
+Since not all environments will adhere to the above standards, various
+wrappers are provided in the `environments/` directory. For best results,
+all environments should be wrapped in a class inherting from
+`PPOEnvironmentWrapper`.
+
+Design decisions that may have an impact on learning have largely come
+from the following two papers:
+arXiv:2103.01955v2
+arXiv:2006.07869v4
+
 # Installation
 
 After activating a virtual environment, issue the following command from the
@@ -93,6 +118,13 @@ and CPUs when training on multiple processors. This can be overridden with
 the `--alow_mpi_gpu` flag, which is helpful for environments that require
 networks that can benefit from GPUs (convolutions, for example).
 
+NOTE: the current implementation of multiple environment instances per
+processor assumes that the rollout bottleneck will come from inference rather
+than stepping through the environment. Because of this, the multiple environment
+instances are run in succession rather than in parallel, and the speed up
+comes from batched inference during the rollout. Very slow environments may
+not see a performance gain from increasing `envs-per-proc`.
+
 **Usage:**
 
 mpirun:
@@ -131,7 +163,6 @@ Some things to note:
    processor is only collecting 32 timesteps per rollout, the highest
    score any of them could ever achieve would be 32. Therefore, a reported
    score around 32 might actually signal a converged policy.
-4. The `envs_per_proc` flag is currently disabled for multi-agent environments.
 
 # Other Features
 
@@ -208,19 +239,6 @@ but we're ending the trajectory.
 For custom environments, you can add "non-terminal done" as an entry in the
 info dictionary. When True, this will trigger the current trajectory to end
 in a non-terminal state.
-
-# MAPPO
-
-When the `is_multi_agent` flag is used, MAPPO will be utilized for training.
-This implemenation of MAPPO comes from the suggestsions outlined in
-arXiv:2103.01955v2 and arXiv:2006.07869v4.
-
-### Caveats
-1. I've currently only tested cooperative environments, but I plan to soon
-   test competitive and mixed environments as well.
-2. Our current implementation only supports flat observation spaces (Discrete
-   and Box).
-
 
 # Tips And Tricks
 
