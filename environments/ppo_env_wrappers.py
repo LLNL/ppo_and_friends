@@ -453,12 +453,22 @@ class PPOEnvironmentWrapper(ABC):
 
     def _update_done_agents(self, done):
         """
+            Update our dictionary of done agents.
+
+            Arguments:
+                done    The done dictionary from taking a step.
         """
         for agent_id in done:
             self.agents_done[agent_id] = done[agent_id]
 
     def _filter_done_agent_actions(self, actions):
         """
+            Filter out the actions of agents that are done. This allows
+            us to use death masking while preventing dead agents from
+            sending masked actions to the simulation.
+
+            Arguments:
+                actions    The action dictionary to filter.
         """
         filtered_actions = {}
 
@@ -470,6 +480,18 @@ class PPOEnvironmentWrapper(ABC):
 
     def _apply_death_mask(self, obs, reward, done, info):
         """
+            Apply death masking. Note that this will alter the done
+            agents to be not done.
+
+            Arguments:
+                obs        The observation dictionary.
+                reward     The reward dictionary.
+                done       The done diciontary.
+                info       The info dictionary.
+
+            Returns:
+                A death masked tuple containing observations, rewards,
+                dones, and infos.
         """
         for agent_id in self.agent_ids:
             if self.agents_done[agent_id]:
@@ -507,6 +529,13 @@ class PPOEnvironmentWrapper(ABC):
 
     def _add_agent_ids_to_obs(self, obs):
         """
+            Add our agent ids to the given observations.
+
+            Arguments:
+                obs    The observation dictionary.
+
+            Returns:
+                The updated observation dictionary.
         """
         for a_id in obs:
             obs[a_id] = np.concatenate((obs[a_id],
@@ -517,6 +546,8 @@ class PPOEnvironmentWrapper(ABC):
 
     def _define_critic_space(self):
         """
+            Define the observation space for the critic. There are
+            several options here.
         """
         #
         # Local view: the critics only see what the actor sees.
@@ -578,6 +609,16 @@ class PPOEnvironmentWrapper(ABC):
                                              obs,
                                              done):
         """
+            Construct the global view observations for the
+            critic. This view sees observations from all agents
+            in the simulation.
+
+            Arguments:
+                obs    The agent observation dictionary.
+                done   The done dictionary.
+
+            Returns:
+                The critic observations.
         """
         #
         # All agents will share the same critic observations.
@@ -634,6 +675,16 @@ class PPOEnvironmentWrapper(ABC):
                                              obs,
                                              done):
         """
+            Construct the policy view observations for the
+            critic. This view sees observations from all agents
+            that share a policy.
+
+            Arguments:
+                obs    The agent observation dictionary.
+                done   The done dictionary.
+
+            Returns:
+                The critic observations.
         """
         critic_obs  = {}
         policy_data = {}
@@ -691,6 +742,14 @@ class PPOEnvironmentWrapper(ABC):
                                       obs,
                                       done):
         """
+            Construct the critic observations.
+
+            Arguments:
+                obs    The agent observation dictionary.
+                done   The agent done dictionary.
+
+            Returns:
+                The critic observations.
         """
         if self.critic_view == "global":
             return self._construct_global_critic_observation(obs, done)
@@ -705,17 +764,21 @@ class PPOEnvironmentWrapper(ABC):
     @abstractmethod
     def _define_agent_ids(self):
         """
+            Abstract method for defining self.agent_ids.
         """
         return
 
     @abstractmethod
     def _define_multi_agent_spaces(self):
         """
+            Abstract method for defining the action and observation
+            spaces of our agents.
         """
         return
 
     def get_all_done(self):
         """
+            Get the all_done boolean flag.
         """
         return self.all_done
 
@@ -751,6 +814,7 @@ class PPOEnvironmentWrapper(ABC):
 
     def seed(self, seed):
         """
+            Set the seed for this environment.
         """
         self.env.seed(seed)
 
@@ -766,8 +830,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         in the middle of an episode.
         Vectorized environments are also often referred to as environment
         wrappers that contain multiple instances of environments, which then
-        return batches of observations, rewards, etc. We don't currently
-        support this second idea.
+        return batches of observations, rewards, etc. We currently support
+        both.
     """
 
     def __init__(self,
@@ -816,10 +880,11 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             we've reached a "done" state.
 
             Arguments:
-                action    The action to take.
+                action    A dictionary mapping agent ids to actions.
+
             Returns:
-                The resulting observation, reward, done, and info
-                tuple.
+                The resulting observation, critic_observation,
+                reward, done, and info tuple, each being a dictionary.
         """
         #
         # If we're testing, we don't want to return a batch.
@@ -837,10 +902,11 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             we've reached a "done" state.
 
             Arguments:
-                action    The action to take.
+                action    A dictionary mapping agent ids to actions.
+
             Returns:
-                The resulting observation, reward, done, and info
-                tuple.
+                The resulting observation, critic_observation,
+                reward, done, and info tuple, each being a dictionary.
         """
         obs, critic_obs, reward, done, info = self.env.step(action)
 
@@ -861,11 +927,12 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             a batch of results of size self.num_envs.
 
             Arguments:
-                actions    The actions to take.
+                action    A dictionary mapping agent ids to batches
+                          of actions.
 
             Returns:
-                The resulting observation, reward, done, and info
-                tuple.
+                The resulting observation, critic_observation,
+                reward, done, and info tuple, each being a dictionary.
         """
         batch_obs        = {}
         batch_critic_obs = {}
@@ -930,7 +997,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Reset the environment.
 
             Returns:
-                The resulting observation.
+                The resulting observation dictionaries for the actor
+                and critic.
         """
         if self.test_mode:
             return self.single_reset()
@@ -938,6 +1006,13 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
     def soft_reset(self):
         """
+            Perform a soft reset if possible. A soft reset results
+            in picking up where we last left off, rather than actually
+            resetting the environment.
+
+            Returns:
+                The resulting observation dictionaries for the actor
+                and critic.
         """
         if self.need_hard_reset:
             return self.reset()
@@ -948,7 +1023,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Reset the environment.
 
             Returns:
-                The resulting observation.
+                The resulting observation and critic observation
+                dictionaries.
         """
         obs, critic_obs = self.env.reset()
         return obs, critic_obs
@@ -958,7 +1034,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             Reset the batch of environments.
 
             Returns:
-                The resulting observation.
+                The resulting observation and critic observation
+                dictionaries.
         """
         batch_obs        = {}
         batch_critic_obs = {}
