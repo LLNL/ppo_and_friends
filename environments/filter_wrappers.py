@@ -51,6 +51,11 @@ class ObservationFilter(IdentityWrapper, ABC):
 
     def _apply_filters(self, local_obs, critic_obs):
         """
+            Apply our filters.
+
+            Arguments:
+                local_obs      The individual actor observations.
+                critic_obs     The observations for the critic.
         """
         local_obs  = self._filter_local_observation(local_obs)
         critic_obs = self._filter_critic_observation(critic_obs)
