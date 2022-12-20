@@ -1723,7 +1723,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
 	    "lr_dec"             : lr_dec,
-            "bootstrap_clip"     : (-1, 1),
+            "bootstrap_clip"     : (-10., 10.),
         }
 
         policy_name = "abmarl-maze"
@@ -1746,7 +1746,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 128,
+                     batch_size         = 32,
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
