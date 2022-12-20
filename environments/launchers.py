@@ -16,8 +16,8 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
-from ppo_and_friends.environments.action_wrappers import MultiBinaryCartPoleWrapper
-from ppo_and_friends.environments.action_wrappers import MultiBinaryLunarLanderWrapper
+from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryCartPoleWrapper
+from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryLunarLanderWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
@@ -1709,7 +1709,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 64
 
-        lr     = 0.0003
+        lr     = 0.0002
         min_lr = 0.0001
 
         lr_dec = LinearDecrementer(
@@ -1746,7 +1746,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 32,
+                     batch_size         = 128,
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
