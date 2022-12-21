@@ -253,6 +253,9 @@ class MountainCarLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 128
 
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"] = 2
+
         lr     = 0.0003
         min_lr = 0.0001
 
@@ -270,6 +273,7 @@ class MountainCarLauncher(EnvironmentLauncher):
             "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10, 10),
             "enable_icm"       : True,
+            "icm_kw_args"      : icm_kw_args,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -311,10 +315,13 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
         #
         actor_kw_args = {}
         actor_kw_args["activation"]  =  nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+        actor_kw_args["hidden_size"] = 128
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 128
+
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"] = 2
 
         lr     = 0.0003
         min_lr = 0.0003
@@ -329,9 +336,10 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-            "lr_dec"           : lr_dec,
+            "lr_dec"             : lr_dec,
             "bootstrap_clip"     : (-10, 10),
             "enable_icm"         : True,
+            "icm_kw_args"        : icm_kw_args,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -351,7 +359,6 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
-                     use_soft_resets    = True,
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)
