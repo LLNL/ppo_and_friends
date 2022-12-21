@@ -81,15 +81,15 @@ saved state. You can re-run from scratch by using the `--clobber` option.
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-python main.py -e <env_name> --num-test_runs <num_test_runs> --render
+python main.py -e <env_name> --num-test-runs <num_test_runs> --render
 ```
-You can optionally omit the `--render` or add the `--render_gif` flag.
+You can optionally omit the `--render` or add the `--render-gif` flag.
 
 By default, exploration is disabled during testing, but you can enable it
 with the `--test-explore` flag. Example:
 
 ```
-python main.py -e <env_name> --num-test_runs <num_test_runs> --render --test-explore
+python main.py -e <env_name> --num-test-runs <num_test_runs> --render --test-explore
 ```
 
 Note that enabling exploration during testing will have varied results. I've found
@@ -115,7 +115,7 @@ setting suggestions.
 
 Currently, the default is to use GPUs when training on a single processor
 and CPUs when training on multiple processors. This can be overridden with
-the `--alow_mpi_gpu` flag, which is helpful for environments that require
+the `--alow-mpi-gpu` flag, which is helpful for environments that require
 networks that can benefit from GPUs (convolutions, for example).
 
 NOTE: the current implementation of multiple environment instances per
@@ -143,7 +143,7 @@ Some things to note:
    processor will collect 1024/N of those timesteps, where N is the total
    number of processors (remainders go to processor 0). Note that there
    are various side effects of this, some of which are outlined below.
-   Also, `envs_per_proc` can have a similar effect on reducing the total
+   Also, `envs-per-proc` can have a similar effect on reducing the total
    timesteps that each environment instance experiences, especially if
    each instance can reach its max timesteps before being "done".
 2. Increasing the processor count doesn't always increase training speed.
@@ -152,7 +152,7 @@ Some things to note:
    timesteps per rollout is set to 1024, and we run with > 2 processors,
    we will never collect states from `U` and thus might not ever learn
    how to handle those unique situations. A similar logic applies for
-   `envs_per_proc`. **Note**: this particular issue is now partially
+   `envs-per-proc`. **Note**: this particular issue is now partially
    mitigated by the recent addition of "soft resets", but this feature
    has its own complications.
 3. When running with multiple processors or environment instances,
@@ -253,7 +253,7 @@ pip install autorom[accept-rom-license]
 Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
 that can help with some of these issues. For testing with the `--render` flag,
 you'll need to set the `LD_PRELOAD` path (see the above bash file). For running,
-with the `--render_gif` flag, you'll need to unset the `LD_PRELOAD` path.
+with the `--render-gif` flag, you'll need to unset the `LD_PRELOAD` path.
 
 **Performance**
 
@@ -320,7 +320,7 @@ runs is >= 300. This policy generally gets an average score >= 320 once
 solved.
 
 ### All Atari pixel environments
-I recommend enabling the `--allow_mpi_gpu` flag for systems with GPUs.
+I recommend enabling the `--allow-mpi-gpu` flag for systems with GPUs.
 
 ### Ant
 In order to solve the environment, you need to reach an average score >= 6000
