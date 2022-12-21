@@ -707,7 +707,8 @@ class PPO(object):
 
                 rewards[agent_id] = ext_rewards[agent_id] + intr_rewards[agent_id]
             else:
-                intr_rewards[agent_id] = 0.0
+                rewards[agent_id] = ext_rewards[agent_id]
+                intr_rewards[agent_id] = np.zeros(1)
 
         return rewards, intr_rewards
 
