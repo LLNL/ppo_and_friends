@@ -63,7 +63,7 @@ class AlternateMazeNavigationSim(GridWorldSimulation):
 
     def get_reward(self, agent_id, **kwargs):
 
-        if self.get_all_done():
+        if self.agent_reached_goal():
             self.reward = 1.
 
         reward = self.reward
@@ -71,12 +71,14 @@ class AlternateMazeNavigationSim(GridWorldSimulation):
 
         return reward
 
+    def agent_reached_goal(self):
+        return np.all(self.navigator.position == self.target.position)
+
     def get_done(self, agent_id, **kwargs):
         return self.get_all_done()
 
     def get_all_done(self, **kwargs):
-        return (np.all(self.navigator.position == self.target.position) or
-            self.step_count == 512)
+        return self.agent_reached_goal() or self.step_count == 512
 
     def get_info(self, agent_id, **kwargs):
         return {}
