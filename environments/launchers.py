@@ -1714,21 +1714,19 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 128
 
-        lr     = 0.0002
-        min_lr = 0.0001
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"] = 9
 
-        lr_dec = LinearDecrementer(
-            max_iteration  = 300,
-            max_value      = lr,
-            min_value      = min_lr)
+        lr = 0.0001
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-	    "lr_dec"             : lr_dec,
             "bootstrap_clip"     : (-10., 10.),
+            "enable_icm"         : True,
+            "icm_kw_args"        : icm_kw_args,
         }
 
         policy_name = "abmarl-maze"
@@ -1779,21 +1777,19 @@ class AbmarlBlindMazeLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 64
 
-        lr     = 0.0002
-        min_lr = 0.0001
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"] = 2
 
-        lr_dec = LinearDecrementer(
-            max_iteration  = 100,
-            max_value      = lr,
-            min_value      = min_lr)
+        lr = 0.0001
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-	    "lr_dec"             : lr_dec,
             "bootstrap_clip"     : (-10., 10.),
+            "enable_icm"         : True,
+            "icm_kw_args"        : icm_kw_args,
         }
 
         policy_name = "abmarl-maze"
