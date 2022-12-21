@@ -210,12 +210,16 @@ class ICM(PPONetwork):
         #
         # Observation encoder.
         #
-        self.obs_encoder = obs_encoder(
-            obs_dim,
-            encoded_obs_dim,
-            out_init,
-            hidden_size,
-            **kw_args)
+        if encoded_obs_dim > 0:
+            self.obs_encoder = obs_encoder(
+                obs_dim,
+                encoded_obs_dim,
+                out_init,
+                hidden_size,
+                **kw_args)
+        else:
+            self.obs_encoder = lambda x : x
+            encoded_obs_dim  = obs_dim
 
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
