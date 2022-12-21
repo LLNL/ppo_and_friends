@@ -171,6 +171,9 @@ class MultiCategoricalDistribution(PPODistribution):
         A multi-categorical distribution for supporting MultiDiscrete
         action spaces. This is basically the same as the Categorical
         distribution, except that we create lists of distributions.
+
+        This implementation is largely inspired by
+        https://github.com/pytorch/pytorch/issues/43250
     """
 
     def __init__(self, nvec, **kw_args):
