@@ -502,7 +502,8 @@ class PPOEnvironmentWrapper(ABC):
                 # we need to set done to False.
                 #
                 if agent_id in obs:
-                    done[agent_id] = False
+                    if not self.all_done:
+                        done[agent_id] = False
 
                 #
                 # Case 2: the agent died in a previous step. We now need to zero
