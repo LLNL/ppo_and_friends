@@ -31,7 +31,7 @@ except:
 
 try:
     from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze_env
+    from ppo_and_friends.environments.abmarl_envs.maze import abmarl_maze, abmarl_blind_maze
     from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
     HAVE_ABMARL = True
 except:
@@ -1702,10 +1702,10 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 32
+        actor_kw_args["hidden_size"] = 64
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 64
+        critic_kw_args["hidden_size"] = 128
 
         lr     = 0.0002
         min_lr = 0.0001
@@ -1728,7 +1728,72 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
         policy_mapping_fn = lambda *args : policy_name
 
         env_generator = lambda : \
-                AbmarlWrapper(env               = abmarl_maze_env,
+                AbmarlWrapper(env               = abmarl_maze,
+                              policy_mapping_fn = policy_mapping_fn)
+
+        policy_settings = { policy_name : \
+            (None,
+             env_generator().observation_space["navigator"],
+             env_generator().critic_observation_space["navigator"],
+             env_generator().action_space["navigator"],
+             policy_args)
+        }
+
+        ts_per_rollout = num_procs * 128
+
+        self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 128,
+                     epochs_per_iter    = 20,
+                     max_ts_per_ep      = 128,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_values   = True,
+                     normalize_obs      = False,
+                     normalize_rewards  = False,
+                     obs_clip           = None,
+                     reward_clip        = None,
+                     **self.kw_launch_args)
+
+
+class AbmarlBlindMazeLauncher(EnvironmentLauncher):
+
+    def launch(self):
+        if not HAVE_ABMARL:
+            msg  = "ERROR: unable to import the Abmarl environments. "
+            msg += "This environment is installed from its git repository."
+            rank_print(msg)
+            comm.Abort()
+
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 32
+
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 64
+
+        lr     = 0.0002
+        min_lr = 0.0001
+
+        lr_dec = LinearDecrementer(
+            max_iteration  = 100,
+            max_value      = lr,
+            min_value      = min_lr)
+
+        policy_args = {\
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : lr,
+	    "lr_dec"             : lr_dec,
+            "bootstrap_clip"     : (-10., 10.),
+        }
+
+        policy_name = "abmarl-maze"
+        policy_mapping_fn = lambda *args : policy_name
+
+        env_generator = lambda : \
+                AbmarlWrapper(env               = abmarl_blind_maze,
                               policy_mapping_fn = policy_mapping_fn)
 
         policy_settings = { policy_name : \
@@ -1776,7 +1841,7 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
         min_lr = 0.0001
 
         lr_dec = LinearDecrementer(
-            max_iteration  = 300,
+            max_iteration  = 100,
             max_value      = lr,
             min_value      = min_lr)
 

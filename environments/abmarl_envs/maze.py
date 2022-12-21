@@ -37,10 +37,24 @@ sim = MultiAgentWrapper(
                     file_name,
                     object_registry,
                     overlapping={1: [3], 3: [1]},
+                    observe="grid",
+                )
+            )
+        )
+    )
+
+blind_sim = MultiAgentWrapper(
+        AllStepManager(
+            FlattenWrapper(
+                AlternateMazeNavigationSim.build_sim_from_file(
+                    file_name,
+                    object_registry,
+                    overlapping={1: [3], 3: [1]},
                     observe="position",
                 )
             )
         )
     )
 
-abmarl_maze_env = sim
+abmarl_blind_maze = blind_sim
+abmarl_maze = sim
