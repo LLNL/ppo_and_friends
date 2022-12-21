@@ -4,9 +4,10 @@
 import torch.nn as nn
 import torch
 import sys
-from .utils import GaussianDistribution, CategoricalDistribution
+from .distributions import *
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
+import torch.nn.functional as t_functional
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -66,6 +67,7 @@ class PPOActorCriticNetwork(PPONetwork):
     def __init__(self,
                  action_dtype,
                  out_dim,
+                 action_nvec = None,
                  **kw_args):
         """
             NOTE: if this class is to behave as a PPO actor, it should be
@@ -78,13 +80,15 @@ class PPOActorCriticNetwork(PPONetwork):
 
         super(PPOActorCriticNetwork, self).__init__(**kw_args)
 
-        if action_dtype not in ["discrete", "continuous"]:
+        if action_dtype not in ["discrete", "continuous",
+            "multi-binary", "multi-discrete"]:
+
             msg = "ERROR: unknown action type {}".format(action_dtype)
             rank_print(msg)
             comm.Abort()
 
         self.action_dtype = action_dtype
-        self.need_softmax = False
+        self.output_func  = lambda x : x
 
         #
         # Actors have special roles.
@@ -92,10 +96,20 @@ class PPOActorCriticNetwork(PPONetwork):
         if "actor" in self.name:
 
             if action_dtype == "discrete":
-                self.need_softmax = True
                 self.distribution = CategoricalDistribution(**kw_args)
+                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
+
+            if action_dtype == "multi-discrete":
+                self.distribution = MultiCategoricalDistribution(
+                    nvec = action_nvec, **kw_args)
+                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
+
             elif action_dtype == "continuous":
                 self.distribution = GaussianDistribution(out_dim, **kw_args)
+
+            elif action_dtype == "multi-binary":
+                self.distribution = BernoulliDistribution(**kw_args)
+                self.output_func  = t_functional.sigmoid
 
     def get_result(self,
                    obs,

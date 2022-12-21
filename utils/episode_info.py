@@ -38,7 +38,7 @@ class EpisodeInfo(object):
         self.gamma                    = gamma
         self.lambd                    = lambd
         self.bootstrap_clip           = bootstrap_clip
-        self.global_observations      = []
+        self.critic_observations      = []
         self.observations             = []
         self.next_observations        = []
         self.actions                  = []
@@ -55,7 +55,6 @@ class EpisodeInfo(object):
         self.length                   = 0
         self.is_finished              = False
         self.has_hidden_states        = False
-        self.has_global_obs           = False
 
     def compute_discounted_sums(self, array, gamma):
         """
@@ -134,7 +133,7 @@ class EpisodeInfo(object):
                  value,
                  log_prob,
                  reward,
-                 global_observation = np.empty(0),
+                 critic_observation = np.empty(0),
                  actor_hidden       = np.empty(0),
                  actor_cell         = np.empty(0),
                  critic_hidden      = np.empty(0),
@@ -156,7 +155,7 @@ class EpisodeInfo(object):
                 log_prob                 The log probability calculated at this
                                          step.
                 reward                   The reward received at this step.
-                global_observation       The global observation used in multi-
+                critic_observation       The critic observation used in multi-
                                          agent environments eliciting our
                                          action.
                 actor_hidden             The hidden state of the actor iff the
@@ -182,10 +181,7 @@ class EpisodeInfo(object):
         self.values.append(value)
         self.log_probs.append(log_prob)
         self.rewards.append(reward)
-
-        if global_observation.size > 0:
-            self.has_global_obs = True
-            self.global_observations.append(global_observation)
+        self.critic_observations.append(critic_observation)
 
         ac_hidden_check = np.array(
             (len(actor_hidden),
@@ -300,7 +296,6 @@ class PPODataset(Dataset):
         self.episodes             = []
         self.is_built             = False
         self.build_hidden_states  = False
-        self.build_global_obs     = False
         self.sequence_length      = sequence_length
         self.build_terminal_mask  = False
 
@@ -315,7 +310,7 @@ class PPODataset(Dataset):
 
         self.actions                   = None
         self.raw_actions               = None
-        self.global_observations       = None
+        self.critic_observations       = None
         self.observations              = None
         self.next_observations         = None
         self.rewards_to_go             = None
@@ -341,15 +336,6 @@ class PPODataset(Dataset):
 
         elif self.build_hidden_states  and not episode.has_hidden_states:
             msg  = "ERROR: some episodes have hidden states while others "
-            msg += "do not. Bailing..."
-            rank_print(msg)
-            comm.Abort()
-
-        if episode.has_global_obs:
-            self.build_global_obs = True
-
-        elif self.build_global_obs  and not episode.has_global_obs:
-            msg  = "ERROR: some episodes have global observations while others "
             msg += "do not. Bailing..."
             rank_print(msg)
             comm.Abort()
@@ -391,7 +377,7 @@ class PPODataset(Dataset):
         #
         self.actions                  = []
         self.raw_actions              = []
-        self.global_observations      = []
+        self.critic_observations      = []
         self.observations             = []
         self.next_observations        = []
         self.rewards_to_go            = []
@@ -431,6 +417,7 @@ class PPODataset(Dataset):
             self.ep_lens.append(ep.length)
             self.advantages.extend(ep.advantages)
             self.values.extend(ep.values)
+            self.critic_observations.extend(ep.critic_observations)
 
             if self.build_hidden_states:
                 self.actor_hidden.extend(ep.actor_hidden)
@@ -438,9 +425,6 @@ class PPODataset(Dataset):
 
                 self.actor_cell.extend(ep.actor_cell)
                 self.critic_cell.extend(ep.critic_cell)
-
-            if self.build_global_obs:
-                self.global_observations.extend(ep.global_observations)
 
             if self.build_terminal_mask:
                 cur_ts += ep.length
@@ -481,7 +465,7 @@ class PPODataset(Dataset):
         #
         self.actions                  = np.array(self.actions)
         self.raw_actions              = np.array(self.raw_actions)
-        self.global_observations      = np.array(self.global_observations)
+        self.critic_observations      = np.array(self.critic_observations)
         self.observations             = np.array(self.observations)
         self.next_observations        = np.array(self.next_observations)
         self.rewards_to_go            = np.array(self.rewards_to_go)
@@ -533,16 +517,8 @@ class PPODataset(Dataset):
         self.next_observations = torch.tensor(self.next_observations,
             dtype=torch.float).to(self.device)
 
-        #
-        # If we're building global observations, we use the global observations
-        # from our episodes. Otherwise, the global observation tensor is a
-        # reference to our observations tensor.
-        #
-        if self.build_global_obs:
-            self.global_observations = torch.tensor(self.global_observations,
-                dtype=torch.float).to(self.device)
-        else:
-            self.global_observations = self.observations
+        self.critic_observations = torch.tensor(self.critic_observations,
+            dtype=torch.float).to(self.device)
 
         self.log_probs = torch.tensor(self.log_probs,
             dtype=torch.float).to(self.device)
@@ -550,14 +526,14 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_dtype == "continuous":
+        if self.action_dtype in ["continuous", "multi-binary"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.float).to(self.device)
 
-        elif self.action_dtype == "discrete":
+        elif self.action_dtype in ["discrete", "multi-discrete"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,
@@ -586,7 +562,7 @@ class PPODataset(Dataset):
         # First, handle the easy case of using single time states.
         #
         if self.sequence_length == 1:
-            return (self.global_observations[idx],
+            return (self.critic_observations[idx],
                     self.observations[idx],
                     self.next_observations[idx],
                     self.raw_actions[idx],
@@ -608,7 +584,7 @@ class PPODataset(Dataset):
         start = idx - (self.sequence_length - 1)
         stop  = idx + 1
 
-        glob_obs_seq = self.global_observations[start : stop].clone()
+        glob_obs_seq = self.critic_observations[start : stop].clone()
         obs_seq      = self.observations[start : stop].clone()
         nxt_obs_seq  = self.next_observations[start : stop].clone()
 

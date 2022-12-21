@@ -21,12 +21,17 @@ if __name__ == "__main__":
     parser.add_argument("--test", action="store_true",
         help="Test out an existing policy.")
 
-    parser.add_argument("--num_test_runs", type=int, default=1,
+    parser.add_argument("--test-explore", action="store_true",
+        help="Enable exploration while testing. Note that this flag"
+        "only has an effect while in test mode. Exploration is always"
+        "enabled during training.")
+
+    parser.add_argument("--num-test-runs", type=int, default=1,
         help="If used with --test, this will define the number of test "
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
-    parser.add_argument("--state_path", default="./",
+    parser.add_argument("--state-path", default="./",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
 
@@ -36,20 +41,20 @@ if __name__ == "__main__":
     parser.add_argument("--render", action="store_true",
         help="Render the environment at each step.")
 
-    parser.add_argument("--render_gif", action="store_true",
+    parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
     #TODO: let's also let users stop at an iteration rather than timestep.
-    parser.add_argument("--num_timesteps", default=10000000, type=int,
+    parser.add_argument("--num-timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
 
     parser.add_argument("--random_seed", default=2, type=int,
         help="The random seed to use.")
 
-    parser.add_argument("--envs_per_proc", default=1, type=int,
+    parser.add_argument("--envs-per-proc", default=1, type=int,
         help="The number of environment instances each processor should have.")
 
-    parser.add_argument("--allow_mpi_gpu", action="store_true",
+    parser.add_argument("--allow-mpi-gpu", action="store_true",
         help="By default, GPUs are only used if the we're training on a single "
         "processor, as this is very effecient when using MLPs. This flag will "
         "allow GPUs to be used with multiple processors, which is useful when "
@@ -83,10 +88,17 @@ if __name__ == "__main__":
                  "RobotWarehouseTiny",
                  "RobotWarehouseSmall",
                  "LevelBasedForaging",
-                 "PressurePlate",])
+                 "PressurePlate",
+                 "AbmarlMaze",
+                 "AbmarlBlindMaze",
+                 "AbmarlReachTheTarget",
+                 "BinaryCartPole",
+                 "BinaryLunarLander",
+                 ])
 
     args               = parser.parse_args()
     test               = args.test
+    test_explore       = args.test_explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
     env_name           = args.environment
@@ -152,15 +164,16 @@ if __name__ == "__main__":
     launcher_class = getattr(sys.modules[__name__], class_name)
 
     launcher = launcher_class(
-        random_seed        = random_seed,
-        state_path         = state_path,
-        load_state         = load_state,
-        render             = render,
-        render_gif         = render_gif,
-        num_timesteps      = num_timesteps,
-        device             = device,
-        envs_per_proc      = envs_per_proc,
-        test               = test,
-        num_test_runs      = num_test_runs)
+        random_seed           = random_seed,
+        state_path            = state_path,
+        load_state            = load_state,
+        render                = render,
+        render_gif            = render_gif,
+        num_timesteps         = num_timesteps,
+        device                = device,
+        envs_per_proc         = envs_per_proc,
+        test                  = test,
+        explore_while_testing = test_explore,
+        num_test_runs         = num_test_runs)
 
     launcher.launch()

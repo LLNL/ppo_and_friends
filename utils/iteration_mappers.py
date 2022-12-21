@@ -100,10 +100,10 @@ class LinearDecrementer(StepMapper):
     def __call__(self,
                  **kw_args):
 
-        step = self._get_step(**kw_args)
+        step    = self._get_step(**kw_args)
+        new_val = self.max_value - (step *
+            ((self.max_value - self.min_value) / self.max_step))
 
-        frac = 1.0 - (step - 1.0) / self.max_step
-        new_val = min(self.max_value, frac * self.max_value)
         new_val = max(new_val, self.min_value)
         return new_val
 

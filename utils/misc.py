@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
 import os
 import sys
 import pickle
@@ -12,23 +12,34 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def get_action_dtype(env):
+def get_action_dtype(action_space):
     """
-        Get our action space data type. Options are continuous
-        and discrete. Note that "discrete" in this case is NOT
-        the same as a "Discrete" gym space. A Box space can
-        have a discrete data type.
-
+        Get our action space data type.
         Arguments:
-            env    The environment to query.
+            env    The action space to query.
 
         Returns:
             A string representing the action space dtype.
     """
-    if np.issubdtype(env.action_space.dtype, np.floating):
+    if (type(action_space) == Box and
+        np.issubdtype(action_space.dtype, np.integer)):
+
+        msg  = "ERROR: action spaces of type Box int are not "
+        msg += "directly supported. Please wrap your action space "
+        msg += "in a MultiDiscrete wrapper. See "
+        msg += "environments/action_wrappers for support."
+        rank_print(msg)
+        comm.Abort()
+
+    if np.issubdtype(action_space.dtype, np.floating):
         return "continuous"
-    elif np.issubdtype(env.action_space.dtype, np.integer):
-        return "discrete"
+    elif np.issubdtype(action_space.dtype, np.integer):
+        if type(action_space) == Discrete:
+            return "discrete"
+        elif type(action_space) == MultiBinary:
+            return "multi-binary"
+        elif type(action_space) == MultiDiscrete:
+            return "multi-discrete"
     return "unknown"
 
 
@@ -68,6 +79,8 @@ def need_action_squeeze(env):
 
     elif issubclass(act_type, Discrete):
         need_action_squeeze = True
+    elif issubclass(act_type, Tuple):
+        need_action_squeeze = False
     else:
         msg  = "ERROR: unsupported action space "
         msg += "{}".format(env.action_space)

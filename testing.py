@@ -5,6 +5,7 @@ from ppo_and_friends.utils.render import save_frames_as_gif
 import os
 
 def test_policy(ppo,
+                explore,
                 render_gif,
                 num_test_runs,
                 device):
@@ -13,40 +14,39 @@ def test_policy(ppo,
 
         Arguments:
             ppo            An instance of PPO from ppo.py.
+            explore        Bool determining whether or not exploration should
+                           be enabled while testing.
             render_gif     Create a gif from the renderings.
             num_test_runs  How many times should we run in the environment?
             device         The device to infer on.
     """
+    env        = ppo.env
+    policies   = ppo.policies
+    render     = ppo.render
+    policy_map = ppo.policy_mapping_fn
 
-    env    = ppo.env
-    policy = ppo.actor
-    render = ppo.render
+    action_dtype = {}
+    for agent_id in env.agent_ids:
+        action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
 
-    action_dtype = get_action_dtype(env)
-
-    max_int     = np.iinfo(np.int32).max
-    num_steps   = 0
-    total_score = 0
-    min_score   = max_int
-    max_score   = -max_int
-
-    is_multi_agent = env.get_num_agents() > 1
-
-    if is_multi_agent:
-        reset_filter = lambda x : x[0]
-    else:
-        reset_filter = lambda x: x
+    max_int      = np.iinfo(np.int32).max
+    num_steps    = 0
+    total_scores = {agent_id : 0.0 for agent_id in env.agent_ids}
+    min_scores   = {agent_id : max_int for agent_id in env.agent_ids}
+    max_scores   = {agent_id : -max_int for agent_id in env.agent_ids}
 
     if render_gif:
         gif_frames = []
 
-    policy.eval()
+    for key in policies:
+        policies[key].eval()
 
     for _ in range(num_test_runs):
 
-        obs      = reset_filter(env.reset())
+        obs, _   = env.reset()
         done     = False
-        ep_score = 0
+
+        episode_score = {agent_id : 0.0 for agent_id in env.agent_ids}
 
         while not done:
             num_steps += 1
@@ -57,56 +57,88 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render(mode = "rgb_array"))
 
-            obs = torch.tensor(obs, dtype=torch.float).to(device)
+            actions = {}
+            for agent_id in obs:
 
-            if not is_multi_agent:
-                obs = obs.unsqueeze(0)
+                obs[agent_id] = torch.tensor(obs[agent_id],
+                    dtype=torch.float).to(device)
 
-            with torch.no_grad():
-                action = policy.get_result(obs).detach().cpu()
+                obs[agent_id] = obs[agent_id].unsqueeze(0)
+                policy_id     = policy_map(agent_id)
 
-            if action_dtype == "discrete":
-                action = torch.argmax(action, axis=-1).numpy()
-            else:
-                action = action.numpy()
+                if explore:
+                    with torch.no_grad():
+                         _, agent_action, _ = policies[policy_id].get_action(
+                             obs[agent_id])
+                         actions[agent_id]  = agent_action
 
-            obs, reward, done, info = env.step(action)
+                else:
+                    with torch.no_grad():
+                        actions[agent_id] = \
+                            policies[policy_id].actor.get_result(
+                                obs[agent_id]).detach().cpu()
 
-            reward = np.float32(reward)
+                    if action_dtype[agent_id] == "discrete":
+                        actions[agent_id] = torch.argmax(
+                            actions[agent_id], axis=-1).numpy()
 
-            if is_multi_agent:
-                done = done.all()
+                    elif action_dtype[agent_id] == "multi-binary":
+                        actions[agent_id][actions[agent_id] < 0.5] = 0.0
+                        actions[agent_id][actions[agent_id] > 0.5] = 1.0
+                        actions[agent_id] = actions[agent_id].numpy()
 
-            if "natural reward" in info:
-                score = info["natural reward"]
-            else:
-                score = reward
+                    elif action_dtype[agent_id] == "multi-discrete":
+                        #
+                        # Our network predicts the actions as a contiguous
+                        # array, and we need to break it up into individual
+                        # arrays associated with the discrete actions.
+                        #
+                        nvec = env.action_space[agent_id].nvec
+                        refined_actions = torch.zeros(nvec.size)
 
-            ep_score += score
-            total_score += score
+                        start = 0
+                        for idx, a_dim in enumerate(nvec):
+                            stop = start + a_dim
 
-        #
-        # For multi-agent environments, we report the average score per
-        # agent. There are other options we could try instead. For coop
-        # games, we could sum the scores. Adversarial games get tricky...
-        #
-        if is_multi_agent:
-            refined_score = ep_score.mean()
-        else:
-            refined_score = ep_score
+                            refined_actions[idx] = torch.argmax(
+                                actions[agent_id][:, start : stop], dim=-1)
 
-        min_score = min(min_score, refined_score)
-        max_score = max(max_score, refined_score)
+                            start = stop
 
-    if is_multi_agent:
-        total_score = total_score.mean()
+                        actions[agent_id] = refined_actions
 
-    print("Ran env {} times.".format(num_test_runs))
-    print("Ran {} total time steps.".format(num_steps))
-    print("Ran {} time steps on average.".format(num_steps / num_test_runs))
-    print("Lowest score: {}".format(min_score))
-    print("Highest score: {}".format(max_score))
-    print("Average score: {}".format(total_score / num_test_runs))
+                    else:
+                        actions[agent_id] = actions[agent_id].numpy()
+
+            obs, _, reward, done, info = env.step(actions)
+
+            done = env.get_all_done()
+
+            for agent_id in reward:
+                reward[agent_id] = np.float32(reward[agent_id])
+
+                if "natural reward" in info[agent_id]:
+                    score = info[agent_id]["natural reward"]
+                else:
+                    score = reward[agent_id]
+
+                total_scores[agent_id]  += score
+                episode_score[agent_id] += score
+
+        for agent_id in total_scores:
+            min_scores[agent_id] = min(min_scores[agent_id],
+                episode_score[agent_id])
+            max_scores[agent_id] = max(max_scores[agent_id],
+                episode_score[agent_id])
+
+    for agent_id in env.agent_ids:
+        print("\nAgent {}:".format(agent_id))
+        print("    Ran env {} times.".format(num_test_runs))
+        print("    Ran {} total time steps.".format(num_steps))
+        print("    Ran {} time steps on average.".format(num_steps / num_test_runs))
+        print("    Lowest score: {}".format(min_scores[agent_id]))
+        print("    Highest score: {}".format(max_scores[agent_id]))
+        print("    Average score: {}".format(total_scores[agent_id] / num_test_runs))
 
     if render_gif:
         print("Attempting to create gif..")

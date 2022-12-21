@@ -7,7 +7,7 @@ import torch.nn as nn
 from functools import reduce
 from .utils import init_layer
 from .ppo_networks import PPONetwork
-import torch.nn.functional as t_func
+import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
 
 class LinearInverseModel(nn.Module):
@@ -40,9 +40,13 @@ class LinearInverseModel(nn.Module):
             out_size     = out_dim
             self.out_dim = (out_dim,)
 
-        self.need_softmax = False
-        if action_dtype == "discrete":
-            self.need_softmax = True
+        self.output_func = lambda x : x
+
+        if action_dtype in ["discrete", "multi-discrete"]:
+            self.output_func = lambda x : t_functional.softmax(x, dim=-1)
+
+        elif action_dtype == "multi-binary":
+            self.output_func = t_functional.sigmoid
 
         self.activation = activation
 
@@ -68,8 +72,7 @@ class LinearInverseModel(nn.Module):
 
         out = self.inv_3(out)
 
-        if self.need_softmax:
-            out = t_func.softmax(out, dim=-1)
+        out = self.output_func(out)
 
         out_shape = (out.shape[0],) + self.out_dim
         out = out.reshape(out_shape)
@@ -83,10 +86,11 @@ class LinearForwardModel(nn.Module):
                  in_dim,
                  out_dim,
                  out_init,
-                 act_dim,
                  hidden_size,
                  action_dtype,
-                 activation = nn.ReLU(),
+                 act_dim,
+                 action_nvec = None,
+                 activation  = nn.ReLU(),
                  **kw_args):
         """
             The forward model of the ICM method. In short, this learns to
@@ -108,6 +112,7 @@ class LinearForwardModel(nn.Module):
         self.activation   = activation
         self.action_dtype = action_dtype
         self.act_dim      = act_dim
+        self.action_nvec  = action_nvec
 
         #
         # Forward model; Predict s_2 given s_1 and a_1.
@@ -129,8 +134,26 @@ class LinearForwardModel(nn.Module):
             # multi-dimensional discrete action space, we can create a multi-
             # dimensional one-hot encoding, but we then need to flatten it.
             #
-            actions = t_func.one_hot(actions,
+            actions = t_functional.one_hot(actions,
                 num_classes=self.act_dim[-1]).float().flatten(start_dim = 1)
+
+        elif self.action_dtype == "multi-discrete":
+            #
+            # In the multi-discrete case, we need to create multiple
+            # one-hot encodings, and they can be "ragged" (different lengths).
+            #
+            one_hots = []
+            start    = 0
+
+            for idx, dim in enumerate(self.action_nvec):
+                stop = start + dim
+
+                one_hots.append(t_functional.one_hot(actions[:, start : stop],
+                    num_classes=dim).float().flatten(start_dim = 1))
+
+                start = stop
+
+            actions = torch.cat(one_hots, dim=1)
 
         _input = torch.cat((enc_obs_1, actions), dim=1)
 
@@ -159,6 +182,7 @@ class ICM(PPONetwork):
                  activation      = nn.ReLU(),
                  encoded_obs_dim = 128,
                  hidden_size     = 128,
+                 action_nvec     = None,
                  **kw_args):
         """
             The Intrinsic Curiosit Model (ICM).
@@ -169,14 +193,15 @@ class ICM(PPONetwork):
         super(ICM, self).__init__(**kw_args)
 
         if type(act_dim) == tuple:
-            act_size     = reduce(lambda a, b: a*b, act_dim)
-            act_dim = act_dim
+            act_size = reduce(lambda a, b: a*b, act_dim)
+            act_dim  = act_dim
         else:
-            act_size     = act_dim
-            act_dim = (act_dim,)
+            act_size = act_dim
+            act_dim  = (act_dim,)
 
         self.reward_scale = reward_scale
         self.action_dtype = action_dtype
+        self.action_nvec  = action_nvec
 
         self.activation   = activation
         self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
@@ -185,12 +210,16 @@ class ICM(PPONetwork):
         #
         # Observation encoder.
         #
-        self.obs_encoder = obs_encoder(
-            obs_dim,
-            encoded_obs_dim,
-            out_init,
-            hidden_size,
-            **kw_args)
+        if encoded_obs_dim > 0:
+            self.obs_encoder = obs_encoder(
+                obs_dim,
+                encoded_obs_dim,
+                out_init,
+                hidden_size,
+                **kw_args)
+        else:
+            self.obs_encoder = lambda x : x
+            encoded_obs_dim  = obs_dim
 
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
@@ -210,9 +239,10 @@ class ICM(PPONetwork):
             encoded_obs_dim + act_size,
             encoded_obs_dim,
             out_init,
-            act_dim,
             hidden_size,
             action_dtype,
+            act_dim,
+            action_nvec = action_nvec,
             **kw_args)
 
     def forward(self,
@@ -231,7 +261,7 @@ class ICM(PPONetwork):
         #
         action_pred = self.inv_model(enc_obs_1, enc_obs_2)
 
-        if self.action_dtype == "discrete":
+        if self.action_dtype in ["discrete", "multi-discrete"]:
 
             shape_len = len(action_pred.shape)
 
@@ -249,7 +279,23 @@ class ICM(PPONetwork):
                 #
                 action_pred = action_pred.transpose(1, 2)
 
-            inv_loss = self.ce_loss(action_pred, actions.squeeze(1))
+            if self.action_dtype == "multi-discrete":
+                inv_loss = 0
+                start    = 0
+
+                #
+                # In the multi-discrete case, we have multiple losses to
+                # calculate. Let's just sum them all up.
+                #
+                for idx, dim in enumerate(self.action_nvec):
+                   stop = start + dim
+                   inv_loss += self.ce_loss(action_pred[:, start : stop],
+                       actions[:, idx:idx+1].flatten())
+
+                   start = stop
+            else:
+               inv_loss = self.ce_loss(action_pred, actions.squeeze(1))
+
         elif self.action_dtype == "continuous":
             actions = actions.reshape(action_pred.shape)
             inv_loss = self.mse_loss(action_pred, actions).mean()
