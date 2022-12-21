@@ -284,8 +284,7 @@ class MountainCarLauncher(EnvironmentLauncher):
         # doesn't seem to exhibit this behavior, so it's unlikely an issue
         # with ICM.
         # Also, the extrinsic reward weight fraction is very important
-        # for good performance, and using soft resets results in slightly
-        # faster learning.
+        # for good performance.
         #
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -296,7 +295,6 @@ class MountainCarLauncher(EnvironmentLauncher):
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,
-                     use_soft_resets    = True,
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)
