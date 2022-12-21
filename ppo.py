@@ -243,8 +243,8 @@ class PPO(object):
             self.status_dict[policy_id]["actor loss"]          = 0
             self.status_dict[policy_id]["critic loss"]         = 0
             self.status_dict[policy_id]["kl avg"]              = 0
-            self.status_dict[policy_id]["reward range"] = (max_int, -max_int)
-            self.status_dict[policy_id]["obs range"]    = (max_int, -max_int)
+            self.status_dict[policy_id]["ext reward range"] = (max_int, -max_int)
+            self.status_dict[policy_id]["obs range"]        = (max_int, -max_int)
 
         #
         # Value normalization is discussed in multiple papers, so I'm not
@@ -277,6 +277,7 @@ class PPO(object):
             if self.policies[policy_id].enable_icm:
                 self.status_dict[policy_id]["icm loss"] = 0
                 self.status_dict[policy_id]["intrinsic score avg"] = 0
+                self.status_dict[policy_id]["intr reward range"] = (max_int, -max_int)
 
         if load_state:
             if not os.path.exists(state_path):
@@ -671,7 +672,7 @@ class PPO(object):
         return tensor_dict
 
     def apply_intrinsic_rewards(self,
-                                rewards,
+                                ext_rewards,
                                 prev_obs,
                                 obs,
                                 actions):
@@ -680,10 +681,10 @@ class PPO(object):
             ICM.
 
             Arguments:
-                rewards    The rewards dictionary.
-                prev_obs   The previous observation dictionary.
-                obs        The current observation dictionary.
-                actions    The actions dictionary.
+                ex_rewards    The extrinsic rewards dictionary.
+                prev_obs      The previous observation dictionary.
+                obs           The current observation dictionary.
+                actions       The actions dictionary.
 
             Returns:
                 A tuple of form (rewards, intr_rewards) s.t. "rewards" is
@@ -692,6 +693,7 @@ class PPO(object):
                 the intrinsic rewards alone.
         """
         intr_rewards = {}
+        rewards = {}
 
         for agent_id in obs:
             policy_id = self.policy_mapping_fn(agent_id)
@@ -703,7 +705,7 @@ class PPO(object):
                         obs[agent_id],
                         actions[agent_id])
 
-                rewards[agent_id] = rewards[agent_id] + intr_rewards[agent_id]
+                rewards[agent_id] = ext_rewards[agent_id] + intr_rewards[agent_id]
             else:
                 intr_rewards[agent_id] = 0.0
 
@@ -889,32 +891,36 @@ class PPO(object):
         obs, critic_obs    = initial_reset_func()
         env_batch_size     = self.env.get_batch_size()
 
-        top_rollout_score  = {}
-        rollout_max_reward = {}
-        rollout_min_reward = {}
-        rollout_max_obs    = {}
-        rollout_min_obs    = {}
-        ep_nat_rewards     = {}
-        ep_rewards         = {}
-        ep_intr_rewards    = {}
-        total_ext_rewards  = {}
-        total_intr_rewards = {}
-        total_rewards      = {}
-        agents_per_policy  = {}
+        top_rollout_score       = {}
+        rollout_max_ext_reward  = {}
+        rollout_min_ext_reward  = {}
+        rollout_max_intr_reward = {}
+        rollout_min_intr_reward = {}
+        rollout_max_obs         = {}
+        rollout_min_obs         = {}
+        ep_nat_rewards          = {}
+        ep_rewards              = {}
+        ep_intr_rewards         = {}
+        total_ext_rewards       = {}
+        total_intr_rewards      = {}
+        total_rewards           = {}
+        agents_per_policy       = {}
 
         for policy_id in self.policies:
-            top_rollout_score[policy_id]  = -np.finfo(np.float32).max
-            rollout_max_reward[policy_id] = -np.finfo(np.float32).max
-            rollout_min_reward[policy_id] = np.finfo(np.float32).max
-            rollout_max_obs[policy_id]    = -np.finfo(np.float32).max
-            rollout_min_obs[policy_id]    = np.finfo(np.float32).max
-            ep_nat_rewards[policy_id]     = np.zeros((env_batch_size, 1))
-            ep_intr_rewards[policy_id]    = np.zeros((env_batch_size, 1))
-            ep_rewards[policy_id]         = np.zeros((env_batch_size, 1))
-            total_ext_rewards[policy_id]  = np.zeros((env_batch_size, 1))
-            total_intr_rewards[policy_id] = np.zeros((env_batch_size, 1))
-            total_rewards[policy_id]      = np.zeros((env_batch_size, 1))
-            agents_per_policy[policy_id]  = 0
+            top_rollout_score[policy_id]       = -np.finfo(np.float32).max
+            rollout_max_ext_reward[policy_id]  = -np.finfo(np.float32).max
+            rollout_min_ext_reward[policy_id]  = np.finfo(np.float32).max
+            rollout_max_intr_reward[policy_id] = -np.finfo(np.float32).max
+            rollout_min_intr_reward[policy_id] = np.finfo(np.float32).max
+            rollout_max_obs[policy_id]         = -np.finfo(np.float32).max
+            rollout_min_obs[policy_id]         = np.finfo(np.float32).max
+            ep_nat_rewards[policy_id]          = np.zeros((env_batch_size, 1))
+            ep_intr_rewards[policy_id]         = np.zeros((env_batch_size, 1))
+            ep_rewards[policy_id]              = np.zeros((env_batch_size, 1))
+            total_ext_rewards[policy_id]       = np.zeros((env_batch_size, 1))
+            total_intr_rewards[policy_id]      = np.zeros((env_batch_size, 1))
+            total_rewards[policy_id]           = np.zeros((env_batch_size, 1))
+            agents_per_policy[policy_id]       = 0
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
@@ -1005,7 +1011,7 @@ class PPO(object):
             # This amounts to adding "curiosity", aka intrinsic reward,
             # to out extrinsic reward.
             #
-            reward, intr_rewards = self.apply_intrinsic_rewards(
+            reward, intr_reward = self.apply_intrinsic_rewards(
                 ext_reward,
                 prev_obs,
                 obs,
@@ -1036,11 +1042,21 @@ class PPO(object):
                     rewards              = reward[agent_id],
                     where_done           = where_done)
 
-                rollout_max_reward[policy_id] = \
-                    max(rollout_max_reward[policy_id], reward[agent_id].max())
+                rollout_max_ext_reward[policy_id] = \
+                    max(rollout_max_ext_reward[policy_id],
+                        ext_reward[agent_id].max())
 
-                rollout_min_reward[policy_id] = \
-                    min(rollout_min_reward[policy_id], reward[agent_id].min())
+                rollout_min_ext_reward[policy_id] = \
+                    min(rollout_min_ext_reward[policy_id],
+                        ext_reward[agent_id].min())
+
+                rollout_max_intr_reward[policy_id] = \
+                    max(rollout_max_intr_reward[policy_id],
+                        intr_reward[agent_id].max())
+
+                rollout_min_intr_reward[policy_id] = \
+                    min(rollout_min_intr_reward[policy_id],
+                        intr_reward[agent_id].min())
 
                 rollout_max_obs[policy_id]    = \
                     max(rollout_max_obs[policy_id], obs[agent_id].max())
@@ -1050,7 +1066,7 @@ class PPO(object):
 
                 ep_rewards[policy_id]        += reward[agent_id]
                 ep_nat_rewards[policy_id]    += natural_reward[agent_id]
-                ep_intr_rewards[policy_id]   += intr_rewards[agent_id]
+                ep_intr_rewards[policy_id]   += intr_reward[agent_id]
                 agents_per_policy[policy_id] += 1
 
             #
@@ -1179,7 +1195,7 @@ class PPO(object):
 
                         if self.policies[policy_id].enable_icm:
                             ism = self.status_dict[policy_id]["intrinsic score avg"]
-                            surprise = intr_rewards[agent_id][where_maxed] - ism
+                            surprise = intr_reward[agent_id][where_maxed] - ism
 
                             next_reward[agent_id] += surprise.flatten()
                         
@@ -1258,20 +1274,15 @@ class PPO(object):
             top_score = comm.allreduce(top_score, MPI.MAX)
 
             #
-            # If we're normalizing, we don't really want to keep track
-            # of the largest and smallest ever seen, because our range will
-            # fluctuate with normalization. When we aren't normalizing, the
-            # the global range is accurate and useful.
+            # We used to keep track of the global reward range across all
+            # episodes, but I think it's a bit more helpful to see the
+            # fluctuations across rollouts.
             #
-            if not self.normalize_rewards:
-                max_reward = max(self.status_dict[policy_id]["reward range"][1],
-                    rollout_max_reward[policy_id])
+            max_reward = max(self.status_dict[policy_id]["ext reward range"][1],
+                rollout_max_ext_reward[policy_id])
 
-                min_reward = min(self.status_dict[policy_id]["reward range"][0],
-                    rollout_min_reward[policy_id])
-            else:
-                max_reward = rollout_max_reward[policy_id]
-                min_reward = rollout_min_reward[policy_id]
+            min_reward = min(self.status_dict[policy_id]["ext reward range"][0],
+                rollout_min_ext_reward[policy_id])
 
             max_reward = comm.allreduce(max_reward, MPI.MAX)
             min_reward = comm.allreduce(min_reward, MPI.MIN)
@@ -1303,15 +1314,27 @@ class PPO(object):
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
             self.status_dict[policy_id]["top score"]           = top_score
-            self.status_dict[policy_id]["obs range"]       = obs_range
-            self.status_dict[policy_id]["reward range"]    = rw_range
+            self.status_dict[policy_id]["obs range"]           = obs_range
+            self.status_dict[policy_id]["ext reward range"]    = rw_range
 
             if self.policies[policy_id].enable_icm:
-                intr_rewards = total_intr_rewards[policy_id].sum()
-                intr_rewards = comm.allreduce(intr_rewards, MPI.SUM)
+                intr_reward = total_intr_rewards[policy_id].sum()
+                intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
-                ism = intr_rewards / (total_episodes/ env_batch_size)
+                ism = intr_reward / (total_episodes/ env_batch_size)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
+
+                max_reward = max(self.status_dict[policy_id]["intr reward range"][1],
+                    rollout_max_intr_reward[policy_id])
+
+                min_reward = min(self.status_dict[policy_id]["intr reward range"][0],
+                    rollout_min_intr_reward[policy_id])
+
+                max_reward   = comm.allreduce(max_reward, MPI.MAX)
+                min_reward   = comm.allreduce(min_reward, MPI.MIN)
+                reward_range = (max_reward, min_reward)
+
+                self.status_dict[policy_id]["intr reward range"] = reward_range
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
