@@ -128,7 +128,7 @@ class PPOActorCriticNetwork(PPONetwork):
         """
         if self.name == "actor":
             res = self.__call__(obs)
-            res = self.distribution.refine_sample(res, True)
+            res = self.distribution.refine_sample(res, testing)
             return res
         else:
             return self.__call__(obs)
