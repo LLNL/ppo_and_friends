@@ -1123,7 +1123,6 @@ class PPO(object):
                     ep_nat_rewards[policy_id][where_done]  = 0
                     ep_intr_rewards[policy_id][where_done] = 0
 
-
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
 
@@ -1628,11 +1627,11 @@ class PPO(object):
                 critic_hidden = torch.transpose(critic_hidden, 0, 1)
                 critic_cell   = torch.transpose(critic_cell, 0, 1)
 
-                data_laoder.dataset.actor_hidden[batch_idxs]  = actor_hidden
-                data_laoder.dataset.critic_hidden[batch_idxs] = critic_hidden
+                data_loader.dataset.actor_hidden[batch_idxs]  = actor_hidden
+                data_loader.dataset.critic_hidden[batch_idxs] = critic_hidden
 
-                data_laoder.dataset.actor_cell[batch_idxs]  = actor_cell
-                data_laoder.dataset.critic_cell[batch_idxs] = critic_cell
+                data_loader.dataset.actor_cell[batch_idxs]  = actor_cell
+                data_loader.dataset.critic_cell[batch_idxs] = critic_cell
 
             comm.barrier()
             counter += 1
