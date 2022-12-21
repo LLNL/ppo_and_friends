@@ -1245,9 +1245,10 @@ class PPO(object):
                             total_intr_rewards[policy_id] += \
                                 ep_intr_rewards[policy_id]
 
-                        top_rollout_score[policy_id] = \
-                            max(top_rollout_score[policy_id],
-                            ep_nat_rewards[policy_id].max())
+                        if where_not_done.size > 0:
+                            top_rollout_score[policy_id] = \
+                                max(top_rollout_score[policy_id],
+                                ep_nat_rewards[policy_id][where_not_done].max())
 
                 ep_ts[where_maxed] = 0
 
@@ -1264,7 +1265,7 @@ class PPO(object):
             # We didn't complete any episodes, so let's just take the top score
             # from our incomplete episode's scores.
             #
-            if total_episodes <= 1.0:
+            if total_episodes < 1.0:
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
                     ep_nat_rewards[policy_id].max())
 
