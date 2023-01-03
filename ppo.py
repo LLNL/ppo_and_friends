@@ -1279,12 +1279,8 @@ class PPO(object):
             # episodes, but I think it's a bit more helpful to see the
             # fluctuations across rollouts.
             #
-            max_reward = max(self.status_dict[policy_id]["ext reward range"][1],
-                rollout_max_ext_reward[policy_id])
-
-            min_reward = min(self.status_dict[policy_id]["ext reward range"][0],
-                rollout_min_ext_reward[policy_id])
-
+            max_reward = rollout_max_ext_reward[policy_id]
+            min_reward = rollout_min_ext_reward[policy_id]
             max_reward = comm.allreduce(max_reward, MPI.MAX)
             min_reward = comm.allreduce(min_reward, MPI.MIN)
 
