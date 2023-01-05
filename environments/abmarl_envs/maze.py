@@ -67,6 +67,7 @@ lg_sim = MultiAgentWrapper(
                     object_registry,
                     overlapping={1: [3], 3: [1]},
                     observe="grid",
+                    max_steps=2048,
                 )
             )
         )
@@ -80,6 +81,7 @@ lg_blind_sim = MultiAgentWrapper(
                     object_registry,
                     overlapping={1: [3], 3: [1]},
                     observe="position",
+                    max_steps=2048,
                 )
             )
         )
