@@ -27,14 +27,17 @@ object_registry = {
     )
 }
 
-file_name = os.path.join(os.path.realpath(
+small_maze = os.path.join(os.path.realpath(
     os.path.dirname(__file__)), "maze.txt")
 
-sim = MultiAgentWrapper(
+large_maze = os.path.join(os.path.realpath(
+    os.path.dirname(__file__)), "large_maze.txt")
+
+sm_sim = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
-                    file_name,
+                    small_maze,
                     object_registry,
                     overlapping={1: [3], 3: [1]},
                     observe="grid",
@@ -43,11 +46,11 @@ sim = MultiAgentWrapper(
         )
     )
 
-blind_sim = MultiAgentWrapper(
+sm_blind_sim = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
-                    file_name,
+                    small_maze,
                     object_registry,
                     overlapping={1: [3], 3: [1]},
                     observe="position",
@@ -56,5 +59,33 @@ blind_sim = MultiAgentWrapper(
         )
     )
 
-abmarl_blind_maze = blind_sim
-abmarl_maze = sim
+lg_sim = MultiAgentWrapper(
+        AllStepManager(
+            FlattenWrapper(
+                AlternateMazeNavigationSim.build_sim_from_file(
+                    large_maze,
+                    object_registry,
+                    overlapping={1: [3], 3: [1]},
+                    observe="grid",
+                )
+            )
+        )
+    )
+
+lg_blind_sim = MultiAgentWrapper(
+        AllStepManager(
+            FlattenWrapper(
+                AlternateMazeNavigationSim.build_sim_from_file(
+                    large_maze,
+                    object_registry,
+                    overlapping={1: [3], 3: [1]},
+                    observe="position",
+                )
+            )
+        )
+    )
+
+sm_abmarl_blind_maze = sm_blind_sim
+sm_abmarl_maze       = sm_sim
+lg_abmarl_blind_maze = lg_blind_sim
+lg_abmarl_maze       = lg_sim

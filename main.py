@@ -91,6 +91,8 @@ if __name__ == "__main__":
                  "PressurePlate",
                  "AbmarlMaze",
                  "AbmarlBlindMaze",
+                 "AbmarlLargeMaze",
+                 "AbmarlBlindLargeMaze",
                  "AbmarlReachTheTarget",
                  "BinaryCartPole",
                  "BinaryLunarLander",
