@@ -10,6 +10,11 @@ from .ppo_networks import PPONetwork
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
 
+from mpi4py import MPI
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
+
 class LinearInverseModel(nn.Module):
 
     def __init__(self,
