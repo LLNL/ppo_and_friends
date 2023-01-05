@@ -1712,10 +1712,10 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+        actor_kw_args["hidden_size"] = 128
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
         icm_kw_args["encoded_obs_dim"] = 9
@@ -1747,14 +1747,14 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 128
+        ts_per_rollout = num_procs * 256
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 128,
                      epochs_per_iter    = 20,
-                     max_ts_per_ep      = 128,
+                     max_ts_per_ep      = 256,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
@@ -1775,10 +1775,10 @@ class AbmarlLargeMazeLauncher(EnvironmentLauncher):
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+        actor_kw_args["hidden_size"] = 128
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
         icm_kw_args["encoded_obs_dim"] = 9
@@ -1810,7 +1810,7 @@ class AbmarlLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 128
+        ts_per_rollout = num_procs * 256
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1909,7 +1909,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         icm_kw_args = {}
         icm_kw_args["encoded_obs_dim"] = 2
 
-        lr = 0.001
+        lr = 0.0005
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
@@ -1919,6 +1919,8 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             "bootstrap_clip"     : (-10., 10.),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
+            "intr_reward_weight" : 1e-2,
+            "entropy_weight"     : 0.05,
         }
 
         policy_name = "abmarl-maze"
@@ -1936,18 +1938,20 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = num_procs * 512
 
+        #TODO: how does max_ts_per_ep affect results?
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 128,
                      epochs_per_iter    = 20,
-                     max_ts_per_ep      = 128,
+                     max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,
+                     use_soft_resets    = True,
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)

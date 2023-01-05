@@ -244,6 +244,7 @@ class PPO(object):
             self.status_dict[policy_id]["critic loss"]         = 0
             self.status_dict[policy_id]["kl avg"]              = 0
             self.status_dict[policy_id]["ext reward range"] = (max_int, -max_int)
+            self.status_dict[policy_id]["top reward"]       = -max_int
             self.status_dict[policy_id]["obs range"]        = (max_int, -max_int)
 
         #
@@ -906,6 +907,7 @@ class PPO(object):
         total_intr_rewards      = {}
         total_rewards           = {}
         agents_per_policy       = {}
+        top_reward              = {}
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]       = -np.finfo(np.float32).max
@@ -922,6 +924,7 @@ class PPO(object):
             total_intr_rewards[policy_id]      = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]           = np.zeros((env_batch_size, 1))
             agents_per_policy[policy_id]       = 0
+            top_reward[policy_id]              = -np.finfo(np.float32).max
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
@@ -1069,6 +1072,9 @@ class PPO(object):
                 ep_nat_rewards[policy_id]    += natural_reward[agent_id]
                 ep_intr_rewards[policy_id]   += intr_reward[agent_id]
                 agents_per_policy[policy_id] += 1
+
+                top_reward[policy_id] = max(top_reward[policy_id],
+                    natural_reward[agent_id].item())
 
             #
             # Since each policy can have multiple agents, we average
@@ -1308,11 +1314,15 @@ class PPO(object):
             rw_range          = (min_reward, max_reward)
             obs_range         = (min_obs, max_obs)
 
+            global_top_reward = max(self.status_dict[policy_id]["top reward"],
+                top_reward[policy_id])
+
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
             self.status_dict[policy_id]["top score"]           = top_score
             self.status_dict[policy_id]["obs range"]           = obs_range
             self.status_dict[policy_id]["ext reward range"]    = rw_range
+            self.status_dict[policy_id]["top reward"]          = global_top_reward
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_rewards[policy_id].sum()
@@ -1329,7 +1339,7 @@ class PPO(object):
 
                 max_reward   = comm.allreduce(max_reward, MPI.MAX)
                 min_reward   = comm.allreduce(min_reward, MPI.MIN)
-                reward_range = (max_reward, min_reward)
+                reward_range = (min_reward, max_reward)
 
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
