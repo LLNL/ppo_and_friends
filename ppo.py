@@ -1074,7 +1074,7 @@ class PPO(object):
                 agents_per_policy[policy_id] += 1
 
                 top_reward[policy_id] = max(top_reward[policy_id],
-                    natural_reward[agent_id].item())
+                    natural_reward[agent_id].max())
 
             #
             # Since each policy can have multiple agents, we average
@@ -1316,6 +1316,7 @@ class PPO(object):
 
             global_top_reward = max(self.status_dict[policy_id]["top reward"],
                 top_reward[policy_id])
+            global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
