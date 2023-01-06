@@ -73,8 +73,8 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         self.activation = activation
 
-        self.input_layer, self.hidden_layers, self.output_layer = \
-            create_linear_layers(
+        self.sequential_net = \
+            create_sequential_network(
                 in_dim       = in_dim,
                 out_size     = out_size,
                 hidden_size  = hidden_size,
@@ -84,13 +84,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
-
-        if self.input_layer is not None:
-            out = self.input_layer(out)
-            out = self.activation(out)
-            out = self.hidden_layers(out)
-
-        out = self.output_layer(out)
+        out = self.sequential_net(out)
 
         #
         # If this network is embedded in a larger network,

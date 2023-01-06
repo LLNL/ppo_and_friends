@@ -95,7 +95,7 @@ def init_net_parameters(net,
     return net
 
 
-def create_linear_layers(
+def create_sequential_network(
     in_dim,
     out_size,
     hidden_size,
@@ -103,7 +103,7 @@ def create_linear_layers(
     activation,
     out_init = None):
     """
-        Create input, hidden, and output layers to be used in a network.
+        Create a Sequential torch network.
 
         Arguments:
             in_dim          The dimensions of the input data. For
@@ -143,38 +143,37 @@ def create_linear_layers(
     else:
         hidden_depth = len(hidden_size)
 
+    layers = []
 
     if len(hidden_size) != 0:
 
-        input_layer = init_layer(nn.Linear(in_dim, hidden_size[0]))
+        layers.append(init_layer(nn.Linear(in_dim, hidden_size[0])))
+        layers.append(activation)
 
-        hidden_layer_list = []
+        inner_layer_list = []
 
         for i in range(hidden_depth - 1):
-            hidden_layer_list.append(init_layer(
+            inner_layer_list.append(init_layer(
                 nn.Linear(
                     hidden_size[i],
                     hidden_size[i + 1])))
 
-            hidden_layer_list.append(activation)
+            inner_layer_list.append(activation)
 
-        hidden_layers = nn.Sequential(*hidden_layer_list)
+        layers.append(nn.Sequential(*inner_layer_list))
 
         if out_init != None:
-            output_layer = init_layer(
+            layers.append(init_layer(
                 nn.Linear(hidden_size[-1], out_size),
-                    weight_std=out_init)
+                    weight_std=out_init))
         else:
-            output_layer = init_layer(
-                nn.Linear(hidden_size[-1], out_size))
+            layers.append(init_layer(
+                nn.Linear(hidden_size[-1], out_size)))
     else:
-        input_layer   = None
-        hidden_layers = nn.Sequential(*[])
-
         if out_init != None:
-            output_layer = init_layer(nn.Linear(in_dim, out_size),
-                weight_std=out_init)
+            layers.append(init_layer(nn.Linear(in_dim, out_size),
+                weight_std=out_init))
         else:
-            output_layer = init_layer(nn.Linear(in_dim, out_size))
+            layers.append(init_layer(nn.Linear(in_dim, out_size)))
 
-    return input_layer, hidden_layers, output_layer
+    return nn.Sequential(*layers)
