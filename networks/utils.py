@@ -4,6 +4,11 @@
 import torch.nn as nn
 import numpy as np
 
+from mpi4py import MPI
+comm      = MPI.COMM_WORLD
+rank      = comm.Get_rank()
+num_procs = comm.Get_size()
+
 def get_conv2d_out_size(in_size,
                         padding,
                         kernel_size,
@@ -88,3 +93,88 @@ def init_net_parameters(net,
             nn.init.constant_(param, bias_const)
 
     return net
+
+
+def create_linear_layers(
+    in_dim,
+    out_size,
+    hidden_size,
+    hidden_depth,
+    activation,
+    out_init = None):
+    """
+        Create input, hidden, and output layers to be used in a network.
+
+        Arguments:
+            in_dim          The dimensions of the input data. For
+                            instance, if the expected input shape is
+                            (batch_size, 16, 4), in_dim would be (16, 4).
+            out_dim         The expected dimensions for the output. For
+                            instance, if the expected output shape is
+                            (batch_size, 16, 4), out_dim would be (16, 4).
+            activation      The activation function to use on the output
+                            of hidden layers.
+            hidden_size     Can either be an int or list of ints. If an int,
+                            all layers will be this size. Otherwise, a list
+                            designates the size for each layer. Note that
+                            the hidden_depth argument is ignored if this
+                            argument is a list and the depth is instead
+                            taken from the length of the list. Note that
+                            this argument can be set to 0 or an empty list,
+                            resulting in only an input and output layer.
+            hidden_depth    The number of hidden layers. Note that this is
+                            ignored if hidden_size is a list.
+            out_init        A std weight to apply to the output layer.
+    """
+    if type(hidden_size) != list:
+
+        if ((hidden_size == 0 and hidden_depth != 0) or
+            (hidden_size != 0 and hidden_depth == 0)):
+
+            msg  = "ERROR: if either hidden_size or hidden_depth "
+            msg += "is 0, both must be 0,"
+            msg += "but received "
+            msg += "hidden_size of {} ".format(hidden_size)
+            msg += "and hidden_depth of {}.".format(hidden_depth)
+            rank_print(msg)
+            comm.Abort()
+
+        hidden_size = [hidden_size] * hidden_depth
+    else:
+        hidden_depth = len(hidden_size)
+
+
+    if len(hidden_size) != 0:
+
+        input_layer = init_layer(nn.Linear(in_dim, hidden_size[0]))
+
+        hidden_layer_list = []
+
+        for i in range(hidden_depth - 1):
+            hidden_layer_list.append(init_layer(
+                nn.Linear(
+                    hidden_size[i],
+                    hidden_size[i + 1])))
+
+            hidden_layer_list.append(activation)
+
+        hidden_layers = nn.Sequential(*hidden_layer_list)
+
+        if out_init != None:
+            output_layer = init_layer(
+                nn.Linear(hidden_size[-1], out_size),
+                    weight_std=out_init)
+        else:
+            output_layer = init_layer(
+                nn.Linear(hidden_size[-1], out_size))
+    else:
+        input_layer   = None
+        hidden_layers = nn.Sequential(*[])
+
+        if out_init != None:
+            output_layer = init_layer(nn.Linear(in_dim, out_size),
+                weight_std=out_init)
+        else:
+            output_layer = init_layer(nn.Linear(in_dim, out_size))
+
+    return input_layer, hidden_layers, output_layer
