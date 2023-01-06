@@ -5,7 +5,7 @@ from .encoders import *
 import torch
 import torch.nn as nn
 from functools import reduce
-from .utils import init_layer
+from .utils import init_layer, create_sequential_network
 from .ppo_networks import PPONetwork
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -22,6 +22,7 @@ class LinearInverseModel(nn.Module):
                  out_dim,
                  out_init,
                  hidden_size,
+                 hidden_depth,
                  action_dtype,
                  activation = nn.ReLU(),
                  **kw_args):
@@ -34,6 +35,29 @@ class LinearInverseModel(nn.Module):
             make choices.
 
             This implementation uses a simple feed-forward network.
+
+            Arguments:
+                in_dim          The dimensions of the input data. For
+                                instance, if the expected input shape is
+                                (batch_size, 16, 4), in_dim would be (16, 4).
+                out_dim         The expected dimensions for the output. For
+                                instance, if the expected output shape is
+                                (batch_size, 16, 4), out_dim would be (16, 4).
+                out_init        A std weight to apply to the output layer.
+                hidden_size     Can either be an int or list of ints. If an int,
+                                all layers will be this size. Otherwise, a list
+                                designates the size for each layer. Note that
+                                the hidden_depth argument is ignored if this
+                                argument is a list and the depth is instead
+                                taken from the length of the list. Note that
+                                this argument can be set to 0 or an empty list,
+                                resulting in only an input and output layer.
+                hidden_depth    The number of hidden layers. Note that this is
+                                ignored if hidden_size is a list.
+                action_dtype    A string signifying what type of actions we're
+                                using.
+                activation      The activation function to use on the output
+                                of hidden layers.
         """
 
         super(LinearInverseModel, self).__init__()
@@ -58,10 +82,14 @@ class LinearInverseModel(nn.Module):
         #
         # Inverse model; Predict the a_1 given s_1 and s_2.
         #
-        self.inv_1 = init_layer(nn.Linear(in_dim, hidden_size))
-        self.inv_2 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.inv_3 = init_layer(nn.Linear(hidden_size, out_size),
-            weight_std=out_init)
+        self.sequential_net = \
+            create_sequential_network(
+                in_dim       = in_dim,
+                out_size     = out_size,
+                hidden_size  = hidden_size,
+                hidden_depth = hidden_depth,
+                activation   = activation,
+                out_init     = out_init)
 
     def forward(self,
                 enc_obs_1,
@@ -69,14 +97,7 @@ class LinearInverseModel(nn.Module):
 
         obs_input = torch.cat((enc_obs_1, enc_obs_2), dim=1)
 
-        out = self.inv_1(obs_input)
-        out = self.activation(out)
-
-        out = self.inv_2(out)
-        out = self.activation(out)
-
-        out = self.inv_3(out)
-
+        out = self.sequential_net(obs_input)
         out = self.output_func(out)
 
         out_shape = (out.shape[0],) + self.out_dim
@@ -92,6 +113,7 @@ class LinearForwardModel(nn.Module):
                  out_dim,
                  out_init,
                  hidden_size,
+                 hidden_depth,
                  action_dtype,
                  act_dim,
                  action_nvec = None,
@@ -105,6 +127,29 @@ class LinearForwardModel(nn.Module):
             that an actor needs to make decisions.
 
             This implementation uses a simple feed-forward network.
+
+            Arguments:
+                in_dim          The dimensions of the input data. For
+                                instance, if the expected input shape is
+                                (batch_size, 16, 4), in_dim would be (16, 4).
+                out_dim         The expected dimensions for the output. For
+                                instance, if the expected output shape is
+                                (batch_size, 16, 4), out_dim would be (16, 4).
+                out_init        A std weight to apply to the output layer.
+                hidden_size     Can either be an int or list of ints. If an int,
+                                all layers will be this size. Otherwise, a list
+                                designates the size for each layer. Note that
+                                the hidden_depth argument is ignored if this
+                                argument is a list and the depth is instead
+                                taken from the length of the list. Note that
+                                this argument can be set to 0 or an empty list,
+                                resulting in only an input and output layer.
+                hidden_depth    The number of hidden layers. Note that this is
+                                ignored if hidden_size is a list.
+                action_dtype    A string signifying what type of actions we're
+                                using.
+                activation      The activation function to use on the output
+                                of hidden layers.
         """
 
         super(LinearForwardModel, self).__init__()
@@ -122,10 +167,14 @@ class LinearForwardModel(nn.Module):
         #
         # Forward model; Predict s_2 given s_1 and a_1.
         #
-        self.f_1 = init_layer(nn.Linear(in_dim, hidden_size))
-        self.f_2 = init_layer(nn.Linear(hidden_size, hidden_size))
-        self.f_3 = init_layer(nn.Linear(hidden_size, out_size),
-            weight_std=out_init)
+        self.sequential_net = \
+            create_sequential_network(
+                in_dim       = in_dim,
+                out_size     = out_size,
+                hidden_size  = hidden_size,
+                hidden_depth = hidden_depth,
+                activation   = activation,
+                out_init     = out_init)
 
     def forward(self,
                 enc_obs_1,
@@ -165,13 +214,14 @@ class LinearForwardModel(nn.Module):
         #
         # Predict obs_2 given obs_1 and actions.
         #
-        out = self.f_1(_input)
-        out = self.activation(out)
+        #out = self.f_1(_input)
+        #out = self.activation(out)
 
-        out = self.f_2(out)
-        out = self.activation(out)
+        #out = self.f_2(out)
+        #out = self.activation(out)
 
-        out = self.f_3(out)
+        #out = self.f_3(out)
+        out = self.sequential_net(_input)
         return out
 
 
@@ -181,18 +231,75 @@ class ICM(PPONetwork):
                  obs_dim,
                  act_dim,
                  action_dtype,
-                 out_init        = 1.0,
-                 obs_encoder     = LinearObservationEncoder,
-                 reward_scale    = 0.01,
-                 activation      = nn.ReLU(),
-                 encoded_obs_dim = 128,
-                 hidden_size     = 128,
-                 action_nvec     = None,
+                 out_init             = 1.0,
+                 obs_encoder          = LinearObservationEncoder,
+                 reward_scale         = 0.01,
+                 activation           = nn.ReLU(),
+                 encoded_obs_dim      = 128,
+                 encoder_hidden_size  = 128,
+                 inverse_hidden_size  = 128,
+                 inverse_hidden_depth = 2,
+                 forward_hidden_size  = 128,
+                 forward_hidden_depth = 2,
+                 action_nvec          = None,
                  **kw_args):
         """
             The Intrinsic Curiosit Model (ICM).
 
             This implementation of ICM comes from arXiv:1705.05363v1.
+
+            Arguments:
+                obs_dim              The shape of our observations.
+                act_dim              The shape of our actions.
+                action_dtype         A string signifying what type of actions
+                                     we're using.
+                out_init             A std weight to apply to the output layer.
+                obs_encoder          The class to use for encoding observations.
+                reward_scale         A scale/weight to apply to the reward.
+                activation           The activation function to use on the
+                                     output of hidden layers.
+                encoded_obs_dim      The dimensions for the encoded
+                                     observations.
+                encoder_hidden_size  Hidden size for the encoder.
+                                     Can either be an int or list of ints. If an
+                                     int, all layers will be this size.
+                                     Otherwise, a list designates the size for
+                                     each layer. Note that the hidden_depth
+                                     argument is ignored if this argument is a
+                                     list and the depth is instead taken from
+                                     the length of the list. Note that this 
+                                     argument can be set to 0 or an empty list,
+                                     resulting in only an input and output
+                                     layer.
+                inverse_hidden_size  Hidden size for the inverse model.
+                                     Can either be an int or list of ints. If an
+                                     int, all layers will be this size.
+                                     Otherwise, a list designates the size for
+                                     each layer. Note that the hidden_depth
+                                     argument is ignored if this argument is a
+                                     list and the depth is instead taken from
+                                     the length of the list. Note that this 
+                                     argument can be set to 0 or an empty list,
+                                     resulting in only an input and output
+                                     layer.
+                inverse_hidden_depth The number of hidden layers for the inverse
+                                     model. Note that this is ignored if
+                                     hidden_size is a list.
+                forward_hidden_size  Hidden size for the forward model.
+                                     Can either be an int or list of ints. If an
+                                     int, all layers will be this size.
+                                     Otherwise, a list designates the size for
+                                     each layer. Note that the hidden_depth
+                                     argument is ignored if this argument is a
+                                     list and the depth is instead taken from
+                                     the length of the list. Note that this 
+                                     argument can be set to 0 or an empty list,
+                                     resulting in only an input and output
+                                     layer.
+                forward_hidden_depth The number of hidden layers for the forward
+                                     model. Note that this is ignored if
+                                     hidden_size is a list.
+                action_nvec          The nvec attribute of the action space.
         """
 
         super(ICM, self).__init__(**kw_args)
@@ -220,7 +327,7 @@ class ICM(PPONetwork):
                 obs_dim,
                 encoded_obs_dim,
                 out_init,
-                hidden_size,
+                encoder_hidden_size,
                 **kw_args)
         else:
             self.obs_encoder = lambda x : x
@@ -233,7 +340,8 @@ class ICM(PPONetwork):
             encoded_obs_dim * 2, 
             act_dim,
             out_init,
-            hidden_size,
+            inverse_hidden_size,
+            inverse_hidden_depth,
             action_dtype,
             **kw_args)
 
@@ -244,7 +352,8 @@ class ICM(PPONetwork):
             encoded_obs_dim + act_size,
             encoded_obs_dim,
             out_init,
-            hidden_size,
+            forward_hidden_size,
+            forward_hidden_depth,
             action_dtype,
             act_dim,
             action_nvec = action_nvec,
