@@ -12,7 +12,7 @@ from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
-from ppo_and_friends.utils.iteration_mappers import LinearDecrementer
+from ppo_and_friends.utils.schedulers import LinearScheduler, CallableExtent
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -68,8 +68,7 @@ class AgentPolicy():
                                       estimated reward (from our value network)
                                       might be way outside of the expected
                                       range. We also allow the range min/max
-                                      to be callables that take in the
-                                      current iteration.
+                                      to be callables from utils/schedulers.
                  ac_network           The type of network to use for the actor
                                       and critic.
                  actor_kw_args        Keyword arguments for the actor network.
@@ -85,14 +84,14 @@ class AgentPolicy():
                  lr                   The initial learning rate.
                  lr_dec               A class that inherits from the
                                       IterationMapper class located in
-                                      utils/iteration_mappers.py.
+                                      utils/schedulers.py.
                                       This class has a decrement function that
                                       will be used to updated the learning rate.
                  entropy_weight       An optional weight to apply to our
                                       entropy.
                  entropy_dec          A class that inherits from the
                                       IterationMapper class located in
-                                      utils/iteration_mappers.py.
+                                      utils/schedulers.py.
                                       This class has a decrement function that
                                       will be used to updated the entropy
                                       weight.
@@ -138,16 +137,18 @@ class AgentPolicy():
         self.gradient_clip      = gradient_clip
 
         if lr_dec == None:
-            self.lr_dec = LinearDecrementer(
-                max_iteration = 1,
+            self.lr_dec = LinearScheduler(
+                status_key    = "",
+                status_max    = 1,
                 max_value     = lr,
                 min_value     = lr)
         else:
             self.lr_dec = lr_dec
 
         if entropy_dec == None:
-            self.entropy_dec = LinearDecrementer(
-                max_iteration = 1,
+            self.entropy_dec = LinearScheduler(
+                status_key    = "",
+                status_max    = 1,
                 max_value     = entropy_weight,
                 min_value     = entropy_weight)
         else:
@@ -197,13 +198,13 @@ class AgentPolicy():
             min_bs_callable  = bootstrap_clip[0]
             bs_clip_callable = True
         else:
-            min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
+            min_bs_callable = CallableExtent(bootstrap_clip[0])
 
         if callable(bootstrap_clip[1]):
             max_bs_callable  = bootstrap_clip[1]
             bs_clip_callable = True
         else:
-            max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
+            max_bs_callable = CallableExtent(bootstrap_clip[1])
 
         self.bootstrap_clip = (min_bs_callable, max_bs_callable)
 
@@ -230,6 +231,18 @@ class AgentPolicy():
                 lr=lr, eps=1e-5)
         else:
             self.icm_optim = None
+
+    def finalize(self, status_dict):
+        """
+            Perfrom any finalizing tasks before we start using the policy.
+
+            Arguments:
+                status_dict    The status dict for training.
+        """
+        self.lr_dec.finalize(status_dict)
+        self.entropy_dec.finalize(status_dict)
+        self.bootstrap_clip[0].finalize(status_dict)
+        self.bootstrap_clip[1].finalize(status_dict)
 
     def register_agent(self, agent_id):
         """
@@ -392,7 +405,7 @@ class AgentPolicy():
             self.episodes[agent_id] = np.array([None] * env_batch_size,
                 dtype=object)
 
-            bs_clip_range = self.get_bs_clip_range(None, status_dict)
+            bs_clip_range = self.get_bs_clip_range(None)
 
             for ei_idx in range(env_batch_size):
                 self.episodes[agent_id][ei_idx] = EpisodeInfo(
@@ -572,8 +585,7 @@ class AgentPolicy():
             # provided range.
             #
             bs_min, bs_max = self.get_bs_clip_range(
-                self.episodes[agent_id][env_i].rewards,
-                status_dict)
+                self.episodes[agent_id][env_i].rewards)
 
             #
             # If we're terminal, the start of the next episode is 0.
@@ -726,17 +738,11 @@ class AgentPolicy():
 
         return intr_reward
 
-    def update_learning_rate(self, iteration, timestep):
+    def update_learning_rate(self):
         """
             Update the learning rate.
-
-            Arguments:
-                iteration        The current training iteration.
-                timestep         The current training timestep.
         """
-        self.lr = self.lr_dec(
-            iteration = iteration,
-            timestep  = timestep)
+        self.lr = self.lr_dec()
 
         update_optimizer_lr(self.actor_optim, self.lr)
         update_optimizer_lr(self.critic_optim, self.lr)
@@ -744,21 +750,13 @@ class AgentPolicy():
         if self.enable_icm:
             update_optimizer_lr(self.icm_optim, self.lr)
 
-    def update_entropy_weight(self,
-                              iteration,
-                              timestep):
+    def update_entropy_weight(self):
         """
-            Update the entropy weight. This relies on the entropy_dec function,
-            which expects an iteration and returns an updated entropy weight.
-
-            Arguments:
-                iteration    The current iteration of training.
+            Update the entropy weight.
         """
-        self.entropy_weight = self.entropy_dec(
-            iteration = iteration,
-            timestep  = timestep)
+        self.entropy_weight = self.entropy_dec()
 
-    def get_bs_clip_range(self, ep_rewards, status_dict):
+    def get_bs_clip_range(self, ep_rewards):
         """
             Get the current bootstrap clip range.
 
@@ -776,16 +774,8 @@ class AgentPolicy():
             bs_max = max(ep_rewards)
 
         else:
-            iteration = status_dict["general"]["iteration"]
-            timestep  = status_dict["general"]["timesteps"]
-
-            bs_min = self.bootstrap_clip[0](
-                iteration = iteration,
-                timestep  = timestep)
-
-            bs_max = self.bootstrap_clip[1](
-                iteration = iteration,
-                timestep  = timestep)
+            bs_min = self.bootstrap_clip[0]()
+            bs_max = self.bootstrap_clip[1]()
 
         return (bs_min, bs_max)
 

@@ -8,7 +8,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
-from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.utils import generate_policy
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
@@ -141,7 +140,7 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
-        env, self.status_dict = wrap_environment(
+        env = wrap_environment(
             env_generator     = env_generator,
             envs_per_proc     = envs_per_proc,
             random_seed       = random_seed,
@@ -221,6 +220,7 @@ class PPO(object):
         #
         max_int = np.iinfo(np.int32).max
 
+        self.status_dict = {}
         self.status_dict["general"] = {}
         self.status_dict["general"]["iteration"]      = 0
         self.status_dict["general"]["rollout time"]   = 0
@@ -307,6 +307,11 @@ class PPO(object):
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
         comm.barrier()
+
+        for policy_id in self.policies:
+            self.policies[policy_id].finalize(self.status_dict)
+
+        self.env.finalize(self.status_dict)
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -813,33 +818,20 @@ class PPO(object):
 
         rank_print("--------------------------------------------------------")
 
-    def update_learning_rate(self,
-                             iteration,
-                             timestep):
+    def update_learning_rate(self):
         """
-            Update the learning rate. This relies on the lr_dec function,
-            which expects an iteration and returns an updated learning rate.
-
-            Arguments:
-                iteration    The current iteration of training.
+            Update the learning rate. This relies on the lr_dec function.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].update_learning_rate(
-                iteration, timestep)
+            self.policies[policy_id].update_learning_rate()
             self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr
 
-    def update_entropy_weight(self,
-                              iteration,
-                              timestep):
+    def update_entropy_weight(self):
         """
-            Update the entropy weight. This relies on the entropy_dec function,
-            which expects an iteration and returns an updated entropy weight.
-
-            Arguments:
-                iteration    The current iteration of training.
+            Update the entropy weight. This relies on the entropy_dec function.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].update_entropy_weight(iteration, timestep)
+            self.policies[policy_id].update_entropy_weight()
             self.status_dict[policy_id]["entropy weight"] = \
                 self.policies[policy_id].entropy_weight
 
@@ -1382,14 +1374,6 @@ class PPO(object):
 
             self.rollout()
 
-            self.update_learning_rate(
-                self.status_dict["general"]["iteration"],
-                self.status_dict["general"]["timesteps"])
-
-            self.update_entropy_weight(
-                self.status_dict["general"]["iteration"],
-                self.status_dict["general"]["timesteps"])
-
             data_loaders = {}
             for key in self.policies:
                 data_loaders[key] = DataLoader(
@@ -1457,6 +1441,9 @@ class PPO(object):
 
             iteration += 1
             self.status_dict["general"]["iteration"] = iteration
+
+            self.update_learning_rate()
+            self.update_entropy_weight()
 
             self.print_status()
 

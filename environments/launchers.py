@@ -13,7 +13,6 @@ from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
 from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryCartPoleWrapper
@@ -21,7 +20,7 @@ from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryLunarL
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
-from ppo_and_friends.utils.iteration_mappers import *
+from ppo_and_friends.utils.schedulers import *
 
 try:
     import pressureplate
@@ -108,14 +107,7 @@ class CartPoleLauncher(EnvironmentLauncher):
         actor_kw_args["activation"] = nn.LeakyReLU()
         critic_kw_args = actor_kw_args.copy()
 
-        lr     = 0.0002
-        min_lr = 0.0002
-
-        lr_dec = LinearDecrementer(
-            max_iteration  = 1,
-            max_value      = lr,
-            min_value      = min_lr)
-
+        lr = 0.0002
         ts_per_rollout = num_procs * 256
 
         policy_args = {\
@@ -123,7 +115,6 @@ class CartPoleLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -159,13 +150,7 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
         actor_kw_args["activation"] = nn.LeakyReLU()
         critic_kw_args = actor_kw_args.copy()
 
-        lr     = 0.0002
-        min_lr = 0.0002
-
-        lr_dec = LinearDecrementer(
-            max_iteration  = 1,
-            max_value      = lr,
-            min_value      = min_lr)
+        lr = 0.0002
 
         ts_per_rollout = num_procs * 256
 
@@ -174,7 +159,6 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -208,13 +192,7 @@ class PendulumLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        lr     = 0.0003
-        min_lr = 0.0003
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1000,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr = 0.0003
 
         ts_per_rollout = num_procs * 512
 
@@ -223,7 +201,6 @@ class PendulumLauncher(EnvironmentLauncher):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
             "dynamic_bs_clip"  : True,
         }
 
@@ -262,8 +239,8 @@ class MountainCarLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearStepMapper(
-            step_type    = "iteration",
+        lr_dec = LinearStepScheduler(
+            status_key   = "iteration",
             steps        = [35, 50, 60],
             step_values  = [0.0003, 0.00025, 0.0002],
             ending_value = 0.0001)
@@ -326,20 +303,13 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
         icm_kw_args = {}
         icm_kw_args["encoded_obs_dim"] = 2
 
-        lr     = 0.0003
-        min_lr = 0.0003
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr = 0.0003
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-            "lr_dec"             : lr_dec,
             "bootstrap_clip"     : (-10, 10),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
@@ -383,10 +353,11 @@ class AcrobotLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 2000,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr_dec = LinearScheduler(
+            status_key = "iteration",
+            status_max = 2000,
+            max_value  = lr,
+            min_value  = min_lr)
 
         ts_per_rollout = num_procs * 512
 
@@ -444,8 +415,9 @@ class LunarLanderLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 200,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 200,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -509,8 +481,9 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 200,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 200,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -574,8 +547,9 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 100,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 100,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -649,8 +623,9 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 200,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 200,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -733,20 +708,20 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
         # run with 4 processors. The resulting policy can regularly reach average
         # scores of 320+ over 100 test runs.
         #
-        lr_dec = LinearStepMapper(
-            step_type    = "iteration",
+        lr_dec = LinearStepScheduler(
+            status_key   = "iteration",
             steps        = [3900,],
             step_values  = [0.0001,],
             ending_value = 0.00001)
 
-        reward_clip_min = LinearStepMapper(
-            step_type    = "iteration",
+        reward_clip_min = LinearStepScheduler(
+            status_key   = "iteration",
             steps        = [4000,],
             step_values  = [-1.,],
             ending_value = -10.)
 
-        bs_clip_min = LinearStepMapper(
-            step_type    = "iteration",
+        bs_clip_min = LinearStepScheduler(
+            status_key   = "iteration",
             steps        = [4000,],
             step_values  = [-1.,],
             ending_value = -10.)
@@ -820,8 +795,9 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 4000,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 4000,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -891,8 +867,9 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 4000,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 4000,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -973,20 +950,13 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 128
 
-        lr     = 0.0001
-        min_lr = 0.0001
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1.,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr = 0.0001
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
             "bootstrap_clip"   : (-10., 10.),
             "entropy_weight"   : 0.0,
         }
@@ -1029,8 +999,9 @@ class AntLauncher(EnvironmentLauncher):
         lr     = 0.00025
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 100,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 100,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -1104,20 +1075,13 @@ class HumanoidLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
 
-        lr     = 0.0001
-        min_lr = 0.0001
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1.0,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr = 0.0001
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
             "target_kl"        : 0.015,
         }
 
@@ -1171,8 +1135,9 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 200.0,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 200,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -1219,8 +1184,9 @@ class Walker2DLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 600,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 600,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -1272,8 +1238,8 @@ class HopperLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearStepMapper(
-            step_type    = "iteration",
+        lr_dec = LinearStepScheduler(
+            status_key   = "iteration",
             steps        = [400,],
             step_values  = [0.0003,],
             ending_value = 0.0001)
@@ -1325,20 +1291,12 @@ class HalfCheetahLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        lr     = 0.0001
-        min_lr = 0.0001
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1.0,
-            max_value     = lr,
-            min_value     = min_lr)
-
+        lr = 0.0001
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1375,20 +1333,13 @@ class SwimmerLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        lr     = 0.0001
-        min_lr = 0.0001
-
-        lr_dec = LinearDecrementer(
-            max_iteration = 1.0,
-            max_value     = lr,
-            min_value     = min_lr)
+        lr = 0.0001
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "lr_dec"           : lr_dec,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -1434,16 +1385,18 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_timestep  = 1000000,
+        lr_dec = LinearScheduler(
+            status_key    = "timestep",
+            status_max    = 1000000,
             max_value     = lr,
             min_value     = min_lr)
 
         entropy_weight     = 0.015
         min_entropy_weight = 0.01
 
-        entropy_dec = LinearDecrementer(
-            max_timestep  = 1000000,
+        entropy_dec = LinearScheduler(
+            status_key    = "timestep",
+            status_max    = 1000000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
 
@@ -1517,16 +1470,18 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 6000,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 6000,
             max_value     = lr,
             min_value     = min_lr)
 
         entropy_weight     = 0.05
         min_entropy_weight = 0.01
 
-        entropy_dec = LinearDecrementer(
-            max_iteration = 6000,
+        entropy_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 6000,
             max_value     = entropy_weight,
             min_value     = min_entropy_weight)
 
@@ -1596,8 +1551,9 @@ class LevelBasedForagingLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 1500,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 1500,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -1657,8 +1613,9 @@ class PressurePlateLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration = 1500,
+        lr_dec = LinearScheduler(
+            status_key    = "iteration",
+            status_max    = 1500,
             max_value     = lr,
             min_value     = min_lr)
 
@@ -1907,9 +1864,12 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 2
+        icm_kw_args["encoded_obs_dim"]     = 2
+        #icm_kw_args["inverse_hidden_size"] = [256, 256]
+        #icm_kw_args["forward_hidden_size"] = [256, 256]
 
         lr = 0.0005
+        #lr = 0.001
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
@@ -1919,8 +1879,8 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             "bootstrap_clip"     : (-10., 10.),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
-            "intr_reward_weight" : 1e-2,
-            "entropy_weight"     : 0.05,
+            "intr_reward_weight" : 1e-3,
+            "entropy_weight"     : 0.01,
         }
 
         policy_name = "abmarl-maze"
@@ -1938,9 +1898,8 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = num_procs * 1024
 
-        #TODO: how does max_ts_per_ep affect results?
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
@@ -1976,8 +1935,9 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
         lr     = 0.0003
         min_lr = 0.0001
 
-        lr_dec = LinearDecrementer(
-            max_iteration  = 100,
+        lr_dec = LinearScheduler(
+            status_key     = "iteration",
+            status_max     = 100,
             max_value      = lr,
             min_value      = min_lr)
 

@@ -43,6 +43,7 @@ class IdentityWrapper(ABC):
         self.need_hard_reset   = True
         self.obs_cache         = None
         self.can_augment_obs   = False
+        self.finalized         = False
 
         self.observation_space        = env.observation_space
         self.critic_observation_space = env.critic_observation_space
@@ -318,6 +319,28 @@ class IdentityWrapper(ABC):
                 return has_wrapper(wrapper_class)
 
         return False
+
+    def _finalize(self, status_dict):
+        """
+            Finalize the environment by recursing through all wrappers.
+
+            Arguments:
+                status_dict    The training status dict.
+        """
+        finalize = getattr(self.env, "finalize", None)
+
+        if callable(finalize):
+            finalize(status_dict)
+
+    def finalize(self, status_dict):
+        """
+            Perform any finalizing acts.
+
+            Arguments:
+                status_dict    The training status dict.
+        """
+        self._finalize(status_dict)
+        self.finalized = True
 
     def seed(self, seed):
         self.set_random_seed(seed)
