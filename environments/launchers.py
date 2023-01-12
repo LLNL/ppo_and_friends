@@ -238,9 +238,9 @@ class MountainCarLauncher(EnvironmentLauncher):
 
         lr = LinearStepScheduler(
             status_key      = "iteration",
+            initial_value   = 0.0003,
             status_triggers = [35, 50, 60],
-            step_values     = [0.0003, 0.00025, 0.0002],
-            ending_value    = 0.0001)
+            step_values     = [0.00025, 0.0002, 0.0001])
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -683,21 +683,21 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
         #
         lr = LinearStepScheduler(
             status_key      = "iteration",
+            initial_value   = 0.0001,
             status_triggers = [3900,],
-            step_values     = [0.0001,],
-            ending_value    = 0.00001)
+            step_values     = [0.00001,])
 
         reward_clip_min = LinearStepScheduler(
             status_key      = "iteration",
+            initial_value   = -1.,
             status_triggers = [4000,],
-            step_values     = [-1.,],
-            ending_value    = -10.)
+            step_values     = [-10.,])
 
         bs_clip_min = LinearStepScheduler(
             status_key      = "iteration",
+            initial_value   = -1.,
             status_triggers = [4000,],
-            step_values     = [-1.,],
-            ending_value    = -10.)
+            step_values     = [-10.,])
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -1189,9 +1189,9 @@ class HopperLauncher(EnvironmentLauncher):
 
         lr = LinearStepScheduler(
             status_key      = "iteration",
+            initial_value   = 0.0003,
             status_triggers = [400,],
-            step_values     = [0.0003,],
-            ending_value    = 0.0001)
+            step_values     = [0.0001,])
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -1780,6 +1780,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             rank_print(msg)
             comm.Abort()
 
+        #FIXME: add maze results to README
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 128
@@ -1797,52 +1798,60 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         # Once we find the goal once, we want to increase the learning
         # rate to make sure we keep going back.
         #
-        lr = 0.0005
-        #lr = LinearScheduler(
-        #    status_key = "iteration",
-        #    status_max = 300,
-        #    max_value  = 0.0005,
-        #    min_value  = 0.0001)
-
         #lr = LinearStepScheduler(
-        #    status_preface  = "abmarl-maze",
-        #    status_key      = "top reward",
+        #    status_key      = "iteration",
+        #    initial_value   = 0.0005,
         #    compare_fn      = np.greater_equal,
-        #    status_triggers = [1.0,],
-        #    step_values     = [0.0005,],
-        #    ending_value    = 0.001)
+        #    status_triggers = [30, 70],
+        #    step_values     = [1e-4, 1e-5])
 
-        intr_reward_weight = 1e-2
+        #intr_reward_weight = LinearStepScheduler(
+        #    status_key      = "iteration",
+        #    initial_value   = 1e-2,
+        #    compare_fn      = np.greater_equal,
+        #    status_triggers = [30, 40, 50, 60],
+        #    step_values     = [1e-3, 1e-4, 1e-5, 1e-6])
+
+        #entropy_weight = LinearStepScheduler(
+        #    status_key      = "iteration",
+        #    initial_value   = 0.03,
+        #    compare_fn      = np.greater_equal,
+        #    status_triggers = [30, 40, 50, 60],
+        #    step_values     = [1e-2, 1e-3, 1e-4, 1e-5])
+
+        lr = LinearStepScheduler(
+            status_key      = "longest run",
+            initial_value   = 0.0005,
+            compare_fn      = np.less_equal,
+            status_triggers = [400, 100],
+            step_values     = [1e-4, 5e-5])
+
         intr_reward_weight = LinearStepScheduler(
-            #status_preface  = "abmarl-maze",
-            #status_key      = "top reward",
-            status_key      = "iteration",
-            compare_fn      = np.greater_equal,
-            status_triggers = [40,],
-            step_values     = [1e-2,],
-            ending_value    = 0.0)
+            status_key      = "longest run",
+            #initial_value   = 1e-3,
+            #compare_fn      = np.less_equal,
+            #status_triggers = [2000, 1000, 500, 300],
+            #step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
 
-        #intr_reward_weight = LinearScheduler(
-        #    status_key = "iteration",
-        #    status_max = 200,
-        #    max_value  = 1.0,
-        #    min_value  = 0.0)
+            initial_value   = 1e-2,
+            compare_fn      = np.less,
+            status_triggers = [2048, 2000, 1000, 500],
+            step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
 
-        entropy_weight = 0.03
+        #entropy_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 0.05,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [2000, 500, 300],
+        #    step_values     = [1e-3, 1e-4, 1e-5])
+
         entropy_weight = LinearStepScheduler(
-            #status_preface  = "abmarl-maze",
-            #status_key      = "top reward",
-            status_key      = "iteration",
+            status_preface  = "abmarl-maze",
+            status_key      = "top reward",
+            initial_value   = 0.05,
             compare_fn      = np.greater_equal,
-            status_triggers = [40,],
-            step_values     = [0.03,],
-            ending_value    = 0.0)
-
-        #entropy_weight = LinearScheduler(
-        #    status_key = "iteration",
-        #    status_max = 200,
-        #    max_value  = 0.03,
-        #    min_value  = 0.001)
+            status_triggers = [1.0],
+            step_values     = [1e-3])
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
@@ -1874,11 +1883,10 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
 
         ts_per_rollout = num_procs * 2048
 
-        #FIXME: using a smaller max ts per ep shows much better performance over time.
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 128,
+                     batch_size         = 1024,
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,

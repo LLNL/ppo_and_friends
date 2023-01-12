@@ -1312,6 +1312,13 @@ class PPO(object):
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
+            running_score     = comm.bcast(running_score, root=0)
+            running_ext_score = comm.bcast(running_ext_score, root=0)
+            top_score         = comm.bcast(top_score, root=0)
+            obs_range         = comm.bcast(obs_range, root=0)
+            rw_range          = comm.bcast(rw_range, root=0)
+            global_top_reward = comm.bcast(global_top_reward, root=0)
+
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
             self.status_dict[policy_id]["top score"]           = top_score
@@ -1324,6 +1331,7 @@ class PPO(object):
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
                 ism = intr_reward / (total_episodes/ env_batch_size)
+                ism = comm.bcast(ism, root=0)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
                 max_reward = rollout_max_intr_reward[policy_id]
@@ -1333,10 +1341,15 @@ class PPO(object):
                 min_reward   = comm.allreduce(min_reward, MPI.MIN)
                 reward_range = (min_reward, max_reward)
 
+                reward_range = comm.bcast(reward_range, root=0)
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
+
+        total_episodes   = comm.bcast(total_episodes, root=0)
+        longest_run      = comm.bcast(longest_run, root=0)
+        total_rollout_ts = comm.bcast(total_rollout_ts, root=0)
 
         self.status_dict["general"]["total episodes"] += total_episodes
         self.status_dict["general"]["longest run"]     = longest_run
