@@ -24,11 +24,13 @@ class StatusScheduler(object):
 
     def __init__(self,
                  status_key,
-                 status_max):
+                 status_max,
+                 status_preface = "general"):
 
-        self.status_max = status_max
-        self.status_key = status_key
-        self.finalized  = False
+        self.status_max     = status_max
+        self.status_key     = status_key
+        self.finalized      = False
+        self.status_preface = status_preface
 
     def finalize(self, status_dict):
         """
@@ -44,14 +46,16 @@ class StatusScheduler(object):
             self.finalized = True
             return
 
-        if self.status_key not in self.status_dict["general"]:
-            msg  = "ERROR: status_key must exist in status_dict['general']. "
-            msg += f"Available keys: {self.status_dict['general'].keys()}."
+        if self.status_key not in self.status_dict[self.status_preface]:
+            msg  = "ERROR: status_key must exist in "
+            msg += "status_dict[status_preface]. "
+            msg += f"Available keys in self.status_dict[{self.status_preface}]:"
+            msg += f"{self.status_dict[self.status_preface].keys()}."
             rank_print(msg)
             comm.Abort()
 
         try:
-            float(self.status_dict["general"][self.status_key])
+            float(self.status_dict[self.status_preface][self.status_key])
         except ValueError:
             msg  = "ERROR: the value for a mapper must be a number!"
             rank_print(msg)
@@ -65,7 +69,7 @@ class StatusScheduler(object):
         if self.status_key == "":
             return 0
 
-        return self.status_dict["general"][self.status_key]
+        return self.status_dict[self.status_preface][self.status_key]
 
     def __call__(self, iteration, timestep, **kw_args):
         raise NotImplementedError
@@ -129,43 +133,50 @@ class LinearStepScheduler(StatusScheduler):
 
     def __init__(self,
                  status_key,
-                 steps,
+                 status_triggers,
                  step_values,
                  ending_value,
+                 compare_fn = np.greater,
                  **kw_args):
         """
             A class that maps status dict entries to new values. Steps should
-            be a list containing numeric triggers to look for in the status dict
-            in ascending order. As long as
+            be a list containing numeric triggers to look for in the status
+            dict. As long as
             our step is < the current index of the step list (starting
             at index 0), the associated value from step_values will be returned.
             Once our step exceeds the current step, the index is
             incremented, and the process repeats. If our step ever exceeds
-            the last step in steps, ending_value will be returned thereafter.
+            the last step in status_triggers, ending_value will be
+            returned thereafter.
 
             Arguments:
-                steps         A list of triggers from the status dict.
-                step_values   The values corresponding to steps.
-                ending_value  The value to use if our step ever exceeds the
-                              last entry of steps.
+                status_key      The status dict key mapping to the value we
+                                wish to use as a trigger.
+                status_triggers A list of triggers from the status dict.
+                step_values     The values corresponding to status_triggers.
+                ending_value    The value to use if our step ever exceeds the
+                                last entry of status_triggers.
+                compare_fn      The comparison function to use.
         """
         super(LinearStepScheduler, self).__init__(
             status_max  = 1,
             status_key  = status_key,
             **kw_args)
 
-        self.steps        = steps
-        self.step_values  = step_values
-        self.ending_value = ending_value
-        self.range_idx    = 0
+        self.status_triggers = status_triggers
+        self.step_values     = step_values
+        self.ending_value    = ending_value
+        self.range_idx       = 0
+        self.compare_fn      = compare_fn
 
-        if len(self.steps) == 0:
-            msg = "ERROR: LinearStepScheduler requires at least one step."
+        if len(self.status_triggers) == 0:
+            msg  = "ERROR: LinearStepScheduler requires at least one "
+            msg += "status trigger."
             rank_print(msg)
             comm.Abort()
 
-        if len(self.steps) != len(self.step_values):
-            msg  = "ERROR: steps and step_values must contain "
+        if len(self.status_triggers) != len(self.step_values):
+            msg  = "ERROR: status_triggers and step_values must contain "
             msg += "the same number of entries."
             rank_print(msg)
             comm.Abort()
@@ -174,13 +185,13 @@ class LinearStepScheduler(StatusScheduler):
 
         step = self._get_step()
 
-        if self.range_idx >= len(self.steps):
+        if self.range_idx >= len(self.status_triggers):
             return self.ending_value
 
-        while step > self.steps[self.range_idx]:
+        while self.compare_fn(step, self.status_triggers[self.range_idx]):
             self.range_idx += 1
 
-            if self.range_idx >= len(self.steps):
+            if self.range_idx >= len(self.status_triggers):
                 return self.ending_value
 
         return self.step_values[self.range_idx]
