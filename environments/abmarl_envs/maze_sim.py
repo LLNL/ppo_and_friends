@@ -79,7 +79,7 @@ class AlternateMazeNavigationSim(GridWorldSimulation):
         return self.get_all_done()
 
     def get_all_done(self, **kwargs):
-        return self.agent_reached_goal() or self.step_count == 512
+        return self.agent_reached_goal() or self.step_count == self.max_steps
 
     def get_info(self, agent_id, **kwargs):
         return {}
