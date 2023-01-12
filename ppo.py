@@ -39,7 +39,6 @@ class PPO(object):
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
                  ext_reward_weight   = 1.0,
-                 intr_reward_weight  = 1.0,
                  normalize_adv       = True,
                  normalize_obs       = True,
                  normalize_rewards   = True,
@@ -84,8 +83,6 @@ class PPO(object):
                                       to perform after a single rollout (which
                                       may contain multiple episodes).
                  ext_reward_weight    An optional weight for the extrinsic
-                                      reward.
-                 intr_reward_weight   an optional weight for the intrinsic
                                       reward.
                  normalize_adv        Should we normalize the advantages? This
                                       occurs at the minibatch level.
@@ -176,7 +173,6 @@ class PPO(object):
         self.state_path          = state_path
         self.render              = render
         self.ext_reward_weight   = ext_reward_weight
-        self.intr_reward_weight  = intr_reward_weight
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
         self.ts_per_rollout      = ts_per_rollout
@@ -238,8 +234,6 @@ class PPO(object):
             self.status_dict[policy_id]["extrinsic score avg"] = 0
             self.status_dict[policy_id]["top score"]           = -max_int
             self.status_dict[policy_id]["weighted entropy"]    = 0
-            self.status_dict[policy_id]["entropy weight"]      = policy.entropy_weight
-            self.status_dict[policy_id]["lr"]                  = policy.lr
             self.status_dict[policy_id]["actor loss"]          = 0
             self.status_dict[policy_id]["critic loss"]         = 0
             self.status_dict[policy_id]["kl avg"]              = 0
@@ -297,19 +291,24 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                for policy_id in self.policies:
-                    policy    = self.policies[policy_id]
-                    policy.lr = min(self.status_dict[policy_id]["lr"],
-                        policy.lr)
-
-                    self.status_dict[policy_id]["lr"] = policy.lr
-
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
         comm.barrier()
 
         for policy_id in self.policies:
+            policy = self.policies[policy_id]
+
             self.policies[policy_id].finalize(self.status_dict)
+            self.status_dict[policy_id]["lr"] = policy.lr()
+            self.status_dict[policy_id]["entropy weight"] = \
+                policy.entropy_weight()
+
+            if self.policies[policy_id].enable_icm:
+                self.status_dict[policy_id]["icm lr"] = \
+                    policy.icm_lr()
+                self.status_dict[policy_id]["intr reward weight"] = \
+                    policy.intr_reward_weight()
+
 
         self.env.finalize(self.status_dict)
 
@@ -820,20 +819,25 @@ class PPO(object):
 
     def update_learning_rate(self):
         """
-            Update the learning rate. This relies on the lr_dec function.
+            Update the learning rate.
         """
         for policy_id in self.policies:
             self.policies[policy_id].update_learning_rate()
-            self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr
+            self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr()
+
+            if self.policies[policy_id].enable_icm:
+                self.status_dict[policy_id]["icm lr"] = \
+                    self.policies[policy_id].icm_lr()
+                self.status_dict[policy_id]["intr reward weight"] = \
+                    self.policies[policy_id].intr_reward_weight()
 
     def update_entropy_weight(self):
         """
-            Update the entropy weight. This relies on the entropy_dec function.
+            Update the entropy weight.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].update_entropy_weight()
             self.status_dict[policy_id]["entropy weight"] = \
-                self.policies[policy_id].entropy_weight
+                self.policies[policy_id].entropy_weight()
 
     def rollout(self):
         """
@@ -1267,9 +1271,7 @@ class PPO(object):
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
                     ep_nat_rewards[policy_id].max())
 
-            top_score = max(top_rollout_score[policy_id],
-                self.status_dict[policy_id]["top score"])
-
+            top_score = top_rollout_score[policy_id]
             top_score = comm.allreduce(top_score, MPI.MAX)
 
             #
@@ -1324,11 +1326,8 @@ class PPO(object):
                 ism = intr_reward / (total_episodes/ env_batch_size)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
-                max_reward = max(self.status_dict[policy_id]["intr reward range"][1],
-                    rollout_max_intr_reward[policy_id])
-
-                min_reward = min(self.status_dict[policy_id]["intr reward range"][0],
-                    rollout_min_intr_reward[policy_id])
+                max_reward = rollout_max_intr_reward[policy_id]
+                min_reward = rollout_min_intr_reward[policy_id]
 
                 max_reward   = comm.allreduce(max_reward, MPI.MAX)
                 min_reward   = comm.allreduce(min_reward, MPI.MIN)
@@ -1454,7 +1453,7 @@ class PPO(object):
 
             lr_sum = 0.0
             for policy_id in self.policies:
-                lr_sum += self.policies[policy_id].lr
+                lr_sum += self.policies[policy_id].lr()
 
             if lr_sum <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
@@ -1573,10 +1572,10 @@ class PPO(object):
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
 
-            if self.policies[policy_id].entropy_weight != 0.0:
+            if self.policies[policy_id].entropy_weight() != 0.0:
                 total_entropy += entropy.mean().item()
                 actor_loss -= \
-                    self.policies[policy_id].entropy_weight * entropy.mean()
+                    self.policies[policy_id].entropy_weight() * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
@@ -1636,7 +1635,7 @@ class PPO(object):
         total_actor_loss  = comm.allreduce(total_actor_loss, MPI.SUM)
         total_critic_loss = comm.allreduce(total_critic_loss, MPI.SUM)
         total_kl          = comm.allreduce(total_kl, MPI.SUM)
-        w_entropy = total_entropy * self.policies[policy_id].entropy_weight
+        w_entropy = total_entropy * self.policies[policy_id].entropy_weight()
 
         self.status_dict[policy_id]["weighted entropy"] = w_entropy / counter
         self.status_dict[policy_id]["actor loss"] = \
