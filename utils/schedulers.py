@@ -95,11 +95,11 @@ class LogScheduler(StatusScheduler):
 
     def __call__(self):
 
-        step      = self._get_step()
-        dec_value = self.max_value - (np.log(step) / self.numerator)
-        dec_value = min(dec_value, self.max_value) 
+        step  = self._get_step()
+        value = self.max_value - (np.log(step) / self.numerator)
+        value = min(value, self.max_value)
 
-        return max(dec_value, self.min_value)
+        return max(value, self.min_value)
 
 
 class LinearScheduler(StatusScheduler):
@@ -132,30 +132,27 @@ class LinearScheduler(StatusScheduler):
 class LinearStepScheduler(StatusScheduler):
 
     def __init__(self,
+                 initial_value,
                  status_key,
                  status_triggers,
                  step_values,
-                 ending_value,
                  compare_fn = np.greater,
                  **kw_args):
         """
-            A class that maps status dict entries to new values. Steps should
-            be a list containing numeric triggers to look for in the status
-            dict. As long as
-            our step is < the current index of the step list (starting
-            at index 0), the associated value from step_values will be returned.
-            Once our step exceeds the current step, the index is
-            incremented, and the process repeats. If our step ever exceeds
-            the last step in status_triggers, ending_value will be
-            returned thereafter.
+            A class that maps status dict entries to scheduled values.
+            At each step,
+            compare_fn(status_dict[status_key], status_triggers[idx]) will
+            be evaluated. The initial_value will be returned at each call until
+            the first True evaluation of compare_fn. At that point, each call
+            will begin returning entries of step_values, increasing the return
+            index for step_values whenever the comparison is evaluated as True.
 
             Arguments:
                 status_key      The status dict key mapping to the value we
                                 wish to use as a trigger.
+                initial_value   The initial value to return.
                 status_triggers A list of triggers from the status dict.
                 step_values     The values corresponding to status_triggers.
-                ending_value    The value to use if our step ever exceeds the
-                                last entry of status_triggers.
                 compare_fn      The comparison function to use.
         """
         super(LinearStepScheduler, self).__init__(
@@ -164,9 +161,10 @@ class LinearStepScheduler(StatusScheduler):
             **kw_args)
 
         self.status_triggers = status_triggers
+        self.initial_value   = initial_value
         self.step_values     = step_values
-        self.ending_value    = ending_value
-        self.range_idx       = 0
+        self.max_idx         = len(self.step_values) - 1
+        self.range_idx       = -1
         self.compare_fn      = compare_fn
 
         if len(self.status_triggers) == 0:
@@ -183,15 +181,21 @@ class LinearStepScheduler(StatusScheduler):
 
     def __call__(self):
 
+        #
+        # Tricky business: on the first iteration, out status dict won't
+        # have been updated yet, so the values are nonsense.
+        #
+        if self.status_dict["general"]["iteration"] == 0:
+            return self.initial_value
+
         step = self._get_step()
 
-        if self.range_idx >= len(self.status_triggers):
-            return self.ending_value
+        while (self.range_idx < self.max_idx and
+            self.compare_fn(step, self.status_triggers[self.range_idx + 1])):
 
-        while self.compare_fn(step, self.status_triggers[self.range_idx]):
-            self.range_idx += 1
+            self.range_idx = min(self.range_idx + 1, self.max_idx)
 
-            if self.range_idx >= len(self.status_triggers):
-                return self.ending_value
+        if self.range_idx < 0:
+            return self.initial_value
 
         return self.step_values[self.range_idx]
