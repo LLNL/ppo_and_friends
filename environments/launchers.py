@@ -1800,60 +1800,60 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         # Once we find the goal once, we want to increase the learning
         # rate to make sure we keep going back.
         #
-        #lr = LinearStepScheduler(
-        #    status_key      = "iteration",
-        #    initial_value   = 0.0005,
-        #    compare_fn      = np.greater_equal,
-        #    status_triggers = [30, 70],
-        #    step_values     = [1e-4, 1e-5])
-
-        #intr_reward_weight = LinearStepScheduler(
-        #    status_key      = "iteration",
-        #    initial_value   = 1e-2,
-        #    compare_fn      = np.greater_equal,
-        #    status_triggers = [30, 40, 50, 60],
-        #    step_values     = [1e-3, 1e-4, 1e-5, 1e-6])
-
-        #entropy_weight = LinearStepScheduler(
-        #    status_key      = "iteration",
-        #    initial_value   = 0.03,
-        #    compare_fn      = np.greater_equal,
-        #    status_triggers = [30, 40, 50, 60],
-        #    step_values     = [1e-2, 1e-3, 1e-4, 1e-5])
-
-
-
-        #lr = LinearStepScheduler(
-        #    status_key      = "longest run",
-        #    initial_value   = 0.0008,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [400, 100],
-        #    step_values     = [1e-4, 5e-5])
         lr = LinearStepScheduler(
-            status_key      = "shortest run",
-            initial_value   = 0.001,
-            compare_fn      = np.less_equal,
-            status_triggers = [1000, 200],
-            step_values     = [1e-5, 1e-4])
+            status_key      = "iteration",
+            initial_value   = 0.0005,
+            compare_fn      = np.greater_equal,
+            status_triggers = [10, 70],
+            step_values     = [1e-4, 1e-5])
 
         intr_reward_weight = LinearStepScheduler(
-            status_key      = "longest run",
-            initial_value   = 1e-3,
-            compare_fn      = np.less_equal,
-            status_triggers = [2000, 1000, 500, 300],
-            step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
-
-            #initial_value   = 1.,
-            #compare_fn      = np.less,
-            #status_triggers = [2048, 2000, 1000, 500],
-            #step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
+            status_key      = "iteration",
+            initial_value   = 1e-2,
+            compare_fn      = np.greater_equal,
+            status_triggers = [10, 40, 50, 60],
+            step_values     = [1e-3, 1e-4, 1e-5, 1e-6])
 
         entropy_weight = LinearStepScheduler(
-            status_key      = "shortest run",
-            initial_value   = 0.05,
-            compare_fn      = np.less_equal,
-            status_triggers = [2000, 500, 300],
-            step_values     = [1e-2, 1e-4, 1e-5])
+            status_key      = "iteration",
+            initial_value   = 0.03,
+            compare_fn      = np.greater_equal,
+            status_triggers = [10, 40, 50, 60],
+            step_values     = [1e-2, 1e-3, 1e-4, 1e-5])
+
+
+
+        ##lr = LinearStepScheduler(
+        ##    status_key      = "longest run",
+        ##    initial_value   = 0.0008,
+        ##    compare_fn      = np.less_equal,
+        ##    status_triggers = [400, 100],
+        ##    step_values     = [1e-4, 5e-5])
+        #lr = LinearStepScheduler(
+        #    status_key      = "shortest run",
+        #    initial_value   = 0.001,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [1000, 200],
+        #    step_values     = [1e-5, 1e-4])
+
+        #intr_reward_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 1e-3,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [2000, 1000, 500, 300],
+        #    step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
+
+        #    #initial_value   = 1.,
+        #    #compare_fn      = np.less,
+        #    #status_triggers = [2048, 2000, 1000, 500],
+        #    #step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
+
+        #entropy_weight = LinearStepScheduler(
+        #    status_key      = "shortest run",
+        #    initial_value   = 0.05,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [2000, 500, 300],
+        #    step_values     = [1e-2, 1e-4, 1e-5])
 
         #entropy_weight = LinearStepScheduler(
         #    status_key      = "longest run",
@@ -1876,12 +1876,12 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             "critic_kw_args"     : critic_kw_args,
             "icm_lr"             : 0.0005,
             "lr"                 : lr,
-            #FIXME: tinker with this again.
             "bootstrap_clip"     : (-10., 10.),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
             "intr_reward_weight" : intr_reward_weight,
             "entropy_weight"     : entropy_weight,
+            "target_kl"          : 0.01,
         }
 
         policy_name = "abmarl-maze"
@@ -1904,8 +1904,8 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 1024,
-                     epochs_per_iter    = 20,
+                     batch_size         = 2048,
+                     epochs_per_iter    = 32,
                      max_ts_per_ep      = 1024,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
