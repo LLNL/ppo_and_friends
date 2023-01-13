@@ -226,6 +226,7 @@ class PPO(object):
         self.status_dict["general"]["total episodes"] = 0
         self.status_dict["general"]["longest run"]    = 0
         self.status_dict["general"]["shortest run"]   = max_int
+        self.status_dict["general"]["average run"]    = 0
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -874,6 +875,7 @@ class PPO(object):
         total_rollout_ts = 0
         longest_run      = 0
         shortest_run     = self.ts_per_rollout
+        avg_run          = self.ts_per_rollout
 
         for key in self.policies:
             self.policies[key].eval()
@@ -1133,6 +1135,8 @@ class PPO(object):
                 shortest_run = min(shortest_run,
                     episode_lengths[where_done].min())
 
+                avg_run = episode_lengths[where_done].mean()
+
                 episode_lengths[where_done]    = 0
                 total_episodes                += done_count
                 ep_ts[where_done]              = 0
@@ -1317,13 +1321,6 @@ class PPO(object):
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
-            running_score     = comm.bcast(running_score, root=0)
-            running_ext_score = comm.bcast(running_ext_score, root=0)
-            top_score         = comm.bcast(top_score, root=0)
-            obs_range         = comm.bcast(obs_range, root=0)
-            rw_range          = comm.bcast(rw_range, root=0)
-            global_top_reward = comm.bcast(global_top_reward, root=0)
-
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
             self.status_dict[policy_id]["top score"]           = top_score
@@ -1336,7 +1333,6 @@ class PPO(object):
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
                 ism = intr_reward / (total_episodes/ env_batch_size)
-                ism = comm.bcast(ism, root=0)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
                 max_reward = rollout_max_intr_reward[policy_id]
@@ -1346,21 +1342,17 @@ class PPO(object):
                 min_reward   = comm.allreduce(min_reward, MPI.MIN)
                 reward_range = (min_reward, max_reward)
 
-                reward_range = comm.bcast(reward_range, root=0)
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
         shortest_run     = comm.allreduce(shortest_run, MPI.MIN)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
-
-        total_episodes   = comm.bcast(total_episodes, root=0)
-        longest_run      = comm.bcast(longest_run, root=0)
-        shortest_run     = comm.bcast(shortest_run, root=0)
-        total_rollout_ts = comm.bcast(total_rollout_ts, root=0)
+        avg_run          = comm.allreduce(avg_run, MPI.SUM) / num_procs
 
         self.status_dict["general"]["total episodes"] += total_episodes
         self.status_dict["general"]["longest run"]     = longest_run
         self.status_dict["general"]["shortest run"]    = shortest_run
+        self.status_dict["general"]["average run"]     = avg_run
         self.status_dict["general"]["timesteps"]      += total_rollout_ts
 
         #
