@@ -225,6 +225,7 @@ class PPO(object):
         self.status_dict["general"]["timesteps"]      = 0
         self.status_dict["general"]["total episodes"] = 0
         self.status_dict["general"]["longest run"]    = 0
+        self.status_dict["general"]["shortest run"]   = max_int
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -872,6 +873,7 @@ class PPO(object):
         total_episodes   = 0.0
         total_rollout_ts = 0
         longest_run      = 0
+        shortest_run     = self.ts_per_rollout
 
         for key in self.policies:
             self.policies[key].eval()
@@ -1128,6 +1130,9 @@ class PPO(object):
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
 
+                shortest_run = min(shortest_run,
+                    episode_lengths[where_done].min())
+
                 episode_lengths[where_done]    = 0
                 total_episodes                += done_count
                 ep_ts[where_done]              = 0
@@ -1345,14 +1350,17 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
+        shortest_run     = comm.allreduce(shortest_run, MPI.MIN)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
 
         total_episodes   = comm.bcast(total_episodes, root=0)
         longest_run      = comm.bcast(longest_run, root=0)
+        shortest_run     = comm.bcast(shortest_run, root=0)
         total_rollout_ts = comm.bcast(total_rollout_ts, root=0)
 
         self.status_dict["general"]["total episodes"] += total_episodes
         self.status_dict["general"]["longest run"]     = longest_run
+        self.status_dict["general"]["shortest run"]    = shortest_run
         self.status_dict["general"]["timesteps"]      += total_rollout_ts
 
         #
