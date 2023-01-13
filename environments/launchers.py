@@ -1789,8 +1789,10 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
+        #FIXME:
         icm_kw_args["encoded_obs_dim"]     = 0
-        icm_kw_args["encoder_hidden_size"] = 0
+        #icm_kw_args["encoded_obs_dim"]     = 1
+
         icm_kw_args["inverse_hidden_size"] = 256
         icm_kw_args["forward_hidden_size"] = 256
 
@@ -1819,24 +1821,39 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         #    status_triggers = [30, 40, 50, 60],
         #    step_values     = [1e-2, 1e-3, 1e-4, 1e-5])
 
+
+
+        #lr = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 0.0008,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [400, 100],
+        #    step_values     = [1e-4, 5e-5])
         lr = LinearStepScheduler(
-            status_key      = "longest run",
-            initial_value   = 0.0005,
+            status_key      = "shortest run",
+            initial_value   = 0.001,
             compare_fn      = np.less_equal,
-            status_triggers = [400, 100],
-            step_values     = [1e-4, 5e-5])
+            status_triggers = [1000, 200],
+            step_values     = [1e-5, 1e-4])
 
         intr_reward_weight = LinearStepScheduler(
             status_key      = "longest run",
-            #initial_value   = 1e-3,
-            #compare_fn      = np.less_equal,
-            #status_triggers = [2000, 1000, 500, 300],
-            #step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
+            initial_value   = 1e-3,
+            compare_fn      = np.less_equal,
+            status_triggers = [2000, 1000, 500, 300],
+            step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
 
-            initial_value   = 1e-2,
-            compare_fn      = np.less,
-            status_triggers = [2048, 2000, 1000, 500],
-            step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
+            #initial_value   = 1.,
+            #compare_fn      = np.less,
+            #status_triggers = [2048, 2000, 1000, 500],
+            #step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
+
+        entropy_weight = LinearStepScheduler(
+            status_key      = "shortest run",
+            initial_value   = 0.05,
+            compare_fn      = np.less_equal,
+            status_triggers = [2000, 500, 300],
+            step_values     = [1e-2, 1e-4, 1e-5])
 
         #entropy_weight = LinearStepScheduler(
         #    status_key      = "longest run",
@@ -1845,13 +1862,13 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         #    status_triggers = [2000, 500, 300],
         #    step_values     = [1e-3, 1e-4, 1e-5])
 
-        entropy_weight = LinearStepScheduler(
-            status_preface  = "abmarl-maze",
-            status_key      = "top reward",
-            initial_value   = 0.05,
-            compare_fn      = np.greater_equal,
-            status_triggers = [1.0],
-            step_values     = [1e-3])
+        #entropy_weight = LinearStepScheduler(
+        #    status_preface  = "abmarl-maze",
+        #    status_key      = "top reward",
+        #    initial_value   = 0.05,
+        #    compare_fn      = np.greater_equal,
+        #    status_triggers = [1.0],
+        #    step_values     = [1e-3])
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
@@ -1859,6 +1876,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             "critic_kw_args"     : critic_kw_args,
             "icm_lr"             : 0.0005,
             "lr"                 : lr,
+            #FIXME: tinker with this again.
             "bootstrap_clip"     : (-10., 10.),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
@@ -1888,7 +1906,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 1024,
                      epochs_per_iter    = 20,
-                     max_ts_per_ep      = 128,
+                     max_ts_per_ep      = 1024,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
