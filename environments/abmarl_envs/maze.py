@@ -30,6 +30,9 @@ object_registry = {
 small_maze = os.path.join(os.path.realpath(
     os.path.dirname(__file__)), "maze.txt")
 
+medium_maze = os.path.join(os.path.realpath(
+    os.path.dirname(__file__)), "medium_maze.txt")
+
 large_maze = os.path.join(os.path.realpath(
     os.path.dirname(__file__)), "large_maze.txt")
 
@@ -58,6 +61,21 @@ sm_blind_sim = MultiAgentWrapper(
             )
         )
     )
+
+md_blind_sim = MultiAgentWrapper(
+        AllStepManager(
+            FlattenWrapper(
+                AlternateMazeNavigationSim.build_sim_from_file(
+                    medium_maze,
+                    object_registry,
+                    overlapping={1: [3], 3: [1]},
+                    observe="position",
+                    max_steps=4096,
+                )
+            )
+        )
+    )
+
 
 lg_sim = MultiAgentWrapper(
         AllStepManager(
@@ -89,5 +107,7 @@ lg_blind_sim = MultiAgentWrapper(
 
 sm_abmarl_blind_maze = sm_blind_sim
 sm_abmarl_maze       = sm_sim
+md_abmarl_blind_maze = md_blind_sim
 lg_abmarl_blind_maze = lg_blind_sim
 lg_abmarl_maze       = lg_sim
+
