@@ -1823,90 +1823,15 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         #FIXME: add maze results to README
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
+        actor_kw_args["hidden_size"] = 64
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
-        #FIXME:
         icm_kw_args["encoded_obs_dim"]     = 0
         icm_kw_args["inverse_hidden_size"] = 128
         icm_kw_args["forward_hidden_size"] = 128
-
-        ##
-        ## Once we find the goal once, we want to increase the learning
-        ## rate to make sure we keep going back.
-        ##
-        ##lr = LinearStepScheduler(
-        ##    status_key      = "iteration",
-        ##    initial_value   = 0.0005,
-        ##    compare_fn      = np.greater_equal,
-        ##    status_triggers = [20, 70],
-        ##    step_values     = [1e-4, 1e-5])
-
-        ##intr_reward_weight = LinearStepScheduler(
-        ##    status_key      = "iteration",
-        ##    initial_value   = 1e-2,
-        ##    compare_fn      = np.greater_equal,
-        ##    status_triggers = [20, 40, 50, 60],
-        ##    step_values     = [1e-3, 1e-4, 1e-5, 1e-6])
-
-        ##entropy_weight = LinearStepScheduler(
-        ##    status_key      = "iteration",
-        ##    initial_value   = 0.03,
-        ##    compare_fn      = np.greater_equal,
-        ##    status_triggers = [20, 40, 50, 60],
-        ##    step_values     = [1e-2, 1e-3, 1e-4, 1e-5])
-
-
-
-        ##lr = LinearStepScheduler(
-        ##    status_key      = "longest run",
-        ##    initial_value   = 0.0008,
-        ##    compare_fn      = np.less_equal,
-        ##    status_triggers = [400, 100],
-        ##    step_values     = [1e-4, 5e-5])
-        #lr = LinearStepScheduler(
-        #    status_key      = "shortest run",
-        #    initial_value   = 0.0005,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [1000, 200],
-        #    step_values     = [1e-4, 1e-5])
-
-        #intr_reward_weight = LinearStepScheduler(
-        #    status_key      = "shortest run",
-        #    initial_value   = 1e-3,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [2000, 1000, 500, 300],
-        #    step_values     = [1e-4, 1e-5, 1e-6, 1e-7])
-
-        #    #initial_value   = 1.,
-        #    #compare_fn      = np.less,
-        #    #status_triggers = [2048, 2000, 1000, 500],
-        #    #step_values     = [1e-3, 1e-5, 1e-6, 1e-7])
-
-        #entropy_weight = LinearStepScheduler(
-        #    status_key      = "shortest run",
-        #    initial_value   = 0.05,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [2000, 500, 300],
-        #    step_values     = [1e-2, 1e-4, 1e-5])
-
-        ##entropy_weight = LinearStepScheduler(
-        ##    status_key      = "longest run",
-        ##    initial_value   = 0.05,
-        ##    compare_fn      = np.less_equal,
-        ##    status_triggers = [2000, 500, 300],
-        ##    step_values     = [1e-3, 1e-4, 1e-5])
-
-        ##entropy_weight = LinearStepScheduler(
-        ##    status_preface  = "abmarl-maze",
-        ##    status_key      = "top reward",
-        ##    initial_value   = 0.05,
-        ##    compare_fn      = np.greater_equal,
-        ##    status_triggers = [1.0],
-        ##    step_values     = [1e-3])
 
         lr = 0.0005
         #
@@ -1915,14 +1840,14 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         #
         intr_reward_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 1e-2,
+            initial_value   = 1e-3,
             compare_fn      = np.less_equal,
             status_triggers = [4000, 3000, 2000, 500,],
-            step_values     = [1e-3, 1e-4, 1e-5, 0.0,])
+            step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
 
         entropy_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 0.03,
+            initial_value   = 0.04,
             compare_fn      = np.less_equal,
             status_triggers = [4000, 3000, 2000, 500],
             step_values     = [1e-2, 1e-3, 1e-4, 0.0])
@@ -1938,7 +1863,6 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             "icm_kw_args"        : icm_kw_args,
             "intr_reward_weight" : intr_reward_weight,
             "entropy_weight"     : entropy_weight,
-            #"target_kl"          : 0.01,
         }
 
         policy_name = "abmarl-maze"
@@ -1962,11 +1886,8 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 4096,
-
-                     #epochs_per_iter    = 32,
                      epochs_per_iter    = 20,
-
-                     max_ts_per_ep      = 128,
+                     max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
@@ -1986,9 +1907,6 @@ class AbmarlBlindMediumMazeLauncher(EnvironmentLauncher):
             rank_print(msg)
             comm.Abort()
 
-        # FIXME: these settings seem to work for the medium maze!
-        # let's try them on the large maze.
-
         #FIXME: add maze results to README
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1998,7 +1916,6 @@ class AbmarlBlindMediumMazeLauncher(EnvironmentLauncher):
         critic_kw_args["hidden_size"] = 256
 
         icm_kw_args = {}
-        #FIXME:
         icm_kw_args["encoded_obs_dim"]     = 0
         icm_kw_args["inverse_hidden_size"] = 128
         icm_kw_args["forward_hidden_size"] = 128
@@ -2033,7 +1950,6 @@ class AbmarlBlindMediumMazeLauncher(EnvironmentLauncher):
             "icm_kw_args"        : icm_kw_args,
             "intr_reward_weight" : intr_reward_weight,
             "entropy_weight"     : entropy_weight,
-            #"target_kl"          : 0.01,
         }
 
         policy_name = "abmarl-maze"
@@ -2057,10 +1973,7 @@ class AbmarlBlindMediumMazeLauncher(EnvironmentLauncher):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 4096,
-
-                     #epochs_per_iter    = 32,
                      epochs_per_iter    = 20,
-
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
