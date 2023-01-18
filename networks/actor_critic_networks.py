@@ -9,8 +9,8 @@ from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
 from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SingleSplitObservationNetwork
 from .ppo_networks import PPOLSTMNetwork
-from mpi4py import MPI
 
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()

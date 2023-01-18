@@ -44,6 +44,11 @@ if __name__ == "__main__":
     parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
+    parser.add_argument("--pickle-class", action="store_true",
+        help="Pickle the entire PPO class. If True, the pickled class will be "
+        "saved in the state-path. This is useful for loading a trained model "
+        "for inference outside of this workflow.")
+
     #TODO: let's also let users stop at an iteration rather than timestep.
     parser.add_argument("--num-timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
@@ -113,6 +118,7 @@ if __name__ == "__main__":
     force_determinism  = args.force_deterministic
     envs_per_proc      = args.envs_per_proc
     allow_mpi_gpu      = args.allow_mpi_gpu
+    pickle_class       = args.pickle_class
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -177,6 +183,7 @@ if __name__ == "__main__":
         envs_per_proc         = envs_per_proc,
         test                  = test,
         explore_while_testing = test_explore,
+        pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 
     launcher.launch()

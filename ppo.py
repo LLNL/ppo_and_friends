@@ -1,6 +1,6 @@
 import sys
 import gc
-import pickle
+import dill as pickle
 import numpy as np
 import os
 from copy import deepcopy

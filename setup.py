@@ -22,6 +22,7 @@ dependencies = [
     'gym==0.21',
     'box2d-py',
     'numpy',
+    'dill',
     'mpi4py',
     'moviepy',
     'torch>=1.10.2',
