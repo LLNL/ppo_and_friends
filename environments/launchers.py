@@ -90,7 +90,8 @@ class EnvironmentLauncher(ABC):
                         render_gif,
                         num_test_runs,
                         device)
-        else:
+
+        elif not kw_args["pickle_class"]:
             ppo.learn(num_timesteps)
 
 
@@ -1872,14 +1873,14 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             status_key      = "longest run",
             initial_value   = 1e-1,
             compare_fn      = np.less_equal,
-            status_triggers = [500, 256, 128, 64,],
+            status_triggers = [500, 256, 128, 95,],
             step_values     = [1e-2, 1e-4, 1e-6, 0.0,])
 
         entropy_weight = LinearStepScheduler(
             status_key      = "longest run",
             initial_value   = 0.03,
             compare_fn      = np.less_equal,
-            status_triggers = [500, 256, 128, 64,],
+            status_triggers = [500, 256, 128, 95,],
             step_values     = [1e-2, 1e-3, 1e-4, 0.0])
 
         policy_args = {\
