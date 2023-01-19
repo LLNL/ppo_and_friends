@@ -12,7 +12,7 @@ from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
-from ppo_and_friends.utils.schedulers import LinearScheduler, CallableExtent
+from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -132,22 +132,22 @@ class AgentPolicy():
         if callable(lr):
             self.lr = lr
         else:
-            self.lr = CallableExtent(lr)
+            self.lr = CallableValue(lr)
 
         if callable(icm_lr):
             self.icm_lr = icm_lr
         else:
-            self.icm_lr = CallableExtent(icm_lr)
+            self.icm_lr = CallableValue(icm_lr)
 
         if callable(entropy_weight):
             self.entropy_weight = entropy_weight
         else:
-            self.entropy_weight = CallableExtent(entropy_weight)
+            self.entropy_weight = CallableValue(entropy_weight)
 
         if callable(intr_reward_weight):
             self.intr_reward_weight = intr_reward_weight
         else:
-            self.intr_reward_weight = CallableExtent(intr_reward_weight)
+            self.intr_reward_weight = CallableValue(intr_reward_weight)
 
         act_type = type(action_space)
         self.act_nvec = None
@@ -193,13 +193,13 @@ class AgentPolicy():
             min_bs_callable  = bootstrap_clip[0]
             bs_clip_callable = True
         else:
-            min_bs_callable = CallableExtent(bootstrap_clip[0])
+            min_bs_callable = CallableValue(bootstrap_clip[0])
 
         if callable(bootstrap_clip[1]):
             max_bs_callable  = bootstrap_clip[1]
             bs_clip_callable = True
         else:
-            max_bs_callable = CallableExtent(bootstrap_clip[1])
+            max_bs_callable = CallableValue(bootstrap_clip[1])
 
         self.bootstrap_clip = (min_bs_callable, max_bs_callable)
 

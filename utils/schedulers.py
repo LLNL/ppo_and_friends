@@ -6,7 +6,7 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-class CallableExtent():
+class CallableValue():
     """
         A simple placeholder for a scheduler.
     """

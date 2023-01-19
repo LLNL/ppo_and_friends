@@ -5,7 +5,7 @@
 """
 from ppo_and_friends.utils.stats import RunningMeanStd
 from ppo_and_friends.environments.ppo_env_wrappers import IdentityWrapper
-from ppo_and_friends.utils.schedulers import CallableExtent
+from ppo_and_friends.utils.schedulers import CallableValue
 import numpy as np
 from copy import deepcopy
 import pickle
@@ -552,12 +552,12 @@ class GenericClipper(IdentityWrapper):
         if callable(clip_range[0]):
             min_callable = clip_range[0]
         else:
-            min_callable = CallableExtent(clip_range[0])
+            min_callable = CallableValue(clip_range[0])
 
         if callable(clip_range[1]):
             max_callable = clip_range[1]
         else:
-            max_callable = CallableExtent(clip_range[1])
+            max_callable = CallableValue(clip_range[1])
 
         self.clip_range = (min_callable, max_callable)
 
