@@ -37,7 +37,6 @@ setup(name             = "ppo_and_friends",
       package_dir      = package_dirs,
       packages         = list(package_dirs.keys()),
       package_data     = {"" : ["environments/abmarl_envs/maze.txt",
-                                "environments/abmarl_envs/medium_maze.txt",
                                 "environments/abmarl_envs/large_maze.txt"]},
       install_requires = dependencies,
       zip_safe         = False)
