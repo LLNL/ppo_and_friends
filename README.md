@@ -320,7 +320,7 @@ runs is >= 300. This policy generally gets an average score >= 320 once
 solved.
 
 ### All Atari pixel environments
-I recommend enabling the `--allow-mpi-gpu` flag for systems with GPUs.
+I recommend using `--device 'gpu'` for systems with GPUs.
 
 ### Ant
 In order to solve the environment, you need to reach an average score >= 6000

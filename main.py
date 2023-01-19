@@ -31,6 +31,9 @@ if __name__ == "__main__":
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
+    parser.add_argument("--device", type="str", default="cpu",
+        help="Which device to use for training.")
+
     parser.add_argument("--state-path", default="./",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
@@ -58,12 +61,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--envs-per-proc", default=1, type=int,
         help="The number of environment instances each processor should have.")
-
-    parser.add_argument("--allow-mpi-gpu", action="store_true",
-        help="By default, GPUs are only used if the we're training on a single "
-        "processor, as this is very effecient when using MLPs. This flag will "
-        "allow GPUs to be used with multiple processors, which is useful when "
-        "using networks that are very slow on CPUs (like convolutions).")
 
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
@@ -116,8 +113,8 @@ if __name__ == "__main__":
     num_timesteps      = args.num_timesteps
     force_determinism  = args.force_deterministic
     envs_per_proc      = args.envs_per_proc
-    allow_mpi_gpu      = args.allow_mpi_gpu
     pickle_class       = args.pickle_class
+    device             = torch.device(args.device)
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -152,14 +149,6 @@ if __name__ == "__main__":
         if os.path.exists(state_path):
             shutil.rmtree(state_path)
     comm.barrier()
-
-    if (torch.cuda.is_available() and
-        not test and
-        (num_procs == 1 or allow_mpi_gpu)):
-
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
 
     rank_print("Using device: {}".format(device))
     rank_print("Number of processors: {}".format(num_procs))
