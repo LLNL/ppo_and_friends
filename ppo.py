@@ -16,6 +16,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
+from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
@@ -50,7 +51,7 @@ class PPO(object):
                  state_path          = "./",
                  save_every          = 1,
                  pickle_class        = False,
-                 use_soft_resets     = False,
+                 soft_resets         = False,
                  obs_augment         = False,
                  test_mode           = False):
         """
@@ -104,7 +105,9 @@ class PPO(object):
                  pickle_class         When enabled, the entire PPO class will
                                       be pickled and saved into the output
                                       directory after it's been initialized.
-                 use_soft_resets      Use "soft resets" during rollouts.
+                 soft_resets          Use "soft resets" during rollouts. This
+                                      can be a bool or an instance of
+                                      LinearStepScheduler.
                  obs_augment          This is a funny option that can only be
                                       enabled with environments that have a
                                       "observation_augment" method defined.
@@ -184,12 +187,24 @@ class PPO(object):
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
-        self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
+
+        if callable(soft_resets):
+            if type(soft_resets) != LinearStepScheduler:
+                msg  = "ERROR: soft_resets must be of type bool or "
+                msg += f"{LinearStepScheduler} but received "
+                msg += f"{type(soft_resets)}"
+                rank_print(msg)
+                comm.Abort()
+
+            self.soft_resets = soft_resets
+
+        else:
+            self.soft_resets = CallableValue(soft_resets)
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -313,6 +328,7 @@ class PPO(object):
 
 
         self.env.finalize(self.status_dict)
+        self.soft_resets.finalize(self.status_dict)
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -885,7 +901,7 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
-        if self.use_soft_resets:
+        if self.soft_resets():
             initial_reset_func = self.env.soft_reset
         else:
             initial_reset_func = self.env.reset

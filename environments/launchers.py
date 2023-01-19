@@ -32,7 +32,6 @@ try:
     from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
     from ppo_and_friends.environments.abmarl_envs.maze import sm_abmarl_maze
     from ppo_and_friends.environments.abmarl_envs.maze import sm_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl_envs.maze import md_abmarl_blind_maze
     from ppo_and_friends.environments.abmarl_envs.maze import lg_abmarl_maze
     from ppo_and_friends.environments.abmarl_envs.maze import lg_abmarl_blind_maze
     from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
@@ -1384,7 +1383,6 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
                 epochs_per_iter    = 5,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                use_soft_resets    = False,
                 normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
@@ -1455,7 +1453,7 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 10000,
-                     use_soft_resets    = True,
+                     soft_resets        = True,
                      epochs_per_iter    = 5,
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
@@ -1575,7 +1573,7 @@ class PressurePlateLauncher(EnvironmentLauncher):
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     use_soft_resets    = True,
+                     soft_resets        = True,
                      **self.kw_launch_args)
 
 
@@ -1820,7 +1818,25 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
             rank_print(msg)
             comm.Abort()
 
-        #FIXME: add maze results to README
+        #
+        # The large maze is very finicky. I've found 2 general approaches to
+        # solving it.
+        #   1. Use long trajectories (I used 4096). This allows the agent to
+        #      fully explore the space and reach the goal consistently enough
+        #      to learn a good policy. The downside to this is that each rollout
+        #      takes a while.
+        #   2. Use shorter trajectories in conjunction with soft resets. This
+        #      is an alternative approach to exploring the space and allows
+        #      the agent to begin converging on a policy much sooner than
+        #      the first approach. The main issue here is that soft resets
+        #      will add more stochasticity to the trajectories and slow down
+        #      the rate of convergence. We can combat this by wrapping the
+        #      soft reset flag in a scheduler that disables it when it starts
+        #      consistently reaching the goal.
+        #
+        # Aside from the above, I've also found that annealing exploration over
+        # time greatly improves results.
+        #
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 64
@@ -1838,18 +1854,32 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         # Once we start consistently reaching the goal, we can stop
         # exploring so much.
         #
+        #intr_reward_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 1e-3,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [4000, 3000, 2000, 500,],
+        #    step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
+
+        #entropy_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 0.04,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [4000, 3000, 2000, 500],
+        #    step_values     = [1e-2, 1e-3, 1e-4, 0.0])
+
         intr_reward_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 1e-3,
+            initial_value   = 1e-1,
             compare_fn      = np.less_equal,
-            status_triggers = [4000, 3000, 2000, 500,],
-            step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
+            status_triggers = [500, 256, 128, 64,],
+            step_values     = [1e-2, 1e-4, 1e-6, 0.0,])
 
         entropy_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 0.04,
+            initial_value   = 0.03,
             compare_fn      = np.less_equal,
-            status_triggers = [4000, 3000, 2000, 500],
+            status_triggers = [500, 256, 128, 64,],
             step_values     = [1e-2, 1e-3, 1e-4, 0.0])
 
         policy_args = {\
@@ -1880,106 +1910,28 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 4096
+        soft_resets = LinearStepScheduler(
+            status_key      = "iteration",
+            initial_value   = True,
+            compare_fn      = np.greater_equal,
+            status_triggers = [50,],
+            step_values     = [False,])
+
+        ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 4096,
+                     batch_size         = 512,
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 512,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_values   = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,
-                     use_soft_resets    = False,
-                     obs_clip           = None,
-                     reward_clip        = None,
-                     **self.kw_launch_args)
 
+                     soft_resets        = soft_resets,
 
-class AbmarlBlindMediumMazeLauncher(EnvironmentLauncher):
-
-    def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
-        #FIXME: add maze results to README
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
-
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
-        icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"]     = 0
-        icm_kw_args["inverse_hidden_size"] = 128
-        icm_kw_args["forward_hidden_size"] = 128
-
-        lr = 0.0005
-        #
-        # Once we start consistently reaching the goal, we can stop
-        # exploring so much.
-        #
-        intr_reward_weight = LinearStepScheduler(
-            status_key      = "longest run",
-            initial_value   = 1e-3,
-            compare_fn      = np.less_equal,
-            status_triggers = [4000, 3000, 2000, 500,],
-            step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
-
-        entropy_weight = LinearStepScheduler(
-            status_key      = "longest run",
-            initial_value   = 0.03,
-            compare_fn      = np.less_equal,
-            status_triggers = [4000, 3000, 2000, 500],
-            step_values     = [1e-2, 1e-3, 1e-4, 0.0])
-
-        policy_args = {\
-            "ac_network"         : FeedForwardNetwork,
-            "actor_kw_args"      : actor_kw_args,
-            "critic_kw_args"     : critic_kw_args,
-            "icm_lr"             : 0.0005,
-            "lr"                 : lr,
-            "bootstrap_clip"     : (-10., 10.),
-            "enable_icm"         : True,
-            "icm_kw_args"        : icm_kw_args,
-            "intr_reward_weight" : intr_reward_weight,
-            "entropy_weight"     : entropy_weight,
-        }
-
-        policy_name = "abmarl-maze"
-        policy_mapping_fn = lambda *args : policy_name
-
-        env_generator = lambda : \
-                AbmarlWrapper(env               = md_abmarl_blind_maze,
-                              policy_mapping_fn = policy_mapping_fn)
-
-        policy_settings = { policy_name : \
-            (None,
-             env_generator().observation_space["navigator"],
-             env_generator().critic_observation_space["navigator"],
-             env_generator().action_space["navigator"],
-             policy_args)
-        }
-
-        ts_per_rollout = num_procs * 4096
-
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 4096,
-                     epochs_per_iter    = 20,
-                     max_ts_per_ep      = 512,
-                     ts_per_rollout     = ts_per_rollout,
-                     normalize_values   = True,
-                     normalize_obs      = False,
-                     normalize_rewards  = False,
-                     use_soft_resets    = False,
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)
