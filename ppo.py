@@ -326,7 +326,6 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
 
-
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
 
