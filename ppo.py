@@ -1608,7 +1608,26 @@ class PPO(object):
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            critic_loss        = nn.MSELoss()(values, rewards_tg)
+            #
+            # Calculate the critic loss. Optionally, we can use the clipped
+            # version.
+            #
+            critic_loss = nn.MSELoss()(values, rewards_tg)
+
+            #
+            # This clipping strategy comes from arXiv:2005.12729v1, which
+            # differs somewhat from other implementations (rllib for example)
+            # but should be true to OpenAI's original approach.
+            #
+            if self.policies[policy_id].vf_clip is not None:
+                clipped_values = torch.clamp(
+                    values,
+                    -self.policies[policy_id].vf_clip,
+                    self.policies[policy_id].vf_clip)
+
+                clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
+                critic_loss  = torch.max(critic_loss, clipped_loss)
+
             total_critic_loss += critic_loss.item()
 
             #

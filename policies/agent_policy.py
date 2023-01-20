@@ -38,6 +38,7 @@ class AgentPolicy():
                  icm_kw_args         = {},
                  target_kl           = 100.,
                  surr_clip           = 0.2,
+                 vf_clip             = None,
                  gradient_clip       = 0.5,
                  lr                  = 3e-4,
                  icm_lr              = 3e-4,
@@ -78,6 +79,8 @@ class AgentPolicy():
                                       [0.1, 0.5]. Use high values to disable.
                  surr_clip            The clip value applied to the surrogate
                                       (standard PPO approach).
+                 vf_clip              An optional clip parameter used for
+                                      clipping the value function loss.
                  gradient_clip        A clip value to use on the gradient
                                       update.
                  lr                   The learning rate. Can be
@@ -127,6 +130,7 @@ class AgentPolicy():
         self.icm_beta           = icm_beta
         self.target_kl          = target_kl
         self.surr_clip          = surr_clip
+        self.vf_clip            = vf_clip
         self.gradient_clip      = gradient_clip
 
         if callable(lr):
