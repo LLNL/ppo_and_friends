@@ -1670,69 +1670,6 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
-class AbmarlLargeMazeLauncher(EnvironmentLauncher):
-
-    def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
-
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
-        icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 9
-
-        lr = 0.0001
-
-        policy_args = {\
-            "ac_network"         : FeedForwardNetwork,
-            "actor_kw_args"      : actor_kw_args,
-            "critic_kw_args"     : critic_kw_args,
-            "lr"                 : lr,
-            "bootstrap_clip"     : (-10., 10.),
-            "enable_icm"         : True,
-            "icm_kw_args"        : icm_kw_args,
-        }
-
-        policy_name = "abmarl-maze"
-        policy_mapping_fn = lambda *args : policy_name
-
-        env_generator = lambda : \
-                AbmarlWrapper(env               = lg_abmarl_maze,
-                              policy_mapping_fn = policy_mapping_fn)
-
-        policy_settings = { policy_name : \
-            (None,
-             env_generator().observation_space["navigator"],
-             env_generator().critic_observation_space["navigator"],
-             env_generator().action_space["navigator"],
-             policy_args)
-        }
-
-        ts_per_rollout = num_procs * 256
-
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 128,
-                     epochs_per_iter    = 20,
-                     max_ts_per_ep      = 128,
-                     ts_per_rollout     = ts_per_rollout,
-                     normalize_values   = True,
-                     normalize_obs      = False,
-                     normalize_rewards  = False,
-                     obs_clip           = None,
-                     reward_clip        = None,
-                     **self.kw_launch_args)
-
-
 class AbmarlBlindMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
@@ -1816,6 +1753,92 @@ class AbmarlBlindMazeLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
+class AbmarlLargeMazeLauncher(EnvironmentLauncher):
+
+    def launch(self):
+        if not HAVE_ABMARL:
+            msg  = "ERROR: unable to import the Abmarl environments. "
+            msg += "This environment is installed from its git repository."
+            rank_print(msg)
+            comm.Abort()
+
+        #
+        # See AbmarlBlindLargeMaze for details about this environment. I spent
+        # more time solving the blind case, which is more difficult, but they
+        # are otherwise very similar.
+        #
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 128
+
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 256
+
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"] = 9
+
+        lr = 0.0005
+        soft_resets = False
+        intr_reward_weight = LinearStepScheduler(
+            status_key      = "longest run",
+            initial_value   = 1e-3,
+            compare_fn      = np.less_equal,
+            status_triggers = [4000, 3000, 2000, 500,],
+            step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
+
+        entropy_weight = LinearStepScheduler(
+            status_key      = "longest run",
+            initial_value   = 0.04,
+            compare_fn      = np.less_equal,
+            status_triggers = [4000, 3000, 2000, 500],
+            step_values     = [1e-2, 1e-3, 1e-4, 0.0])
+
+        policy_args = {\
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "icm_lr"             : 0.0005,
+            "lr"                 : lr,
+            "bootstrap_clip"     : (-10., 10.),
+            "enable_icm"         : True,
+            "icm_kw_args"        : icm_kw_args,
+            "intr_reward_weight" : intr_reward_weight,
+            "entropy_weight"     : entropy_weight,
+        }
+
+        policy_name = "abmarl-maze"
+        policy_mapping_fn = lambda *args : policy_name
+
+        env_generator = lambda : \
+                AbmarlWrapper(env               = lg_abmarl_maze,
+                              policy_mapping_fn = policy_mapping_fn)
+
+        policy_settings = { policy_name : \
+            (None,
+             env_generator().observation_space["navigator"],
+             env_generator().critic_observation_space["navigator"],
+             env_generator().action_space["navigator"],
+             policy_args)
+        }
+
+        ts_per_rollout = num_procs * 4096
+
+        self.run_ppo(env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 512,
+                     epochs_per_iter    = 20,
+                     max_ts_per_ep      = 512,
+                     ts_per_rollout     = ts_per_rollout,
+                     normalize_values   = True,
+                     normalize_obs      = False,
+                     normalize_rewards  = False,
+                     soft_resets        = soft_resets,
+                     obs_clip           = None,
+                     reward_clip        = None,
+                     **self.kw_launch_args)
+
+
 class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
@@ -1859,35 +1882,56 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
         lr = 0.0005
         #
         # Once we start consistently reaching the goal, we can stop
-        # exploring so much.
+        # exploring so much. Two approaches are below.
         #
-        #intr_reward_weight = LinearStepScheduler(
-        #    status_key      = "longest run",
-        #    initial_value   = 1e-3,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [4000, 3000, 2000, 500,],
-        #    step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
 
-        #entropy_weight = LinearStepScheduler(
-        #    status_key      = "longest run",
-        #    initial_value   = 0.04,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [4000, 3000, 2000, 500],
-        #    step_values     = [1e-2, 1e-3, 1e-4, 0.0])
-
+        #
+        # This first approach takes a bit longer than the second,
+        # but it's more generalizable to different MPI distributions.
+        #
+        rollout_length = 4096
+        soft_resets    = False
         intr_reward_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 1e-1,
+            initial_value   = 1e-3,
             compare_fn      = np.less_equal,
-            status_triggers = [500, 256, 128, 95,],
-            step_values     = [1e-2, 1e-4, 1e-6, 0.0,])
+            status_triggers = [4000, 3000, 2000, 500,],
+            step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
 
         entropy_weight = LinearStepScheduler(
             status_key      = "longest run",
-            initial_value   = 0.03,
+            initial_value   = 0.04,
             compare_fn      = np.less_equal,
-            status_triggers = [500, 256, 128, 95,],
+            status_triggers = [4000, 3000, 2000, 500],
             step_values     = [1e-2, 1e-3, 1e-4, 0.0])
+
+        #
+        # The approach below is faster when you have access to lots of
+        # processors. I used 36 and was able to generate a converged policy
+        # in under 30 minutes. The problem with this strategy is that I
+        # didn't spend time generalizing the soft reset trigger.
+        #
+        #rollout_length = 512
+        #intr_reward_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 1e-1,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [500, 256, 128, 95,],
+        #    step_values     = [1e-2, 1e-4, 1e-6, 0.0,])
+
+        #entropy_weight = LinearStepScheduler(
+        #    status_key      = "longest run",
+        #    initial_value   = 0.03,
+        #    compare_fn      = np.less_equal,
+        #    status_triggers = [500, 256, 128, 95,],
+        #    step_values     = [1e-2, 1e-3, 1e-4, 0.0])
+
+        #soft_resets = LinearStepScheduler(
+        #    status_key      = "iteration",
+        #    initial_value   = True,
+        #    compare_fn      = np.greater_equal,
+        #    status_triggers = [50,],
+        #    step_values     = [False,])
 
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
@@ -1917,14 +1961,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        soft_resets = LinearStepScheduler(
-            status_key      = "iteration",
-            initial_value   = True,
-            compare_fn      = np.greater_equal,
-            status_triggers = [50,],
-            step_values     = [False,])
-
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = num_procs * rollout_length
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1936,9 +1973,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
                      normalize_values   = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,
-
                      soft_resets        = soft_resets,
-
                      obs_clip           = None,
                      reward_clip        = None,
                      **self.kw_launch_args)
