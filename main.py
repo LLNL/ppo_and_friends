@@ -31,6 +31,9 @@ if __name__ == "__main__":
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
+    parser.add_argument("--device", type=str, default="cpu",
+        help="Which device to use for training.")
+
     parser.add_argument("--state-path", default="./",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
@@ -44,6 +47,11 @@ if __name__ == "__main__":
     parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
+    parser.add_argument("--pickle-class", action="store_true",
+        help="Pickle the entire PPO class. If True, the pickled class will be "
+        "saved in the state-path. This is useful for loading a trained model "
+        "for inference outside of this workflow.")
+
     #TODO: let's also let users stop at an iteration rather than timestep.
     parser.add_argument("--num-timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
@@ -53,12 +61,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--envs-per-proc", default=1, type=int,
         help="The number of environment instances each processor should have.")
-
-    parser.add_argument("--allow-mpi-gpu", action="store_true",
-        help="By default, GPUs are only used if the we're training on a single "
-        "processor, as this is very effecient when using MLPs. This flag will "
-        "allow GPUs to be used with multiple processors, which is useful when "
-        "using networks that are very slow on CPUs (like convolutions).")
 
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
@@ -91,6 +93,8 @@ if __name__ == "__main__":
                  "PressurePlate",
                  "AbmarlMaze",
                  "AbmarlBlindMaze",
+                 "AbmarlLargeMaze",
+                 "AbmarlBlindLargeMaze",
                  "AbmarlReachTheTarget",
                  "BinaryCartPole",
                  "BinaryLunarLander",
@@ -109,7 +113,8 @@ if __name__ == "__main__":
     num_timesteps      = args.num_timesteps
     force_determinism  = args.force_deterministic
     envs_per_proc      = args.envs_per_proc
-    allow_mpi_gpu      = args.allow_mpi_gpu
+    pickle_class       = args.pickle_class
+    device             = torch.device(args.device)
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -145,14 +150,6 @@ if __name__ == "__main__":
             shutil.rmtree(state_path)
     comm.barrier()
 
-    if (torch.cuda.is_available() and
-        not test and
-        (num_procs == 1 or allow_mpi_gpu)):
-
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
-
     rank_print("Using device: {}".format(device))
     rank_print("Number of processors: {}".format(num_procs))
     rank_print("Number of environments per processor: {}".format(envs_per_proc))
@@ -174,6 +171,7 @@ if __name__ == "__main__":
         envs_per_proc         = envs_per_proc,
         test                  = test,
         explore_while_testing = test_explore,
+        pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 
     launcher.launch()

@@ -9,8 +9,8 @@ from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
 from .ppo_networks import PPOActorCriticNetwork, PPOConv2dNetwork, SingleSplitObservationNetwork
 from .ppo_networks import PPOLSTMNetwork
-from mpi4py import MPI
 
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
@@ -73,79 +73,18 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         self.activation = activation
 
-        if type(hidden_size) != list:
-
-            if ((hidden_size == 0 and hidden_depth != 0) or
-                (hidden_size != 0 and hidden_depth == 0)):
-
-                msg  = "ERROR: if either hidden_size or hidden_depth "
-                msg += "is 0, both must be 0,"
-                msg += "but received "
-                msg += "hidden_size of {} ".format(hidden_size)
-                msg += "and hidden_depth of {}.".format(hidden_depth)
-                rank_print(msg)
-                comm.Abort()
-
-            hidden_size = [hidden_size] * hidden_depth
-        else:
-            hidden_depth = len(hidden_size)
-
-
-        if len(hidden_size) != 0:
-
-            self.input_layer = init_layer(nn.Linear(in_dim, hidden_size[0]))
-
-            hidden_layer_list = []
-
-            for i in range(hidden_depth - 1):
-                hidden_layer_list.append(init_layer(
-                    nn.Linear(
-                        hidden_size[i],
-                        hidden_size[i + 1])))
-
-                hidden_layer_list.append(self.activation)
-
-            #
-            # This our our 2-layer network case. Technically, we have
-            # a single hidden layer, but realistically it's included in
-            # our input and output layers.
-            #
-            if (hidden_depth - 1) == 0:
-                self.have_hidden   = False
-                self.two_layer_net = True
-
-            self.hidden_layers = nn.Sequential(*hidden_layer_list)
-
-            if out_init != None:
-                self.output_layer = init_layer(
-                    nn.Linear(hidden_size[-1], out_size),
-                        weight_std=out_init)
-            else:
-                self.output_layer = init_layer(
-                    nn.Linear(hidden_size[-1], out_size))
-        else:
-            self.input_layer = None
-            self.have_hidden = False
-
-            if out_init != None:
-                self.output_layer = init_layer(nn.Linear(in_dim, out_size),
-                    weight_std=out_init)
-            else:
-                self.output_layer = init_layer(nn.Linear(in_dim, out_size))
+        self.sequential_net = \
+            create_sequential_network(
+                in_dim       = in_dim,
+                out_size     = out_size,
+                hidden_size  = hidden_size,
+                hidden_depth = hidden_depth,
+                activation   = activation,
+                out_init     = out_init)
 
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
-
-        if self.have_hidden:
-            out = self.input_layer(out)
-            out = self.activation(out)
-            out = self.hidden_layers(out)
-
-        elif self.two_layer_net:
-            out = self.input_layer(out)
-            out = self.activation(out)
-
-        out = self.output_layer(out)
+        out = self.sequential_net(out)
 
         #
         # If this network is embedded in a larger network,

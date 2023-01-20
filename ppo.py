@@ -1,6 +1,6 @@
 import sys
 import gc
-import pickle
+import dill as pickle
 import numpy as np
 import os
 from copy import deepcopy
@@ -8,7 +8,6 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
-from ppo_and_friends.utils.iteration_mappers import *
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.utils import generate_policy
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
@@ -17,6 +16,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
+from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
@@ -40,7 +40,6 @@ class PPO(object):
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
                  ext_reward_weight   = 1.0,
-                 intr_reward_weight  = 1.0,
                  normalize_adv       = True,
                  normalize_obs       = True,
                  normalize_rewards   = True,
@@ -52,7 +51,7 @@ class PPO(object):
                  state_path          = "./",
                  save_every          = 1,
                  pickle_class        = False,
-                 use_soft_resets     = False,
+                 soft_resets         = False,
                  obs_augment         = False,
                  test_mode           = False):
         """
@@ -86,8 +85,6 @@ class PPO(object):
                                       may contain multiple episodes).
                  ext_reward_weight    An optional weight for the extrinsic
                                       reward.
-                 intr_reward_weight   an optional weight for the intrinsic
-                                      reward.
                  normalize_adv        Should we normalize the advantages? This
                                       occurs at the minibatch level.
                  normalize_obs        Should we normalize the observations?
@@ -108,7 +105,9 @@ class PPO(object):
                  pickle_class         When enabled, the entire PPO class will
                                       be pickled and saved into the output
                                       directory after it's been initialized.
-                 use_soft_resets      Use "soft resets" during rollouts.
+                 soft_resets          Use "soft resets" during rollouts. This
+                                      can be a bool or an instance of
+                                      LinearStepScheduler.
                  obs_augment          This is a funny option that can only be
                                       enabled with environments that have a
                                       "observation_augment" method defined.
@@ -141,7 +140,7 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
-        env, self.status_dict = wrap_environment(
+        env = wrap_environment(
             env_generator     = env_generator,
             envs_per_proc     = envs_per_proc,
             random_seed       = random_seed,
@@ -177,7 +176,6 @@ class PPO(object):
         self.state_path          = state_path
         self.render              = render
         self.ext_reward_weight   = ext_reward_weight
-        self.intr_reward_weight  = intr_reward_weight
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
         self.ts_per_rollout      = ts_per_rollout
@@ -189,12 +187,24 @@ class PPO(object):
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
-        self.use_soft_resets     = use_soft_resets
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
+
+        if callable(soft_resets):
+            if type(soft_resets) != LinearStepScheduler:
+                msg  = "ERROR: soft_resets must be of type bool or "
+                msg += f"{LinearStepScheduler} but received "
+                msg += f"{type(soft_resets)}"
+                rank_print(msg)
+                comm.Abort()
+
+            self.soft_resets = soft_resets
+
+        else:
+            self.soft_resets = CallableValue(soft_resets)
 
         self.policies = {}
         for policy_id in policy_settings:
@@ -221,6 +231,7 @@ class PPO(object):
         #
         max_int = np.iinfo(np.int32).max
 
+        self.status_dict = {}
         self.status_dict["general"] = {}
         self.status_dict["general"]["iteration"]      = 0
         self.status_dict["general"]["rollout time"]   = 0
@@ -229,6 +240,8 @@ class PPO(object):
         self.status_dict["general"]["timesteps"]      = 0
         self.status_dict["general"]["total episodes"] = 0
         self.status_dict["general"]["longest run"]    = 0
+        self.status_dict["general"]["shortest run"]   = max_int
+        self.status_dict["general"]["average run"]    = 0
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -238,12 +251,11 @@ class PPO(object):
             self.status_dict[policy_id]["extrinsic score avg"] = 0
             self.status_dict[policy_id]["top score"]           = -max_int
             self.status_dict[policy_id]["weighted entropy"]    = 0
-            self.status_dict[policy_id]["entropy weight"]      = policy.entropy_weight
-            self.status_dict[policy_id]["lr"]                  = policy.lr
             self.status_dict[policy_id]["actor loss"]          = 0
             self.status_dict[policy_id]["critic loss"]         = 0
             self.status_dict[policy_id]["kl avg"]              = 0
             self.status_dict[policy_id]["ext reward range"] = (max_int, -max_int)
+            self.status_dict[policy_id]["top reward"]       = -max_int
             self.status_dict[policy_id]["obs range"]        = (max_int, -max_int)
 
         #
@@ -296,16 +308,26 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                for policy_id in self.policies:
-                    policy    = self.policies[policy_id]
-                    policy.lr = min(self.status_dict[policy_id]["lr"],
-                        policy.lr)
-
-                    self.status_dict[policy_id]["lr"] = policy.lr
-
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
         comm.barrier()
+
+        for policy_id in self.policies:
+            policy = self.policies[policy_id]
+
+            self.policies[policy_id].finalize(self.status_dict)
+            self.status_dict[policy_id]["lr"] = policy.lr()
+            self.status_dict[policy_id]["entropy weight"] = \
+                policy.entropy_weight()
+
+            if self.policies[policy_id].enable_icm:
+                self.status_dict[policy_id]["icm lr"] = \
+                    policy.icm_lr()
+                self.status_dict[policy_id]["intr reward weight"] = \
+                    policy.intr_reward_weight()
+
+        self.env.finalize(self.status_dict)
+        self.soft_resets.finalize(self.status_dict)
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -812,35 +834,27 @@ class PPO(object):
 
         rank_print("--------------------------------------------------------")
 
-    def update_learning_rate(self,
-                             iteration,
-                             timestep):
+    def update_learning_rate(self):
         """
-            Update the learning rate. This relies on the lr_dec function,
-            which expects an iteration and returns an updated learning rate.
-
-            Arguments:
-                iteration    The current iteration of training.
+            Update the learning rate.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].update_learning_rate(
-                iteration, timestep)
-            self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr
+            self.policies[policy_id].update_learning_rate()
+            self.status_dict[policy_id]["lr"] = self.policies[policy_id].lr()
 
-    def update_entropy_weight(self,
-                              iteration,
-                              timestep):
+            if self.policies[policy_id].enable_icm:
+                self.status_dict[policy_id]["icm lr"] = \
+                    self.policies[policy_id].icm_lr()
+                self.status_dict[policy_id]["intr reward weight"] = \
+                    self.policies[policy_id].intr_reward_weight()
+
+    def update_entropy_weight(self):
         """
-            Update the entropy weight. This relies on the entropy_dec function,
-            which expects an iteration and returns an updated entropy weight.
-
-            Arguments:
-                iteration    The current iteration of training.
+            Update the entropy weight.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].update_entropy_weight(iteration, timestep)
             self.status_dict[policy_id]["entropy weight"] = \
-                self.policies[policy_id].entropy_weight
+                self.policies[policy_id].entropy_weight()
 
     def rollout(self):
         """
@@ -875,6 +889,8 @@ class PPO(object):
         total_episodes   = 0.0
         total_rollout_ts = 0
         longest_run      = 0
+        shortest_run     = self.ts_per_rollout
+        avg_run          = self.ts_per_rollout
 
         for key in self.policies:
             self.policies[key].eval()
@@ -884,7 +900,7 @@ class PPO(object):
         # that are impossible to escape. We might be able to handle this
         # more intelligently.
         #
-        if self.use_soft_resets:
+        if self.soft_resets():
             initial_reset_func = self.env.soft_reset
         else:
             initial_reset_func = self.env.reset
@@ -906,6 +922,7 @@ class PPO(object):
         total_intr_rewards      = {}
         total_rewards           = {}
         agents_per_policy       = {}
+        top_reward              = {}
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]       = -np.finfo(np.float32).max
@@ -922,6 +939,7 @@ class PPO(object):
             total_intr_rewards[policy_id]      = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]           = np.zeros((env_batch_size, 1))
             agents_per_policy[policy_id]       = 0
+            top_reward[policy_id]              = -np.finfo(np.float32).max
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
@@ -1070,6 +1088,9 @@ class PPO(object):
                 ep_intr_rewards[policy_id]   += intr_reward[agent_id]
                 agents_per_policy[policy_id] += 1
 
+                top_reward[policy_id] = max(top_reward[policy_id],
+                    natural_reward[agent_id].max())
+
             #
             # Since each policy can have multiple agents, we average
             # the scores to get a more interpretable value.
@@ -1125,6 +1146,11 @@ class PPO(object):
 
                 longest_run = max(longest_run,
                     episode_lengths[where_done].max())
+
+                shortest_run = min(shortest_run,
+                    episode_lengths[where_done].min())
+
+                avg_run = episode_lengths[where_done].mean()
 
                 episode_lengths[where_done]    = 0
                 total_episodes                += done_count
@@ -1269,9 +1295,7 @@ class PPO(object):
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
                     ep_nat_rewards[policy_id].max())
 
-            top_score = max(top_rollout_score[policy_id],
-                self.status_dict[policy_id]["top score"])
-
+            top_score = top_rollout_score[policy_id]
             top_score = comm.allreduce(top_score, MPI.MAX)
 
             #
@@ -1308,11 +1332,16 @@ class PPO(object):
             rw_range          = (min_reward, max_reward)
             obs_range         = (min_obs, max_obs)
 
+            global_top_reward = max(self.status_dict[policy_id]["top reward"],
+                top_reward[policy_id])
+            global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
+
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
             self.status_dict[policy_id]["top score"]           = top_score
             self.status_dict[policy_id]["obs range"]           = obs_range
             self.status_dict[policy_id]["ext reward range"]    = rw_range
+            self.status_dict[policy_id]["top reward"]          = global_top_reward
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_rewards[policy_id].sum()
@@ -1321,23 +1350,24 @@ class PPO(object):
                 ism = intr_reward / (total_episodes/ env_batch_size)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
-                max_reward = max(self.status_dict[policy_id]["intr reward range"][1],
-                    rollout_max_intr_reward[policy_id])
-
-                min_reward = min(self.status_dict[policy_id]["intr reward range"][0],
-                    rollout_min_intr_reward[policy_id])
+                max_reward = rollout_max_intr_reward[policy_id]
+                min_reward = rollout_min_intr_reward[policy_id]
 
                 max_reward   = comm.allreduce(max_reward, MPI.MAX)
                 min_reward   = comm.allreduce(min_reward, MPI.MIN)
-                reward_range = (max_reward, min_reward)
+                reward_range = (min_reward, max_reward)
 
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
         longest_run      = comm.allreduce(longest_run, MPI.MAX)
+        shortest_run     = comm.allreduce(shortest_run, MPI.MIN)
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
+        avg_run          = comm.allreduce(avg_run, MPI.SUM) / num_procs
 
         self.status_dict["general"]["total episodes"] += total_episodes
         self.status_dict["general"]["longest run"]     = longest_run
+        self.status_dict["general"]["shortest run"]    = shortest_run
+        self.status_dict["general"]["average run"]     = avg_run
         self.status_dict["general"]["timesteps"]      += total_rollout_ts
 
         #
@@ -1370,14 +1400,6 @@ class PPO(object):
             iter_start_time = time.time()
 
             self.rollout()
-
-            self.update_learning_rate(
-                self.status_dict["general"]["iteration"],
-                self.status_dict["general"]["timesteps"])
-
-            self.update_entropy_weight(
-                self.status_dict["general"]["iteration"],
-                self.status_dict["general"]["timesteps"])
 
             data_loaders = {}
             for key in self.policies:
@@ -1447,6 +1469,9 @@ class PPO(object):
             iteration += 1
             self.status_dict["general"]["iteration"] = iteration
 
+            self.update_learning_rate()
+            self.update_entropy_weight()
+
             self.print_status()
 
             if self.save_every > 0 and iteration % self.save_every == 0:
@@ -1456,7 +1481,7 @@ class PPO(object):
 
             lr_sum = 0.0
             for policy_id in self.policies:
-                lr_sum += self.policies[policy_id].lr
+                lr_sum += self.policies[policy_id].lr()
 
             if lr_sum <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
@@ -1575,10 +1600,10 @@ class PPO(object):
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
 
-            if self.policies[policy_id].entropy_weight != 0.0:
+            if self.policies[policy_id].entropy_weight() != 0.0:
                 total_entropy += entropy.mean().item()
                 actor_loss -= \
-                    self.policies[policy_id].entropy_weight * entropy.mean()
+                    self.policies[policy_id].entropy_weight() * entropy.mean()
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
@@ -1638,7 +1663,7 @@ class PPO(object):
         total_actor_loss  = comm.allreduce(total_actor_loss, MPI.SUM)
         total_critic_loss = comm.allreduce(total_critic_loss, MPI.SUM)
         total_kl          = comm.allreduce(total_kl, MPI.SUM)
-        w_entropy = total_entropy * self.policies[policy_id].entropy_weight
+        w_entropy = total_entropy * self.policies[policy_id].entropy_weight()
 
         self.status_dict[policy_id]["weighted entropy"] = w_entropy / counter
         self.status_dict[policy_id]["actor loss"] = \

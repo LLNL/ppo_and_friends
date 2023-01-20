@@ -66,12 +66,10 @@ def wrap_environment(
             test_mode    = test_mode,
             update_stats = not test_mode)
 
-    status_dict = {}
     if obs_clip != None and type(obs_clip) == tuple:
         env = ObservationClipper(
             env         = env,
             test_mode   = test_mode,
-            status_dict = status_dict,
             clip_range  = obs_clip)
 
     #
@@ -92,7 +90,6 @@ def wrap_environment(
         env = RewardClipper(
             env         = env,
             test_mode   = test_mode,
-            status_dict = status_dict,
             clip_range  = reward_clip)
 
-    return env, status_dict
+    return env

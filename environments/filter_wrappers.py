@@ -5,6 +5,7 @@
 """
 from ppo_and_friends.utils.stats import RunningMeanStd
 from ppo_and_friends.environments.ppo_env_wrappers import IdentityWrapper
+from ppo_and_friends.utils.schedulers import CallableValue
 import numpy as np
 from copy import deepcopy
 import pickle
@@ -529,7 +530,6 @@ class GenericClipper(IdentityWrapper):
 
     def __init__(self,
                  env,
-                 status_dict = {},
                  clip_range  = (-10., 10.),
                  **kw_args):
         """
@@ -537,11 +537,9 @@ class GenericClipper(IdentityWrapper):
 
             Arguments:
                 env         The environment to wrap.
-                status_dict The training status dictionary. This is used when
-                            our clip range contains callables.
                 clip_range  The range to clip our rewards into. This can be
                             either a real number or a class that inherits from
-                            IterationMapper.
+                            utils/StatusScheduler.
         """
 
         super(GenericClipper, self).__init__(
@@ -550,19 +548,31 @@ class GenericClipper(IdentityWrapper):
 
         min_callable = None
         max_callable = None
-        self.status_dict = status_dict
 
         if callable(clip_range[0]):
             min_callable = clip_range[0]
         else:
-            min_callable = lambda *args, **kwargs : clip_range[0]
+            min_callable = CallableValue(clip_range[0])
 
         if callable(clip_range[1]):
             max_callable = clip_range[1]
         else:
-            max_callable = lambda *args, **kwargs : clip_range[1]
+            max_callable = CallableValue(clip_range[1])
 
         self.clip_range = (min_callable, max_callable)
+
+    def finalize(self, status_dict):
+        """
+            Finalize our clip range, which might require a status dict.
+
+            Arguments:
+                status_dict    The training status dict.
+        """
+        self.clip_range[0].finalize(status_dict)
+        self.clip_range[1].finalize(status_dict)
+        self.finalized = True
+
+        self._finalize(status_dict)
 
     def get_clip_range(self):
         """
@@ -571,12 +581,8 @@ class GenericClipper(IdentityWrapper):
             Returns:
                 A tuple containing the clip range as (min, max).
         """
-        min_value = self.clip_range[0](
-            iteration = self.status_dict["general"]["iteration"],
-            timestep  = self.status_dict["general"]["timesteps"])
-        max_value = self.clip_range[1](
-            iteration = self.status_dict["general"]["iteration"],
-            timestep  = self.status_dict["general"]["timesteps"])
+        min_value = self.clip_range[0]()
+        max_value = self.clip_range[1]()
 
         return (min_value, max_value)
 
@@ -616,7 +622,6 @@ class ObservationClipper(ObservationFilter, GenericClipper):
 
     def __init__(self,
                  env,
-                 status_dict = {},
                  clip_range  = (-10., 10.),
                  **kw_args):
         """
@@ -624,13 +629,10 @@ class ObservationClipper(ObservationFilter, GenericClipper):
 
             Arguments:
                 env         The environment to wrap.
-                status_dict The training status dictionary. This is used when
-                            our clip range contains callables.
                 clip_range  The range to clip our observations into.
         """
         super(ObservationClipper, self).__init__(
             env,
-            status_dict = status_dict,
             clip_range  = clip_range,
             **kw_args)
 
@@ -666,7 +668,6 @@ class RewardClipper(GenericClipper):
 
     def __init__(self,
                  env,
-                 status_dict = {},
                  clip_range  = (-10., 10.),
                  **kw_args):
         """
@@ -674,14 +675,11 @@ class RewardClipper(GenericClipper):
 
             Arguments:
                 env         The environment to wrap.
-                status_dict The training status dictionary. This is used when
-                            our clip range contains callables.
                 clip_range  The range to clip our rewards into.
         """
 
         super(RewardClipper, self).__init__(
             env,
-            status_dict = status_dict,
             clip_range  = clip_range,
             **kw_args)
 

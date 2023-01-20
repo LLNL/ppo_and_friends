@@ -12,7 +12,7 @@ from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
-from ppo_and_friends.utils.iteration_mappers import LinearDecrementer
+from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -40,9 +40,8 @@ class AgentPolicy():
                  surr_clip           = 0.2,
                  gradient_clip       = 0.5,
                  lr                  = 3e-4,
-                 lr_dec              = None,
+                 icm_lr              = 3e-4,
                  entropy_weight      = 0.01,
-                 entropy_dec         = None,
                  use_gae             = True,
                  gamma               = 0.99,
                  lambd               = 0.95,
@@ -68,8 +67,7 @@ class AgentPolicy():
                                       estimated reward (from our value network)
                                       might be way outside of the expected
                                       range. We also allow the range min/max
-                                      to be callables that take in the
-                                      current iteration.
+                                      to be callables from utils/schedulers.
                  ac_network           The type of network to use for the actor
                                       and critic.
                  actor_kw_args        Keyword arguments for the actor network.
@@ -82,20 +80,15 @@ class AgentPolicy():
                                       (standard PPO approach).
                  gradient_clip        A clip value to use on the gradient
                                       update.
-                 lr                   The initial learning rate.
-                 lr_dec               A class that inherits from the
-                                      IterationMapper class located in
-                                      utils/iteration_mappers.py.
-                                      This class has a decrement function that
-                                      will be used to updated the learning rate.
-                 entropy_weight       An optional weight to apply to our
-                                      entropy.
-                 entropy_dec          A class that inherits from the
-                                      IterationMapper class located in
-                                      utils/iteration_mappers.py.
-                                      This class has a decrement function that
-                                      will be used to updated the entropy
-                                      weight.
+                 lr                   The learning rate. Can be
+                                      a number or a scheduler class from
+                                      utils/schedulers.py.
+                 icm_lr               The learning rate. Can be
+                                      a number or a scheduler class from
+                                      utils/schedulers.py.
+                 entropy_weight       The entropy weight. Can be
+                                      a number or a scheduler class from
+                                      utils/schedulers.py.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
                                       vanilla advantage calculation.
@@ -111,6 +104,8 @@ class AgentPolicy():
                  icm_network          The network to use for ICM applications.
                  intr_reward_weight   When using ICM, this weight will be
                                       applied to the intrinsic reward.
+                                      Can be a number or a class from
+                                      utils/schedulers.py.
                  icm_beta             The beta value used within the ICM.
                  test_mode            Boolean flag. Are we in test mode?
         """
@@ -119,7 +114,6 @@ class AgentPolicy():
         self.actor_obs_space    = actor_observation_space
         self.critic_obs_space   = critic_observation_space
         self.enable_icm         = enable_icm
-        self.intr_reward_weight = intr_reward_weight
         self.test_mode          = test_mode
         self.use_gae            = use_gae
         self.gamma              = gamma
@@ -130,28 +124,30 @@ class AgentPolicy():
         self.device             = torch.device("cpu")
         self.agent_ids          = set()
         self.episodes           = {}
-        self.lr                 = lr
-        self.entropy_weight     = entropy_weight
         self.icm_beta           = icm_beta
         self.target_kl          = target_kl
         self.surr_clip          = surr_clip
         self.gradient_clip      = gradient_clip
 
-        if lr_dec == None:
-            self.lr_dec = LinearDecrementer(
-                max_iteration = 1,
-                max_value     = lr,
-                min_value     = lr)
+        if callable(lr):
+            self.lr = lr
         else:
-            self.lr_dec = lr_dec
+            self.lr = CallableValue(lr)
 
-        if entropy_dec == None:
-            self.entropy_dec = LinearDecrementer(
-                max_iteration = 1,
-                max_value     = entropy_weight,
-                min_value     = entropy_weight)
+        if callable(icm_lr):
+            self.icm_lr = icm_lr
         else:
-            self.entropy_dec = entropy_dec
+            self.icm_lr = CallableValue(icm_lr)
+
+        if callable(entropy_weight):
+            self.entropy_weight = entropy_weight
+        else:
+            self.entropy_weight = CallableValue(entropy_weight)
+
+        if callable(intr_reward_weight):
+            self.intr_reward_weight = intr_reward_weight
+        else:
+            self.intr_reward_weight = CallableValue(intr_reward_weight)
 
         act_type = type(action_space)
         self.act_nvec = None
@@ -197,13 +193,13 @@ class AgentPolicy():
             min_bs_callable  = bootstrap_clip[0]
             bs_clip_callable = True
         else:
-            min_bs_callable = lambda *args, **kwargs : bootstrap_clip[0]
+            min_bs_callable = CallableValue(bootstrap_clip[0])
 
         if callable(bootstrap_clip[1]):
             max_bs_callable  = bootstrap_clip[1]
             bs_clip_callable = True
         else:
-            max_bs_callable = lambda *args, **kwargs : bootstrap_clip[1]
+            max_bs_callable = CallableValue(bootstrap_clip[1])
 
         self.bootstrap_clip = (min_bs_callable, max_bs_callable)
 
@@ -222,14 +218,31 @@ class AgentPolicy():
             critic_kw_args = critic_kw_args,
             icm_kw_args    = icm_kw_args)
 
-        self.actor_optim  = Adam(self.actor.parameters(), lr=lr, eps=1e-5)
-        self.critic_optim = Adam(self.critic.parameters(), lr=lr, eps=1e-5)
+    def finalize(self, status_dict):
+        """
+            Perfrom any finalizing tasks before we start using the policy.
+
+            Arguments:
+                status_dict    The status dict for training.
+        """
+        self.lr.finalize(status_dict)
+        self.icm_lr.finalize(status_dict)
+        self.entropy_weight.finalize(status_dict)
+        self.intr_reward_weight.finalize(status_dict)
+        self.bootstrap_clip[0].finalize(status_dict)
+        self.bootstrap_clip[1].finalize(status_dict)
+
+        self.actor_optim  = Adam(
+            self.actor.parameters(), lr=self.lr(), eps=1e-5)
+        self.critic_optim = Adam(
+            self.critic.parameters(), lr=self.lr(), eps=1e-5)
 
         if self.enable_icm:
             self.icm_optim = Adam(self.icm_model.parameters(),
-                lr=lr, eps=1e-5)
+                lr=self.icm_lr(), eps=1e-5)
         else:
             self.icm_optim = None
+
 
     def register_agent(self, agent_id):
         """
@@ -392,7 +405,7 @@ class AgentPolicy():
             self.episodes[agent_id] = np.array([None] * env_batch_size,
                 dtype=object)
 
-            bs_clip_range = self.get_bs_clip_range(None, status_dict)
+            bs_clip_range = self.get_bs_clip_range(None)
 
             for ei_idx in range(env_batch_size):
                 self.episodes[agent_id][ei_idx] = EpisodeInfo(
@@ -572,8 +585,7 @@ class AgentPolicy():
             # provided range.
             #
             bs_min, bs_max = self.get_bs_clip_range(
-                self.episodes[agent_id][env_i].rewards,
-                status_dict)
+                self.episodes[agent_id][env_i].rewards)
 
             #
             # If we're terminal, the start of the next episode is 0.
@@ -722,43 +734,21 @@ class AgentPolicy():
         batch_size   = obs.shape[0]
         intr_reward  = intr_reward.detach().cpu().numpy()
         intr_reward  = intr_reward.reshape((batch_size, -1))
-        intr_reward *= self.intr_reward_weight
+        intr_reward *= self.intr_reward_weight()
 
         return intr_reward
 
-    def update_learning_rate(self, iteration, timestep):
+    def update_learning_rate(self):
         """
             Update the learning rate.
-
-            Arguments:
-                iteration        The current training iteration.
-                timestep         The current training timestep.
         """
-        self.lr = self.lr_dec(
-            iteration = iteration,
-            timestep  = timestep)
-
-        update_optimizer_lr(self.actor_optim, self.lr)
-        update_optimizer_lr(self.critic_optim, self.lr)
+        update_optimizer_lr(self.actor_optim, self.lr())
+        update_optimizer_lr(self.critic_optim, self.lr())
 
         if self.enable_icm:
-            update_optimizer_lr(self.icm_optim, self.lr)
+            update_optimizer_lr(self.icm_optim, self.icm_lr())
 
-    def update_entropy_weight(self,
-                              iteration,
-                              timestep):
-        """
-            Update the entropy weight. This relies on the entropy_dec function,
-            which expects an iteration and returns an updated entropy weight.
-
-            Arguments:
-                iteration    The current iteration of training.
-        """
-        self.entropy_weight = self.entropy_dec(
-            iteration = iteration,
-            timestep  = timestep)
-
-    def get_bs_clip_range(self, ep_rewards, status_dict):
+    def get_bs_clip_range(self, ep_rewards):
         """
             Get the current bootstrap clip range.
 
@@ -776,16 +766,8 @@ class AgentPolicy():
             bs_max = max(ep_rewards)
 
         else:
-            iteration = status_dict["general"]["iteration"]
-            timestep  = status_dict["general"]["timesteps"]
-
-            bs_min = self.bootstrap_clip[0](
-                iteration = iteration,
-                timestep  = timestep)
-
-            bs_max = self.bootstrap_clip[1](
-                iteration = iteration,
-                timestep  = timestep)
+            bs_min = self.bootstrap_clip[0]()
+            bs_max = self.bootstrap_clip[1]()
 
         return (bs_min, bs_max)
 
@@ -891,7 +873,6 @@ class AgentPolicy():
             and self.actor_obs_space    == other.actor_obs_space
             and self.critic_obs_space   == other.critic_obs_space
             and self.enable_icm         == other.enable_icm
-            and self.intr_reward_weight == other.intr_reward_weight
             and self.test_mode          == other.test_mode
             and self.use_gae            == other.use_gae
             and self.gamma              == other.gamma
@@ -913,6 +894,9 @@ class AgentPolicy():
         str_self += "    critic obs space: {}\n".format(self.critic_obs_space)
         str_self += "    enable icm: {}\n".format(self.enable_icm)
         str_self += "    intr reward weight: {}\n".format(self.intr_reward_weight)
+        str_self += "    lr: {}\n".format(self.lr)
+        str_self += "    icm_lr: {}\n".format(self.icm_lr)
+        str_self += "    entropy_weight: {}\n".format(self.entropy_weight)
         str_self += "    test mode: {}\n".format(self.test_mode)
         str_self += "    use gae: {}\n".format(self.use_gae)
         str_self += "    gamma: {}\n".format(self.gamma)
