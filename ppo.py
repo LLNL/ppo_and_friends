@@ -1564,7 +1564,8 @@ class PPO(object):
                 ratios, 1 - self.policies[policy_id].surr_clip,
                     1 + self.policies[policy_id].surr_clip) * advantages
 
-            total_kl += (log_probs - curr_log_probs).mean().item()
+            current_kl = (log_probs - curr_log_probs).mean().item()
+            total_kl  += current_kl
 
             if torch.isnan(ratios).any() or torch.isinf(ratios).any():
                 rank_print("ERROR: ratios are nan or inf!")
@@ -1595,7 +1596,7 @@ class PPO(object):
                 comm.Abort()
 
             #
-            # We negate here to perform gradient ascent rather than descent.
+            # Calculate the actor loss.
             #
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
@@ -1605,12 +1606,40 @@ class PPO(object):
                 actor_loss -= \
                     self.policies[policy_id].entropy_weight() * entropy.mean()
 
+            #
+            # Optionally add a kl divergence penalty.
+            #
+            if self.policies[policy_id].kl_loss_weight > 0.0:
+                actor_loss += self.policies[policy_id].kl_loss_weight * \
+                    current_kl
+
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
 
-            critic_loss        = nn.MSELoss()(values, rewards_tg)
+            #
+            # Calculate the critic loss. Optionally, we can use the clipped
+            # version.
+            #
+            critic_loss = nn.MSELoss()(values, rewards_tg)
+
+            #
+            # This clipping strategy comes from arXiv:2005.12729v1, which
+            # differs somewhat from other implementations (rllib for example)
+            # but should be true to OpenAI's original approach.
+            #
+            if self.policies[policy_id].vf_clip is not None:
+                clipped_values = torch.clamp(
+                    values,
+                    -self.policies[policy_id].vf_clip,
+                    self.policies[policy_id].vf_clip)
+
+                clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
+                critic_loss  = torch.max(critic_loss, clipped_loss)
+
             total_critic_loss += critic_loss.item()
 
+            #
+            # Perform our backwards steps, and average gradients across ranks.
             #
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
@@ -1619,18 +1648,24 @@ class PPO(object):
             actor_loss.backward(
                 retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].actor)
-            nn.utils.clip_grad_norm_(
-                self.policies[policy_id].actor.parameters(),
-                self.policies[policy_id].gradient_clip)
+
+            if self.policies[policy_id].gradient_clip is not None:
+                nn.utils.clip_grad_norm_(
+                    self.policies[policy_id].actor.parameters(),
+                    self.policies[policy_id].gradient_clip)
+
             self.policies[policy_id].actor_optim.step()
 
             self.policies[policy_id].critic_optim.zero_grad()
             critic_loss.backward(
                 retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].critic)
-            nn.utils.clip_grad_norm_(
-                self.policies[policy_id].critic.parameters(),
-                self.policies[policy_id].gradient_clip)
+
+            if self.policies[policy_id].gradient_clip is not None:
+                nn.utils.clip_grad_norm_(
+                    self.policies[policy_id].critic.parameters(),
+                    self.policies[policy_id].gradient_clip)
+
             self.policies[policy_id].critic_optim.step()
 
             #

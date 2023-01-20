@@ -38,10 +38,12 @@ class AgentPolicy():
                  icm_kw_args         = {},
                  target_kl           = 100.,
                  surr_clip           = 0.2,
+                 vf_clip             = None,
                  gradient_clip       = 0.5,
                  lr                  = 3e-4,
                  icm_lr              = 3e-4,
                  entropy_weight      = 0.01,
+                 kl_loss_weight      = 0.0,
                  use_gae             = True,
                  gamma               = 0.99,
                  lambd               = 0.95,
@@ -78,8 +80,10 @@ class AgentPolicy():
                                       [0.1, 0.5]. Use high values to disable.
                  surr_clip            The clip value applied to the surrogate
                                       (standard PPO approach).
-                 gradient_clip        A clip value to use on the gradient
-                                      update.
+                 vf_clip              An optional clip parameter used for
+                                      clipping the value function loss.
+                 gradient_clip        An optional clip value to use on the
+                                      gradient update.
                  lr                   The learning rate. Can be
                                       a number or a scheduler class from
                                       utils/schedulers.py.
@@ -89,6 +93,10 @@ class AgentPolicy():
                  entropy_weight       The entropy weight. Can be
                                       a number or a scheduler class from
                                       utils/schedulers.py.
+                 kl_loss_weight       A "kl coefficient" when adding kl
+                                      divergence to the actor's loss. This
+                                      is only used when > 0.0, and is off
+                                      by default.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
                                       vanilla advantage calculation.
@@ -127,7 +135,9 @@ class AgentPolicy():
         self.icm_beta           = icm_beta
         self.target_kl          = target_kl
         self.surr_clip          = surr_clip
+        self.vf_clip            = vf_clip
         self.gradient_clip      = gradient_clip
+        self.kl_loss_weight     = kl_loss_weight
 
         if callable(lr):
             self.lr = lr

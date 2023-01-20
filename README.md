@@ -18,13 +18,22 @@ Some of our friends:
 * Multi Agent Proximal Policy Optimization (MAPPO)
 * Generalized Advantage Estimations (GAE)
 * LSTM integration into PPO algorithm
-* Gradient, reward, bootstrap, and observation clipping
+* Gradient, reward, bootstrap, value, and observation clipping
 * KL based early ending
+* KL punishment
 * Splitting observations by proprioceptive and exteroceptive information
 * Observation, advantage, and reward normalization
 * Learning rate annealing
+* Entropy annealing
+* Intrinsic reward weight annealing
 * Vectorized environments
 * Observational augmentations
+
+For a full list of policy options and their defaults, see 
+`ppo_and_friends/policies/agent_policy.py`.
+
+Note that this implementation of PPO uses separate networks for critics
+and actors.
 
 # MAPPO
 
@@ -50,6 +59,29 @@ Design decisions that may have an impact on learning have largely come
 from the following two papers:
 arXiv:2103.01955v2
 arXiv:2006.07869v4
+
+# Terminology
+Terminology varies across implemenations and publications, so here are
+some commonly overloaded terms and how we define them.
+
+1. **batch size**: we refer to the gradient descent mini-batch size as the
+   batch size. This is sometimes referred to as 'mini batch size',
+   'sgd mini batch size', etc. This is defined as `batch_size` in our code.
+2. **timesteps per rollout**: this refers to the total number of timesteps
+   collected in a single rollout. This is sometimes referred to as the batch
+   size. This includes the data collected from all processors.
+   The exception to this rule is that a single processor will only see the
+   number timesteps it needs to collect. This is defined as `ts_per_rollout`
+   in our code.
+3. **max timesteps per episode**: this refers to the maximum number of
+   timesteps collected for a single episode trajectory. This is sometimes
+   referred to as horizon or trajectory length. If max timesteps
+   per episode is 10, and we're collecting 100 timesteps in our rollout
+   on a single processor, then we'll end up with 10 episodes of length 10.
+   Note that the environment does not need to enter a done state for
+   an episode's trajectory to end. This is defined as `max_ts_per_ep` in our
+   code.
+
 
 # Installation
 
