@@ -68,7 +68,7 @@ some commonly overloaded terms and how we define them.
    batch size. This is sometimes referred to as 'mini batch size',
    'sgd mini batch size', etc.
 2. **timesteps per rollout**: this refers to the total number of timesteps
-   collected in a single rollout. This is sometimes referreed to as the batch
+   collected in a single rollout. This is sometimes referred to as the batch
    size. This includes the data collected from all processors.
    The exception to this rule is that a single processor will only see the
    number timesteps it needs to collect.
