@@ -81,8 +81,8 @@ class AgentPolicy():
                                       (standard PPO approach).
                  vf_clip              An optional clip parameter used for
                                       clipping the value function loss.
-                 gradient_clip        A clip value to use on the gradient
-                                      update.
+                 gradient_clip        An optional clip value to use on the
+                                      gradient update.
                  lr                   The learning rate. Can be
                                       a number or a scheduler class from
                                       utils/schedulers.py.

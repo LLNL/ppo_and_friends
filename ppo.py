@@ -1595,7 +1595,7 @@ class PPO(object):
                 comm.Abort()
 
             #
-            # We negate here to perform gradient ascent rather than descent.
+            # Calculate the actor loss.
             #
             actor_loss        = (-torch.min(surr1, surr2)).mean()
             total_actor_loss += actor_loss.item()
@@ -1631,6 +1631,8 @@ class PPO(object):
             total_critic_loss += critic_loss.item()
 
             #
+            # Perform our backwards steps, and average gradients across ranks.
+            #
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
             #
@@ -1638,18 +1640,24 @@ class PPO(object):
             actor_loss.backward(
                 retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].actor)
-            nn.utils.clip_grad_norm_(
-                self.policies[policy_id].actor.parameters(),
-                self.policies[policy_id].gradient_clip)
+
+            if self.policies[policy_id].gradient_clip is not None:
+                nn.utils.clip_grad_norm_(
+                    self.policies[policy_id].actor.parameters(),
+                    self.policies[policy_id].gradient_clip)
+
             self.policies[policy_id].actor_optim.step()
 
             self.policies[policy_id].critic_optim.zero_grad()
             critic_loss.backward(
                 retain_graph = self.policies[policy_id].using_lstm)
             mpi_avg_gradients(self.policies[policy_id].critic)
-            nn.utils.clip_grad_norm_(
-                self.policies[policy_id].critic.parameters(),
-                self.policies[policy_id].gradient_clip)
+
+            if self.policies[policy_id].gradient_clip is not None:
+                nn.utils.clip_grad_norm_(
+                    self.policies[policy_id].critic.parameters(),
+                    self.policies[policy_id].gradient_clip)
+
             self.policies[policy_id].critic_optim.step()
 
             #
