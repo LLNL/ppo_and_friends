@@ -31,7 +31,7 @@ if __name__ == "__main__":
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
-    parser.add_argument("--device", type="str", default="cpu",
+    parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
 
     parser.add_argument("--state-path", default="./",

@@ -84,6 +84,12 @@ class EnvironmentLauncher(ABC):
                   test_mode         = test,
                   **kw_args)
 
+        #
+        # Pickling is a special case. It allows users to save the ppo class
+        # for use elsewhere. So, we skip training if pickling is requested.
+        #
+        pickling = "pickle_class" in kw_args and kw_args["pickle_class"]
+
         if test:
             test_policy(ppo,
                         explore_while_testing,
@@ -91,7 +97,7 @@ class EnvironmentLauncher(ABC):
                         num_test_runs,
                         device)
 
-        elif not kw_args["pickle_class"]:
+        elif not pickling:
             ppo.learn(num_timesteps)
 
 
