@@ -66,19 +66,21 @@ some commonly overloaded terms and how we define them.
 
 1. **batch size**: we refer to the gradient descent mini-batch size as the
    batch size. This is sometimes referred to as 'mini batch size',
-   'sgd mini batch size', etc.
+   'sgd mini batch size', etc. This is defined as `batch_size` in our code.
 2. **timesteps per rollout**: this refers to the total number of timesteps
    collected in a single rollout. This is sometimes referred to as the batch
    size. This includes the data collected from all processors.
    The exception to this rule is that a single processor will only see the
-   number timesteps it needs to collect.
+   number timesteps it needs to collect. This is defined as `ts_per_rollout`
+   in our code.
 3. **max timesteps per episode**: this refers to the maximum number of
    timesteps collected for a single episode trajectory. This is sometimes
    referred to as horizon or trajectory length. If max timesteps
    per episode is 10, and we're collecting 100 timesteps in our rollout
    on a single processor, then we'll end up with 10 episodes of length 10.
    Note that the environment does not need to enter a done state for
-   an episode's trajectory to end.
+   an episode's trajectory to end. This is defined as `max_ts_per_ep` in our
+   code.
 
 
 # Installation
