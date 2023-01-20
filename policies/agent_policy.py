@@ -43,6 +43,7 @@ class AgentPolicy():
                  lr                  = 3e-4,
                  icm_lr              = 3e-4,
                  entropy_weight      = 0.01,
+                 kl_loss_weight      = 0.0,
                  use_gae             = True,
                  gamma               = 0.99,
                  lambd               = 0.95,
@@ -92,6 +93,10 @@ class AgentPolicy():
                  entropy_weight       The entropy weight. Can be
                                       a number or a scheduler class from
                                       utils/schedulers.py.
+                 kl_loss_weight       A "kl coefficient" when adding kl
+                                      divergence to the actor's loss. This
+                                      is only used when > 0.0, and is off
+                                      by default.
                  use_gae              Should we use Generalized Advantage
                                       Estimations? If not, fall back on the
                                       vanilla advantage calculation.
@@ -132,6 +137,7 @@ class AgentPolicy():
         self.surr_clip          = surr_clip
         self.vf_clip            = vf_clip
         self.gradient_clip      = gradient_clip
+        self.kl_loss_weight     = kl_loss_weight
 
         if callable(lr):
             self.lr = lr

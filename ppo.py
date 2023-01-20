@@ -1564,7 +1564,8 @@ class PPO(object):
                 ratios, 1 - self.policies[policy_id].surr_clip,
                     1 + self.policies[policy_id].surr_clip) * advantages
 
-            total_kl += (log_probs - curr_log_probs).mean().item()
+            current_kl = (log_probs - curr_log_probs).mean().item()
+            total_kl  += current_kl
 
             if torch.isnan(ratios).any() or torch.isinf(ratios).any():
                 rank_print("ERROR: ratios are nan or inf!")
@@ -1604,6 +1605,13 @@ class PPO(object):
                 total_entropy += entropy.mean().item()
                 actor_loss -= \
                     self.policies[policy_id].entropy_weight() * entropy.mean()
+
+            #
+            # Optionally add a kl divergence penalty.
+            #
+            if self.policies[policy_id].kl_loss_weight > 0.0:
+                actor_loss += self.policies[policy_id].kl_loss_weight * \
+                    current_kl
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
