@@ -62,7 +62,7 @@ arXiv:2006.07869v4
 
 # Terminology
 Terminology varies across implemenations and publications, so here are
-some commonly overloaded terms and how we define them here.
+some commonly overloaded terms and how we define them.
 
 1. **batch size**: we refer to the gradient descent mini-batch size as the
    batch size.
