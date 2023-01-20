@@ -30,10 +30,10 @@ except:
 
 try:
     from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze import sm_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.maze import sm_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl_envs.maze import lg_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.maze import lg_abmarl_blind_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
     from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
     HAVE_ABMARL = True
 except:

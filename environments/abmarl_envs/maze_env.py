@@ -33,7 +33,7 @@ small_maze = os.path.join(os.path.realpath(
 large_maze = os.path.join(os.path.realpath(
     os.path.dirname(__file__)), "large_maze.txt")
 
-sm_sim = MultiAgentWrapper(
+sm_abmarl_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
@@ -46,7 +46,7 @@ sm_sim = MultiAgentWrapper(
         )
     )
 
-sm_blind_sim = MultiAgentWrapper(
+sm_abmarl_blind_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
@@ -59,7 +59,7 @@ sm_blind_sim = MultiAgentWrapper(
         )
     )
 
-lg_sim = MultiAgentWrapper(
+lg_abmarl_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
@@ -73,7 +73,7 @@ lg_sim = MultiAgentWrapper(
         )
     )
 
-lg_blind_sim = MultiAgentWrapper(
+lg_abmarl_blind_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
@@ -86,9 +86,3 @@ lg_blind_sim = MultiAgentWrapper(
             )
         )
     )
-
-sm_abmarl_blind_maze = sm_blind_sim
-sm_abmarl_maze       = sm_sim
-lg_abmarl_blind_maze = lg_blind_sim
-lg_abmarl_maze       = lg_sim
-
