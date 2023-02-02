@@ -53,7 +53,8 @@ class PPO(object):
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
-                 test_mode           = False):
+                 test_mode           = False,
+                 verbose             = False):
         """
             Initialize the PPO trainer.
 
@@ -119,6 +120,7 @@ class PPO(object):
                                       testing, but some of its attributes are.
                                       Setting this to True will enable test
                                       mode.
+                 verbose              Enable verbosity?
         """
         set_torch_threads()
 
@@ -192,6 +194,7 @@ class PPO(object):
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
+        self.verbose             = verbose
 
         if callable(soft_resets):
             if type(soft_resets) != LinearStepScheduler:
@@ -340,6 +343,17 @@ class PPO(object):
             with open(state_file, "wb") as out_f:
                 pickle.dump(self, out_f,
                     protocol=pickle.HIGHEST_PROTOCOL)
+
+        if self.verbose and rank == 0:
+            print(f"\nPolicy info:")
+            print(f"  training {len(self.policies)} policies.")
+            for policy_id in self.policies:
+                policy = self.policies[policy_id]
+                sp     = "  "
+                print(f"\n  {policy.name} policy:")
+                print(f"{sp}action space: {policy.action_space}")
+                print(f"{sp}actor obs space: {policy.actor_obs_space}")
+                print(f"{sp}critic obs space: {policy.critic_obs_space}")
 
         comm.barrier()
 
