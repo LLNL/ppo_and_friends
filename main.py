@@ -47,6 +47,9 @@ if __name__ == "__main__":
     parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
+    parser.add_argument("--verbose", action="store_true",
+        help="Enable verbosity.")
+
     parser.add_argument("--pickle-class", action="store_true",
         help="Pickle the entire PPO class. If True, the pickled class will be "
         "saved in the state-path. This is useful for loading a trained model "
@@ -110,6 +113,7 @@ if __name__ == "__main__":
     clobber            = args.clobber
     render             = args.render
     render_gif         = args.render_gif
+    verbose            = args.verbose
     num_timesteps      = args.num_timesteps
     force_determinism  = args.force_deterministic
     envs_per_proc      = args.envs_per_proc
@@ -166,6 +170,7 @@ if __name__ == "__main__":
         load_state            = load_state,
         render                = render,
         render_gif            = render_gif,
+        verbose               = verbose,
         num_timesteps         = num_timesteps,
         device                = device,
         envs_per_proc         = envs_per_proc,
