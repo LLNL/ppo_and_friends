@@ -274,6 +274,35 @@ in a non-terminal state.
 
 # Tips And Tricks
 
+**Action Space**
+By default, predictions in the continuous action space will be in the [-1, 1]
+range rather than infering from the environment's action space. This is to
+avoid issues with unbounded spaces. The range of the continuous action space
+can easily be configured through the actor keyword arguments to the policy.
+
+For example, the following will set the action space to the range [-100, 100]:
+```
+...
+actor_kw_args["distribution_min"] = -100.
+actor_kw_args["distribution_max"] = 100.
+
+policy_args = {\
+    "actor_kw_args"    : actor_kw_args,
+}
+
+policy_settings = { "actor_0" : \
+    (None,
+     env_generator().observation_space["actor_0"],
+     env_generator().critic_observation_space["actor_0"],
+     env_generator().action_space["actor_0"],
+     policy_args),
+}
+...
+```
+
+See the `HumanoidLauncher` in `environments/launchers.py` for a more
+concrete example.
+
 **OpenAI Gym**
 
 Installing atari environments:
