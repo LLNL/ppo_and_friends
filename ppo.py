@@ -16,7 +16,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
-from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue
+from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
 import time
 from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
@@ -49,7 +49,7 @@ class PPO(object):
                  render              = False,
                  load_state          = False,
                  state_path          = "./",
-                 save_every          = 1,
+                 save_when           = None,
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
@@ -102,7 +102,9 @@ class PPO(object):
                                       training?
                  load_state           Should we load a saved state?
                  state_path           The path to save/load our state.
-                 save_every           Save every save_every iterations.
+                 save_when            An instance of ChangeInStateScheduler
+                                      that determines when to save. If None,
+                                      saving will occur every iteration.
                  pickle_class         When enabled, the entire PPO class will
                                       be pickled and saved into the output
                                       directory after it's been initialized.
@@ -184,7 +186,6 @@ class PPO(object):
         self.gamma               = gamma
         self.epochs_per_iter     = epochs_per_iter
         self.prev_top_window     = -np.finfo(np.float32).max
-        self.save_every          = save_every
         self.normalize_adv       = normalize_adv
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
@@ -195,6 +196,18 @@ class PPO(object):
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
         self.verbose             = verbose
+        self.save_when           = save_when
+
+        if self.save_when is None:
+            self.save_when = ChangeInStateScheduler(
+                status_key = "iteration")
+
+        elif type(self.save_when) != ChangeInStateScheduler:
+            msg  = "ERROR: 'save_when' must be of type None or "
+            msg += "ChangeInStateScheduler but received type "
+            msg += f"{type(save_when)}"
+            rank_print(msg)
+            comm.Abort()
 
         if callable(soft_resets):
             if type(soft_resets) != LinearStepScheduler:
@@ -331,6 +344,7 @@ class PPO(object):
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
+        self.save_when.finalize(self.status_dict)
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -1488,7 +1502,7 @@ class PPO(object):
 
             self.print_status()
 
-            if self.save_every > 0 and iteration % self.save_every == 0:
+            if self.save_when():
                 self.save()
 
             comm.barrier()

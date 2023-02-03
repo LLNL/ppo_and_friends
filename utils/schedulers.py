@@ -24,10 +24,8 @@ class StatusScheduler(object):
 
     def __init__(self,
                  status_key,
-                 status_max,
                  status_preface = "general"):
 
-        self.status_max     = status_max
         self.status_key     = status_key
         self.finalized      = False
         self.status_preface = status_preface
@@ -85,13 +83,13 @@ class LogScheduler(StatusScheduler):
                  **kw_args):
 
         super(LogScheduler, self).__init__(
-            status_max  = status_max,
             status_key  = status_key,
             **kw_args)
 
-        self.min_value = min_value
-        self.max_value = max_value
-        self.numerator = np.log(self.status_max) / (max_value - min_value)
+        self.status_max = status_max
+        self.min_value  = min_value
+        self.max_value  = max_value
+        self.numerator  = np.log(self.status_max) / (max_value - min_value)
 
     def __call__(self):
 
@@ -113,11 +111,11 @@ class LinearScheduler(StatusScheduler):
 
         super(LinearScheduler, self).__init__(
             status_key  = status_key,
-            status_max  = status_max,
             **kw_args)
 
-        self.min_value = min_value
-        self.max_value = max_value
+        self.status_max = status_max
+        self.min_value  = min_value
+        self.max_value  = max_value
 
     def __call__(self):
 
@@ -156,8 +154,7 @@ class LinearStepScheduler(StatusScheduler):
                 compare_fn      The comparison function to use.
         """
         super(LinearStepScheduler, self).__init__(
-            status_max  = 1,
-            status_key  = status_key,
+            status_key = status_key,
             **kw_args)
 
         self.status_triggers = status_triggers
@@ -199,3 +196,50 @@ class LinearStepScheduler(StatusScheduler):
             return self.initial_value
 
         return self.step_values[self.range_idx]
+
+
+class ChangeInStateScheduler(StatusScheduler):
+
+    def __init__(self,
+                 status_key,
+                 compare_fn = np.not_equal,
+                 persistent = False,
+                 **kw_args):
+        """
+            A class that tracks changes in a particular status and returns
+            compare_fn(prev_status, current_status).
+            When persistent is False, the status will be cached every
+            iteration. When persistent is True, the cached status will
+            only be updated when compare_fn(cache, current) evaluates to True.
+
+            Arguments:
+                status_key      The status dict key mapping to the value we
+                                wish to track.
+                compare_fn      The comparison function to use.
+        """
+
+        super(ChangeInStateScheduler, self).__init__(
+            status_key = status_key,
+            **kw_args)
+
+        self.compare_fn  = compare_fn
+        self.prev_status = None
+        self.persistent  = persistent
+
+    def __call__(self):
+
+        step = self._get_step()
+
+        if self.prev_status is None:
+            self.prev_status = step
+            return False
+
+        stat_change = self.compare_fn(step, self.prev_status)
+
+        if self.persistent:
+            if stat_change:
+                self.prev_status = step
+        else:
+            self.prev_status = step
+
+        return stat_change
