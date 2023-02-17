@@ -76,20 +76,22 @@ class PPODistribution(object):
         """
         return dist.entropy()
 
-    def refine_sample(self,
-                      sample,
-                      testing = False):
+    def refine_prediction(self,
+                          prediction):
         """
-            Given a sample from the distribution, refine this
-            sample. In our case, we have no refinements yet.
+            Given a prediction from our network, refine it for use in
+            the environment as an action.
+
+            NOTE: this method inhibits exploration. To allow exploration,
+            the distribution must be sampled.
 
             Arguments:
-                sample    The sample to refine.
+                prediction    The prediction to refine.
 
             Returns:
-                The refined sample.
+                The refined prediction.
         """
-        return sample
+        return prediction
 
 
 class BernoulliDistribution(PPODistribution):
@@ -128,6 +130,24 @@ class BernoulliDistribution(PPODistribution):
         """
         return dist.log_prob(actions).sum(dim=-1)
 
+    def refine_prediction(self, prediction):
+        """
+            Given a prediction from our network, refine it for use in
+            the environment as an action.
+
+            NOTE: this method inhibits exploration. To allow exploration,
+            the distribution must be sampled.
+
+            Arguments:
+                prediction    The prediction to refine.
+
+            Returns:
+                The refined prediction.
+        """
+        prediction[prediction >= 0.5] = 1.0
+        prediction[prediction < 0.5]  = 0.0
+        return prediction
+
 
 class CategoricalDistribution(PPODistribution):
     """
@@ -164,6 +184,23 @@ class CategoricalDistribution(PPODistribution):
                 given distribution.
         """
         return dist.log_prob(actions)
+
+    def refine_prediction(self, prediction):
+        """
+            Given a prediction from our network, refine it for use in
+            the environment as an action.
+
+            NOTE: this method inhibits exploration. To allow exploration,
+            the distribution must be sampled.
+
+            Arguments:
+                prediction    The prediction to refine.
+
+            Returns:
+                The refined prediction.
+        """
+        prediction = torch.argmax(prediction, axis=-1)
+        return prediction
 
 
 class MultiCategoricalDistribution(PPODistribution):
@@ -263,6 +300,39 @@ class MultiCategoricalDistribution(PPODistribution):
                 The distributions entropy.
         """
         return torch.stack([d.entropy() for d in dists], dim=-1).sum(dim=-1)
+
+    def refine_prediction(self, prediction):
+        """
+            Given a prediction from our network, refine it for use in
+            the environment as an action.
+
+            NOTE: this method inhibits exploration. To allow exploration,
+            the distribution must be sampled.
+
+            Arguments:
+                prediction    The prediction to refine.
+
+            Returns:
+                The refined prediction.
+        """
+        #
+        # Our network predicts the actions as a contiguous
+        # array, and we need to break it up into individual
+        # arrays associated with the discrete actions.
+        #
+        refined_prediction = torch.zeros(self.nvec.size)
+
+        start = 0
+        for idx, a_dim in enumerate(self.nvec):
+            stop = start + a_dim
+
+            refined_prediction[idx] = torch.argmax(
+                prediction[:, start : stop], dim=-1)
+
+            start = stop
+
+        prediction = refined_prediction
+        return prediction
 
 
 class GaussianDistribution(nn.Module, PPODistribution):
@@ -386,8 +456,7 @@ class GaussianDistribution(nn.Module, PPODistribution):
         return sample
 
     def refine_sample(self,
-                      sample,
-                      testing = False):
+                      sample):
         """
             Given a sample from the distribution, refine this
             sample. In our case, this means checking if we need
@@ -395,19 +464,39 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
             Arguments:
                 sample      The sample to refine.
-                testing     If we are testing, it seems that we need to send
-                            our sample through tanh before enforcing a range.
-                            The testing performs much better in this case.
 
             Returns:
                 The refined sample.
         """
+        #
+        # NOTE: I've seen peculiar behavior with adding/omitting
+        # tanh. Let's keep an eye on this.
+        #
         sample = torch.tanh(sample)
 
         if self.dist_min != -1.0 or self.dist_max != 1.0:
             sample = self._enforce_sample_range(sample)
 
         return sample
+
+    def refine_prediction(self, prediction):
+        """
+            Given a prediction from our network, refine it for use in
+            the environment as an action.
+
+            NOTE: this method inhibits exploration. To allow exploration,
+            the distribution must be sampled.
+
+            Arguments:
+                prediction    The prediction to refine.
+
+            Returns:
+                The refined prediction.
+        """
+        #
+        # In this case, we can just rely on the refine_sample method.
+        #
+        return self.refine_sample(prediction)
 
     def sample_distribution(self, dist):
         """

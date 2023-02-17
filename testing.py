@@ -66,49 +66,10 @@ def test_policy(ppo,
                 obs[agent_id] = obs[agent_id].unsqueeze(0)
                 policy_id     = policy_map(agent_id)
 
-                if explore:
-                    with torch.no_grad():
-                         _, agent_action, _ = policies[policy_id].get_action(
-                             obs[agent_id])
-                         actions[agent_id]  = agent_action
+                agent_action = policies[policy_id].get_inference_actions(
+                    obs[agent_id], explore)
 
-                else:
-                    with torch.no_grad():
-                        actions[agent_id] = \
-                            policies[policy_id].actor.get_result(
-                                obs[agent_id]).detach().cpu()
-
-                    if action_dtype[agent_id] == "discrete":
-                        actions[agent_id] = torch.argmax(
-                            actions[agent_id], axis=-1).numpy()
-
-                    elif action_dtype[agent_id] == "multi-binary":
-                        actions[agent_id][actions[agent_id] < 0.5] = 0.0
-                        actions[agent_id][actions[agent_id] > 0.5] = 1.0
-                        actions[agent_id] = actions[agent_id].numpy()
-
-                    elif action_dtype[agent_id] == "multi-discrete":
-                        #
-                        # Our network predicts the actions as a contiguous
-                        # array, and we need to break it up into individual
-                        # arrays associated with the discrete actions.
-                        #
-                        nvec = env.action_space[agent_id].nvec
-                        refined_actions = torch.zeros(nvec.size)
-
-                        start = 0
-                        for idx, a_dim in enumerate(nvec):
-                            stop = start + a_dim
-
-                            refined_actions[idx] = torch.argmax(
-                                actions[agent_id][:, start : stop], dim=-1)
-
-                            start = stop
-
-                        actions[agent_id] = refined_actions
-
-                    else:
-                        actions[agent_id] = actions[agent_id].numpy()
+                actions[agent_id] = agent_action.numpy()
 
             obs, _, reward, done, info = env.step(actions)
 

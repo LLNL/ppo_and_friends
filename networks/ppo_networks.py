@@ -112,9 +112,7 @@ class PPOActorCriticNetwork(PPONetwork):
                 self.distribution = BernoulliDistribution(**kw_args)
                 self.output_func  = t_functional.sigmoid
 
-    def get_result(self,
-                   obs,
-                   testing = True):
+    def get_refined_prediction(self, obs):
         """
             Given an observation, return the results of performing
             inference + any other alterations that should be made
@@ -122,14 +120,13 @@ class PPOActorCriticNetwork(PPONetwork):
 
             Arguments:
                 obs      The observation to infer from.
-                testing  Are we testing a trained environment?
 
             Returns:
                 The predicted result with any required alterations.
         """
         if self.name == "actor":
             res = self.__call__(obs)
-            res = self.distribution.refine_sample(res, testing)
+            res = self.distribution.refine_prediction(res)
             return res
         else:
             return self.__call__(obs)

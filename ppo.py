@@ -476,7 +476,7 @@ class PPO(object):
                 self.policies[policy_id].actor_obs_space.shape)
 
             batch_raw_actions, batch_actions, batch_log_probs = \
-                self.policies[policy_id].get_action(batch_obs)
+                self.policies[policy_id].get_training_actions(batch_obs)
 
             #
             # We now need to reverse our batching to get actions of
@@ -521,7 +521,7 @@ class PPO(object):
 
             obs_slice = obs[agent_id][0:1]
             raw_action, action, log_prob = \
-                self.policies[policy_id].get_action(obs_slice)
+                self.policies[policy_id].get_training_actions(obs_slice)
 
             raw_actions[agent_id] = raw_action
             actions[agent_id]     = action
