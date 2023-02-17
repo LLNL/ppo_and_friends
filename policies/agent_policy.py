@@ -625,13 +625,16 @@ class AgentPolicy():
         self.dataset  = None
         self.episodes = {}
 
-    def get_action(self, obs):
+    def get_training_actions(self, obs):
         """
-            Given an observation from our environment, determine what the
-            action should be.
+            Given observations from our environment, determine what the
+            next actions should be taken while allowing natural exploration.
+
+            This method is explicitly meant to be used in training and will
+            return more than just the environment actions.
 
             Arguments:
-                obs    The environment observation.
+                obs    The environment observations.
 
             Returns:
                 A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
@@ -641,7 +644,8 @@ class AgentPolicy():
                 probability distribution.
         """
         if len(obs.shape) < 2:
-            msg  = "ERROR: get_action expects a batch of observations but "
+            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg ++ "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
@@ -666,6 +670,86 @@ class AgentPolicy():
         raw_action = raw_action.detach().numpy()
 
         return raw_action, action, log_prob.detach()
+
+    def get_inference_actions(self, obs, explore):
+        """
+            Given observations from our environment, determine what the
+            actions should be.
+
+            This method is meant to be used for inference only, and it
+            will return the environment actions alone.
+
+            Arguments:
+                obs       The environment observation.
+                explore   Should we allow exploration?
+
+            Returns:
+                Predicted actions to perform in the environment.
+        """
+        if explore:
+            return self._get_action_with_exploration(obs)
+        return self._get_action_without_exploration(obs)
+
+    def _get_action_with_exploration(self, obs):
+        """
+            Given observations from our environment, determine what the
+            next actions should be taken while allowing natural exploration.
+
+            Arguments:
+                obs    The environment observations.
+
+            Returns:
+                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+                is the distribution sample before any "squashing" takes place,
+                "action" is the the action value that should be fed to the
+                environment, and log_prob is the log probabilities from our
+                probability distribution.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg ++ "batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+
+        with torch.no_grad():
+            action_pred = self.actor(t_obs)
+
+        action_pred = action_pred.cpu().detach()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        #
+        # Our distribution gives us two potentially distinct actions, one of
+        # which is guaranteed to be a raw sample from the distribution. The
+        # other might be altered in some way (usually to enforce a range).
+        #
+        action, _ = self.actor.distribution.sample_distribution(dist)
+        return action
+
+    def _get_action_without_exploration(self, obs):
+        """
+            Given observations from our environment, determine what the
+            next actions should be while not allowing any exploration.
+
+            Arguments:
+                obs    The environment observations.
+
+            Returns:
+                The next actions to perform.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: _get_action_without_exploration expects a "
+            msg ++ "batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+
+        with torch.no_grad():
+            return self.actor.get_refined_prediction(t_obs)
 
     def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
         """
