@@ -6,6 +6,7 @@ from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
 from gym.spaces import Dict, Box
+import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
@@ -71,7 +72,11 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             Define our multi-agent observation and action spaces.
         """
         if getattr(self.env, "observation_space", None) is not None:
-            self.observation_space = self.env.observation_space
+            #
+            # NOTE: I think abmarl does some funny business behind the scenes,
+            # and we need to deep copy this space here.
+            #
+            self.observation_space = copy.deepcopy(self.env.observation_space)
         else:
             self.observation_space = Dict({
                 agent.id: agent.observation_space
