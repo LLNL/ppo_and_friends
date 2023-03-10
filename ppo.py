@@ -47,6 +47,7 @@ class PPO(object):
                  obs_clip            = None,
                  reward_clip         = None,
                  render              = False,
+                 frame_pause         = 0.0,
                  load_state          = False,
                  state_path          = "./",
                  save_when           = None,
@@ -54,7 +55,8 @@ class PPO(object):
                  soft_resets         = False,
                  obs_augment         = False,
                  test_mode           = False,
-                 verbose             = False):
+                 verbose             = False,
+                 **kw_args):
         """
             Initialize the PPO trainer.
 
@@ -100,6 +102,8 @@ class PPO(object):
                                       the reward as (min, max).
                  render               Should we render the environment while
                                       training?
+                 frame_pause          If render is True, sleep frame_pause
+                                      seconds between renderings.
                  load_state           Should we load a saved state?
                  state_path           The path to save/load our state.
                  save_when            An instance of ChangeInStateScheduler
@@ -179,6 +183,7 @@ class PPO(object):
         self.device              = device
         self.state_path          = state_path
         self.render              = render
+        self.frame_pause         = frame_pause
         self.ext_reward_weight   = ext_reward_weight
         self.max_ts_per_ep       = max_ts_per_ep
         self.batch_size          = batch_size
@@ -984,7 +989,7 @@ class PPO(object):
             ep_ts += 1
 
             if self.render:
-                self.env.render()
+                self.env.render(frame_pause = self.frame_pause)
 
             total_rollout_ts += env_batch_size
             episode_lengths  += 1

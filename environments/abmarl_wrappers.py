@@ -6,6 +6,7 @@ from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
 from gym.spaces import Dict, Box
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -173,10 +174,17 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
         return obs, critic_obs
 
-    def render(self, **kw_args):
+    def render(self, frame_pause = 0.0, **kw_args):
         """
             Render the environment.
+
+            Arguments:
+                frame_pause    Sleep frame_pause seconds before rendering.
         """
+
+        if frame_pause > 0.0:
+            time.sleep(frame_pause)
+
         if self.fig is None:
             self.fig, _ = plt.subplots()
 

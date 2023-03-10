@@ -47,6 +47,11 @@ if __name__ == "__main__":
     parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
+    parser.add_argument("--frame-pause", default=0.0, type=float,
+        help="When rendering, pause between frames for frame-pause seconds."
+        "Note that this flag only works when used in conjunction with the "
+        "--render flag.")
+
     parser.add_argument("--verbose", action="store_true",
         help="Enable verbosity.")
 
@@ -113,6 +118,7 @@ if __name__ == "__main__":
     clobber            = args.clobber
     render             = args.render
     render_gif         = args.render_gif
+    frame_pause        = args.frame_pause
     verbose            = args.verbose
     num_timesteps      = args.num_timesteps
     force_determinism  = args.force_deterministic
@@ -170,6 +176,7 @@ if __name__ == "__main__":
         load_state            = load_state,
         render                = render,
         render_gif            = render_gif,
+        frame_pause           = frame_pause,
         verbose               = verbose,
         num_timesteps         = num_timesteps,
         device                = device,

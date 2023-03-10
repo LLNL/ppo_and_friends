@@ -2,6 +2,7 @@
     A home for generic environment wrappers. The should not be
     specific to any type of environment.
 """
+import time
 import numpy as np
 import numbers
 from copy import deepcopy
@@ -830,10 +831,16 @@ class PPOEnvironmentWrapper(ABC):
         """
         return
 
-    def render(self, **kw_args):
+    def render(self, frame_pause = 0.0, **kw_args):
         """
             Render the environment.
+
+            Arguments:
+                frame_pause    Sleep frame_pause seconds before rendering.
         """
+        if frame_pause > 0.0:
+            time.sleep(frame_pause)
+
         return self.env.render(**kw_args)
 
     def seed(self, seed):
