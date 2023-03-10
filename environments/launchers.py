@@ -1339,13 +1339,13 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
         critic_kw_args["hidden_size"] = 512
 
         lr = LinearScheduler(
-            status_key    = "timestep",
+            status_key    = "timesteps",
             status_max    = 1000000,
             max_value     = 0.0003,
             min_value     = 0.0001)
 
         entropy_weight = LinearScheduler(
-            status_key    = "timestep",
+            status_key    = "timesteps",
             status_max    = 1000000,
             max_value     = 0.015,
             min_value     = 0.01)
