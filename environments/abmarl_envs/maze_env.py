@@ -38,7 +38,7 @@ sm_abmarl_maze = MultiAgentWrapper(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     small_maze,
-                    object_registry,
+                    object_registry.copy(),
                     overlapping={1: [3], 3: [1]},
                     observe="grid",
                 )
@@ -51,7 +51,7 @@ sm_abmarl_blind_maze = MultiAgentWrapper(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     small_maze,
-                    object_registry,
+                    object_registry.copy(),
                     overlapping={1: [3], 3: [1]},
                     observe="position",
                 )
@@ -64,7 +64,7 @@ lg_abmarl_maze = MultiAgentWrapper(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     large_maze,
-                    object_registry,
+                    object_registry.copy(),
                     overlapping={1: [3], 3: [1]},
                     observe="grid",
                     max_steps=2048,
@@ -78,7 +78,7 @@ lg_abmarl_blind_maze = MultiAgentWrapper(
             FlattenWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     large_maze,
-                    object_registry,
+                    object_registry.copy(),
                     overlapping={1: [3], 3: [1]},
                     observe="position",
                     max_steps=4096,
