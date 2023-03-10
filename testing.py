@@ -8,7 +8,9 @@ def test_policy(ppo,
                 explore,
                 render_gif,
                 num_test_runs,
-                device):
+                device,
+                frame_pause = 0.0,
+                **kw_args):
     """
         Test a trained policy.
 
@@ -19,6 +21,8 @@ def test_policy(ppo,
             render_gif     Create a gif from the renderings.
             num_test_runs  How many times should we run in the environment?
             device         The device to infer on.
+            frame_pause    If rendering, sleep frame_pause seconds between
+                           renderings.
     """
     env        = ppo.env
     policies   = ppo.policies
@@ -52,7 +56,7 @@ def test_policy(ppo,
             num_steps += 1
 
             if render:
-                env.render()
+                env.render(frame_pause = frame_pause)
 
             elif render_gif:
                 gif_frames.append(env.render(mode = "rgb_array"))

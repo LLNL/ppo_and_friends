@@ -95,7 +95,8 @@ class EnvironmentLauncher(ABC):
                         explore_while_testing,
                         render_gif,
                         num_test_runs,
-                        device)
+                        device,
+                        **kw_args)
 
         elif not pickling:
             ppo.learn(num_timesteps)
