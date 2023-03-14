@@ -92,6 +92,7 @@ class BoxIntActionWrapper():
 
         self.range     = space.high - space.low
         self.offsets   = space.low
+        self.dtype     = space.dtype
 
         self.multi_discrete_space = MultiDiscrete(self.range - space.low)
 
@@ -111,7 +112,7 @@ class BoxIntActionWrapper():
             Returns:
                 An action converted from Box int to MultiDiscrete.
         """
-        return action - self.offsets
+        return (action - self.offsets).astype(self.dtype)
 
     def unwrap_action(self, action):
         """
@@ -123,7 +124,7 @@ class BoxIntActionWrapper():
             Returns:
                 An action converted from MultiDiscrete to Box int.
         """
-        return action + self.offsets
+        return (action + self.offsets).astype(self.dtype)
 
 
 class IdentityActionWrapper():
