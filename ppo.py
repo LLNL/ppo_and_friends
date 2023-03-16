@@ -1429,10 +1429,17 @@ class PPO(object):
         ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
         iteration  = self.status_dict["general"]["iteration"]
 
+        iter_start_time = time.time()
+        iter_stop_time  = iter_start_time
+
         while self.status_dict["general"]["timesteps"] < ts_max:
+            running_time    = (iter_stop_time - iter_start_time)
             iter_start_time = time.time()
 
             self.rollout()
+
+            running_time += self.status_dict["general"]["rollout time"]
+            self.status_dict["general"]["running time"] += running_time
 
             self.print_status()
 
@@ -1501,9 +1508,6 @@ class PPO(object):
             training_time = (now_time - train_start_time)
             self.status_dict["general"]["train time"] = now_time - train_start_time
 
-            running_time = (now_time - iter_start_time)
-            self.status_dict["general"]["running time"] += running_time
-
             iteration += 1
             self.status_dict["general"]["iteration"] = iteration
 
@@ -1519,6 +1523,8 @@ class PPO(object):
             if lr_sum <= 0.0:
                 rank_print("Learning rate has bottomed out. Terminating early")
                 break
+
+            iter_stop_time = time.time()
 
         stop_time   = time.time()
         seconds     = (stop_time - start_time)
