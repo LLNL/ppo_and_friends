@@ -1434,6 +1434,11 @@ class PPO(object):
 
             self.rollout()
 
+            self.print_status()
+
+            if self.save_when():
+                self.save()
+
             data_loaders = {}
             for key in self.policies:
                 data_loaders[key] = DataLoader(
@@ -1504,11 +1509,6 @@ class PPO(object):
 
             self.update_learning_rate()
             self.update_entropy_weight()
-
-            self.print_status()
-
-            if self.save_when():
-                self.save()
 
             comm.barrier()
 
