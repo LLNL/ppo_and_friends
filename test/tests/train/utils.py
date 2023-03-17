@@ -26,7 +26,11 @@ def get_final_status(stdout):
         Returns:
             The final status report from the stdout.
     """
-    return stdout.split("Status Report:")[-1]
+    try:
+        final_status = stdout.split("Status Report:")[-1]
+    except:
+        final_status = None
+    return final_status
 
 def get_final_extrinsic_score_avg(stdout):
     """
@@ -39,7 +43,11 @@ def get_final_extrinsic_score_avg(stdout):
             The final status report from the stdout.
     """
     final_status = get_final_status(stdout)
-    return float(final_status.split("extrinsic score avg:")[1].split()[0])
+    try:
+        score = float(final_status.split("extrinsic score avg:")[1].split()[0])
+    except:
+        score = None
+    return score
 
 def extrinsic_score_test(name, train_command):
 
