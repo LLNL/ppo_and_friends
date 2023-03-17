@@ -364,15 +364,15 @@ class PPO(object):
                     protocol=pickle.HIGHEST_PROTOCOL)
 
         if self.verbose and rank == 0:
-            print(f"\nPolicy info:")
-            print(f"  training {len(self.policies)} policies.")
+            rank_print(f"\nPolicy info:")
+            rank_print(f"  training {len(self.policies)} policies.")
             for policy_id in self.policies:
                 policy = self.policies[policy_id]
                 sp     = "  "
-                print(f"\n  {policy.name} policy:")
-                print(f"{sp}action space: {policy.action_space}")
-                print(f"{sp}actor obs space: {policy.actor_obs_space}")
-                print(f"{sp}critic obs space: {policy.critic_obs_space}")
+                rank_print(f"\n  {policy.name} policy:")
+                rank_print(f"{sp}action space: {policy.action_space}")
+                rank_print(f"{sp}actor obs space: {policy.actor_obs_space}")
+                rank_print(f"{sp}critic obs space: {policy.critic_obs_space}")
 
         comm.barrier()
 
@@ -1794,7 +1794,7 @@ class PPO(object):
             Save all information required for a restart.
         """
         if self.verbose:
-            print("\nSaving state")
+            rank_print("\nSaving state")
 
         if self.test_mode:
             msg = "WARNING: save() was called while in test mode. Disregarding."
