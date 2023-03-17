@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
 
-    parser.add_argument("--random_seed", default=2, type=int,
+    parser.add_argument("--random-seed", default=2, type=int,
         help="The random seed to use.")
 
     parser.add_argument("--envs-per-proc", default=1, type=int,
