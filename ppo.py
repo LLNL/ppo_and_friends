@@ -922,8 +922,8 @@ class PPO(object):
         total_episodes   = 0.0
         total_rollout_ts = 0
         longest_run      = 0
-        shortest_run     = self.ts_per_rollout
-        avg_run          = self.ts_per_rollout
+        shortest_run     = self.ts_per_rollout / self.envs_per_proc
+        avg_run          = self.ts_per_rollout / self.envs_per_proc
 
         for key in self.policies:
             self.policies[key].eval()
