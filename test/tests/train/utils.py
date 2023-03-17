@@ -49,7 +49,7 @@ def get_final_extrinsic_score_avg(stdout):
         score = None
     return score
 
-def extrinsic_score_test(name, train_command):
+def extrinsic_score_test(name, train_command, passing_score):
 
     root_dir = get_root_dir()
     cur_dir  = Path(os.getcwd())
@@ -62,13 +62,13 @@ def extrinsic_score_test(name, train_command):
     final_status = get_final_status(result.stdout)
     score_avg    = get_final_extrinsic_score_avg(result.stdout)
 
-    passing_score = 200.0
-
     fail_msg  = f"\n************{name} FAILED************"
     fail_msg += f"\nExpected avg extrinsic score >= {passing_score}. "
     fail_msg += f"\nFinal score: {score_avg}"
     fail_msg += f"\nFinal status report: \n{final_status}"
     fail_msg += f"\nstderr: \n{result.stderr}"
+
+    assert score_avg != None, fail_msg
 
     assert score_avg >= passing_score, fail_msg
 
