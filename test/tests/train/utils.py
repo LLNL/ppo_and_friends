@@ -33,25 +33,13 @@ def get_final_status(stdout):
         final_status = None
     return final_status
 
-def get_final_extrinsic_score_avg(stdout):
+def run_training(train_command):
     """
-        Get the final status report from a string of training stdout.
+        Run training on a sub-process.
 
         Arguments:
-            stdout    A string capturing the stdout of a training.
-
-        Returns:
-            The final status report from the stdout.
+            train_command    The training command.
     """
-    final_status = get_final_status(stdout)
-    try:
-        score = float(final_status.split("extrinsic score avg:")[1].split()[0])
-    except:
-        score = None
-    return score
-
-def extrinsic_score_training_test(name, train_command, passing_score):
-
     root_dir = get_root_dir()
     cur_dir  = Path(os.getcwd())
 
@@ -63,23 +51,18 @@ def extrinsic_score_training_test(name, train_command, passing_score):
         capture_output=True, text=True)
     os.chdir(cur_dir)
 
-    final_status = get_final_status(result.stdout)
-    score_avg    = get_final_extrinsic_score_avg(result.stdout)
+def average_score_test(name, test_command, passing_scores, state_dir):
+    """
+        Run a testing phase using a trained model and determine if
+        the model reaches passing scores.
 
-    fail_msg  = f"\n************{name} FAILED************"
-    fail_msg += f"\nExpected avg extrinsic score >= {passing_score}. "
-    fail_msg += f"\nFinal score: {score_avg}"
-    fail_msg += f"\nFinal status report: \n{final_status}"
-    fail_msg += f"\nstderr: \n{result.stderr}"
-
-    assert score_avg != None, fail_msg
-
-    assert score_avg >= passing_score, fail_msg
-
-    print(f"\n************{name} PASSED************")
-
-def average_test_score_test(name, test_command, passing_scores, state_dir):
-
+        Arguments:
+            name             The name of the test.
+            test_command     The test command to run.
+            passing_scores   A dict containing passing scores for each
+                             agent.
+            state_dir        The name of the state directory.
+    """
     root_dir = get_root_dir()
     cur_dir  = Path(os.getcwd())
 
