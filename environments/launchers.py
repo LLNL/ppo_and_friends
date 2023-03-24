@@ -413,9 +413,9 @@ class LunarLanderLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
 
         lr = LinearScheduler(
-            status_key    = "iteration",
-            status_max    = 200,
-            max_value     = 0.0003,
+            status_key    = "timesteps",
+            status_max    = 1000000,
+            max_value     = 0.0005,
             min_value     = 0.0001)
 
         #
@@ -1546,16 +1546,23 @@ class PressurePlateLauncher(EnvironmentLauncher):
         critic_kw_args["hidden_size"] = 256
 
         lr = LinearScheduler(
-            status_key    = "iteration",
-            status_max    = 1500,
-            max_value     = 0.0003,
+            status_key    = "timesteps",
+            status_max    = 400000,
+            max_value     = 0.001,
             min_value     = 0.0001)
+
+        entropy_weight = LinearScheduler(
+            status_key    = "timesteps",
+            status_max    = 400000,
+            max_value     = 0.02,
+            min_value     = 0.0)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
+            "entropy_weight"   : entropy_weight,
             "bootstrap_clip"   : (-3, 0),
         }
 
@@ -1567,9 +1574,15 @@ class PressurePlateLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
+        save_when = ChangeInStateScheduler(
+            status_key  = "longest run",
+            compare_fn  = np.less_equal,
+            persistent  = True)
+
         ts_per_rollout = num_procs * 512
 
         self.run_ppo(env_generator      = env_generator,
+                     save_when          = save_when,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 10000,
