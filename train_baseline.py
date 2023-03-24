@@ -31,6 +31,10 @@ if __name__ == "__main__":
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
+    parser.add_argument("--save-test-scores", action="store_true",
+        help="If used with --test, the test scores for each agent will be "
+        "saved as a pickle file in the output directory.")
+
     parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
 
@@ -113,6 +117,7 @@ if __name__ == "__main__":
     test_explore       = args.test_explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
+    save_test_scores   = args.save_test_scores
     env_name           = args.environment
     state_path         = os.path.join(args.state_path, "saved_states", env_name)
     clobber            = args.clobber
@@ -183,6 +188,7 @@ if __name__ == "__main__":
         envs_per_proc         = envs_per_proc,
         test                  = test,
         explore_while_testing = test_explore,
+        save_test_scores      = save_test_scores,
         pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 

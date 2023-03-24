@@ -1,4 +1,5 @@
 import torch
+import dill as pickle
 from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
@@ -9,20 +10,23 @@ def test_policy(ppo,
                 render_gif,
                 num_test_runs,
                 device,
-                frame_pause = 0.0,
+                frame_pause      = 0.0,
+                save_test_scores = False,
                 **kw_args):
     """
         Test a trained policy.
 
         Arguments:
-            ppo            An instance of PPO from ppo.py.
-            explore        Bool determining whether or not exploration should
-                           be enabled while testing.
-            render_gif     Create a gif from the renderings.
-            num_test_runs  How many times should we run in the environment?
-            device         The device to infer on.
-            frame_pause    If rendering, sleep frame_pause seconds between
-                           renderings.
+            ppo              An instance of PPO from ppo.py.
+            explore          Bool determining whether or not exploration should
+                             be enabled while testing.
+            render_gif       Create a gif from the renderings.
+            num_test_runs    How many times should we run in the environment?
+            device           The device to infer on.
+            frame_pause      If rendering, sleep frame_pause seconds between
+                             renderings.
+            save_test_scores If True, save the agent scores to a pickled
+                             dictionary.
     """
     env        = ppo.env
     policies   = ppo.policies
@@ -96,6 +100,11 @@ def test_policy(ppo,
             max_scores[agent_id] = max(max_scores[agent_id],
                 episode_score[agent_id])
 
+    if save_test_scores:
+        score_info = {}
+        score_info["num_test_runs"]    = num_test_runs
+        score_info["total_time_steps"] = num_steps
+
     for agent_id in env.agent_ids:
         print("\nAgent {}:".format(agent_id))
         print("    Ran env {} times.".format(num_test_runs))
@@ -104,6 +113,20 @@ def test_policy(ppo,
         print("    Lowest score: {}".format(min_scores[agent_id]))
         print("    Highest score: {}".format(max_scores[agent_id]))
         print("    Average score: {}".format(total_scores[agent_id] / num_test_runs))
+
+        if save_test_scores:
+            score_info[agent_id] = {\
+                "low_score"  : min_scores[agent_id],
+                "high_score" : max_scores[agent_id],
+                "avg_score"  : total_scores[agent_id] / num_test_runs,
+            }
+
+    if save_test_scores:
+        score_file = os.path.join(ppo.state_path, "test-scores.pickle")
+
+        with open(score_file, "wb") as out_f:
+            pickle.dump(score_info, out_f,
+                protocol=pickle.HIGHEST_PROTOCOL)
 
     if render_gif:
         print("Attempting to create gif..")
