@@ -29,7 +29,7 @@ jobs:
         cd ../
         git clone https://github.com/LLNL/Abmarl.git
         cd Abmarl
-        pip install -r requirements
+        pip install -r requirements.txt
         pip install .
     - name: Test with pytest
       run: |
