@@ -49,6 +49,10 @@ def run_training(train_command):
     print(f"CD INTO {root_dir}")#FIXME
     os.chdir(root_dir)
     print(f"CURRENT DIR {os.getcwd()}")#FIXME
+    import os
+    files = [f for f in os.listdir('.') if os.path.isfile(f)]
+    print(f"CURRENT DIR FILES: {files}")#FIXME
+
     result = subprocess.run(train_command.split(),
         capture_output=True, text=True)
     os.chdir(cur_dir)
