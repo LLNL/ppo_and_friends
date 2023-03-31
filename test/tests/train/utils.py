@@ -46,7 +46,9 @@ def run_training(train_command):
     train_command += f" --state-path {cur_dir}"
     print(f"Running command: {train_command}")
 
+    print(f"CD INTO {root_dir}")#FIXME
     os.chdir(root_dir)
+    print(f"CURRENT DIR {os.getcwd()}")#FIXME
     result = subprocess.run(train_command.split(),
         capture_output=True, text=True)
     os.chdir(cur_dir)
