@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import time
 
-def run_command(command):
+def run_command(command, verbose=False):
     print(f"Running command: {command}")
     t1 = time.time()
     result = subprocess.run(command.split(),
@@ -14,6 +14,11 @@ def run_command(command):
 
     timing = (t2 - t1) * 60.
     print(f"Command finished in {timing} minutes.")
+
+    if verbose:
+        print(result.stdout)
+        print(result.stderr)
+
     return result
 
 def get_final_status(stdout):

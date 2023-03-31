@@ -1443,7 +1443,7 @@ class PPO(object):
 
             self.print_status()
 
-            if self.save_when():
+            if self.save_when() or iteration == 0:
                 self.save()
 
             data_loaders = {}
