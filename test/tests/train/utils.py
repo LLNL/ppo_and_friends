@@ -3,6 +3,18 @@ import dill as pickle
 import subprocess
 import os
 from pathlib import Path
+import time
+
+def run_command(command):
+    print(f"Running command: {command}")
+    t1 = time.time()
+    result = subprocess.run(command.split(),
+        capture_output=True, text=True)
+    t2 = time.time()
+
+    timing = (t2 - t1) * 60.
+    print(f"Command finished in {timing} minutes.")
+    return result
 
 def get_final_status(stdout):
     """
@@ -29,10 +41,7 @@ def run_training(train_command):
     """
     cur_dir        = Path(os.getcwd())
     train_command += f" --state-path {cur_dir}"
-    print(f"Running command: {train_command}")
-
-    result = subprocess.run(train_command.split(),
-        capture_output=True, text=True)
+    run_command(train_command)
 
 def average_score_test(name, test_command, passing_scores, state_dir):
     """
@@ -48,10 +57,8 @@ def average_score_test(name, test_command, passing_scores, state_dir):
     """
     cur_dir       = Path(os.getcwd())
     test_command += f" --state-path {cur_dir}"
-    print(f"Running command: {test_command}")
 
-    result = subprocess.run(test_command.split(),
-        capture_output=True, text=True)
+    run_command(test_command)
 
     score_file = os.path.join(cur_dir, "saved_states", state_dir,
         "test-scores.pickle")
@@ -85,10 +92,8 @@ def high_score_test(name, test_command, passing_scores, state_dir):
     """
     cur_dir       = Path(os.getcwd())
     test_command += f" --state-path {cur_dir}"
-    print(f"Running command: {test_command}")
 
-    result = subprocess.run(test_command.split(),
-        capture_output=True, text=True)
+    run_command(test_command)
 
     score_file = os.path.join(cur_dir, "saved_states", state_dir,
         "test-scores.pickle")
