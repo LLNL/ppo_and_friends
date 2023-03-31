@@ -23,7 +23,7 @@ dependencies = [
     'box2d-py',
     'numpy',
     'dill',
-    'mpi4py==3.0.1',
+    'mpi4py',
     'moviepy',
     'torch>=1.10.2,<2.0',
     'swig',
