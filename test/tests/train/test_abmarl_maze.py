@@ -3,7 +3,8 @@ from utils import run_training, average_score_test
 def test_abmarl_blind_maze_mpi():
 
     num_timesteps = 85000
-    cmd  = f"mpirun -n 2 --use-hwthread-cpus python train_baseline.py "
+    #cmd  = f"mpirun -n 2 --use-hwthread-cpus python train_baseline.py "
+    cmd  = f"ppoaf-baselines "
     cmd += f"AbmarlBlindMaze --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)

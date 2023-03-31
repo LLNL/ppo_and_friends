@@ -14,7 +14,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-if __name__ == "__main__":
+def baselines():
 
     parser = argparse.ArgumentParser()
 
@@ -193,3 +193,6 @@ if __name__ == "__main__":
         num_test_runs         = num_test_runs)
 
     launcher.launch()
+
+if __name__ == "__main__":
+    baselines()

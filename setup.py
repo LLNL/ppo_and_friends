@@ -39,4 +39,7 @@ setup(name             = "ppo_and_friends",
       package_data     = {"" : ["environments/abmarl_envs/maze.txt",
                                 "environments/abmarl_envs/large_maze.txt"]},
       install_requires = dependencies,
+      entry_points     = {
+          'console_scripts' : ['ppoaf-baselines=ppo_and_friends.train_baseline:baselines']
+      },
       zip_safe         = False)
