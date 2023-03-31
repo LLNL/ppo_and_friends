@@ -26,13 +26,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install pytest
         pip install .
-        cd ../
-        git clone https://github.com/LLNL/Abmarl.git
-        cd Abmarl
-        pip install -r requirements.txt
-        pip install .
     - name: Test with pytest
       run: |
         cd test
-        python tests/train/test_abmarl_maze.py
+        pytest tests/train/test_abmarl_maze.py
 
