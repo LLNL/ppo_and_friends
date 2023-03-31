@@ -8,7 +8,7 @@ def test_abmarl_blind_maze_mpi():
 
     run_training(cmd)
 
-    cmd  = f"python train_baseline.py "
+    cmd  = f"ppoaf-baselines "
     cmd += f"AbmarlBlindMaze --test --num-test-runs 5 "
     cmd += f"--save-test-scores"
 
