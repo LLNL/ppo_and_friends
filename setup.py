@@ -27,6 +27,7 @@ dependencies = [
     'moviepy',
     'torch>=1.10.2,<2.0',
     'swig',
+    'abmarl',
 ]
 
 setup(name             = "ppo_and_friends",
