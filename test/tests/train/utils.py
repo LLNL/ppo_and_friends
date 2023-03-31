@@ -4,19 +4,6 @@ import subprocess
 import os
 from pathlib import Path
 
-def get_root_dir():
-    """
-        Get the root directory for ppo_and_friends.
-
-        Returns:
-            The full path to the root directory of the ppo_and_friends
-            repo.
-    """
-    test_path = os.path.realpath(__file__)
-    root_dir  = Path(str(test_path).split("ppo_and_friends")[0])
-    root_dir  = root_dir / "ppo_and_friends"
-    return root_dir
-
 def get_final_status(stdout):
     """
         Get the final status report from a string of training stdout.
@@ -40,24 +27,12 @@ def run_training(train_command):
         Arguments:
             train_command    The training command.
     """
-    root_dir = get_root_dir()
-    cur_dir  = Path(os.getcwd())
-
+    cur_dir        = Path(os.getcwd())
     train_command += f" --state-path {cur_dir}"
     print(f"Running command: {train_command}")
 
-    print(f"CD INTO {root_dir}")#FIXME
-    os.chdir(root_dir)
-    print(f"CURRENT DIR {os.getcwd()}")#FIXME
-    files = [f for f in os.listdir('.') if os.path.isfile(f)]
-    print(f"CURRENT DIR FILES: {files}")#FIXME
-
     result = subprocess.run(train_command.split(),
         capture_output=True, text=True)
-    os.chdir(cur_dir)
-
-    print(result.stdout)#FIXME
-    print(result.stderr)#FIXME
 
 def average_score_test(name, test_command, passing_scores, state_dir):
     """
@@ -71,16 +46,12 @@ def average_score_test(name, test_command, passing_scores, state_dir):
                              agent.
             state_dir        The name of the state directory.
     """
-    root_dir = get_root_dir()
-    cur_dir  = Path(os.getcwd())
-
+    cur_dir       = Path(os.getcwd())
     test_command += f" --state-path {cur_dir}"
     print(f"Running command: {test_command}")
 
-    os.chdir(root_dir)
     result = subprocess.run(test_command.split(),
         capture_output=True, text=True)
-    os.chdir(cur_dir)
 
     score_file = os.path.join("saved_states", state_dir, "test-scores.pickle")
     with open(score_file, "rb") as in_f:
@@ -110,16 +81,12 @@ def high_score_test(name, test_command, passing_scores, state_dir):
                              agent.
             state_dir        The name of the state directory.
     """
-    root_dir = get_root_dir()
-    cur_dir  = Path(os.getcwd())
-
+    cur_dir       = Path(os.getcwd())
     test_command += f" --state-path {cur_dir}"
     print(f"Running command: {test_command}")
 
-    os.chdir(root_dir)
     result = subprocess.run(test_command.split(),
         capture_output=True, text=True)
-    os.chdir(cur_dir)
 
     score_file = os.path.join("saved_states", state_dir, "test-scores.pickle")
     with open(score_file, "rb") as in_f:
