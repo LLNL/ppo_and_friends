@@ -21,23 +21,18 @@ from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
+from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
+from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
+from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
+from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
+from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
+from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
 
 try:
     import pressureplate
     HAVE_PRESSURE_PLATE = True
 except:
     HAVE_PRESSURE_PLATE = False
-
-try:
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
-    HAVE_ABMARL = True
-except:
-    HAVE_ABMARL = False
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -1605,12 +1600,6 @@ class PressurePlateLauncher(EnvironmentLauncher):
 class AbmarlMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 128
@@ -1687,12 +1676,6 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
 class AbmarlBlindMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 32
@@ -1770,12 +1753,6 @@ class AbmarlBlindMazeLauncher(EnvironmentLauncher):
 class AbmarlLargeMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
         #
         # See AbmarlBlindLargeMaze for details about this environment. I spent
         # more time solving the blind case, which is more difficult, but they
@@ -1856,12 +1833,6 @@ class AbmarlLargeMazeLauncher(EnvironmentLauncher):
 class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
 
     def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
         #
         # The large maze is very finicky. I've found 2 general approaches to
         # solving it.
@@ -1996,12 +1967,6 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
 class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
 
     def launch(self):
-        if not HAVE_ABMARL:
-            msg  = "ERROR: unable to import the Abmarl environments. "
-            msg += "This environment is installed from its git repository."
-            rank_print(msg)
-            comm.Abort()
-
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 64
