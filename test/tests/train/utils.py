@@ -53,7 +53,7 @@ def average_score_test(name, test_command, passing_scores, state_dir):
     result = subprocess.run(test_command.split(),
         capture_output=True, text=True)
 
-    score_file = os.path.join(cur_di, "saved_states", state_dir,
+    score_file = os.path.join(cur_dir, "saved_states", state_dir,
         "test-scores.pickle")
 
     with open(score_file, "rb") as in_f:
@@ -90,7 +90,8 @@ def high_score_test(name, test_command, passing_scores, state_dir):
     result = subprocess.run(test_command.split(),
         capture_output=True, text=True)
 
-    score_file = os.path.join("saved_states", state_dir, "test-scores.pickle")
+    score_file = os.path.join(cur_dir, "saved_states", state_dir,
+        "test-scores.pickle")
     with open(score_file, "rb") as in_f:
         scores = pickle.load(in_f)
 
