@@ -4,12 +4,12 @@ def test_pressure_plate_mpi():
 
     num_timesteps = 310000
     cmd  = f"mpirun -n 4 python train_baseline.py "
-    cmd += f"-e PressurePlate --clobber --num-timesteps {num_timesteps}"
+    cmd += f"PressurePlate --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
 
     cmd  = f"python train_baseline.py "
-    cmd += f"-e PressurePlate --test --test-explore --num-test-runs 1 "
+    cmd += f"PressurePlate --test --test-explore --num-test-runs 1 "
     cmd += f"--save-test-scores"
 
     passing_scores = {"agent3" : -512}

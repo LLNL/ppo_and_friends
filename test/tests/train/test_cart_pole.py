@@ -3,7 +3,7 @@ from utils import run_training, average_score_test
 def run_cart_pole_test(name, num_test_runs=10):
 
     cmd  = f"python train_baseline.py "
-    cmd += f"-e CartPole --test "
+    cmd += f"CartPole --test "
     cmd += f"--num-test-runs {num_test_runs} "
     cmd += f"--save-test-scores"
 
@@ -16,7 +16,7 @@ def test_cart_pole_serial():
 
     num_timesteps = 17000
     cmd  = f"python train_baseline.py "
-    cmd += f"-e CartPole --clobber --num-timesteps {num_timesteps}"
+    cmd += f"CartPole --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
     run_cart_pole_test("cart-pole-serial")
@@ -25,7 +25,7 @@ def test_cart_pole_mpi():
 
     num_timesteps = 40000
     cmd  = f"mpirun -n 4 python train_baseline.py "
-    cmd += f"-e CartPole --clobber --num-timesteps {num_timesteps}"
+    cmd += f"CartPole --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
     run_cart_pole_test("cart-pole-mpi")
@@ -34,7 +34,7 @@ def test_cart_pole_multi_envs():
 
     num_timesteps = 80000
     cmd  = f"python train_baseline.py "
-    cmd += f"-e CartPole --clobber --num-timesteps {num_timesteps} "
+    cmd += f"CartPole --clobber --num-timesteps {num_timesteps} "
     cmd += f"--envs-per-proc 2"
 
     run_training(cmd)
@@ -44,7 +44,7 @@ def test_cart_pole_multi_envs_mpi():
 
     num_timesteps = 40000
     cmd  = f"mpirun -n 4 python train_baseline.py "
-    cmd += f"-e CartPole --clobber --num-timesteps {num_timesteps} "
+    cmd += f"CartPole --clobber --num-timesteps {num_timesteps} "
     cmd += f"--envs-per-proc 2"
 
     run_training(cmd)
@@ -54,7 +54,7 @@ def test_binary_cart_pole_serial():
 
     num_timesteps = 17000
     cmd  = f"python train_baseline.py "
-    cmd += f"-e BinaryCartPole --clobber --num-timesteps {num_timesteps}"
+    cmd += f"BinaryCartPole --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
     run_cart_pole_test("cart-pole-binary-serial")

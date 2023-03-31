@@ -54,7 +54,7 @@ def run_training(train_command):
 def average_score_test(name, test_command, passing_scores, state_dir):
     """
         Run a testing phase using a trained model and determine if
-        the model reaches passing scores.
+        the model reaches passing average scores.
 
         Arguments:
             name             The name of the test.
@@ -87,6 +87,45 @@ def average_score_test(name, test_command, passing_scores, state_dir):
         assert agent_id in scores, msg
 
         assert scores[agent_id]["avg_score"] >= passing_scores[agent_id], fail_msg
+
+    print(f"\n************{name} PASSED************")
+
+def high_score_test(name, test_command, passing_scores, state_dir):
+    """
+        Run a testing phase using a trained model and determine if
+        the model reaches passing high scores.
+
+        Arguments:
+            name             The name of the test.
+            test_command     The test command to run.
+            passing_scores   A dict containing passing scores for each
+                             agent.
+            state_dir        The name of the state directory.
+    """
+    root_dir = get_root_dir()
+    cur_dir  = Path(os.getcwd())
+
+    test_command += f" --state-path {cur_dir}"
+    print(f"Running command: {test_command}")
+
+    os.chdir(root_dir)
+    result = subprocess.run(test_command.split(),
+        capture_output=True, text=True)
+    os.chdir(cur_dir)
+
+    score_file = os.path.join("saved_states", state_dir, "test-scores.pickle")
+    with open(score_file, "rb") as in_f:
+        scores = pickle.load(in_f)
+
+    fail_msg  = f"\n************{name} FAILED************"
+    fail_msg += f"\nExpected high scores:\n {passing_scores}"
+    fail_msg += f"\nActual scores:\n {scores}"
+
+    for agent_id in passing_scores:
+        msg = f"ERROR: unable to find agent {agent_id} in the test scores."
+        assert agent_id in scores, msg
+
+        assert scores[agent_id]["high_score"] >= passing_scores[agent_id], fail_msg
 
     print(f"\n************{name} PASSED************")
 

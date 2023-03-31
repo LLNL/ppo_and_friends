@@ -77,7 +77,7 @@ if __name__ == "__main__":
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    parser.add_argument("--environment", "-e", type=str, required=True,
+    parser.add_argument("environment", type=str,
         help="Which environment should we train or test?",
         choices=["CartPole",
                  "Pendulum",
