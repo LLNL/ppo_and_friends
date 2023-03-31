@@ -51,6 +51,9 @@ def run_training(train_command):
         capture_output=True, text=True)
     os.chdir(cur_dir)
 
+    print(result.stdout)#FIXME
+    print(result.stderr)#FIXME
+
 def average_score_test(name, test_command, passing_scores, state_dir):
     """
         Run a testing phase using a trained model and determine if
