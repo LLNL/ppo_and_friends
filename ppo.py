@@ -1438,7 +1438,6 @@ class PPO(object):
 
             self.rollout()
 
-            running_time += self.status_dict["general"]["rollout time"]
             self.status_dict["general"]["running time"] += running_time
 
             self.print_status()
