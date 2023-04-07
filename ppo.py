@@ -1433,10 +1433,12 @@ class PPO(object):
         iter_stop_time  = iter_start_time
 
         while self.status_dict["general"]["timesteps"] < ts_max:
-            running_time    = (iter_stop_time - iter_start_time)
-            iter_start_time = time.time()
 
             self.rollout()
+
+            running_time    = (iter_stop_time - iter_start_time)
+            running_time   += self.status_dict["general"]["rollout time"]
+            iter_start_time = time.time()
 
             self.status_dict["general"]["running time"] += running_time
 
