@@ -1481,14 +1481,15 @@ class PPO(object):
                     #
                     comm.barrier()
                     if (self.status_dict[policy_id]["kl avg"] >
-                        (1.5 * self.policies[policy_id].target_kl)):
+                        (self.policies[policy_id].target_kl)):
 
-                        kl = 1.5 * self.policies[policy_id].target_kl
-                        msg  = "\nTarget KL of {} ".format(kl)
-                        msg += "has been reached. "
-                        msg += "Ending early (after "
-                        msg += "{} epochs)".format(epoch_idx + 1)
-                        rank_print(msg)
+                        if self.verbose:
+                            kl = self.policies[policy_id].target_kl
+                            msg  = "\nTarget KL of {} ".format(kl)
+                            msg += "has been reached. "
+                            msg += "Ending early (after "
+                            msg += "{} epochs)".format(epoch_idx + 1)
+                            rank_print(msg)
                         break
 
                     if self.policies[policy_id].enable_icm:
