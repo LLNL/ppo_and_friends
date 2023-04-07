@@ -1475,20 +1475,22 @@ class PPO(object):
                     self._ppo_batch_train(data_loaders[policy_id], policy_id)
 
                     #
-                    # Early ending using KL. Why multiply by 1.5, you ask? I have
-                    # no idea, really. It's a magic number that the folks at
-                    # OpenAI are using.
+                    # Early ending using KL.
+                    # NOTE: OpenAI's implementation multiplies the kl target
+                    # by a magic number (1.5). I got sick of magic numbers and
+                    # scapped that approach.
                     #
                     comm.barrier()
                     if (self.status_dict[policy_id]["kl avg"] >
-                        (1.5 * self.policies[policy_id].target_kl)):
+                        (self.policies[policy_id].target_kl)):
 
-                        kl = 1.5 * self.policies[policy_id].target_kl
-                        msg  = "\nTarget KL of {} ".format(kl)
-                        msg += "has been reached. "
-                        msg += "Ending early (after "
-                        msg += "{} epochs)".format(epoch_idx + 1)
-                        rank_print(msg)
+                        if self.verbose:
+                            kl = self.policies[policy_id].target_kl
+                            msg  = "\nTarget KL of {} ".format(kl)
+                            msg += "has been reached. "
+                            msg += "Ending early (after "
+                            msg += "{} epochs)".format(epoch_idx + 1)
+                            rank_print(msg)
                         break
 
                     if self.policies[policy_id].enable_icm:
