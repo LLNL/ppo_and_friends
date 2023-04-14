@@ -15,9 +15,11 @@ def run_command(command, verbose=False):
     timing = (t2 - t1) / 60.
     print(f"Command finished in {timing} minutes.")
 
+    if result.returncode != 0:
+        print(result.stderr)
+
     if verbose:
         print(result.stdout)
-        print(result.stderr)
 
     return result
 

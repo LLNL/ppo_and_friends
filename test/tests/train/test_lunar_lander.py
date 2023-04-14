@@ -3,12 +3,12 @@ from utils import run_training, average_score_test, high_score_test
 def test_lunar_lander_mpi():
 
     num_timesteps = 400000
-    cmd  = f"mpirun -n 2 python train_baseline.py "
+    cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"LunarLander --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
 
-    cmd  = f"python train_baseline.py "
+    cmd  = f"ppoaf-baselines "
     cmd += f"LunarLander --test --test-explore --num-test-runs 10 "
     cmd += f"--save-test-scores"
 
@@ -20,12 +20,12 @@ def test_lunar_lander_mpi():
 def test_binary_lunar_lander_mpi():
 
     num_timesteps = 400000
-    cmd  = f"mpirun -n 2 python train_baseline.py "
+    cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"BinaryLunarLander --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
 
-    cmd  = f"python train_baseline.py "
+    cmd  = f"ppoaf-baselines "
     cmd += f"BinaryLunarLander --test --test-explore --num-test-runs 10 "
     cmd += f"--save-test-scores"
 
