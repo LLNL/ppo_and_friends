@@ -12,7 +12,7 @@ def run_command(command, verbose=False):
         capture_output=True, text=True)
     t2 = time.time()
 
-    timing = (t2 - t1) * 60.
+    timing = (t2 - t1) / 60.
     print(f"Command finished in {timing} minutes.")
 
     if verbose:
