@@ -1,4 +1,5 @@
 import torch
+import sys
 import dill as pickle
 from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
@@ -125,11 +126,13 @@ def test_policy(ppo,
         score_file = os.path.join(ppo.state_path, "test-scores.pickle")
 
         print(f"SAVING SCORES TO {score_file}")#FIXME
+        sys.stdout.flush()#FIXME
         with open(score_file, "wb") as out_f:
             pickle.dump(score_info, out_f,
                 protocol=pickle.HIGHEST_PROTOCOL)
     else:
         print("NOT SAVING SCORES")#FIXME
+        sys.stdout.flush()#FIXME
 
     if render_gif:
         print("Attempting to create gif..")
