@@ -38,5 +38,5 @@ jobs:
     - name: Test with pytest
       run: |
         cd test
-        python tests/train/test_abmarl_maze.py
+        pytest tests
 
