@@ -19,12 +19,21 @@ jobs:
     - name: Set up Python 3.8
       uses: actions/setup-python@v3
       with:
-        python-version: "3.8.13"
+        python-version: "3.8"
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
         python -m pip install --upgrade pip
         pip install pytest
+        pip install .
+        #
+        # TODO: the current release of abmarl is incompatible with
+        # python3.8, but this issue is fixed in main. Remove this after
+        # the new abmarl release.
+        #
+        git clone https://github.com/LLNL/Abmarl.git
+        cd Abmarl
+        pip install -r requirements.txt
         pip install .
     - name: Test with pytest
       run: |
