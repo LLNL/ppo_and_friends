@@ -10,7 +10,6 @@ def test_abmarl_blind_maze_mpi():
 
     cmd  = f"ppoaf-baselines "
     cmd += f"AbmarlBlindMaze --test --num-test-runs 5 "
-    cmd += f"--save-test-scores"
 
     passing_scores = {"navigator" : 0.8}
 

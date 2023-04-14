@@ -61,7 +61,7 @@ def average_score_test(name, test_command, passing_scores, state_dir):
             state_dir        The name of the state directory.
     """
     cur_dir       = Path(os.getcwd())
-    test_command += f" --state-path {cur_dir}"
+    test_command += f" --state-path {cur_dir} --save-test-scores"
 
     run_command(test_command)
 
@@ -96,12 +96,13 @@ def high_score_test(name, test_command, passing_scores, state_dir):
             state_dir        The name of the state directory.
     """
     cur_dir       = Path(os.getcwd())
-    test_command += f" --state-path {cur_dir}"
+    test_command += f" --state-path {cur_dir} --save-test-scores"
 
     run_command(test_command)
 
     score_file = os.path.join(cur_dir, "saved_states", state_dir,
         "test-scores.pickle")
+
     with open(score_file, "rb") as in_f:
         scores = pickle.load(in_f)
 
