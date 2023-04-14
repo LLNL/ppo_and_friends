@@ -124,9 +124,12 @@ def test_policy(ppo,
     if save_test_scores:
         score_file = os.path.join(ppo.state_path, "test-scores.pickle")
 
+        print(f"SAVING SCORES TO {score_file}")#FIXME
         with open(score_file, "wb") as out_f:
             pickle.dump(score_info, out_f,
                 protocol=pickle.HIGHEST_PROTOCOL)
+    else:
+        print("NOT SAVING SCORES")#FIXME
 
     if render_gif:
         print("Attempting to create gif..")
