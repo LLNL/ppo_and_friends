@@ -52,7 +52,7 @@ def average_score_test(name,
                        test_command,
                        passing_scores,
                        state_dir,
-                       verbose = True):#FIXME: disable
+                       verbose = False):
     """
         Run a testing phase using a trained model and determine if
         the model reaches passing average scores.
