@@ -2,7 +2,7 @@ from utils import run_training, average_score_test
 
 def test_pressure_plate_mpi():
 
-    num_timesteps = 310000
+    num_timesteps = 400000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"PressurePlate --clobber --num-timesteps {num_timesteps}"
 
