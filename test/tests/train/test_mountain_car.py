@@ -3,7 +3,7 @@ from utils import run_training, average_score_test
 def test_mountain_car_mpi():
 
     num_timesteps = 200000
-    cmd  = f"mpirun -n 4 python train_baseline.py "
+    cmd  = f"mpirun -n 2 python train_baseline.py "
     cmd += f"MountainCar --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
@@ -20,7 +20,7 @@ def test_mountain_car_mpi():
 def test_mountain_car_continous_mpi():
 
     num_timesteps = 300000
-    cmd  = f"mpirun -n 4 python train_baseline.py "
+    cmd  = f"mpirun -n 2 python train_baseline.py "
     cmd += f"MountainCarContinuous --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)

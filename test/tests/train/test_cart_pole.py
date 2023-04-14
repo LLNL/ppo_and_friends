@@ -24,7 +24,7 @@ def test_cart_pole_serial():
 def test_cart_pole_mpi():
 
     num_timesteps = 40000
-    cmd  = f"mpirun -n 4 python train_baseline.py "
+    cmd  = f"mpirun -n 2 python train_baseline.py "
     cmd += f"CartPole --clobber --num-timesteps {num_timesteps}"
 
     run_training(cmd)
@@ -43,7 +43,7 @@ def test_cart_pole_multi_envs():
 def test_cart_pole_multi_envs_mpi():
 
     num_timesteps = 40000
-    cmd  = f"mpirun -n 4 python train_baseline.py "
+    cmd  = f"mpirun -n 2 python train_baseline.py "
     cmd += f"CartPole --clobber --num-timesteps {num_timesteps} "
     cmd += f"--envs-per-proc 2"
 
