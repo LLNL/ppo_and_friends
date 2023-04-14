@@ -91,7 +91,7 @@ def average_score_test(name,
 def high_score_test(name,
                     test_command,
                     passing_scores,
-                    state_di
+                    state_dir,
                     verbose = False):
     """
         Run a testing phase using a trained model and determine if
