@@ -35,6 +35,7 @@ jobs:
         cd Abmarl
         pip install -r requirements.txt
         pip install .
+        cd ../
     - name: Test with pytest
       run: |
         cd test
