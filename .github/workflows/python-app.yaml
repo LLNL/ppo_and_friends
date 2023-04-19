@@ -30,14 +30,15 @@ jobs:
         pip install .
         #
         # TODO: the current release of abmarl is incompatible with
-        # python3.8, but this issue is fixed in main. Remove this after
-        # the new abmarl release.
+        # python3.8, but this issue is fixed in main. Abmarl also
+        # depends on an older version of gym that is causing issues with
+        # pip in Github's CI.
         #
-        git clone https://github.com/LLNL/Abmarl.git
-        cd Abmarl
-        pip install -r requirements.txt
-        pip install .
-        cd ../
+        #git clone https://github.com/LLNL/Abmarl.git
+        #cd Abmarl
+        #pip install -r requirements.txt
+        #pip install .
+        #cd ../
     - name: Test with pytest
       run: |
         cd test
