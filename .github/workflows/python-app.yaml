@@ -22,11 +22,11 @@ jobs:
         python-version: "3.8"
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade setuptools
-        python -m pip install --upgrade pip
+        pip install setuptools==65.2
+        pip install --upgrade pip
         sudo apt install libopenmpi-dev
-        python -m pip install pytest
-        python -m pip install .
+        pip install pytest
+        pip install .
         #
         # TODO: the current release of abmarl is incompatible with
         # python3.8, but this issue is fixed in main. Abmarl also
