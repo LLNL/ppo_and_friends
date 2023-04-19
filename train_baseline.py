@@ -3,7 +3,8 @@ import torch
 import random
 import numpy as np
 import argparse
-from ppo_and_friends.environments.launchers import *
+import sys
+import ppo_and_friends.environments.launchers as launchers
 import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 import shutil
@@ -173,7 +174,7 @@ def baselines():
     # Launch PPO.
     #
     class_name     = "{}Launcher".format(env_name)
-    launcher_class = getattr(sys.modules[__name__], class_name)
+    launcher_class = getattr(launchers, class_name)
 
     launcher = launcher_class(
         random_seed           = random_seed,
