@@ -22,13 +22,12 @@ jobs:
         python-version: "3.8"
     - name: Install dependencies
       run: |
-        pip install --upgrade setuptools
-        pip install --upgrade pip
-        sudo apt install libopenmpi-dev
+        python -m pip install --upgrade setuptools
         python -m pip install --upgrade pip
-        pip install opencv-python
-        pip install pytest
-        pip install .
+        sudo apt install libopenmpi-dev
+        python -m pip install opencv-python
+        python -m pip install pytest
+        python -m pip install .
         #
         # TODO: the current release of abmarl is incompatible with
         # python3.8, but this issue is fixed in main. Abmarl also
