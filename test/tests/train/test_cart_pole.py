@@ -32,7 +32,7 @@ def test_cart_pole_mpi():
 
 def test_cart_pole_multi_envs():
 
-    num_timesteps = 80000
+    num_timesteps = 90000
     cmd  = f"ppoaf-baselines "
     cmd += f"CartPole --clobber --num-timesteps {num_timesteps} "
     cmd += f"--envs-per-proc 2"

@@ -32,11 +32,11 @@ jobs:
         # depends on an older version of gym that is causing issues with
         # pip in Github's CI.
         #
-        #git clone https://github.com/LLNL/Abmarl.git
-        #cd Abmarl
-        #pip install -r requirements.txt
-        #pip install .
-        #cd ../
+        git clone https://github.com/LLNL/Abmarl.git
+        cd Abmarl
+        pip install -r requirements.txt
+        pip install .
+        cd ../
     - name: Test with pytest
       run: |
         cd test
