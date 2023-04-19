@@ -19,12 +19,6 @@ from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
-from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
-from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
-from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
-from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
-from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
