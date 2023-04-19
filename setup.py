@@ -19,7 +19,7 @@ dependencies = [
     'matplotlib',
     'opencv-python',
     'pygame',
-    'gym==0.21',
+    'gym==0.26',
     'box2d-py',
     'numpy',
     'dill',
