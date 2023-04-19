@@ -27,7 +27,9 @@ dependencies = [
     'moviepy',
     'torch>=1.10.2,<2.0',
     'swig',
-    'abmarl',
+    # FIXME: abmarl currently causes prblems in github's
+    # CI, so I'm commenting it out until this is fixed.
+    #'abmarl',
 ]
 
 setup(name             = "ppo_and_friends",
