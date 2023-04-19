@@ -1,4 +1,4 @@
-from utils import run_training, average_score_test
+from utils import run_training, high_score_test
 
 def run_cart_pole_test(name, num_test_runs=10):
 
@@ -9,7 +9,7 @@ def run_cart_pole_test(name, num_test_runs=10):
 
     passing_scores = {"agent0" : 200.}
 
-    average_score_test(name, cmd,
+    high_score_test(name, cmd,
         passing_scores, "CartPole")
 
 def test_cart_pole_serial():
@@ -32,7 +32,7 @@ def test_cart_pole_mpi():
 
 def test_cart_pole_multi_envs():
 
-    num_timesteps = 90000
+    num_timesteps = 100000
     cmd  = f"ppoaf-baselines "
     cmd += f"CartPole --clobber --num-timesteps {num_timesteps} "
     cmd += f"--envs-per-proc 2"

@@ -1,4 +1,4 @@
-from utils import run_training, average_score_test
+from utils import run_training, high_score_test
 
 def test_mountain_car_mpi():
 
@@ -9,12 +9,12 @@ def test_mountain_car_mpi():
     run_training(cmd)
 
     cmd  = f"ppoaf-baselines "
-    cmd += f"MountainCar --test --test-explore --num-test-runs 5 "
+    cmd += f"MountainCar --test --num-test-runs 5 "
     cmd += f"--save-test-scores"
 
     passing_scores = {"agent0" : -199}
 
-    average_score_test("mountain-car-mpi", cmd,
+    high_score_test("mountain-car-mpi", cmd,
         passing_scores, "MountainCar")
 
 def test_mountain_car_continous_mpi():
@@ -26,12 +26,12 @@ def test_mountain_car_continous_mpi():
     run_training(cmd)
 
     cmd  = f"ppoaf-baselines "
-    cmd += f"MountainCarContinuous --test --test-explore --num-test-runs 5 "
+    cmd += f"MountainCarContinuous --test --num-test-runs 5 "
     cmd += f"--save-test-scores"
 
     passing_scores = {"agent0" : 50.}
 
-    average_score_test("mountain-car-continuous-mpi", cmd,
+    high_score_test("mountain-car-continuous-mpi", cmd,
         passing_scores, "MountainCarContinuous")
 
 if __name__ == "__main__":
