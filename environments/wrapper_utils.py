@@ -46,9 +46,9 @@ def wrap_environment(
 
     #
     # For reproducibility, we need to set the environment's random
-    # seeds. Let's allow testing to be random.
+    # seeds.
     #
-    if not test_mode:
+    if random_seed >= 0:
         env.set_random_seed(random_seed)
 
     #

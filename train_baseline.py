@@ -152,9 +152,10 @@ def baselines():
     # Set random seeds (this doesn't guarantee reproducibility, but it should
     # help).
     #
-    torch.manual_seed(random_seed)
-    random.seed(random_seed)
-    np.random.seed(random_seed)
+    if random_seed >= 0:
+        torch.manual_seed(random_seed)
+        random.seed(random_seed)
+        np.random.seed(random_seed)
 
     if force_determinism:
         torch.use_deterministic_algorithms(True)

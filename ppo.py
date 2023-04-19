@@ -860,7 +860,7 @@ class PPO(object):
                     self.status_dict["general"][key]))
 
         for policy_id in self.policies:
-            rank_print("  {} policy:".format(policy_id))
+            rank_print("  {}:".format(policy_id))
             for key in self.status_dict[policy_id]:
                 rank_print("    {}: {}".format(key,
                     self.status_dict[policy_id][key]))
