@@ -3,6 +3,7 @@
     that initialize training for a specific environment.
 """
 import gym
+import lbforaging
 from abc import ABC, abstractmethod
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
@@ -19,6 +20,18 @@ from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
+
+try:
+    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
+    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
+    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
+    from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
+    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
+except Exception as e:
+    print(e)
+    msg = "WARNING: unable to import Abmarl."
+    print(msg)
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -1459,7 +1472,6 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
 class LevelBasedForagingLauncher(EnvironmentLauncher):
 
     def launch(self):
-        import lbforaging
 
         env_generator = lambda : \
             MultiAgentGymWrapper(gym.make('Foraging-8x8-3p-2f-v2'))
@@ -1590,8 +1602,6 @@ class PressurePlateLauncher(EnvironmentLauncher):
 ###############################################################################
 
 class AbmarlMazeLauncher(EnvironmentLauncher):
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
 
     def launch(self):
         actor_kw_args = {}
@@ -1668,8 +1678,6 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
 
 
 class AbmarlBlindMazeLauncher(EnvironmentLauncher):
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
 
     def launch(self):
         actor_kw_args = {}
@@ -1747,8 +1755,6 @@ class AbmarlBlindMazeLauncher(EnvironmentLauncher):
 
 
 class AbmarlLargeMazeLauncher(EnvironmentLauncher):
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
 
     def launch(self):
         #
@@ -1829,8 +1835,6 @@ class AbmarlLargeMazeLauncher(EnvironmentLauncher):
 
 
 class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
 
     def launch(self):
         #
@@ -1965,8 +1969,6 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
 
 
 class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
 
     def launch(self):
         actor_kw_args = {}
