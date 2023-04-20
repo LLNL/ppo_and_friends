@@ -23,8 +23,9 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip install pytest
+        pip install --upgrade pip
         pip install setuptools==65.5.0
+        pip install pytest
         pip install .
     - name: Test with pytest
       run: |
