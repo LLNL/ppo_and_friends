@@ -22,9 +22,9 @@ jobs:
         python-version: "3.8"
     - name: Install dependencies
       run: |
-        pip install setuptools==65.5.0
         sudo apt install libopenmpi-dev
         pip install pytest
+        pip install setuptools==65.5.0
         pip install .
     - name: Test with pytest
       run: |
