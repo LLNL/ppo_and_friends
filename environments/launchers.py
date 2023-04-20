@@ -3,7 +3,6 @@
     that initialize training for a specific environment.
 """
 import gym
-import lbforaging
 from abc import ABC, abstractmethod
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
@@ -16,6 +15,7 @@ from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
 from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryCartPoleWrapper
 from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryLunarLanderWrapper
+from ppo_and_friends.environments.version_wrappers import Gym21To26
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from .atari_wrappers import *
 import torch.nn as nn
@@ -37,6 +37,12 @@ from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
+
+def get_gym_render_mode(kw_launch_args):
+    if kw_launch_args["render"]:
+        return "human"
+    else:
+        return None
 
 class EnvironmentLauncher(ABC):
     """
@@ -103,7 +109,10 @@ class EnvironmentLauncher(ABC):
 class CartPoleLauncher(EnvironmentLauncher):
 
     def launch(self):
-        env_generator = lambda : SingleAgentGymWrapper(gym.make('CartPole-v0'))
+
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('CartPole-v0',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"] = nn.LeakyReLU()
@@ -153,7 +162,8 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : SingleAgentGymWrapper(
-            MultiBinaryCartPoleWrapper(gym.make('CartPole-v0')))
+            MultiBinaryCartPoleWrapper(gym.make('CartPole-v0',
+                render_mode = get_gym_render_mode(self.kw_launch_args))))
 
         actor_kw_args = {}
         actor_kw_args["activation"] = nn.LeakyReLU()
@@ -199,7 +209,9 @@ class PendulumLauncher(EnvironmentLauncher):
 
     def launch(self):
 
-        env_generator = lambda : SingleAgentGymWrapper(gym.make('Pendulum-v1'))
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('Pendulum-v1',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -241,7 +253,8 @@ class MountainCarLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('MountainCar-v0'))
+            SingleAgentGymWrapper(gym.make('MountainCar-v0',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {"activation" : nn.LeakyReLU()}
         actor_kw_args["hidden_size"] = 128
@@ -300,7 +313,8 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('MountainCarContinuous-v0'))
+            SingleAgentGymWrapper(gym.make('MountainCarContinuous-v0',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Extra args for the actor critic models.
@@ -354,7 +368,8 @@ class AcrobotLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Acrobot-v1'))
+            SingleAgentGymWrapper(gym.make('Acrobot-v1',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["hidden_size"] = 64
@@ -403,7 +418,8 @@ class LunarLanderLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('LunarLander-v2'))
+            SingleAgentGymWrapper(gym.make('LunarLander-v2',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Extra args for the actor critic models.
@@ -472,7 +488,8 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
     def launch(self):
         env_generator = lambda : \
             SingleAgentGymWrapper(
-                MultiBinaryLunarLanderWrapper(gym.make('LunarLander-v2')))
+                MultiBinaryLunarLanderWrapper(gym.make('LunarLander-v2',
+                render_mode = get_gym_render_mode(self.kw_launch_args))))
 
         #
         # Extra args for the actor critic models.
@@ -535,7 +552,8 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('LunarLanderContinuous-v2'))
+            SingleAgentGymWrapper(gym.make('LunarLanderContinuous-v2',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Lunar lander observations are organized as follows:
@@ -607,7 +625,8 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('BipedalWalker-v3'))
+            SingleAgentGymWrapper(gym.make('BipedalWalker-v3',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # The lidar observations are the last 10.
@@ -680,7 +699,8 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('BipedalWalkerHardcore-v3'))
+            SingleAgentGymWrapper(gym.make('BipedalWalkerHardcore-v3',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["std_offset"]  = 0.1
@@ -768,6 +788,7 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
 ###############################################################################
 
 
+#FIXME: depricated now!
 class BreakoutPixelsLauncher(EnvironmentLauncher):
 
     def launch(self):
@@ -779,15 +800,17 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             self.kw_launch_args["render"] = False
 
             gym_generator = lambda : gym.make(
-                'Breakout-v0',
-                repeat_action_probability = 0.0,
-                frameskip = 1,
-                render_mode = 'human')
+                    'Breakout-v4',
+                    repeat_action_probability = 0.0,
+                    frameskip                 = 1,
+                    apply_api_compatibility   = True,
+                    render_mode               = 'human')
         else:
             gym_generator = lambda : gym.make(
-                'Breakout-v0',
-                repeat_action_probability = 0.0,
-                frameskip = 1)
+                    'Breakout-v0',
+                    repeat_action_probability = 0.0,
+                    apply_api_compatibility   = True,
+                    frameskip                 = 1)
 
         breakout_generator = lambda : BreakoutPixelsEnvWrapper(
             env              = gym_generator(),
@@ -795,7 +818,8 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             hist_size        = 4,
             skip_k_frames    = 4)
 
-        env_generator = lambda : SingleAgentGymWrapper(breakout_generator())
+        env_generator = lambda : \
+            SingleAgentGymWrapper(breakout_generator())
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -910,7 +934,8 @@ class InvertedPendulumLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('InvertedPendulum-v2'))
+            SingleAgentGymWrapper(gym.make('InvertedPendulum-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         policy_args = {\
             "ac_network" : FeedForwardNetwork,
@@ -934,7 +959,8 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('InvertedDoublePendulum-v2'))
+            SingleAgentGymWrapper(gym.make('InvertedDoublePendulum-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Pendulum observations are organized as follows:
@@ -982,7 +1008,8 @@ class AntLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Ant-v3'))
+            SingleAgentGymWrapper(gym.make('Ant-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Ant observations are organized as follows:
@@ -1034,7 +1061,8 @@ class HumanoidLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Humanoid-v3'))
+            SingleAgentGymWrapper(gym.make('Humanoid-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         # Humanoid observations are a bit mysterious. See
@@ -1106,7 +1134,8 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
         # NOTE: this is an UNSOVLED environment.
         #
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('HumanoidStandup-v2'))
+            SingleAgentGymWrapper(gym.make('HumanoidStandup-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         #
         #    Positions: 22
@@ -1161,11 +1190,13 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
+#FIXME: busted?
 class Walker2DLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Walker2d-v3'))
+            SingleAgentGymWrapper(gym.make('Walker2d-v4',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.Tanh()
@@ -1210,12 +1241,13 @@ class Walker2DLauncher(EnvironmentLauncher):
                      reward_clip        = (-10., 10.),
                      **self.kw_launch_args)
 
-
+#FIXME: busted?
 class HopperLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Hopper-v3'))
+            SingleAgentGymWrapper(gym.make('Hopper-v3',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.Tanh()
@@ -1267,7 +1299,8 @@ class HalfCheetahLauncher(EnvironmentLauncher):
     def launch(self):
 
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('HalfCheetah-v3'))
+            SingleAgentGymWrapper(gym.make('HalfCheetah-v3',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1309,7 +1342,8 @@ class SwimmerLauncher(EnvironmentLauncher):
 
     def launch(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Swimmer-v3'))
+            SingleAgentGymWrapper(gym.make('Swimmer-v3',
+                render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -1504,73 +1538,25 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
-class LevelBasedForagingLauncher(EnvironmentLauncher):
-
-    def launch(self):
-
-        env_generator = lambda : \
-            MultiAgentGymWrapper(gym.make('Foraging-8x8-3p-2f-v2'))
-
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
-
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
-        lr = LinearScheduler(
-            status_key    = "iteration",
-            status_max    = 1500,
-            max_value     = 0.0003,
-            min_value     = 0.0001)
-
-        policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "bootstrap_clip"   : (0, 1),
-        }
-
-        #
-        # All agents use the same policy, so we can use the basics here.
-        #
-        policy_settings, policy_mapping_fn = get_single_policy_defaults(
-            policy_name   = "lbf",
-            env_generator = env_generator,
-            policy_args   = policy_args)
-
-        ts_per_rollout = num_procs * 256
-
-        self.run_ppo(env_generator      = env_generator,
-                     policy_settings    = policy_settings,
-                     policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 10000,
-                     epochs_per_iter    = 5,
-                     max_ts_per_ep      = 32,
-                     ts_per_rollout     = ts_per_rollout,
-                     normalize_values   = True,
-                     normalize_obs      = False,
-                     obs_clip           = None,
-                     normalize_rewards  = False,
-                     reward_clip        = None,
-                     **self.kw_launch_args)
-
-
 class PressurePlateLauncher(EnvironmentLauncher):
 
     def launch(self):
 
         try:
             import pressureplate
+            import gym as old_gym
         except:
             msg  = "ERROR: unable to import the pressureplate environment. "
             msg += "This environment is installed from its git repository."
             rank_print(msg)
             comm.Abort()
 
+        #FIXME: we have the apply_api_compatibility flag instead.
+        # NOTE: the compatibility wrapper that gym comes with wasn't
+        # working here...
         env_generator = lambda : \
-            MultiAgentGymWrapper(gym.make('pressureplate-linear-4p-v0'))
+            MultiAgentGymWrapper(
+                Gym21To26(old_gym.make('pressureplate-linear-4p-v0')))
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()

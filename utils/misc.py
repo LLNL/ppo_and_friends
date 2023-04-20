@@ -55,44 +55,44 @@ def need_action_squeeze(env):
         Returns:
             Whether or not we need to squeeze our actions.
     """
+    #FIXME: is this function still needed??
+    #need_action_squeze = False
+    #act_type = type(env.action_space)
 
-    need_action_squeze = False
-    act_type = type(env.action_space)
+    #if (issubclass(act_type, Box) or
+    #    issubclass(act_type, MultiBinary) or
+    #    issubclass(act_type, MultiDiscrete)):
 
-    if (issubclass(act_type, Box) or
-        issubclass(act_type, MultiBinary) or
-        issubclass(act_type, MultiDiscrete)):
+    #    action = env.action_space.sample()
 
-        action = env.action_space.sample()
+    #    try:
+    #        env.reset()
+    #        env.step(action)
+    #        env.reset()
+    #        need_action_squeeze = False
+    #    except:
+    #        env.reset()
+    #        env.step(action.squeeze())
+    #        env.reset()
+    #        need_action_squeeze = True
 
-        try:
-            padded_action = np.expand_dims(action, axis=0)
-            env.reset()
-            env.step(padded_action)
-            env.reset()
-            need_action_squeeze = False
-        except:
-            env.reset()
-            env.step(action)
-            env.reset()
-            need_action_squeeze = True
+    #elif issubclass(act_type, Discrete):
+    #    need_action_squeeze = True
+    #elif issubclass(act_type, Tuple):
+    #    need_action_squeeze = False
+    #else:
+    #    msg  = "ERROR: unsupported action space "
+    #    msg += "{}".format(env.action_space)
+    #    rank_print(msg)
+    #    comm.Abort()
 
-    elif issubclass(act_type, Discrete):
-        need_action_squeeze = True
-    elif issubclass(act_type, Tuple):
-        need_action_squeeze = False
-    else:
-        msg  = "ERROR: unsupported action space "
-        msg += "{}".format(env.action_space)
-        rank_print(msg)
-        comm.Abort()
+    ##
+    ## Reset the soft_resets.
+    ##
+    #env.need_hard_reset = True
 
-    #
-    # Reset the soft_resets.
-    #
-    env.need_hard_reset = True
-
-    return need_action_squeeze
+    #return need_action_squeeze
+    return False
 
 
 def update_optimizer_lr(optim, lr):

@@ -5,7 +5,7 @@
 import sys
 import numpy as np
 import torch
-import gym
+import gymnasium as gym
 from gym.spaces import Box, Discrete
 import cv2
 from abc import ABC
@@ -82,7 +82,7 @@ class AtariEnvWrapper(ABC):
         """
         raise NotImplementedError
 
-    def reset(self):
+    def reset(self, *args, **kw_args):
         """
             Reset the environment.
         """
@@ -306,7 +306,7 @@ class PixelHistEnvWrapper(AtariPixels):
         self.hist_size         = hist_size
         self.use_frame_pooling = use_frame_pooling
 
-    def reset(self):
+    def reset(self, *args, **kw_args):
         cur_frame, true_done = self._state_dependent_reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
@@ -315,7 +315,7 @@ class PixelHistEnvWrapper(AtariPixels):
 
         self.prev_frame  = cur_frame.copy()
 
-        return self.frame_cache.copy()
+        return self.frame_cache.copy(), {}
 
     def step(self, action):
         cur_frame, reward, done, info = self.env.step(action)
@@ -339,7 +339,7 @@ class PixelHistEnvWrapper(AtariPixels):
         done, life_lost   = self._check_if_done(done)
         info["life lost"] = life_lost
 
-        return self.frame_cache, reward, done, info
+        return self.frame_cache, reward, done, False, info
 
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -381,14 +381,14 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
                          cur_ram):
         self.ram_cache = np.tile(cur_ram, self.hist_size)
 
-    def reset(self):
+    def reset(self, *args, **kw_args):
         cur_ram, true_done= self._state_dependent_reset()
         cur_ram = cur_ram.astype(np.float32) / 255.
 
         if true_done:
             self._reset_ram_cache(cur_ram)
 
-        return self.ram_cache.copy()
+        return self.ram_cache.copy(), {}
 
     def step(self, action):
         cur_ram, reward, done, info = self.env.step(action)
@@ -402,7 +402,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         done, life_lost   = self._check_if_done(done)
         info["life lost"] = life_lost
 
-        return self.ram_cache.copy(), reward, done, info
+        return self.ram_cache.copy(), reward, done, False, info
 
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -419,9 +419,9 @@ class BreakoutEnvWrapper():
 
         super(BreakoutEnvWrapper, self).__init__(env, **kw_args)
 
-        if "Breakout" not in env.spec._env_name:
+        if "Breakout" not in env.spec.id:
             msg  = "ERROR: expected env to be a variation of Breakout "
-            msg += "but received {}".format(env.spec._env_name)
+            msg += "but received {}".format(env.spec.id)
             sys.stderr.write(msg)
             comm.Abort()
 
@@ -513,7 +513,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
-        return obs, reward, done, info
+        return obs, reward, done, False, info
 
 
 class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
@@ -571,4 +571,4 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             if done and reward == 0:
                 reward = -1.
 
-        return obs, reward, done, info
+        return obs, reward, done, False, info

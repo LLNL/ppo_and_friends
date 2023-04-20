@@ -12,14 +12,15 @@ for pkg in packages:
 package_dirs["ppo_and_friends"] = "."
 
 dependencies = [
-    'mujoco-py<2.2,>=2.1',
+    #'mujoco-py<2.2,>=2.1',
+    'mujoco',
     'pillow',
     'rware',
-    'lbforaging',
+    #'lbforaging',#FIXME
     'matplotlib',
     'opencv-python',
     'pygame',
-    'gym==0.21',
+    'gym>=0.26',
     'box2d-py',
     'numpy',
     'dill',

@@ -38,5 +38,3 @@ class MultiBinaryLunarLanderWrapper(AlternateActionEnvWrapper):
             step_action = 3
 
         return self.env.step(step_action)
-
-

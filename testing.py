@@ -80,7 +80,7 @@ def test_policy(ppo,
 
                 actions[agent_id] = agent_action.numpy()
 
-            obs, _, reward, done, info = env.step(actions)
+            obs, _, reward, terminated, truncated, info = env.step(actions)
 
             done = env.get_all_done()
 

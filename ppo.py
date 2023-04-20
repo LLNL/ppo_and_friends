@@ -669,42 +669,6 @@ class PPO(object):
 
         return norm_values
 
-    def establish_non_terminal_dones(self,
-                                     info,
-                                     dones):
-        """
-            Handle non-terminal dones. Non-terminal dones are a special
-            case where an environment can be "done" without it being terminal.
-
-            Arguments:
-                info    The info dictionary.
-                dones   The done dictionary.
-
-            Returns:
-                A numpy array signifying which environments are non-terminally
-                done.
-        """
-        first_agent = next(iter(dones))
-        batch_size  = dones[first_agent].size
-        non_terminal_dones = np.zeros(batch_size).astype(bool)
-        have_non_terminal_dones = False
-
-        #
-        # Because we always death mask, any environment that's done for
-        # one agent is done for them all.
-        #
-        for b_idx in range(batch_size):
-            if "non-terminal done" in info[first_agent][b_idx]:
-                ntd = info[first_agent][b_idx]["non-terminal done"]
-                non_terminal_dones[b_idx] = ntd
-                have_non_terminal_dones   = ntd or have_non_terminal_dones
-
-        if have_non_terminal_dones:
-            for agent_id in dones:
-                dones[agent_id][non_terminal_dones] = False
-
-        return np.where(non_terminal_dones)[0]
-
     def np_dict_to_tensor_dict(self, numpy_dict):
         """
             Given a dictionary mapping agent ids to numpy arrays,
@@ -785,32 +749,34 @@ class PPO(object):
 
         return rewards
 
-    def get_done_envs(self,
-                      dones):
+    def get_terminated_envs(self,
+                            terminated):
         """
-            Determine which environments are done. Because we death mask,
-            we will never be in a situation where an agent is done before
-            its associated environment is done.
+            Determine which environments are terminated. Because we death mask,
+            we will never be in a situation where an agent is termintaed before
+            its associated environment is terminated.
 
             Arguments:
-                dones    The done dictionary.
+                terminated    The terminated dictionary.
 
             Returns:
-                A tuple of form (where_done, where_not_done), which contains
-                numpy arrays determining which environments are done/not done.
+                A tuple of form (where_term, where_not_term), which contains
+                numpy arrays determining which environments are terminated/
+                not terminated.
         """
-        first_id   = next(iter(dones))
-        batch_size = dones[first_id].size
-        done_envs  = np.zeros(batch_size).astype(bool)
+        first_id   = next(iter(terminated))
+        batch_size = terminated[first_id].size
+        term_envs  = np.zeros(batch_size).astype(bool)
 
         #
-        # Because we always death mask, any agent that has a done environment
-        # means that all agents are done in that same environment.
+        # Because we always death mask, any agent that has a terminated
+        # environment means that all agents are terminated in that same
+        # environment.
         #
-        where_done     = np.where(dones[first_id])[0]
-        where_not_done = np.where(~dones[first_id])[0]
+        where_term     = np.where(terminated[first_id])[0]
+        where_not_term = np.where(~terminated[first_id])[0]
 
-        return where_done, where_not_done
+        return where_term, where_not_term
 
     def _tile_aug_results(self, action, raw_action, obs, log_prob):
         """
@@ -888,6 +854,32 @@ class PPO(object):
         for policy_id in self.policies:
             self.status_dict[policy_id]["entropy weight"] = \
                 self.policies[policy_id].entropy_weight()
+
+    def verify_truncated(self, terminated, truncated):
+        """
+        """
+        first_agent     = next(iter(truncated))
+        where_truncated = np.where(truncated[first_agent])
+        have_truncated  = where_truncated[0].size > 0
+
+        for agent_id in terminated:
+            #
+            # This is an odd edge case. We shouldn't have both
+            # types of done simultaneously...
+            #
+            if terminated[agent_id] and truncated[agent_id]:
+                terminated[agent_id] = False
+
+                if self.verbose:
+                    msg  = "WARNING: terminated and truncated were both "
+                    msg += "set to True. Setting terminated to False."
+                    rank_print(msg)
+
+            msg  = "ERROR: truncation for one but not all agents in "
+            msg += "an environment is not currently supported."
+            assert truncated[agent_id][where_truncated].all(), msg
+
+        return where_truncated
 
     def rollout(self):
         """
@@ -1021,21 +1013,15 @@ class PPO(object):
             # to np arrays. Each element of the numpy array represents
             # the results from a single environment.
             #
-            obs, critic_obs, ext_reward, done, info = self.env.step(action)
+            obs, critic_obs, ext_reward, terminated, truncated, info = \
+                self.env.step(action)
 
             #
-            # Non-terminal dones are interesting cases. We need to
-            # first find them and then set any corresponding "dones"
-            # in the done array to false. This is because we treat
-            # these non-terminal done states as needing to end without
-            # entering a terminal state.
+            # Because we always death mask, any environment that's done for
+            # one agent is done for them all.
             #
-            where_non_terminal = \
-                self.establish_non_terminal_dones(
-                    info,
-                    done)
-
-            have_non_terminal_dones = where_non_terminal.size > 0
+            where_truncated = self.verify_truncated(terminated, truncated)[0]
+            have_truncated  = where_truncated.size > 0
 
             #
             # In the observational augment case, our action is a single action,
@@ -1071,14 +1057,14 @@ class PPO(object):
 
             ep_obs = deepcopy(obs)
 
-            where_done, where_not_done = self.get_done_envs(done)
-            done_count = where_done.size
+            where_term, where_not_term = self.get_terminated_envs(terminated)
+            term_count = where_term.size
 
             for agent_id in action:
-                if done_count > 0:
-                    for done_idx in where_done:
-                        ep_obs[agent_id][done_idx] = \
-                            info[agent_id][done_idx]["terminal observation"]
+                if term_count > 0:
+                    for term_idx in where_term:
+                        ep_obs[agent_id][term_idx] = \
+                            info[agent_id][term_idx]["terminal observation"]
 
                 policy_id = self.policy_mapping_fn(agent_id)
 
@@ -1092,7 +1078,7 @@ class PPO(object):
                     values               = value[agent_id],
                     log_probs            = log_prob[agent_id],
                     rewards              = reward[agent_id],
-                    where_done           = where_done)
+                    where_done           = where_term)#FIXME: change naming to where_terminal
 
                 rollout_max_ext_reward[policy_id] = \
                     max(rollout_max_ext_reward[policy_id],
@@ -1135,84 +1121,84 @@ class PPO(object):
 
             #
             # Episode end cases.
-            #  1. An episode has reached a "done" state.
+            #  1. An episode has reached a terminated state.
             #  2. An episode has reached the maximum allowable timesteps.
-            #  3. An episode has reached a non-terminal done state.
+            #  3. An episode has reached a truncated state.
             #
             # Case 1.
-            # We handle any episodes that have reached a terminal done state.
+            # We handle any episodes that have reached a terminal state.
             # In these cases, the environment cannot proceed any further.
             #
-            if done_count > 0:
+            if term_count > 0:
                 #
-                # Every agent has at least one done environment.
+                # Every agent has at least one terminated environment.
                 #
-                for agent_id in done:
+                for agent_id in terminated:
                     policy_id = self.policy_mapping_fn(agent_id)
 
                     self.policies[policy_id].end_episodes(
                         agent_id        = agent_id,
-                        env_idxs        = where_done,
+                        env_idxs        = where_term,
                         episode_lengths = episode_lengths,
-                        terminal        = np.ones(done_count).astype(bool),
-                        ending_values   = np.zeros(done_count),
-                        ending_rewards  = np.zeros(done_count),
+                        terminal        = np.ones(term_count).astype(bool),
+                        ending_values   = np.zeros(term_count),
+                        ending_rewards  = np.zeros(term_count),
                         status_dict     = self.status_dict)
 
                     top_rollout_score[policy_id] = \
                         max(top_rollout_score[policy_id],
-                        ep_nat_rewards[policy_id][where_done].max())
+                        ep_nat_rewards[policy_id][where_term].max())
 
-                    total_ext_rewards[policy_id][where_done] += \
-                        ep_nat_rewards[policy_id][where_done]
+                    total_ext_rewards[policy_id][where_term] += \
+                        ep_nat_rewards[policy_id][where_term]
 
                     if self.policies[policy_id].enable_icm:
-                        total_intr_rewards[policy_id][where_done] += \
-                            ep_intr_rewards[policy_id][where_done]
+                        total_intr_rewards[policy_id][where_term] += \
+                            ep_intr_rewards[policy_id][where_term]
 
                     total_rewards[policy_id] += \
-                        ep_rewards[policy_id][where_done]
+                        ep_rewards[policy_id][where_term]
 
-                    ep_rewards[policy_id][where_done]      = 0
-                    ep_nat_rewards[policy_id][where_done]  = 0
-                    ep_intr_rewards[policy_id][where_done] = 0
+                    ep_rewards[policy_id][where_term]      = 0
+                    ep_nat_rewards[policy_id][where_term]  = 0
+                    ep_intr_rewards[policy_id][where_term] = 0
 
                 longest_run = max(longest_run,
-                    episode_lengths[where_done].max())
+                    episode_lengths[where_term].max())
 
                 shortest_run = min(shortest_run,
-                    episode_lengths[where_done].min())
+                    episode_lengths[where_term].min())
 
-                avg_run = episode_lengths[where_done].mean()
+                avg_run = episode_lengths[where_term].mean()
 
-                episode_lengths[where_done]    = 0
-                total_episodes                += done_count
-                ep_ts[where_done]              = 0
+                episode_lengths[where_term]    = 0
+                total_episodes                += term_count
+                ep_ts[where_term]              = 0
 
             #
             # Cases 2 and 3.
             # We handle episodes that have reached or exceeded the maximum
             # number of timesteps allowed, but they haven't yet reached a
-            # terminal done state. This is also very similar to reaching
-            # an environment triggered non-terminal done state, so we handle
+            # terminal state. This is also very similar to reaching
+            # an environment triggered truncated state, so we handle
             # them at the same time (identically).
             # Since the environment can continue, we can take this into
             # consideration when calculating the reward.
             #
             ep_max_reached = ((ep_ts == self.max_ts_per_ep).any() and
-                where_not_done.size > 0)
+                where_not_term.size > 0)
 
             if (ep_max_reached or
                 total_rollout_ts >= self.ts_per_rollout or
-                have_non_terminal_dones):
+                have_truncated):
 
                 if total_rollout_ts >= self.ts_per_rollout:
                     where_maxed = np.arange(env_batch_size)
                 else:
                     where_maxed = np.where(ep_ts >= self.max_ts_per_ep)[0]
 
-                where_maxed = np.setdiff1d(where_maxed, where_done)
-                where_maxed = np.concatenate((where_maxed, where_non_terminal))
+                where_maxed = np.setdiff1d(where_maxed, where_term)
+                where_maxed = np.concatenate((where_maxed, where_truncated))
                 where_maxed = np.unique(where_maxed)
 
                 next_value  = self.get_policy_values(critic_obs)
@@ -1304,10 +1290,10 @@ class PPO(object):
                             total_intr_rewards[policy_id] += \
                                 ep_intr_rewards[policy_id]
 
-                        if where_not_done.size > 0:
+                        if where_not_term.size > 0:
                             top_rollout_score[policy_id] = \
                                 max(top_rollout_score[policy_id],
-                                ep_nat_rewards[policy_id][where_not_done].max())
+                                ep_nat_rewards[policy_id][where_not_term].max())
 
                 ep_ts[where_maxed] = 0
 

@@ -24,6 +24,12 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
         This will also return a critic observation along with the
         actor observation.
     """
+    def __init__(self, *args, **kw_args):
+
+        super(PPOGymWrapper, self).__init__(
+            *args, **kw_args)
+
+        self.random_seed = None
 
     def step(self, actions):
         """
@@ -38,11 +44,11 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
         """
         actions = self._filter_done_agent_actions(actions)
 
-        obs, critic_obs, reward, done, info = \
+        obs, critic_obs, reward, terminated, truncated, info = \
             self._wrap_gym_step(*self.env.step(
                 self._unwrap_action(actions)))
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def reset(self):
         """
@@ -51,7 +57,19 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
             Returns:
                 The actor and critic observations.
         """
-        obs, critic_obs = self._wrap_gym_reset(self.env.reset())
+        obs, critic_obs = self._wrap_gym_reset(
+            *self.env.reset(seed = self.random_seed))
+
+        #
+        # Gym versions >= 0.26 require the random seed to be set
+        # when calling reset. Since we don't want the same exact
+        # episode to reply every time we reset, we increment the
+        # seed. This retains reproducibility while allow each episode
+        # to vary.
+        #
+        if self.random_seed != None:
+            self.random_seed += 1
+
         return obs, critic_obs
 
     @abstractmethod
@@ -73,39 +91,56 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
     def _wrap_gym_step(self,
                        obs,
                        reward,
-                       done,
+                       terminated,
+                       truncated,
                        info):
         """
             An abstract method defining how to wrap our enviornment
             step.
 
             Arguments:
-                obs        The agent observations.
-                reward     The agent rewards.
-                done       The agent dones.
-                info       The agent info.
+                obs         The agent observations.
+                reward      The agent rewards.
+                terminated  The agent termination flags.
+                truncated   The agent truncated flags.
+                info        The agent info.
 
             Returns:
-                A tuple of form (obs, critic_obs, reward, done, info) s.t.
-                each is a dictionary.
+                A tuple of form (obs, critic_obs, reward,
+                terminated, truncated, info) s.t. each is a dictionary.
         """
         return
 
     @abstractmethod
     def _wrap_gym_reset(self,
-                        obs):
+                        obs,
+                        info):
         """
             An abstract method defining how to wrap our enviornment
             reset.
 
             Arguments:
                 obs        The agent observations.
+                info       An info dictionary.
 
             Returns:
                 A tuple of form (obs, critic_obs) s.t.
                 each is a dictionary.
         """
         return
+
+    def seed(self,
+             seed):
+        """
+            Set the seed for this environment.
+
+            Arguments:
+                seed    The random seed.
+        """
+        if seed != None:
+            assert type(seed) == int
+
+        self.random_seed = seed
 
 
 class SingleAgentGymWrapper(PPOGymWrapper):
@@ -182,30 +217,33 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         """
         agent_id   = self.get_agent_id()
         env_action = action[agent_id]
+        env_action = env_action.reshape(self.action_space[agent_id].shape)
 
         if self.action_squeeze:
-            env_action = env_action.squeeze()
+            env_action = env_action.squeeze(0)
 
         return env_action
 
     def _wrap_gym_step(self,
                        obs,
                        reward,
-                       done,
+                       terminated,
+                       truncated,
                        info):
         """
             A method defining how to wrap our enviornment
             step.
 
             Arguments:
-                obs        The agent observations.
-                reward     The agent rewards.
-                done       The agent dones.
-                info       The agent info.
+                obs         The agent observations.
+                reward      The agent rewards.
+                terminated  The agent termination flags.
+                truncated   The agent truncated flags.
+                info        The agent info.
 
             Returns:
-                A tuple of form (obs, critic_obs, reward, done, info) s.t.
-                each is a dictionary.
+                A tuple of form (obs, critic_obs, reward,
+                terminated, truncated, info) s.t. each is a dictionary.
         """
         agent_id = self.get_agent_id()
 
@@ -220,31 +258,34 @@ class SingleAgentGymWrapper(PPOGymWrapper):
 
         reward = np.float32(reward)
 
-        if done:
+        if terminated or truncated:
             self.all_done = True
         else:
             self.all_done = False
 
-        obs      = {agent_id : obs}
-        reward   = {agent_id : reward}
-        done     = {agent_id : done}
-        info     = {agent_id : info}
+        obs        = {agent_id : obs}
+        reward     = {agent_id : reward}
+        truncated  = {agent_id : truncated}
+        terminated = {agent_id : terminated}
+        info       = {agent_id : info}
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        critic_obs = self._construct_critic_observation(obs, done)
+        critic_obs = self._construct_critic_observation(obs, self.all_done)
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def _wrap_gym_reset(self,
-                        obs):
+                        obs,
+                        info):
         """
             A method defining how to wrap our enviornment
             reset.
 
             Arguments:
                 obs        The agent observations.
+                info       The agent info.
 
             Returns:
                 A tuple of form (obs, critic_obs) s.t.
@@ -270,9 +311,6 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         return obs, critic_obs
 
 
-# FIXME: we need to make a note of the fact that this
-# wrapper requires that all agents step at once, even if
-# dead.
 class MultiAgentGymWrapper(PPOGymWrapper):
     """
         A wrapper for multi-agent gym environments.
@@ -364,32 +402,45 @@ class MultiAgentGymWrapper(PPOGymWrapper):
     def _wrap_gym_step(self,
                        obs,
                        reward,
-                       done,
+                       terminated,
+                       truncated,
                        info):
         """
             A method defining how to wrap our enviornment
             step.
 
             Arguments:
-                obs        The agent observations.
-                reward     The agent rewards.
-                done       The agent dones.
-                info       The agent info.
+                obs         The agent observations.
+                reward      The agent rewards.
+                terminated  The agent termination flags.
+                truncated   The agent truncated flags.
+                info        The agent info.
 
             Returns:
-                A tuple of form (obs, critic_obs, reward, done, info) s.t.
-                each is a dictionary.
+                A tuple of form (obs, critic_obs, reward,
+                terminated, truncated, info) s.t. each is a dictionary.
         """
-        wrapped_obs    = {}
-        wrapped_reward = {}
-        wrapped_done   = {}
-        wrapped_info   = {}
+        wrapped_obs        = {}
+        wrapped_reward     = {}
+        wrapped_terminated = {}
+        wrapped_truncated  = {}
+        wrapped_info       = {}
+        done_agents        = {}
+        done_array         = np.zeros(len(self.agent_ids)).astype(bool)
+
+        if truncated.any() and not truncated.all():
+            msg  = "ERROR: truncation for one but not all agents in an "
+            msg += "environment is not currently supported."
+            rank_print(msg)
+            comm.Abort()
 
         for a_idx, a_id in enumerate(self.agent_ids):
-            agent_obs    = obs[a_idx]
-            agent_reward = reward[a_idx]
-            agent_done   = done[a_idx]
-            agent_info   = info
+            agent_obs         = obs[a_idx]
+            agent_reward      = reward[a_idx]
+            agent_terminated  = terminated[a_idx]
+            agent_truncated   = truncated[a_idx]
+            agent_info        = info
+            done_array[a_idx] = truncated[a_idx] or terminated[a_idx]
 
             #
             # HACK: some environments are buggy and don't follow their
@@ -402,12 +453,14 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
             agent_reward = np.float32(agent_reward)
 
-            wrapped_obs[a_id]    = agent_obs
-            wrapped_reward[a_id] = agent_reward
-            wrapped_info[a_id]   = agent_info
-            wrapped_done[a_id]   = agent_done
+            wrapped_obs[a_id]        = agent_obs
+            wrapped_reward[a_id]     = agent_reward
+            wrapped_info[a_id]       = agent_info
+            wrapped_terminated[a_id] = agent_terminated
+            wrapped_truncated[a_id]  = agent_truncated
+            done_agents[a_id]        = agent_terminated or agent_truncated
 
-        if np.array(done).all():
+        if done_array.all():
             self.all_done = True
         else:
             self.all_done = False
@@ -415,26 +468,29 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         if self.add_agent_ids:
             wrapped_obs = self._add_agent_ids_to_obs(wrapped_obs)
 
-        self._update_done_agents(wrapped_done)
+        self._update_done_agents(done_agents)
 
-        wrapped_obs, wrapped_reward, wrapped_done, wrapped_info = \
+        wrapped_obs, wrapped_reward, wrapped_terminated, wrapped_info = \
             self._apply_death_mask(
-                wrapped_obs, wrapped_reward, wrapped_done, wrapped_info)
+                wrapped_obs, wrapped_reward, wrapped_terminated, wrapped_info)
 
         critic_obs  = self._construct_critic_observation(
-            wrapped_obs, wrapped_done)
+            wrapped_obs, wrapped_terminated)
 
         return (wrapped_obs, critic_obs,
-            wrapped_reward, wrapped_done, wrapped_info)
+            wrapped_reward, wrapped_terminated,
+            wrapped_truncated, wrapped_info)
 
     def _wrap_gym_reset(self,
-                        obs):
+                        obs,
+                        info):
         """
             A method defining how to wrap our enviornment
             reset.
 
             Arguments:
                 obs        The agent observations.
+                info       The agent info.
 
             Returns:
                 A tuple of form (obs, critic_obs) s.t.

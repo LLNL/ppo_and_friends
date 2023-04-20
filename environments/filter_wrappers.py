@@ -72,9 +72,11 @@ class ObservationFilter(IdentityWrapper, ABC):
                 action    The action to take.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, reward, terminated, truncated,
+                and info tuple.
         """
-        obs, critic_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self.env.step(action)
 
         obs, critic_obs = self._apply_filters(obs, critic_obs)
 
@@ -85,7 +87,7 @@ class ObservationFilter(IdentityWrapper, ABC):
         self.obs_cache = deepcopy(obs)
         self.need_hard_reset = False
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def reset(self):
         """
@@ -398,10 +400,16 @@ class RewardNormalizer(IdentityWrapper):
                 action    The action to take.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, reward, terminated, truncated,
+                and info tuple.
         """
 
-        obs, critic_obs, reward, done, info = self._cache_step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self._cache_step(action)
+
+        agent_dones = {}
+        for agent_id in self.env.agent_ids:
+            agent_dones[agent_id] = terminated[agent_id] or truncated[agent_id]
 
         for agent_id in reward:
 
@@ -415,10 +423,10 @@ class RewardNormalizer(IdentityWrapper):
                         self.running_reward[agent_id])
 
             if self.batch_size > 1:
-                where_done = np.where(done[agent_id])[0]
+                where_done = np.where(agent_dones[agent_id])[0]
                 self.running_reward[agent_id][where_done] = 0.0
 
-            elif done[agent_id]:
+            elif agent_dones[agent_id]:
                 self.running_reward[agent_id][0] = 0.0
 
             #
@@ -439,7 +447,7 @@ class RewardNormalizer(IdentityWrapper):
 
             reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def normalize(self, agent_id, agent_reward):
         """
@@ -692,10 +700,11 @@ class RewardClipper(GenericClipper):
                 actions    A dictionary mapping agent ids to their actions.
 
             Returns:
-                The resulting observation, critic_observation, reward, done,
-                and info tuple.
+                The resulting observation, critic_observation, reward,
+                terminated, truncated, and info tuple.
         """
-        obs, critic_obs, reward, done, info = self._cache_step(actions)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self._cache_step(actions)
 
         for agent_id in reward:
             #
@@ -716,17 +725,18 @@ class RewardClipper(GenericClipper):
 
         reward = self._apply_agent_clipping(reward)
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
 
+# FIXME: this needs to be tested after MA refactor.
 class ObservationAugmentingWrapper(IdentityWrapper):
     """
         This wrapper expects the environment to have a method named
         'augment_observation' that can be utilized to augment an observation
         to create a batch of obserations. Each instance of observation in the
-        batch will be coupled with an identical done and reward. This is to
-        help a policy learn that a particular augmentation does not affect
-        the learned policy.
+        batch will be coupled with identical terminated, truncated, and reward.
+        This is to help a policy learn that a particular augmentation does
+        not affect the learned policy.
     """
 
     def __init__(self,
@@ -767,7 +777,8 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 action    The action to take.
 
             Returns:
-                The resulting observation(s), reward(s), done(s), and info(s).
+                The resulting observation(s), reward(s),
+                terminated(s), truncated(s), and info(s).
         """
         #TODO: update to handle soft resets.
         if self.test_mode:
@@ -787,21 +798,22 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 action    The action to take.
 
             Returns:
-                A batch of observations, rewards, and dones along
-                with a single info dictionary. The observations will
-                contain augmentations of the original observation.
+                A batch of observations, rewards, terminated, and
+                truncated  along with a single info dictionary. The observations
+                will contain augmentations of the original observation.
         """
         # TODO: update for soft resets.
-        # FIXME: this needs to be tested after MA refactor.
-        obs, critic_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self.env.step(action)
 
         batch_obs        = self.env.augment_observation(obs)
         batch_critic_obs = self.env.augment_critic_observation(critic_obs)
         batch_size       = batch_obs.shape[0]
 
-        batch_rewards = {}
-        batch_dones   = {}
-        batch_infos   = {}
+        batch_rewards    = {}
+        batch_terminated = {}
+        batch_truncated  = {}
+        batch_infos      = {}
 
         for agent_id in obs:
             if "terminal observation" in info[0]:
@@ -819,17 +831,21 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 batch_infos[agent_id] = np.tile((info[agent_id][0],), batch_size)
 
             batch_rewards[agent_id] = np.tile((reward[agent_id],), batch_size)
-            batch_dones[agent_id] = \
-                np.tile((done[agent_id],), batch_size).astype(bool)
+            batch_terminated[agent_id] = \
+                np.tile((terminated[agent_id],), batch_size).astype(bool)
+            batch_truncated[agent_id] = \
+                np.tile((truncated[agent_id],), batch_size).astype(bool)
 
             batch_rewards[agent_id] = \
                 batch_rewards[agent_id].reshape((batch_size, 1))
-            batch_dones[agent_id] = \
-                batch_dones[agent_id].reshape((batch_size, 1))
+            batch_terminated[agent_id] = \
+                batch_terminated[agent_id].reshape((batch_size, 1))
+            batch_truncated[agent_id] = \
+                batch_truncated[agent_id].reshape((batch_size, 1))
             batch_infos[agent_id] = batch_infos[agent_id].reshape((batch_size))
 
         return (batch_obs, batch_critic_obs, batch_rewards,
-            batch_dones, batch_infos)
+            batch_terminated, batch_truncated, batch_infos)
 
     def aug_test_step(self, action):
         """
@@ -845,9 +861,11 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 action    The action to take.
 
             Returns:
-                Observation, reward, done, and info (possibly augmented).
+                Observation, reward, terminated, truncated, and
+                info (possibly augmented).
         """
-        obs, critic_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self.env.step(action)
 
         batch_obs        = self.env.augment_observation(obs)
         batch_critic_obs = self.env.augment_critic_observation(critic_obs)
@@ -868,7 +886,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
                 info[agent_id]["terminal observation"] = \
                     deepcopy(terminal_obs[self.test_idx])
 
-        return batch_obs, batch_critic_obs, reward, done, info
+        return batch_obs, batch_critic_obs, reward, terminated, truncated, info
 
     def reset(self):
         """

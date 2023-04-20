@@ -1,7 +1,6 @@
 from gym.spaces import MultiBinary, Box, MultiDiscrete
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.environments.ppo_env_wrappers import IdentityWrapper
 import numpy as np
 from gym.spaces import Dict
 
@@ -46,26 +45,20 @@ class AlternateActionEnvWrapper(ABC):
         """
         return
 
-    def reset(self):
+    def reset(self, *args, **kw_args):
         """
             Reset the environment.
 
             Returns:
                 The resulting observation.
         """
-        return self.env.reset()
+        return self.env.reset(*args, **kw_args)
 
     def render(self, *args, **kw_args):
         """
             Render the environment.
         """
         self.env.render(*args, **kw_args)
-
-    def seed(self, seed):
-        """
-            Set the environment's random seed.
-        """
-        self.env.seed(seed)
 
 
 class BoxIntActionWrapper():

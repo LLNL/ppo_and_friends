@@ -103,15 +103,17 @@ class IdentityWrapper(ABC):
                 action    The action to take.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, reward, terminated, truncated,
+                and info tuple.
         """
-        obs, critic_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self.env.step(action)
 
         self.obs_cache        = deepcopy(obs)
         self.critic_obs_cache = deepcopy(critic_obs)
         self.need_hard_reset  = False
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def step(self, action):
         """
@@ -122,7 +124,8 @@ class IdentityWrapper(ABC):
                 action    The action to take.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, reward, terminated, truncated,
+                and info tuple.
         """
         return self._cache_step(action)
 
@@ -672,7 +675,7 @@ class PPOEnvironmentWrapper(ABC):
             stop = start + obs_size
 
             #
-            # There are two cases where we zero out the obervations:
+            # There are two cases where we zero out the observations:
             #  1. The agent has died, but we're not all done (death masking).
             #  2. An agent hasn't acted in this turn ("turn masking"). We could
             #     also keep around previous turn observations in these cases,
@@ -736,7 +739,7 @@ class PPOEnvironmentWrapper(ABC):
             stop  = start + obs_size
 
             #
-            # There are two cases where we zero out the obervations:
+            # There are two cases where we zero out the observations:
             #  1. The agent has died, but we're not all done (death masking).
             #  2. An agent hasn't acted in this turn ("turn masking"). We could
             #     also keep around previous turn observations in these cases,
@@ -817,7 +820,8 @@ class PPOEnvironmentWrapper(ABC):
                 action    The action to take.
 
             Returns:
-                The resulting observation, reward, done, and info tuple.
+                The resulting observation, reward, terminated, truncated,
+                and info tuple.
         """
         return
 
@@ -915,7 +919,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             Returns:
                 The resulting observation, critic_observation,
-                reward, done, and info tuple, each being a dictionary.
+                reward, terminated, truncated, and info tuple,
+                each being a dictionary.
         """
         #
         # If we're testing, we don't want to return a batch.
@@ -937,9 +942,11 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             Returns:
                 The resulting observation, critic_observation,
-                reward, done, and info tuple, each being a dictionary.
+                reward, terminated, truncated, and info tuple,
+                each being a dictionary.
         """
-        obs, critic_obs, reward, done, info = self.env.step(action)
+        obs, critic_obs, reward, terminated, truncated, info = \
+            self.env.step(action)
 
         if self.env.get_all_done():
             for agent_id in info:
@@ -947,7 +954,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             obs, critic_obs = self.env.reset()
 
-        return obs, critic_obs, reward, done, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def batch_step(self, actions):
         """
@@ -963,12 +970,14 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             Returns:
                 The resulting observation, critic_observation,
-                reward, done, and info tuple, each being a dictionary.
+                reward, terminated, truncated, and info tuple,
+                each being a dictionary.
         """
         batch_obs        = {}
         batch_critic_obs = {}
         batch_rewards    = {}
-        batch_dones      = {}
+        batch_terminated = {}
+        batch_truncated  = {}
         batch_infos      = {}
 
         #
@@ -984,9 +993,10 @@ class VectorizedEnv(IdentityWrapper, Iterable):
 
             batch_obs[agent_id]        = np.zeros(obs_shape)
             batch_critic_obs[agent_id] = np.zeros(critic_obs_shape)
-            batch_rewards[agent_id] = np.zeros((self.num_envs, 1))
-            batch_dones[agent_id]   = np.zeros((self.num_envs, 1)).astype(bool)
-            batch_infos[agent_id]   = np.array([None] * self.num_envs)
+            batch_rewards[agent_id]    = np.zeros((self.num_envs, 1))
+            batch_terminated[agent_id] = np.zeros((self.num_envs, 1)).astype(bool)
+            batch_truncated[agent_id]  = np.zeros((self.num_envs, 1)).astype(bool)
+            batch_infos[agent_id]      = np.array([None] * self.num_envs)
 
         env_actions = np.array([{}] * self.num_envs)
         for agent_id in actions:
@@ -996,7 +1006,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         for env_idx in range(self.num_envs):
             act = env_actions[env_idx]
 
-            obs, critic_obs, reward, done, info = self.envs[env_idx].step(act)
+            obs, critic_obs, reward, terminated, truncated, info = \
+                self.envs[env_idx].step(act)
 
             self.steps[env_idx] += 1
 
@@ -1013,7 +1024,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 batch_obs[agent_id][env_idx]        = obs[agent_id]
                 batch_critic_obs[agent_id][env_idx] = critic_obs[agent_id]
                 batch_rewards[agent_id][env_idx]    = reward[agent_id]
-                batch_dones[agent_id][env_idx]      = done[agent_id]
+                batch_terminated[agent_id][env_idx] = terminated[agent_id]
+                batch_truncated[agent_id][env_idx]  = truncated[agent_id]
                 batch_infos[agent_id][env_idx]      = info[agent_id]
 
         self.obs_cache = deepcopy(batch_obs)
@@ -1021,7 +1033,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
         self.need_hard_reset = False
 
         return (batch_obs, batch_critic_obs,
-            batch_rewards, batch_dones, batch_infos)
+            batch_rewards, batch_terminated,
+            batch_truncated, batch_infos)
 
     def reset(self):
         """

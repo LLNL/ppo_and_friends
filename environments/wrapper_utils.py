@@ -36,8 +36,7 @@ def wrap_environment(
     """
     #
     # Begin adding wrappers. Order matters!
-    # The first wrapper will always be either a standard vectorization
-    # or a multi-agent wrapper. We currently don't support combining them.
+    # The first wrapper will always be a standard vectorization.
     #
     env = VectorizedEnv(
         env_generator = env_generator,

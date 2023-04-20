@@ -1,4 +1,3 @@
-import gym
 import torch
 import random
 import numpy as np
@@ -102,7 +101,6 @@ def baselines():
                  "Humanoid",
                  "RobotWarehouseTiny",
                  "RobotWarehouseSmall",
-                 "LevelBasedForaging",
                  "PressurePlate",
                  "AbmarlMaze",
                  "AbmarlBlindMaze",
