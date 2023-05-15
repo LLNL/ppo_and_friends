@@ -409,7 +409,8 @@ class RewardNormalizer(IdentityWrapper):
 
         agent_dones = {}
         for agent_id in self.env.agent_ids:
-            agent_dones[agent_id] = terminated[agent_id] or truncated[agent_id]
+            agent_dones[agent_id] = np.logical_or(terminated[agent_id],
+                truncated[agent_id])
 
         for agent_id in reward:
 

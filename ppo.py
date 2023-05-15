@@ -860,15 +860,14 @@ class PPO(object):
         """
         first_agent     = next(iter(truncated))
         where_truncated = np.where(truncated[first_agent])
-        have_truncated  = where_truncated[0].size > 0
 
         for agent_id in terminated:
             #
             # This is an odd edge case. We shouldn't have both
             # types of done simultaneously...
             #
-            if terminated[agent_id] and truncated[agent_id]:
-                terminated[agent_id] = False
+            if terminated[agent_id][where_truncated].any():
+                terminated[agent_id][where_truncated] = False
 
                 if self.verbose:
                     msg  = "WARNING: terminated and truncated were both "

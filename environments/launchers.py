@@ -61,6 +61,9 @@ class EnvironmentLauncher(ABC):
     def launch(self):
         raise NotImplementedError
 
+    def get_adjusted_ts_per_rollout(self, ts_per_rollout):
+        return num_procs * ts_per_rollout * self.kw_launch_args['envs_per_proc']
+
     def run_ppo(self,
                 policy_settings,
                 policy_mapping_fn,
@@ -119,7 +122,7 @@ class CartPoleLauncher(EnvironmentLauncher):
         critic_kw_args = actor_kw_args.copy()
 
         lr = 0.0002
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -171,7 +174,7 @@ class BinaryCartPoleLauncher(EnvironmentLauncher):
 
         lr = 0.0002
 
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -222,7 +225,7 @@ class PendulumLauncher(EnvironmentLauncher):
 
         lr = 0.0003
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -383,7 +386,7 @@ class AcrobotLauncher(EnvironmentLauncher):
             max_value  = 0.0003,
             min_value  = 0.0)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -445,7 +448,7 @@ class LunarLanderLauncher(EnvironmentLauncher):
         #
         # Running with 2 processors works well here.
         #
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -515,7 +518,7 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
         #
         # Running with 2 processors works well here.
         #
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -585,7 +588,7 @@ class LunarLanderContinuousLauncher(EnvironmentLauncher):
         #
         # Running with 2 processors works well here.
         #
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -662,7 +665,7 @@ class BipedalWalkerLauncher(EnvironmentLauncher):
             max_value     = 0.0003,
             min_value     = 0.0001)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -768,7 +771,7 @@ class BipedalWalkerHardcoreLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -844,7 +847,7 @@ class BreakoutPixelsLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -912,7 +915,7 @@ class BreakoutRAMLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -945,7 +948,7 @@ class InvertedPendulumLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -992,7 +995,7 @@ class InvertedDoublePendulumLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1043,7 +1046,7 @@ class AntLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1114,7 +1117,7 @@ class HumanoidLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1176,7 +1179,7 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1224,7 +1227,7 @@ class Walker2DLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         #
         # arXiv:2006.05990v1 suggests that value normalization significantly hurts
@@ -1274,7 +1277,7 @@ class HopperLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         #
         # I find that value normalization hurts the hopper environment training.
@@ -1321,7 +1324,7 @@ class HalfCheetahLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         #
         # Normalizing values seems to stabilize results in this env.
@@ -1365,7 +1368,7 @@ class SwimmerLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         self.run_ppo(
                 env_generator      = env_generator,
@@ -1431,7 +1434,7 @@ class RobotWarehouseTinyLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 1024
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         #
         # This environment comes from arXiv:2006.07869v4.
@@ -1507,7 +1510,7 @@ class RobotWarehouseSmallLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         #
         # This is a very sparse reward environment, and there are series of
@@ -1551,7 +1554,6 @@ class PressurePlateLauncher(EnvironmentLauncher):
             rank_print(msg)
             comm.Abort()
 
-        #FIXME: we have the apply_api_compatibility flag instead.
         # NOTE: the compatibility wrapper that gym comes with wasn't
         # working here...
         env_generator = lambda : \
@@ -1599,7 +1601,7 @@ class PressurePlateLauncher(EnvironmentLauncher):
             compare_fn  = np.less_equal,
             persistent  = True)
 
-        ts_per_rollout = num_procs * 512
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
                      save_when          = save_when,
@@ -1681,7 +1683,7 @@ class AbmarlMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1758,7 +1760,7 @@ class AbmarlBlindMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1837,7 +1839,7 @@ class AbmarlLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 4096
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(4096)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -1971,7 +1973,7 @@ class AbmarlBlindLargeMazeLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * rollout_length
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(rollout_length)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
@@ -2038,7 +2040,7 @@ class AbmarlReachTheTargetLauncher(EnvironmentLauncher):
              policy_args)
         }
 
-        ts_per_rollout = num_procs * 256
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
