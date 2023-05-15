@@ -5,7 +5,7 @@
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
-from gym.spaces import Dict, Box
+from gymnasium.spaces import Dict, Box
 import copy
 import time
 import numpy as np

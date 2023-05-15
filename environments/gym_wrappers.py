@@ -4,7 +4,7 @@
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 import numpy as np
 from ppo_and_friends.utils.misc import need_action_squeeze
-from gym.spaces import Box, Discrete
+from gymnasium.spaces import Box, Discrete
 from ppo_and_friends.utils.mpi_utils import rank_print
 from abc import abstractmethod
 from functools import reduce

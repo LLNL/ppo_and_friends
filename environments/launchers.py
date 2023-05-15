@@ -2,7 +2,7 @@
     A home for environment "launchers", defined as simple functions
     that initialize training for a specific environment.
 """
-import gym
+import gymnasium as gym
 from abc import ABC, abstractmethod
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy

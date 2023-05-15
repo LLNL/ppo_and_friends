@@ -62,7 +62,7 @@ def test_binary_cart_pole_serial():
 
 if __name__ == "__main__":
     test_cart_pole_serial()
-    test_cart_pole_mpi()
-    test_cart_pole_multi_envs()
-    test_cart_pole_multi_envs_mpi()
-    test_binary_cart_pole_serial()
+    #test_cart_pole_mpi()
+    #test_cart_pole_multi_envs()
+    #test_cart_pole_multi_envs_mpi()
+    #test_binary_cart_pole_serial()

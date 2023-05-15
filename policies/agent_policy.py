@@ -8,7 +8,7 @@ from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
 from ppo_and_friends.networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork

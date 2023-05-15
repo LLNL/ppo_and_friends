@@ -1,5 +1,5 @@
 from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapper
-from gym.spaces import MultiBinary
+from gymnasium.spaces import MultiBinary
 
 class MultiBinaryCartPoleWrapper(AlternateActionEnvWrapper):
     """

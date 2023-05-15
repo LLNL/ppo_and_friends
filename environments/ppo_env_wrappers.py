@@ -12,8 +12,8 @@ import os
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
-from gym.spaces import Dict, Tuple, Box
-import gym
+from gymnasium.spaces import Dict, Tuple, Box
+import gymnasium as gym
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD

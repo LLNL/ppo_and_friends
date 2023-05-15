@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
+from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
 import os
 import sys
 import pickle

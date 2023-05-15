@@ -1,8 +1,8 @@
-from gym.spaces import MultiBinary, Box, MultiDiscrete
+from gymnasium.spaces import MultiBinary, Box, MultiDiscrete
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 import numpy as np
-from gym.spaces import Dict
+from gymnasium.spaces import Dict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD

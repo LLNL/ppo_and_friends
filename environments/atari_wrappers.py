@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import torch
 import gymnasium as gym
-from gym.spaces import Box, Discrete
+from gymnasium.spaces import Box, Discrete
 import cv2
 from abc import ABC
 from mpi4py import MPI
