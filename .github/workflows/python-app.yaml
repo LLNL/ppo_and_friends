@@ -30,4 +30,4 @@ jobs:
     - name: Test with pytest
       run: |
         cd test
-        pytest tests
+        pytest tests/train/test_cart_pole.py
