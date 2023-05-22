@@ -5,7 +5,6 @@
 import gymnasium as gym
 import numpy as np
 
-#FIXME: no longer needed?
 class Gym21To26():
     """
         There are some big changes between Gym versions .21 and

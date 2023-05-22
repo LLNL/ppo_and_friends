@@ -1092,7 +1092,7 @@ class AntLauncher(EnvironmentLauncher):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      max_ts_per_ep      = 64,
-                     epochs_per_iter    = 8,
+                     epochs_per_iter    = 32,
                      ts_per_rollout     = ts_per_rollout,
                      obs_clip           = (-30., 30.),
                      reward_clip        = (-10., 10.),
@@ -1232,7 +1232,6 @@ class HumanoidStandUpLauncher(EnvironmentLauncher):
                      **self.kw_launch_args)
 
 
-#FIXME: busted?
 class Walker2DLauncher(EnvironmentLauncher):
 
     def launch(self):
@@ -1283,7 +1282,7 @@ class Walker2DLauncher(EnvironmentLauncher):
                      reward_clip        = (-10., 10.),
                      **self.kw_launch_args)
 
-#FIXME: busted?
+
 class HopperLauncher(EnvironmentLauncher):
 
     def launch(self):

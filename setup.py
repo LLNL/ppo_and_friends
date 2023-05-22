@@ -12,15 +12,14 @@ for pkg in packages:
 package_dirs["ppo_and_friends"] = "."
 
 dependencies = [
-    #'mujoco-py<2.2,>=2.1',
-    'mujoco',
+    'mujoco-py<2.2,>=2.1',
+    'mujoco<=2.3.3',
     'pillow',
     'rware',
     #'lbforaging',#FIXME
     'matplotlib',
     'opencv-python',
     'pygame',
-    #'gym>=0.26',
     'gymnasium',
     'box2d-py',
     'numpy',
@@ -41,8 +40,8 @@ setup(name             = "ppo_and_friends",
       license          = "MIT",
       package_dir      = package_dirs,
       packages         = list(package_dirs.keys()),
-      package_data     = {"" : ["environments/abmarl_envs/maze.txt",
-                                "environments/abmarl_envs/large_maze.txt"]},
+      package_data     = {"" : ["environments/abmarl/envs/maze.txt",
+                                "environments/abmarl/envs/large_maze.txt"]},
       install_requires = dependencies,
       entry_points     = {
           'console_scripts' : ['ppoaf-baselines=ppo_and_friends.train_baseline:baselines']
