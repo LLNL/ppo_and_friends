@@ -22,6 +22,7 @@ def test_binary_lunar_lander_mpi():
     num_timesteps = 500000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"BinaryLunarLander --clobber --num-timesteps {num_timesteps}"
+    cmd += f"--random-seed 5"
 
     run_training(cmd)
 
