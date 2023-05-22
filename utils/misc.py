@@ -43,58 +43,6 @@ def get_action_dtype(action_space):
     return "unknown"
 
 
-def need_action_squeeze(env):
-    """
-        Do we need to squeeze the actions before sending them to
-        the environment? This is typically an issue with the env,
-        but we can handle it ourselves.
-
-        Arguments:
-            env    The environment of interest.
-
-        Returns:
-            Whether or not we need to squeeze our actions.
-    """
-    #FIXME: is this function still needed??
-    #need_action_squeze = False
-    #act_type = type(env.action_space)
-
-    #if (issubclass(act_type, Box) or
-    #    issubclass(act_type, MultiBinary) or
-    #    issubclass(act_type, MultiDiscrete)):
-
-    #    action = env.action_space.sample()
-
-    #    try:
-    #        env.reset()
-    #        env.step(action)
-    #        env.reset()
-    #        need_action_squeeze = False
-    #    except:
-    #        env.reset()
-    #        env.step(action.squeeze())
-    #        env.reset()
-    #        need_action_squeeze = True
-
-    #elif issubclass(act_type, Discrete):
-    #    need_action_squeeze = True
-    #elif issubclass(act_type, Tuple):
-    #    need_action_squeeze = False
-    #else:
-    #    msg  = "ERROR: unsupported action space "
-    #    msg += "{}".format(env.action_space)
-    #    rank_print(msg)
-    #    comm.Abort()
-
-    ##
-    ## Reset the soft_resets.
-    ##
-    #env.need_hard_reset = True
-
-    #return need_action_squeeze
-    return False
-
-
 def update_optimizer_lr(optim, lr):
     """
         Update the learning rate of an optimizer.

@@ -3,7 +3,6 @@
 """
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 import numpy as np
-from ppo_and_friends.utils.misc import need_action_squeeze
 from gymnasium.spaces import Box, Discrete
 from ppo_and_friends.utils.mpi_utils import rank_print
 from abc import abstractmethod
@@ -168,12 +167,6 @@ class SingleAgentGymWrapper(PPOGymWrapper):
             msg += "for single agent simulators. Disregarding."
             rank_print(msg)
 
-        #
-        # Environments are very inconsistent! Some of them require their
-        # actions to be squeezed before they can be sent to the env.
-        #
-        self.action_squeeze = need_action_squeeze(self.env)
-
     def _define_agent_ids(self):
         """
             Define our agent_ids.
@@ -218,10 +211,6 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         agent_id   = self.get_agent_id()
         env_action = action[agent_id]
         env_action = env_action.reshape(self.action_space[agent_id].shape)
-
-        if self.action_squeeze:
-            env_action = env_action.squeeze(0)
-
         return env_action
 
     def _wrap_gym_step(self,
@@ -342,12 +331,6 @@ class MultiAgentGymWrapper(PPOGymWrapper):
             add_agent_ids = add_agent_ids,
             **kw_args)
 
-        #
-        # Environments are very inconsistent! Some of them require their
-        # actions to be squeezed before they can be sent to the env.
-        #
-        self.action_squeeze = need_action_squeeze(self.env)
-
     def _define_agent_ids(self):
         """
             Define our agent_ids.
@@ -391,10 +374,6 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
         for a_idx, a_id in enumerate(self.agent_ids):
             env_action = actions[a_id]
-
-            if self.action_squeeze:
-                env_action = env_action.squeeze()
-
             gym_actions[a_idx] = env_action
 
         return tuple(gym_actions)
