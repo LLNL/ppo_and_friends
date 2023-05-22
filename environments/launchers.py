@@ -15,7 +15,7 @@ from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
 from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
 from ppo_and_friends.environments.gym.multi_binary import MultiBinaryCartPoleWrapper
 from ppo_and_friends.environments.gym.multi_binary import MultiBinaryLunarLanderWrapper
-from ppo_and_friends.environments.version_wrappers import Gym21To26
+from ppo_and_friends.environments.gym.version_wrappers import Gym21To26
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.environments.gym.atari_wrappers import *
 import torch.nn as nn
