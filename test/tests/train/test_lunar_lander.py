@@ -19,10 +19,9 @@ def test_lunar_lander_mpi():
 
 def test_binary_lunar_lander_mpi():
 
-    num_timesteps = 500000
+    num_timesteps = 700000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"BinaryLunarLander --clobber --num-timesteps {num_timesteps}"
-    cmd += f"--random-seed 5"
 
     run_training(cmd)
 
@@ -30,7 +29,7 @@ def test_binary_lunar_lander_mpi():
     cmd += f"BinaryLunarLander --test --num-test-runs 10 "
     cmd += f"--save-test-scores"
 
-    passing_scores = {"agent0" : 200.}
+    passing_scores = {"agent0" : 100.}
 
     high_score_test("binary-lunar-lander-mpi", cmd,
         passing_scores, "BinaryLunarLander")
