@@ -20,6 +20,7 @@ from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.environments.gym.atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
+import traceback
 
 try:
     from ppo_and_friends.environments.abmarl.wrappers import AbmarlWrapper
@@ -30,8 +31,8 @@ try:
     from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_blind_maze
 except Exception as e:
     msg  = "WARNING: unable to import Abmarl.\n"
-    msg += f"Abmarl error: {e}"
-    print(msg)
+    msg += "Traceback:"
+    print(traceback.format_exc())
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -540,7 +541,7 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+        actor_kw_args["hidden_size"] = 256
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
@@ -579,7 +580,7 @@ class BinaryLunarLanderLauncher(EnvironmentLauncher):
                      save_when           = save_when,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_mapping_fn,
-                     max_ts_per_ep       = 128,
+                     max_ts_per_ep       = 512,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 512,
                      normalize_obs       = True,
