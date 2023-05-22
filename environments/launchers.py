@@ -11,26 +11,26 @@ from ppo_and_friends.networks.actor_critic_networks import SplitObsNetwork
 from ppo_and_friends.networks.actor_critic_networks import LSTMNetwork
 from ppo_and_friends.networks.encoders import LinearObservationEncoder
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.environments.gym_wrappers import SingleAgentGymWrapper
-from ppo_and_friends.environments.gym_wrappers import MultiAgentGymWrapper
-from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryCartPoleWrapper
-from ppo_and_friends.environments.gym_envs.multi_binary import MultiBinaryLunarLanderWrapper
+from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
+from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
+from ppo_and_friends.environments.gym.multi_binary import MultiBinaryCartPoleWrapper
+from ppo_and_friends.environments.gym.multi_binary import MultiBinaryLunarLanderWrapper
 from ppo_and_friends.environments.version_wrappers import Gym21To26
 from ppo_and_friends.policies.utils import get_single_policy_defaults
-from .atari_wrappers import *
+from ppo_and_friends.environments.gym.atari_wrappers import *
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
 
 try:
-    from ppo_and_friends.environments.abmarl_wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.maze_env import sm_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_maze
-    from ppo_and_friends.environments.abmarl_envs.reach_the_target import abmarl_rtt_env
-    from ppo_and_friends.environments.abmarl_envs.maze_env import lg_abmarl_blind_maze
+    from ppo_and_friends.environments.abmarl.wrappers import AbmarlWrapper
+    from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_maze
+    from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_blind_maze
+    from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_maze
+    from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
+    from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_blind_maze
 except Exception as e:
-    print(e)
-    msg = "WARNING: unable to import Abmarl."
+    msg  = "WARNING: unable to import Abmarl.\n"
+    msg += f"Abmarl error: {e}"
     print(msg)
 
 from mpi4py import MPI
@@ -240,6 +240,7 @@ class PendulumLauncher(EnvironmentLauncher):
             policy_args   = policy_args)
 
         self.run_ppo(env_generator      = env_generator,
+                     ts_per_rollout     = ts_per_rollout,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
@@ -260,33 +261,50 @@ class MountainCarLauncher(EnvironmentLauncher):
                 render_mode = get_gym_render_mode(self.kw_launch_args)))
 
         actor_kw_args = {"activation" : nn.LeakyReLU()}
-        actor_kw_args["hidden_size"] = 128
+        actor_kw_args["hidden_size"]  = 32
+        actor_kw_args["hidden_depth"] = 2
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        critic_kw_args["hidden_size"]  = 64
+        critic_kw_args["hidden_depth"] = 2
 
         icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 2
+        icm_kw_args["encoded_obs_dim"] = 0
+        icm_kw_args["inverse_hidden_depth"] = 2
+        icm_kw_args["inverse_hidden_size"]  = 32
+        icm_kw_args["forward_hidden_depth"] = 2
+        icm_kw_args["forward_hidden_size"]  = 32
 
-        lr = LinearStepScheduler(
-            status_key      = "iteration",
-            initial_value   = 0.0003,
-            status_triggers = [35, 50, 60],
-            step_values     = [0.00025, 0.0002, 0.0001])
+        lr = 0.0003
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-10, 10),
+
+            #
+            # NOTE: I find that that the chosen bootstrap clip
+            # is VERY important in this environment. Too much
+            # optimism appears to lead to less exploration.
+            #
+            "bootstrap_clip"   : (-.01, 0.0),
             "enable_icm"       : True,
             "icm_kw_args"      : icm_kw_args,
+            "icm_lr"           : 0.0003,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
             policy_args   = policy_args)
+
+        save_when = ChangeInStateScheduler(
+            status_key     = "extrinsic score avg",
+            status_preface = "single_agent",
+            compare_fn     = np.greater_equal,
+            persistent     = True)
+
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(200)
 
         #
         # NOTE: This environment performs dramatically  better when
@@ -299,8 +317,10 @@ class MountainCarLauncher(EnvironmentLauncher):
         # for good performance.
         #
         self.run_ppo(env_generator      = env_generator,
+                     save_when          = save_when,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
+                     ts_per_rollout     = ts_per_rollout,
                      epochs_per_iter    = 32,
                      max_ts_per_ep      = 200,
                      ext_reward_weight  = 1./100.,
@@ -319,18 +339,21 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             SingleAgentGymWrapper(gym.make('MountainCarContinuous-v0',
                 render_mode = get_gym_render_mode(self.kw_launch_args)))
 
-        #
-        # Extra args for the actor critic models.
-        #
         actor_kw_args = {}
         actor_kw_args["activation"]  =  nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
+
+        actor_kw_args["hidden_size"]  = 128
+        actor_kw_args["hidden_depth"] = 2
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        critic_kw_args["hidden_size"]  = 128
+        critic_kw_args["hidden_depth"] = 2
 
         icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 2
+        icm_kw_args["inverse_hidden_depth"] = 2
+        icm_kw_args["inverse_hidden_size"]  = 256
+        icm_kw_args["forward_hidden_depth"] = 2
+        icm_kw_args["forward_hidden_size"]  = 256
 
         lr = 0.0003
 
@@ -339,7 +362,12 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-            "bootstrap_clip"     : (-10, 10),
+            #
+            # NOTE: I find that that the chosen bootstrap clip
+            # is VERY important in this environment. Too much
+            # optimism appears to lead to less exploration.
+            #
+            "bootstrap_clip"   : (-0.001, 0.0),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
         }
@@ -348,15 +376,25 @@ class MountainCarContinuousLauncher(EnvironmentLauncher):
             env_generator = env_generator,
             policy_args   = policy_args)
 
+        save_when = ChangeInStateScheduler(
+            status_key     = "extrinsic score avg",
+            status_preface = "single_agent",
+            compare_fn     = np.greater_equal,
+            persistent     = True)
+
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(999)
+
         #
         # I've noticed that normalizing rewards and observations
         # can slow down learning at times. It's not by much (maybe
         # 10-50 iterations).
         #
         self.run_ppo(env_generator      = env_generator,
+                     save_when          = save_when,
+                     ts_per_rollout     = ts_per_rollout,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     max_ts_per_ep      = 200,
+                     max_ts_per_ep      = 999,
                      ext_reward_weight  = 1./100.,
                      normalize_obs      = False,
                      normalize_rewards  = False,

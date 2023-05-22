@@ -2,7 +2,7 @@ from utils import run_training, high_score_test
 
 def test_mountain_car_mpi():
 
-    num_timesteps = 700000
+    num_timesteps = 300000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"MountainCar --clobber --num-timesteps {num_timesteps}"
 
@@ -19,7 +19,7 @@ def test_mountain_car_mpi():
 
 def test_mountain_car_continous_mpi():
 
-    num_timesteps = 700000
+    num_timesteps = 300000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"MountainCarContinuous --clobber --num-timesteps {num_timesteps}"
 
