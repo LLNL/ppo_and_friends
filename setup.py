@@ -30,7 +30,7 @@ dependencies = [
     'swig',
     # FIXME: abmarl currently causes prblems in github's
     # CI, so I'm commenting it out until this is fixed.
-    #'abmarl',
+    'abmarl',
 ]
 
 setup(name             = "ppo_and_friends",
