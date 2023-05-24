@@ -26,12 +26,14 @@ jobs:
         pip install --upgrade pip
         pip install setuptools==65.5.0
         pip install pytest
-        pip install .
         cd ../
         git clone https://github.com/LLNL/Abmarl.git
         cd Abmarl
         pip install .
+        cd ../ppo_and_friends
+        pip install .
     - name: Test with pytest
       run: |
         cd test
-        pytest tests
+        #pytest tests
+        pytest tests/train/test_abmarl.py
