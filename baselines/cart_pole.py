@@ -1,0 +1,53 @@
+import gymnasium as gym
+from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
+from ppo_and_friends.policies.utils import get_single_policy_defaults
+from ppo_and_friends.runners.env_runner import GymRunner
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.utils.schedulers import *
+import torch.nn as nn
+
+class CartPoleRunner(GymRunner):
+
+    def run(self):
+
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('CartPole-v0',
+                render_mode = self.get_gym_render_mode()))
+
+        actor_kw_args = {}
+        actor_kw_args["activation"] = nn.LeakyReLU()
+        critic_kw_args = actor_kw_args.copy()
+
+        lr = 0.0002
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        save_when = ChangeInStateScheduler(
+            status_key     = "extrinsic score avg",
+            status_preface = "single_agent",
+            compare_fn     = np.greater_equal,
+            persistent     = True)
+
+        self.run_ppo(**self.kw_run_args,
+                     save_when          = save_when,
+                     env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 256,
+                     ts_per_rollout     = ts_per_rollout,
+                     max_ts_per_ep      = 32,
+                     obs_clip           = (-10., 10.),
+                     reward_clip        = (-10., 10.),
+                     normalize_obs      = True,
+                     normalize_rewards  = True,
+                     normalize_adv      = True)

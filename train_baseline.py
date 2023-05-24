@@ -3,8 +3,9 @@ import random
 import numpy as np
 import argparse
 import sys
-import ppo_and_friends.environments.launchers as launchers
+from importlib import import_module
 import os
+import re
 from ppo_and_friends.utils.mpi_utils import rank_print
 import shutil
 from mpi4py import MPI
@@ -13,8 +14,14 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+def split_by_title_word(s):
+    """
+        A nice solution ripped from
+        https://stackoverflow.com/questions/64784769/python-split-a-string-but-keep-contiguous-uppercase-letters
+    """
+    return [chunk for chunk in re.split(r"([A-Z][a-z]+)", s) if chunk]
 
-def baselines():
+def train_baseline():
 
     parser = argparse.ArgumentParser()
 
@@ -172,10 +179,12 @@ def baselines():
     #
     # Launch PPO.
     #
-    class_name     = "{}Launcher".format(env_name)
-    launcher_class = getattr(launchers, class_name)
+    module_name  = '_'.join(split_by_title_word(env_name)).lower()
+    module       = import_module(f"ppo_and_friends.baselines.{module_name}")
+    class_name   = "{}Runner".format(env_name)
+    runner_class = getattr(module, class_name)
 
-    launcher = launcher_class(
+    runner = runner_class(
         random_seed           = random_seed,
         state_path            = state_path,
         load_state            = load_state,
@@ -192,7 +201,7 @@ def baselines():
         pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 
-    launcher.launch()
+    runner.run()
 
 if __name__ == "__main__":
-    baselines()
+    train_baseline()

@@ -12,7 +12,7 @@ import os
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
-from gymnasium.spaces import Dict, Tuple, Box
+from gymnasium.spaces import Dict, Tuple, Box, Discrete
 import gymnasium as gym
 
 from mpi4py import MPI

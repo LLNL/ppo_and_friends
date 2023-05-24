@@ -157,10 +157,6 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         else:
             obs, reward, done, info = self.env.step(actions)
 
-        truncated = {}
-        for key in done:
-            truncated[key] = False
-
         self.all_done = self._get_all_done(done)
         self._update_done_agents(done)
 
@@ -172,6 +168,10 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
         critic_obs = self._construct_critic_observation(
             obs, done)
+
+        truncated = {}
+        for key in done:
+            truncated[key] = False
 
         return obs, critic_obs, reward, done, truncated, info
 

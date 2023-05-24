@@ -99,12 +99,12 @@ Baseline environments and a general idea of good training settings can
 be viewed in the **Tips and Tricks** section of this README. A full list
 can also be viewed by issuing the following command:
 ```
-python train_baseline.py --help
+ppoaf-baselines --help
 ```
 
 To train a baseline environment, use the following command:
 ```
-python train_baseline.py <env_name> --num-timesteps <max_num_timesteps>
+ppoaf-baselines <env_name> --num-timesteps <max_num_timesteps>
 ```
 
 Running the same command again will result in loading the previously
@@ -113,7 +113,7 @@ saved state. You can re-run from scratch by using the `--clobber` option.
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-python train_baseline.py <env_name> --num-test-runs <num_test_runs> --render
+ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render-gif` flag.
 
@@ -121,7 +121,7 @@ By default, exploration is disabled during testing, but you can enable it
 with the `--test-explore` flag. Example:
 
 ```
-python train_baseline.py <env_name> --num-test-runs <num_test_runs> --render --test-explore
+ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render --test-explore
 ```
 
 Note that enabling exploration during testing will have varied results. I've found
@@ -161,12 +161,12 @@ not see a performance gain from increasing `envs-per-proc`.
 
 mpirun:
 ```
-mpirun -n {num_procs} python train_baseline.py {env_name} -envs-per-proc {envs_per_proc} ...
+mpirun -n {num_procs} ppoaf-baselines {env_name} -envs-per-proc {envs_per_proc} ...
 ```
 
 srun:
 ```
-srun -N1 -n {num_procs} python train_baseline.py {env_name} --envs-per-proc {envs_per_proc} ...
+srun -N1 -n {num_procs} ppoaf-baselines {env_name} --envs-per-proc {envs_per_proc} ...
 ```
 
 Some things to note:

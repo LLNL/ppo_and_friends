@@ -113,7 +113,8 @@ class AtariEnvWrapper(ABC):
                            skipped frames.
 
             Returns:
-                A tuple of form (observation, reward, done, inf), where reward
+                A tuple of form (observation, reward, terminated,
+                truncated, inf), where reward
                 is actually the sum of all rewards from the frames that were
                 stepped through.
         """
@@ -122,15 +123,15 @@ class AtariEnvWrapper(ABC):
             step_fun = self.env.step
 
         k_reward_sum = 0
-        done         = False
+        terminated   = False
         life_lost    = False
 
         for k in range(self.skip_k_frames):
-            obs, reward, s_done, info = step_func(action)
+            obs, reward, s_terminated, truncated, info = step_func(action)
 
             k_reward_sum += reward
-            done      = done or s_done
-            life_lost = life_lost or info["life lost"]
+            terminated    = terminated or s_terminated
+            life_lost     = life_lost or info["life lost"]
 
             #
             # We lost a life, but we're not done. We might need to
@@ -141,12 +142,12 @@ class AtariEnvWrapper(ABC):
             # will rely on the child class to know what it should do
             # in either case.
             #
-            if not done and self.allow_life_loss and info["life lost"]:
+            if not terminated and self.allow_life_loss and info["life lost"]:
                 obs = self.reset()
 
         info["life lost"] = life_lost
 
-        return obs, k_reward_sum, done, info
+        return obs, k_reward_sum, terminated, truncated, info
 
     def _check_if_done(self, done):
         """
@@ -318,7 +319,7 @@ class PixelHistEnvWrapper(AtariPixels):
         return self.frame_cache.copy(), {}
 
     def step(self, action):
-        cur_frame, reward, done, info = self.env.step(action)
+        cur_frame, reward, terminated, truncated, info = self.env.step(action)
 
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
@@ -336,10 +337,10 @@ class PixelHistEnvWrapper(AtariPixels):
         self.frame_cache = np.roll(self.frame_cache, -1, axis=0)
         self.frame_cache[-1] = cur_frame.copy()
 
-        done, life_lost   = self._check_if_done(done)
+        terminated, life_lost   = self._check_if_done(terminated)
         info["life lost"] = life_lost
 
-        return self.frame_cache, reward, done, False, info
+        return self.frame_cache, reward, terminated, truncated, info
 
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -391,7 +392,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         return self.ram_cache.copy(), {}
 
     def step(self, action):
-        cur_ram, reward, done, info = self.env.step(action)
+        cur_ram, reward, terminated, truncated, info = self.env.step(action)
         cur_ram  = cur_ram.astype(np.float32) / 255.
 
         self.ram_cache = np.roll(self.ram_cache, -self.ram_size)
@@ -399,10 +400,10 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         offset = self.cache_size - self.ram_size
         self.ram_cache[offset :] = cur_ram.copy()
 
-        done, life_lost   = self._check_if_done(done)
+        terminated, life_lost   = self._check_if_done(terminated)
         info["life lost"] = life_lost
 
-        return self.ram_cache.copy(), reward, done, False, info
+        return self.ram_cache.copy(), reward, terminated, truncated, info
 
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -465,7 +466,7 @@ class BreakoutEnvWrapper():
         """
         self.env.reset()
         self._set_random_start_pos()
-        obs, _, _, _ = self.fire_ball()
+        obs, _, _, _, _ = self.fire_ball()
         return obs
 
     def false_done_reset(self):
@@ -475,7 +476,7 @@ class BreakoutEnvWrapper():
 
             In this case, we need to fire the ball again.
         """
-        obs, _, _, _ = self.fire_ball()
+        obs, _, _, _, _ = self.fire_ball()
         return obs
 
 
@@ -502,7 +503,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
         action    = self.action_map[action]
         step_func = lambda a : RAMHistEnvWrapper.step(self, a)
 
-        obs, reward, done, info = self._frame_skip_step(
+        obs, reward, terminated, truncated, info = self._frame_skip_step(
             action    = action,
             step_func = step_func)
 
@@ -510,10 +511,10 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
             #
             # Return a negative reward for failure.
             #
-            if done and reward == 0:
+            if terminated and reward == 0:
                 reward = -1.
 
-        return obs, reward, done, False, info
+        return obs, reward, terminated, truncated, info
 
 
 class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
@@ -560,7 +561,7 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
         action    = self.action_map[action]
         step_func = lambda a : PixelHistEnvWrapper.step(self, a)
 
-        obs, reward, done, info = self._frame_skip_step(
+        obs, reward, terminated, truncated, info = self._frame_skip_step(
             action    = action,
             step_func = step_func)
 
@@ -568,7 +569,7 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
             #
             # Return a negative reward for failure.
             #
-            if done and reward == 0:
+            if terminated and reward == 0:
                 reward = -1.
 
-        return obs, reward, done, False, info
+        return obs, reward, terminated, truncated, info

@@ -1,0 +1,50 @@
+import gymnasium as gym
+from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
+from ppo_and_friends.policies.utils import get_single_policy_defaults
+from ppo_and_friends.runners.env_runner import GymRunner
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.utils.schedulers import *
+import torch.nn as nn
+
+class HalfCheetahRunner(GymRunner):
+
+    def run(self):
+
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('HalfCheetah-v3',
+                render_mode = self.get_gym_render_mode()))
+
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 128
+
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 256
+
+        lr = 0.0001
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
+
+        #
+        # Normalizing values seems to stabilize results in this env.
+        #
+        self.run_ppo(
+                env_generator      = env_generator,
+                policy_settings    = policy_settings,
+                policy_mapping_fn  = policy_mapping_fn,
+                batch_size         = 512,
+                max_ts_per_ep      = 32,
+                ts_per_rollout     = ts_per_rollout,
+                obs_clip           = (-10., 10.),
+                reward_clip        = (-10., 10.),
+                **self.kw_run_args)
