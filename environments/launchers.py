@@ -18,21 +18,15 @@ from ppo_and_friends.environments.gym.multi_binary import MultiBinaryLunarLander
 from ppo_and_friends.environments.gym.version_wrappers import Gym21To26
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.environments.gym.atari_wrappers import *
+from ppo_and_friends.environments.abmarl.wrappers import AbmarlWrapper
+from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_maze
+from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_blind_maze
+from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_maze
+from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
+from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_blind_maze
 import torch.nn as nn
 from ppo_and_friends.utils.schedulers import *
 import traceback
-
-try:
-    from ppo_and_friends.environments.abmarl.wrappers import AbmarlWrapper
-    from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_maze
-    from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_blind_maze
-    from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_maze
-    from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
-    from ppo_and_friends.environments.abmarl.envs.maze_env import lg_abmarl_blind_maze
-except Exception as e:
-    msg  = "WARNING: unable to import Abmarl.\n"
-    msg += "Traceback:"
-    print(traceback.format_exc())
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
