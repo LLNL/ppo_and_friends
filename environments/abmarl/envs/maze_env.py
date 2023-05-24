@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from ppo_and_friends.environments.abmarl_envs.maze_sim import AlternateMazeNavigationSim
+from ppo_and_friends.environments.abmarl.envs.maze_sim import AlternateMazeNavigationSim
 from abmarl.examples import MazeNavigationAgent
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
