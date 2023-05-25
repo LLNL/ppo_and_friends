@@ -93,6 +93,45 @@ pip install .
 
 NOTE: required packages are not yet listed.
 
+# Environments
+
+## Gymnasium
+
+Both single agent and multi-agent gymnasium games are supported through
+the `SingleAgentGymWrapper` and `MultiAgentGymWrapper`, respectively.
+For examples on how to train a gymnasium environment, see the following
+scripts:
+* `baselines/lunar_lander.py` for single agent training.
+* `baselines/pressure_plate.py` for multi agent training. NOTE: this
+   environment is also wrapped with `Gym21ToGymnasium`, which is only
+   needed for environments that only exist in gym versions <=21.
+
+## Gym <= 0.21
+
+For environments that only exist in versions <= 0.21 of Gym, you
+can use the `Gym21ToGymnasium` wrapper. See `baselines/pressure_plate.py`
+for an example.
+
+## Gym To Gymnasium
+
+Games that exist in Gym versions >= 0.26 but not Gymnasium can be tricky.
+I've found that the biggest issue is the spaces not matching up. We have
+a function `gym_space_to_gymnasium_space` in `environments/gym/version_wrappers.py`
+that can be used to (attempt to) convert spaces from Gym to Gymnasium.
+
+## Abmarl
+
+The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
+for an example.
+
+## Custom
+
+All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
+using a custom environment that doesn't conform to Gym or Abmarl standards,
+you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
+found in `environments/ppo_env_wrappers.py`.
+
+
 # Baseline Environments
 
 Baseline environments and a general idea of good training settings can
