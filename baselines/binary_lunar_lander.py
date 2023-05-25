@@ -3,7 +3,6 @@ from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
-from ppo_and_friends.environments.gym.multi_binary import MultiBinaryLunarLanderWrapper
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapper
