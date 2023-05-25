@@ -108,6 +108,7 @@ def train_baseline():
                  "Humanoid",
                  "RobotWarehouseTiny",
                  "RobotWarehouseSmall",
+                 "LevelBasedForaging",
                  "PressurePlate",
                  "AbmarlMaze",
                  "AbmarlBlindMaze",
