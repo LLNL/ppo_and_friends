@@ -3,7 +3,7 @@
 PPO and Friends is a PyTorch implementation of Proximal Policy Optimation
 along with various extra optimizations and add-ons (freinds).
 
-While this project is intended to be compatible with OpenAI's gym environments
+While this project is intended to be compatible with Gymnasium environments
 and interfaces, you'll occasionally see situtations where utilities that gym
 (or stable baselines) provides have been ignored in favor of creating our
 own versions of these utilities. These choices are made to more easily handle
@@ -257,20 +257,6 @@ are enabled, you might find that your rollouts are starting with the agent
 in this trap, which could negatively impact learning. On the other hand, if
 the traps are escapable, and escaping is a desired learned behavior, then
 using soft resets might actually be helpful in the long term.
-
-## Non-Terminal Done States
-
-### What is a non-terminal done state?
-A non-terminal done state is when an environment needs to be reset, but it
-hasn't technically reached a "terminal" state. This is type of
-done state is treated exactly the same as how we treat reaching our maximum
-allowable timesteps per episode; the episode has not reached a terminal state,
-but we're ending the trajectory.
-
-### How to use non-terminal done states
-For custom environments, you can add "non-terminal done" as an entry in the
-info dictionary. When True, this will trigger the current trajectory to end
-in a non-terminal state.
 
 # Tips And Tricks
 
