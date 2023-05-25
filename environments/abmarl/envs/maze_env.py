@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from ppo_and_friends.environments.abmarl_envs.maze_sim import AlternateMazeNavigationSim
+from ppo_and_friends.environments.abmarl.envs.maze_sim import AlternateMazeNavigationSim
 from abmarl.examples import MazeNavigationAgent
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
@@ -39,7 +39,7 @@ sm_abmarl_maze = MultiAgentWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     small_maze,
                     object_registry.copy(),
-                    overlapping={1: [3], 3: [1]},
+                    overlapping={1: set([3]), 3: set([1])},
                     observe="grid",
                 )
             )
@@ -52,7 +52,7 @@ sm_abmarl_blind_maze = MultiAgentWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     small_maze,
                     object_registry.copy(),
-                    overlapping={1: [3], 3: [1]},
+                    overlapping={1: set([3]), 3: set([1])},
                     observe="position",
                 )
             )
@@ -65,7 +65,7 @@ lg_abmarl_maze = MultiAgentWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     large_maze,
                     object_registry.copy(),
-                    overlapping={1: [3], 3: [1]},
+                    overlapping={1: set([3]), 3: set([1])},
                     observe="grid",
                     max_steps=2048,
                 )
@@ -79,7 +79,7 @@ lg_abmarl_blind_maze = MultiAgentWrapper(
                 AlternateMazeNavigationSim.build_sim_from_file(
                     large_maze,
                     object_registry.copy(),
-                    overlapping={1: [3], 3: [1]},
+                    overlapping={1: set([3]), 3: set([1])},
                     observe="position",
                     max_steps=4096,
                 )

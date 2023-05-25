@@ -1,0 +1,41 @@
+name: ppo-and-friends
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        pip install --upgrade pip
+        pip install setuptools==65.5.0
+        pip install pytest
+        #
+        # TODO: once Abmarl is updated in pip, we can
+        # get rid of this.
+        #
+        git clone https://github.com/LLNL/Abmarl.git
+        cd Abmarl
+        pip install .
+        cd ../
+        pip install .
+    - name: Test with pytest
+      run: |
+        cd test
+        pytest tests

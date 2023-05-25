@@ -3,7 +3,7 @@
 PPO and Friends is a PyTorch implementation of Proximal Policy Optimation
 along with various extra optimizations and add-ons (freinds).
 
-While this project is intended to be compatible with OpenAI's gym environments
+While this project is intended to be compatible with Gymnasium environments
 and interfaces, you'll occasionally see situtations where utilities that gym
 (or stable baselines) provides have been ignored in favor of creating our
 own versions of these utilities. These choices are made to more easily handle
@@ -93,18 +93,57 @@ pip install .
 
 NOTE: required packages are not yet listed.
 
-# Supported Environments
+# Environments
 
-Supported environments and a general idea of good training settings can
+## Gymnasium
+
+Both single agent and multi-agent gymnasium games are supported through
+the `SingleAgentGymWrapper` and `MultiAgentGymWrapper`, respectively.
+For examples on how to train a gymnasium environment, see the following
+scripts:
+* `baselines/lunar_lander.py` for single agent training.
+* `baselines/pressure_plate.py` for multi agent training. NOTE: this
+   environment is also wrapped with `Gym21ToGymnasium`, which is only
+   needed for environments that only exist in gym versions <=21.
+
+## Gym <= 0.21
+
+For environments that only exist in versions <= 0.21 of Gym, you
+can use the `Gym21ToGymnasium` wrapper. See `baselines/pressure_plate.py`
+for an example.
+
+## Gym To Gymnasium
+
+Games that exist in Gym versions >= 0.26 but not Gymnasium can be tricky.
+I've found that the biggest issue is the spaces not matching up. We have
+a function `gym_space_to_gymnasium_space` in `environments/gym/version_wrappers.py`
+that can be used to (attempt to) convert spaces from Gym to Gymnasium.
+
+## Abmarl
+
+The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
+for an example.
+
+## Custom
+
+All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
+using a custom environment that doesn't conform to Gym or Abmarl standards,
+you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
+found in `environments/ppo_env_wrappers.py`.
+
+
+# Baseline Environments
+
+Baseline environments and a general idea of good training settings can
 be viewed in the **Tips and Tricks** section of this README. A full list
 can also be viewed by issuing the following command:
 ```
-python main.py --help
+ppoaf-baselines --help
 ```
 
-To train an already supported environment, use the following command:
+To train a baseline environment, use the following command:
 ```
-python main.py -e <env_name> --num-timesteps <max_num_timesteps>
+ppoaf-baselines <env_name> --num-timesteps <max_num_timesteps>
 ```
 
 Running the same command again will result in loading the previously
@@ -113,7 +152,7 @@ saved state. You can re-run from scratch by using the `--clobber` option.
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-python main.py -e <env_name> --num-test-runs <num_test_runs> --render
+ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render-gif` flag.
 
@@ -121,7 +160,7 @@ By default, exploration is disabled during testing, but you can enable it
 with the `--test-explore` flag. Example:
 
 ```
-python main.py -e <env_name> --num-test-runs <num_test_runs> --render --test-explore
+ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render --test-explore
 ```
 
 Note that enabling exploration during testing will have varied results. I've found
@@ -161,12 +200,12 @@ not see a performance gain from increasing `envs-per-proc`.
 
 mpirun:
 ```
-mpirun -n {num_procs} python main.py -e {env_name} --envs-per-proc {envs_per_proc} ...
+mpirun -n {num_procs} ppoaf-baselines {env_name} -envs-per-proc {envs_per_proc} ...
 ```
 
 srun:
 ```
-srun -N1 -n {num_procs} python main.py -e {env_name} --envs-per-proc {envs_per_proc} ...
+srun -N1 -n {num_procs} ppoaf-baselines {env_name} --envs-per-proc {envs_per_proc} ...
 ```
 
 Some things to note:
@@ -227,7 +266,7 @@ we can take a short cut by artificially generating those directions and
 their trajectories from a single observation.
 
 ### How to utilize observational augmentations
-Both `run_ppo`, located in `environments/launchers.py` and our `PPO` class have
+Both `run`, located in `runners/env_runner.py` and our `PPO` class have
 an `obs_augment` argument that, when enabled, will try to wrap your environment
 in `AugmentingEnvWrapper`. This wrapper expects (and checks) that your
 environment has a method named `augment_observation`, which takes a *single*
@@ -258,20 +297,6 @@ in this trap, which could negatively impact learning. On the other hand, if
 the traps are escapable, and escaping is a desired learned behavior, then
 using soft resets might actually be helpful in the long term.
 
-## Non-Terminal Done States
-
-### What is a non-terminal done state?
-A non-terminal done state is when an environment needs to be reset, but it
-hasn't technically reached a "terminal" state. This is type of
-done state is treated exactly the same as how we treat reaching our maximum
-allowable timesteps per episode; the episode has not reached a terminal state,
-but we're ending the trajectory.
-
-### How to use non-terminal done states
-For custom environments, you can add "non-terminal done" as an entry in the
-info dictionary. When True, this will trigger the current trajectory to end
-in a non-terminal state.
-
 # Tips And Tricks
 
 **Action Space**
@@ -300,8 +325,7 @@ policy_settings = { "actor_0" : \
 ...
 ```
 
-See the `HumanoidLauncher` in `environments/launchers.py` for a more
-concrete example.
+See `baselines/humanoid.py` for a more concrete example.
 
 **OpenAI Gym**
 
@@ -350,7 +374,7 @@ GP104BM [GeForce GTX 1070 Mobile]
 
 I have by no means run any comprehensive studies to figure out what the
 optimal choices are for hyper-parameters, but the settings located
-in the environment launchers tend to work well. In general, using as
+in the baselines tend to work well. In general, using as
 many processors as you have access to will speed up training, but
 there is also communication overhead that will become more noticable
 as you scale up. This, combined with the limitations of how often

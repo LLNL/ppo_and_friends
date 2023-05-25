@@ -4,13 +4,14 @@
 """
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
+from ppo_and_friends.environments.gym.version_wrappers import gym_space_to_gymnasium_space
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
-from gym.spaces import Dict, Box
+from gymnasium.spaces import Dict, Box
+import gymnasium as gym
 import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-
 
 class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
@@ -71,6 +72,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         """
             Define our multi-agent observation and action spaces.
         """
+
         if getattr(self.env, "observation_space", None) is not None:
             #
             # NOTE: I think abmarl does some funny business behind the scenes,
@@ -110,6 +112,16 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             msg += f"Action keys: {action_keys}"
             rank_print(msg)
             comm.Abort()
+
+        #
+        # FIXME: Temporary hack! We need all spaces to be from the
+        # gymnasium module, but Abmarl currently is using gym.
+        #
+        for agent_id in self.action_space:
+            self.action_space = gym_space_to_gymnasium_space(self.action_space)
+
+        for agent_id in self.observation_space:
+            self.observation_space = gym_space_to_gymnasium_space(self.observation_space)
 
     def _get_all_done(self, done):
         """
@@ -157,7 +169,11 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         critic_obs = self._construct_critic_observation(
             obs, done)
 
-        return obs, critic_obs, reward, done, info
+        truncated = {}
+        for key in done:
+            truncated[key] = False
+
+        return obs, critic_obs, reward, done, truncated, info
 
     def reset(self):
         """
@@ -195,3 +211,13 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
         self.env.render(fig=self.fig)
 
+
+    def seed(self, seed):
+        """
+            Set the Abmarl seed. It looks like the Abmarl tests just
+            use numpy to set the seed, so that's what we'll do.
+
+            Arguments:
+                seed (int)    The seed to set.
+        """
+        np.random.seed(seed)

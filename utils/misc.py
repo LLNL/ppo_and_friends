@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from .stats import RunningMeanStd
-from gym.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
+from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
 import os
 import sys
 import pickle
@@ -41,58 +41,6 @@ def get_action_dtype(action_space):
         elif type(action_space) == MultiDiscrete:
             return "multi-discrete"
     return "unknown"
-
-
-def need_action_squeeze(env):
-    """
-        Do we need to squeeze the actions before sending them to
-        the environment? This is typically an issue with the env,
-        but we can handle it ourselves.
-
-        Arguments:
-            env    The environment of interest.
-
-        Returns:
-            Whether or not we need to squeeze our actions.
-    """
-
-    need_action_squeze = False
-    act_type = type(env.action_space)
-
-    if (issubclass(act_type, Box) or
-        issubclass(act_type, MultiBinary) or
-        issubclass(act_type, MultiDiscrete)):
-
-        action = env.action_space.sample()
-
-        try:
-            padded_action = np.expand_dims(action, axis=0)
-            env.reset()
-            env.step(padded_action)
-            env.reset()
-            need_action_squeeze = False
-        except:
-            env.reset()
-            env.step(action)
-            env.reset()
-            need_action_squeeze = True
-
-    elif issubclass(act_type, Discrete):
-        need_action_squeeze = True
-    elif issubclass(act_type, Tuple):
-        need_action_squeeze = False
-    else:
-        msg  = "ERROR: unsupported action space "
-        msg += "{}".format(env.action_space)
-        rank_print(msg)
-        comm.Abort()
-
-    #
-    # Reset the soft_resets.
-    #
-    env.need_hard_reset = True
-
-    return need_action_squeeze
 
 
 def update_optimizer_lr(optim, lr):

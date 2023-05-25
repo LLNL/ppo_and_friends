@@ -1,10 +1,11 @@
-import gym
 import torch
 import random
 import numpy as np
 import argparse
-from ppo_and_friends.environments.launchers import *
+import sys
+from importlib import import_module
 import os
+import re
 from ppo_and_friends.utils.mpi_utils import rank_print
 import shutil
 from mpi4py import MPI
@@ -13,8 +14,14 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+def split_by_title_word(s):
+    """
+        A nice solution ripped from
+        https://stackoverflow.com/questions/64784769/python-split-a-string-but-keep-contiguous-uppercase-letters
+    """
+    return [chunk for chunk in re.split(r"([A-Z][a-z]+)", s) if chunk]
 
-if __name__ == "__main__":
+def train_baseline():
 
     parser = argparse.ArgumentParser()
 
@@ -30,6 +37,10 @@ if __name__ == "__main__":
         help="If used with --test, this will define the number of test "
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
+
+    parser.add_argument("--save-test-scores", action="store_true",
+        help="If used with --test, the test scores for each agent will be "
+        "saved as a pickle file in the output directory.")
 
     parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
@@ -73,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    parser.add_argument("--environment", "-e", type=str, required=True,
+    parser.add_argument("environment", type=str,
         help="Which environment should we train or test?",
         choices=["CartPole",
                  "Pendulum",
@@ -113,6 +124,7 @@ if __name__ == "__main__":
     test_explore       = args.test_explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
+    save_test_scores   = args.save_test_scores
     env_name           = args.environment
     state_path         = os.path.join(args.state_path, "saved_states", env_name)
     clobber            = args.clobber
@@ -146,9 +158,10 @@ if __name__ == "__main__":
     # Set random seeds (this doesn't guarantee reproducibility, but it should
     # help).
     #
-    torch.manual_seed(random_seed)
-    random.seed(random_seed)
-    np.random.seed(random_seed)
+    if random_seed >= 0:
+        torch.manual_seed(random_seed)
+        random.seed(random_seed)
+        np.random.seed(random_seed)
 
     if force_determinism:
         torch.use_deterministic_algorithms(True)
@@ -167,10 +180,12 @@ if __name__ == "__main__":
     #
     # Launch PPO.
     #
-    class_name     = "{}Launcher".format(env_name)
-    launcher_class = getattr(sys.modules[__name__], class_name)
+    module_name  = '_'.join(split_by_title_word(env_name)).lower()
+    module       = import_module(f"ppo_and_friends.baselines.{module_name}")
+    class_name   = "{}Runner".format(env_name)
+    runner_class = getattr(module, class_name)
 
-    launcher = launcher_class(
+    runner = runner_class(
         random_seed           = random_seed,
         state_path            = state_path,
         load_state            = load_state,
@@ -183,7 +198,11 @@ if __name__ == "__main__":
         envs_per_proc         = envs_per_proc,
         test                  = test,
         explore_while_testing = test_explore,
+        save_test_scores      = save_test_scores,
         pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 
-    launcher.launch()
+    runner.run()
+
+if __name__ == "__main__":
+    train_baseline()

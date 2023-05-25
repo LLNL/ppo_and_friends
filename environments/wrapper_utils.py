@@ -36,8 +36,7 @@ def wrap_environment(
     """
     #
     # Begin adding wrappers. Order matters!
-    # The first wrapper will always be either a standard vectorization
-    # or a multi-agent wrapper. We currently don't support combining them.
+    # The first wrapper will always be a standard vectorization.
     #
     env = VectorizedEnv(
         env_generator = env_generator,
@@ -46,9 +45,9 @@ def wrap_environment(
 
     #
     # For reproducibility, we need to set the environment's random
-    # seeds. Let's allow testing to be random.
+    # seeds.
     #
-    if not test_mode:
+    if random_seed >= 0:
         env.set_random_seed(random_seed)
 
     #
