@@ -227,7 +227,7 @@ we can take a short cut by artificially generating those directions and
 their trajectories from a single observation.
 
 ### How to utilize observational augmentations
-Both `run_ppo`, located in `environments/launchers.py` and our `PPO` class have
+Both `run`, located in `runners/env_runner.py` and our `PPO` class have
 an `obs_augment` argument that, when enabled, will try to wrap your environment
 in `AugmentingEnvWrapper`. This wrapper expects (and checks) that your
 environment has a method named `augment_observation`, which takes a *single*
@@ -300,8 +300,7 @@ policy_settings = { "actor_0" : \
 ...
 ```
 
-See the `HumanoidLauncher` in `environments/launchers.py` for a more
-concrete example.
+See `baselines/humanoid.py` for a more concrete example.
 
 **OpenAI Gym**
 
@@ -350,7 +349,7 @@ GP104BM [GeForce GTX 1070 Mobile]
 
 I have by no means run any comprehensive studies to figure out what the
 optimal choices are for hyper-parameters, but the settings located
-in the environment launchers tend to work well. In general, using as
+in the baselines tend to work well. In general, using as
 many processors as you have access to will speed up training, but
 there is also communication overhead that will become more noticable
 as you scale up. This, combined with the limitations of how often
