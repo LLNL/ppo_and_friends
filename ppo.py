@@ -1077,7 +1077,7 @@ class PPO(object):
                     values               = value[agent_id],
                     log_probs            = log_prob[agent_id],
                     rewards              = reward[agent_id],
-                    where_done           = where_term)#FIXME: change naming to where_terminal
+                    where_done           = where_term)
 
                 rollout_max_ext_reward[policy_id] = \
                     max(rollout_max_ext_reward[policy_id],

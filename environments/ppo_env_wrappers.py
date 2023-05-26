@@ -478,6 +478,13 @@ class PPOEnvironmentWrapper(ABC):
             rank_print(msg)
             comm.Abort()
 
+    def _reset_done_agents(self):
+        """
+            Reset all agents to being not done.
+        """
+        for agent_id in self.agents_done:
+            self.agents_done[agent_id] = False
+
     def _update_done_agents(self, done):
         """
             Update our dictionary of done agents.
@@ -504,6 +511,25 @@ class PPOEnvironmentWrapper(ABC):
                 filtered_actions[agent_id] = actions[agent_id]
 
         return filtered_actions
+
+    def _get_done_dict(self, terminal, truncated):
+        """
+            Given terminal and truncated dictionaries, create a
+            "done" dictionary.
+
+            Arguments:
+                terminal (dict)    The terminal dictionary.
+                truncated (dict)   The truncated dictionary.
+
+            Returns:
+                A "done" dictionary.
+        """
+        done = {}
+        for agent_id in terminal:
+            assert agent_id in truncated
+            done[agent_id] = terminal[agent_id] or truncated[agent_id]
+
+        return done
 
     def _apply_death_mask(self, obs, reward, done, info):
         """

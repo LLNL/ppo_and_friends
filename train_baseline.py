@@ -117,6 +117,7 @@ def train_baseline():
                  "AbmarlReachTheTarget",
                  "BinaryCartPole",
                  "BinaryLunarLander",
+                 "PistonBall",
                  ])
 
     args               = parser.parse_args()
