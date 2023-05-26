@@ -27,6 +27,8 @@ dependencies = [
     'moviepy',
     'torch>=1.10.2,<2.0',
     'swig',
+    'pettingzoo==1.23',
+    'pymunk',
     # FIXME: abmarl currently causes prblems in github's
     # CI, so I'm commenting it out until this is fixed.
     #'abmarl',
