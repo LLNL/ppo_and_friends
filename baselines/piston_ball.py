@@ -1,6 +1,6 @@
 from pettingzoo.butterfly import pistonball_v6
 from ppo_and_friends.policies.utils import get_single_policy_defaults
-from ppo_and_friends.environments.petting_zoo.wrappers import PPOZooWrapper
+from ppo_and_friends.environments.petting_zoo.wrappers import PPOParallelZooWrapper
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.actor_critic_networks import ZooPixelNetwork
 from ppo_and_friends.utils.schedulers import *
@@ -10,10 +10,9 @@ class PistonBallRunner(GymRunner):
 
     def run(self):
         env_generator = lambda : \
-            PPOZooWrapper(
-               pistonball_v6.parallel_env(
-                    render_mode = self.get_gym_render_mode(),
-                    continuous  = True),
+            PPOParallelZooWrapper(
+                pistonball_v6.parallel_env(
+                    render_mode = self.get_gym_render_mode()),
                 #
                 # Each agent views the entire screen, so the "local"
                 # view is actually global.
