@@ -1,5 +1,5 @@
 """
-    This module contains wrappers for gym environments.
+    This module contains wrappers for petting zoo environments.
 """
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -10,12 +10,13 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-class PPOZooWrapper(PPOEnvironmentWrapper):
+class PPOParallelZooWrapper(PPOEnvironmentWrapper):
     """
+        A wrapper for parallel petting zoo environments.
     """
     def __init__(self, *args, **kw_args):
 
-        super(PPOZooWrapper, self).__init__(
+        super(PPOParallelZooWrapper, self).__init__(
             *args, **kw_args)
 
         self.random_seed = None
@@ -68,6 +69,24 @@ class PPOZooWrapper(PPOEnvironmentWrapper):
                 return False
         return True
 
+    def _conform_actions(self, actions):
+        """
+            Make sure that our actions conform to the environment's
+            requirements.
+
+            Arguments:
+                actions (dict)    The dictionary mapping agents to actions.
+
+            Returns:
+                A copy of actions where the actions are reshaped to match
+                the agent's action space.
+        """
+        c_actions = {}
+        for agent_id in actions:
+            c_actions[agent_id] = \
+                actions[agent_id].reshape(self.action_space[agent_id].shape)
+        return c_actions
+
     def step(self, actions):
         """
             Take a step in the simulation.
@@ -79,10 +98,10 @@ class PPOZooWrapper(PPOEnvironmentWrapper):
                 A tuple of form (actor_observation, critic_observation,
                 reward, terminal, truncated, info)
         """
-        # TODO: need to implement turn masking.
         actions = self._filter_done_agent_actions(actions)
 
-        obs, reward, terminal, truncated, info = self.env.step(actions)
+        obs, reward, terminal, truncated, info = \
+            self.env.step(self._conform_actions(actions))
 
         done = self._get_done_dict(terminal, truncated)
 
