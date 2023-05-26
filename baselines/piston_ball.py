@@ -10,8 +10,10 @@ class PistonBallRunner(GymRunner):
 
     def run(self):
         env_generator = lambda : \
-            PPOZooWrapper(pistonball_v6.parallel_env(
-                render_mode       = self.get_gym_render_mode()),
+            PPOZooWrapper(
+               pistonball_v6.parallel_env(
+                    render_mode = self.get_gym_render_mode(),
+                    continuous  = True),
                 #
                 # Each agent views the entire screen, so the "local"
                 # view is actually global.
@@ -27,11 +29,6 @@ class PistonBallRunner(GymRunner):
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
-
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
         critic_kw_args = actor_kw_args.copy()
 
         lr = 0.0003

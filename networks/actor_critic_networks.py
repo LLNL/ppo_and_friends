@@ -292,7 +292,6 @@ class ZooPixelNetwork(PPOConv2dNetwork):
         height     = in_shape[0]
         width      = in_shape[1]
         channels   = in_shape[2]
-        print(f"{height}, {width}")#FIXME
 
         k_s  = (8, 8)
         strd = (8, 4)
@@ -321,7 +320,6 @@ class ZooPixelNetwork(PPOConv2dNetwork):
         height = get_conv2d_out_size(height, pad[0], k_s[0], strd[0])
         width  = get_conv2d_out_size(width, pad[1], k_s[1], strd[1])
 
-        print(f"{height}, {width}")#FIXME
         self.l1 = init_layer(nn.Linear(height * width * 64, 512))
         self.l2 = init_layer(nn.Linear(512, out_dim), weight_std=out_init)
 
