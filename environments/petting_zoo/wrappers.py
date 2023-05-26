@@ -107,7 +107,7 @@ class PPOZooWrapper(PPOEnvironmentWrapper):
             Returns:
                 A tuple of form (actor_observation, critic_observation).
         """
-        obs = self.env.reset(seed = self.random_seed)
+        obs , info = self.env.reset(seed = self.random_seed)
 
         #
         # Zoo requires the random seed to be set
