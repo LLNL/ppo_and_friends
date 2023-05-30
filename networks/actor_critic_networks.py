@@ -393,7 +393,6 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         height = get_conv2d_out_size(height, pad, k_s, strd)
         width  = get_conv2d_out_size(width, pad, k_s, strd)
 
-        print(f"{height}, {width}")#FIXME
         self.l1 = init_layer(nn.Linear(height * width * 64, 512))
         self.l2 = init_layer(nn.Linear(512, out_dim), weight_std=out_init)
 

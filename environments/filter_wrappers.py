@@ -438,13 +438,11 @@ class RewardNormalizer(IdentityWrapper):
                 batch_size = reward[agent_id].shape[0]
 
                 for b_idx in range(batch_size):
-                    if "natural reward" not in info[agent_id][b_idx]:
-                        info[agent_id][b_idx]["natural reward"] = \
-                            deepcopy(reward[agent_id][b_idx])
+                    info[agent_id][b_idx]["natural reward"] = \
+                        deepcopy(reward[agent_id][b_idx])
             else:
-                if "natural reward" not in info[agent_id]:
-                    info[agent_id]["natural reward"] = \
-                        deepcopy(reward[agent_id])
+                info[agent_id]["natural reward"] = \
+                    deepcopy(reward[agent_id])
 
             reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
@@ -604,11 +602,12 @@ class GenericClipper(IdentityWrapper):
                               needing to be clipped.
 
             Returns:
-                The agent_dict after clipping has been applied.
+                A new agent dictionary s.t. all values have been clipped.
         """
+        clipped_dict = {}
         for agent_id in agent_dict:
-            agent_dict[agent_id] = self._clip(agent_dict[agent_id])
-        return agent_dict
+            clipped_dict[agent_id] = self._clip(agent_dict[agent_id])
+        return clipped_dict
 
     def _clip(self, val):
         """
@@ -716,13 +715,11 @@ class RewardClipper(GenericClipper):
                 batch_size = reward[agent_id].shape[0]
 
                 for b_idx in range(batch_size):
-                    if "natural reward" not in info[agent_id][b_idx]:
-                        info[agent_id][b_idx]["natural reward"] = \
-                            deepcopy(reward[agent_id][b_idx])
+                    info[agent_id][b_idx]["natural reward"] = \
+                        deepcopy(reward[agent_id][b_idx])
             else:
-                if "natural reward" not in info[agent_id]:
-                    info[agent_id]["natural reward"] = \
-                        deepcopy(reward[agent_id])
+                info[agent_id]["natural reward"] = \
+                    deepcopy(reward[agent_id])
 
         reward = self._apply_agent_clipping(reward)
 
