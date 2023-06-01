@@ -113,7 +113,13 @@ class IdentityWrapper(ABC):
         self.critic_obs_cache = deepcopy(critic_obs)
         self.need_hard_reset  = False
 
-        return obs, critic_obs, reward, terminated, truncated, info
+        #
+        # NOTE: environments often return a reference to their info
+        # dictionary. We sometimes add extra info to this, so we need
+        # to make a copy to make sure things workout correctly (see
+        # natural reward logic in filter wrappers for example).
+        #
+        return obs, critic_obs, reward, terminated, truncated, deepcopy(info)
 
     def step(self, action):
         """

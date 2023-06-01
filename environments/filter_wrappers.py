@@ -438,11 +438,13 @@ class RewardNormalizer(IdentityWrapper):
                 batch_size = reward[agent_id].shape[0]
 
                 for b_idx in range(batch_size):
-                    info[agent_id][b_idx]["natural reward"] = \
-                        deepcopy(reward[agent_id][b_idx])
+                    if "natural reward" not in info[agent_id][b_idx]:
+                        info[agent_id][b_idx]["natural reward"] = \
+                            deepcopy(reward[agent_id][b_idx])
             else:
-                info[agent_id]["natural reward"] = \
-                    deepcopy(reward[agent_id])
+                if "natural reward" not in info[agent_id]:
+                    info[agent_id]["natural reward"] = \
+                        deepcopy(reward[agent_id])
 
             reward[agent_id] = self.normalize(agent_id, reward[agent_id])
 
@@ -715,11 +717,13 @@ class RewardClipper(GenericClipper):
                 batch_size = reward[agent_id].shape[0]
 
                 for b_idx in range(batch_size):
-                    info[agent_id][b_idx]["natural reward"] = \
-                        deepcopy(reward[agent_id][b_idx])
+                    if "natural reward" not in info[agent_id][b_idx]:
+                        info[agent_id][b_idx]["natural reward"] = \
+                            deepcopy(reward[agent_id][b_idx])
             else:
-                info[agent_id]["natural reward"] = \
-                    deepcopy(reward[agent_id])
+                if "natural reward" not in info[agent_id]:
+                    info[agent_id]["natural reward"] = \
+                        deepcopy(reward[agent_id])
 
         reward = self._apply_agent_clipping(reward)
 
