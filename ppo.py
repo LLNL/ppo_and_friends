@@ -29,10 +29,10 @@ class PPO(object):
 
     def __init__(self,
                  env_generator,
-                 device,
-                 random_seed,
                  policy_settings,
                  policy_mapping_fn,
+                 device              = 'cpu',
+                 random_seed         = None,
                  envs_per_proc       = 1,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
@@ -63,6 +63,10 @@ class PPO(object):
             Parameters:
                  env_generator        A function that creates instances of
                                       the environment to learn from.
+                 policy_settings      A dictionary containing RLLib-like
+                                      policy settings.
+                 policy_mapping_fn    A function mapping agent ids to
+                                      policy ids.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
                  envs_per_proc        The number of environment instances each
