@@ -64,7 +64,7 @@ def test_policy(ppo,
                 env.render(frame_pause = frame_pause)
 
             elif render_gif:
-                gif_frames.append(env.render(mode = "rgb_array"))
+                gif_frames.append(env.render())
 
             actions = {}
             for agent_id in obs:

@@ -78,6 +78,8 @@ class GymRunner(EnvironmentRunner):
         """
         if self.kw_run_args["render"]:
             return "human"
+        elif self.kw_run_args["render_gif"]:
+            return "rgb_array"
         else:
             return None
 
