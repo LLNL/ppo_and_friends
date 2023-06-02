@@ -41,7 +41,7 @@ class MPESimpleTagRunner(GymRunner):
 
         lr = 0.0003
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
