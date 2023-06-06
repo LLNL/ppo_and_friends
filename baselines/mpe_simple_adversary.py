@@ -17,13 +17,10 @@ class MPESimpleAdversaryRunner(GymRunner):
             PPOParallelZooWrapper(
                 simple_adversary_v3.parallel_env(
                     N=2,
-                    max_cycles=25,
+                    max_cycles=32,
                     continuous_actions=False,
                     render_mode = self.get_gym_render_mode()),
-                #
-                # Each agent observes all other agents in this
-                # scenario.
-                #
+
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
@@ -33,11 +30,11 @@ class MPESimpleAdversaryRunner(GymRunner):
         actor_kw_args["hidden_size"] = 64
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        critic_kw_args["hidden_size"] = 256
 
         critic_kw_args = actor_kw_args.copy()
 
-        lr = 0.0003
+        lr = 0.0002
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
 
@@ -66,11 +63,11 @@ class MPESimpleAdversaryRunner(GymRunner):
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
-                     max_ts_per_ep       = 16,
+                     max_ts_per_ep       = 32,
                      ts_per_rollout      = ts_per_rollout,
-                     batch_size          = 32,
-                     normalize_obs       = True,
+                     batch_size          = 64,
+                     normalize_obs       = False,
                      normalize_rewards   = True,
-                     obs_clip            = (-10., 10.),
-                     reward_clip         = (-10., 10.),
+                     obs_clip            = None,
+                     reward_clip         = None,
                      **self.kw_run_args)

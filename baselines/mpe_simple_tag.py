@@ -22,10 +22,7 @@ class MPESimpleTagRunner(GymRunner):
                     max_cycles=128,
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
-                #
-                # Each agent observes all other agents in this
-                # scenario.
-                #
+
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 

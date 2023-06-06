@@ -49,7 +49,7 @@ class PPO(object):
                  render              = False,
                  frame_pause         = 0.0,
                  load_state          = False,
-                 state_path          = "./",
+                 state_path          = "./saved_state",
                  save_when           = None,
                  pickle_class        = False,
                  soft_resets         = False,
