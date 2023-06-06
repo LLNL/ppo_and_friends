@@ -1784,7 +1784,7 @@ class PPO(object):
             Save all information required for a restart.
         """
         if self.verbose:
-            rank_print("\nSaving state")
+            rank_print("Saving state")
 
         if self.test_mode:
             msg = "WARNING: save() was called while in test mode. Disregarding."
