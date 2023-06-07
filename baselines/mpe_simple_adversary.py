@@ -21,20 +21,20 @@ class MPESimpleAdversaryRunner(GymRunner):
                     continuous_actions=False,
                     render_mode = self.get_gym_render_mode()),
 
-                critic_view       = "local",
+                critic_view       = "policy",
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+        actor_kw_args["hidden_size"] = 256
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
+        critic_kw_args["hidden_size"] = 512
 
         critic_kw_args = actor_kw_args.copy()
 
-        lr = 0.0002
+        lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
 
@@ -63,11 +63,11 @@ class MPESimpleAdversaryRunner(GymRunner):
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
-                     max_ts_per_ep       = 32,
+                     max_ts_per_ep       = 16,
                      ts_per_rollout      = ts_per_rollout,
-                     batch_size          = 64,
+                     batch_size          = 128,
                      normalize_obs       = False,
-                     normalize_rewards   = True,
-                     obs_clip            = None,
-                     reward_clip         = None,
+                     normalize_rewards   = False,
+                     obs_clip            = (-10, 10),
+                     reward_clip         = (-10, 10),
                      **self.kw_run_args)

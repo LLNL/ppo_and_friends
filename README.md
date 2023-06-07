@@ -560,3 +560,79 @@ see a decent policy. See the **Environment Setttings** section for details.
 <img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/PressurePlate.gif" width="300" height="200" />
 
 - **test score (averaged across all agents): -19.27**
+
+## MPESimpleAdversary
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MPESimpleAdversary.gif" width="300" height="200" />
+
+- **test scores for individual agents:**
+
+```
+Agent adversary_0:
+    Ran env 3 times.
+    Ran 96 total time steps.
+    Ran 32.0 time steps on average.
+    Lowest score: -17.08993209169898
+    Highest score: -7.286026444287251
+    Average score: -11.464761470637379
+
+Agent agent_0:
+    Ran env 3 times.
+    Ran 96 total time steps.
+    Ran 32.0 time steps on average.
+    Lowest score: 1.3052540572620759
+    Highest score: 8.179996521593692
+    Average score: 3.964994910365373
+
+Agent agent_1:
+    Ran env 3 times.
+    Ran 96 total time steps.
+    Ran 32.0 time steps on average.
+    Lowest score: 1.3052540572620759
+    Highest score: 8.179996521593692
+    Average score: 3.964994910365373
+```
+
+## MPESimpleTag
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MPESimpleTag.gif" width="300" height="200" />
+
+- **test scores for individual agents:**
+```
+Agent adversary_0:
+    Ran env 1 times.
+    Ran 128 total time steps.
+    Ran 128.0 time steps on average.
+    Lowest score: 120.0
+    Highest score: 120.0
+    Average score: 120.0
+
+Agent adversary_1:
+    Ran env 1 times.
+    Ran 128 total time steps.
+    Ran 128.0 time steps on average.
+    Lowest score: 120.0
+    Highest score: 120.0
+    Average score: 120.0
+
+Agent adversary_2:
+    Ran env 1 times.
+    Ran 128 total time steps.
+    Ran 128.0 time steps on average.
+    Lowest score: 120.0
+    Highest score: 120.0
+    Average score: 120.0
+
+Agent agent_0:
+    Ran env 1 times.
+    Ran 128 total time steps.
+    Ran 128.0 time steps on average.
+    Lowest score: -153.7096730958602
+    Highest score: -153.7096730958602
+    Average score: -153.7096730958602
+```
+
+## MPESimpleSpread
+<img src="https://github.com/aowen87/ppo_and_friends/blob/main/gifs/MPESimpleSpread.gif" width="300" height="200" />
+
+- **test scores for individual agents:**
+```
+```
