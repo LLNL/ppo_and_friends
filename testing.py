@@ -8,9 +8,10 @@ import os
 
 def test_policy(ppo,
                 explore,
-                render_gif,
                 num_test_runs,
                 device,
+                render_gif       = False,
+                gif_fps          = 15,
                 frame_pause      = 0.0,
                 save_test_scores = False,
                 **kw_args):
@@ -22,6 +23,7 @@ def test_policy(ppo,
             explore          Bool determining whether or not exploration should
                              be enabled while testing.
             render_gif       Create a gif from the renderings.
+            gif_fps          The frames per second for rendering a gif.
             num_test_runs    How many times should we run in the environment?
             device           The device to infer on.
             frame_pause      If rendering, sleep frame_pause seconds between
@@ -138,5 +140,6 @@ def test_policy(ppo,
 
         save_frames_as_gif(
             frames   = gif_frames,
+            fps      = gif_fps,
             out_path = out_path,
             filename = "test.gif")
