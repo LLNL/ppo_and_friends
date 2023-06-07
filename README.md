@@ -635,4 +635,27 @@ Agent agent_0:
 
 - **test scores for individual agents:**
 ```
+Agent agent_0:
+    Ran env 5 times.
+    Ran 320 total time steps.
+    Ran 64.0 time steps on average.
+    Lowest score: -20.294600811907934
+    Highest score: -10.20188162020333
+    Average score: -17.444208170487293
+
+Agent agent_1:
+    Ran env 5 times.
+    Ran 320 total time steps.
+    Ran 64.0 time steps on average.
+    Lowest score: -20.294600811907934
+    Highest score: -10.20188162020333
+    Average score: -16.74420817048731
+
+Agent agent_2:
+    Ran env 5 times.
+    Ran 320 total time steps.
+    Ran 64.0 time steps on average.
+    Lowest score: -20.294600811907934
+    Highest score: -10.20188162020333
+    Average score: -17.344208170487292
 ```
