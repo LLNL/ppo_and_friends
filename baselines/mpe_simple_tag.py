@@ -23,16 +23,20 @@ class MPESimpleTagRunner(GymRunner):
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
 
-                critic_view       = "local",
+                #
+                # Using the "policy" view (MAPPO) results in much more
+                # interesting behvaiors from the adversaries in this game.
+                #
+                critic_view       = "policy",
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
+        actor_kw_args["hidden_size"] = 256
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
+        critic_kw_args["hidden_size"] = 512
 
         critic_kw_args = actor_kw_args.copy()
 
@@ -67,9 +71,9 @@ class MPESimpleTagRunner(GymRunner):
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 64,
                      ts_per_rollout      = ts_per_rollout,
-                     batch_size          = 128,
+                     batch_size          = 256,
                      normalize_obs       = False,
                      obs_clip            = None,
-                     normalize_rewards   = True,
+                     normalize_rewards   = False,
                      reward_clip         = None,
                      **self.kw_run_args)

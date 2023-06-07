@@ -598,36 +598,36 @@ Agent agent_1:
 - **test scores for individual agents:**
 ```
 Agent adversary_0:
-    Ran env 1 times.
-    Ran 128 total time steps.
+    Ran env 3 times.
+    Ran 384 total time steps.
     Ran 128.0 time steps on average.
-    Lowest score: 120.0
-    Highest score: 120.0
-    Average score: 120.0
+    Lowest score: 180.0
+    Highest score: 280.0
+    Average score: 226.66666666666666
 
 Agent adversary_1:
-    Ran env 1 times.
-    Ran 128 total time steps.
+    Ran env 3 times.
+    Ran 384 total time steps.
     Ran 128.0 time steps on average.
-    Lowest score: 120.0
-    Highest score: 120.0
-    Average score: 120.0
+    Lowest score: 180.0
+    Highest score: 280.0
+    Average score: 226.66666666666666
 
 Agent adversary_2:
-    Ran env 1 times.
-    Ran 128 total time steps.
+    Ran env 3 times.
+    Ran 384 total time steps.
     Ran 128.0 time steps on average.
-    Lowest score: 120.0
-    Highest score: 120.0
-    Average score: 120.0
+    Lowest score: 180.0
+    Highest score: 280.0
+    Average score: 226.66666666666666
 
 Agent agent_0:
-    Ran env 1 times.
-    Ran 128 total time steps.
+    Ran env 3 times.
+    Ran 384 total time steps.
     Ran 128.0 time steps on average.
-    Lowest score: -153.7096730958602
-    Highest score: -153.7096730958602
-    Average score: -153.7096730958602
+    Lowest score: -309.1990745961666
+    Highest score: -211.49080680310726
+    Average score: -252.04373224576315
 ```
 
 ## MPESimpleSpread
