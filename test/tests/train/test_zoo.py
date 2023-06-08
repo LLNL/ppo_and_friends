@@ -12,7 +12,7 @@ def test_mpe_simple_tag_mpi():
     run_training(cmd)
 
     cmd  = f"ppoaf-baselines "
-    cmd += f"MPISimpleTag --test --num-test-runs 5 "
+    cmd += f"MPESimpleTag --test --num-test-runs 5 "
     cmd += f"--save-test-scores"
 
     #
