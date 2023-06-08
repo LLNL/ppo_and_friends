@@ -47,7 +47,7 @@ def wrap_environment(
     # For reproducibility, we need to set the environment's random
     # seeds.
     #
-    if random_seed >= 0:
+    if random_seed != None:
         env.set_random_seed(random_seed)
 
     #

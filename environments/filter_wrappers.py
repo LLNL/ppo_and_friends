@@ -604,11 +604,12 @@ class GenericClipper(IdentityWrapper):
                               needing to be clipped.
 
             Returns:
-                The agent_dict after clipping has been applied.
+                A new agent dictionary s.t. all values have been clipped.
         """
+        clipped_dict = {}
         for agent_id in agent_dict:
-            agent_dict[agent_id] = self._clip(agent_dict[agent_id])
-        return agent_dict
+            clipped_dict[agent_id] = self._clip(agent_dict[agent_id])
+        return clipped_dict
 
     def _clip(self, val):
         """

@@ -58,6 +58,9 @@ def train_baseline():
     parser.add_argument("--render-gif", action="store_true",
         help="Render a gif when testing.")
 
+    parser.add_argument("--gif-fps", type=int, default=15,
+        help="The frames per second for rendering a gif.")
+
     parser.add_argument("--frame-pause", default=0.0, type=float,
         help="When rendering, pause between frames for frame-pause seconds."
         "Note that this flag only works when used in conjunction with the "
@@ -117,6 +120,9 @@ def train_baseline():
                  "AbmarlReachTheTarget",
                  "BinaryCartPole",
                  "BinaryLunarLander",
+                 "MPESimpleAdversary",
+                 "MPESimpleTag",
+                 "MPESimpleSpread",
                  ])
 
     args               = parser.parse_args()
@@ -130,6 +136,7 @@ def train_baseline():
     clobber            = args.clobber
     render             = args.render
     render_gif         = args.render_gif
+    gif_fps            = args.gif_fps
     frame_pause        = args.frame_pause
     verbose            = args.verbose
     num_timesteps      = args.num_timesteps
@@ -191,6 +198,7 @@ def train_baseline():
         load_state            = load_state,
         render                = render,
         render_gif            = render_gif,
+        gif_fps               = gif_fps,
         frame_pause           = frame_pause,
         verbose               = verbose,
         num_timesteps         = num_timesteps,

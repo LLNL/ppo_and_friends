@@ -262,6 +262,7 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
 
         return out
 
+
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
@@ -332,7 +333,6 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         out = self.output_func(out)
 
         return out
-
 
 class LSTMNetwork(PPOLSTMNetwork):
 

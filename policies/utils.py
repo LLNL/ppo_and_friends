@@ -50,7 +50,8 @@ def generate_policy(
 def get_single_policy_defaults(
     env_generator,
     policy_args,
-    policy_name = "single_agent"):
+    policy_name = "single_agent",
+    agent_name  = "agent0"):
     """
         A convenience function for creating a single-agent policy for
         a single agent environment. This function returns the
@@ -61,6 +62,8 @@ def get_single_policy_defaults(
                              environment.
             policy_args      keyword args for the policy class.
             policy_name      The name of the policy.
+            agent_name       The name of one of the agents of the shared
+                             policy.
 
         Returns:
             A tuple of form (policy_settings, policy_mapping_fn).
@@ -68,9 +71,9 @@ def get_single_policy_defaults(
 
     policy_settings = { policy_name : \
         (None,
-         env_generator().observation_space["agent0"],
-         env_generator().critic_observation_space["agent0"],
-         env_generator().action_space["agent0"],
+         env_generator().observation_space[agent_name],
+         env_generator().critic_observation_space[agent_name],
+         env_generator().action_space[agent_name],
          policy_args)
     }
 

@@ -29,10 +29,10 @@ class PPO(object):
 
     def __init__(self,
                  env_generator,
-                 device,
-                 random_seed,
                  policy_settings,
                  policy_mapping_fn,
+                 device              = 'cpu',
+                 random_seed         = None,
                  envs_per_proc       = 1,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
@@ -49,7 +49,7 @@ class PPO(object):
                  render              = False,
                  frame_pause         = 0.0,
                  load_state          = False,
-                 state_path          = "./",
+                 state_path          = "./saved_state",
                  save_when           = None,
                  pickle_class        = False,
                  soft_resets         = False,
@@ -63,6 +63,10 @@ class PPO(object):
             Parameters:
                  env_generator        A function that creates instances of
                                       the environment to learn from.
+                 policy_settings      A dictionary containing RLLib-like
+                                      policy settings.
+                 policy_mapping_fn    A function mapping agent ids to
+                                      policy ids.
                  device               A torch device to use for training.
                  random_seed          A random seed to use.
                  envs_per_proc        The number of environment instances each
@@ -1077,7 +1081,7 @@ class PPO(object):
                     values               = value[agent_id],
                     log_probs            = log_prob[agent_id],
                     rewards              = reward[agent_id],
-                    where_done           = where_term)#FIXME: change naming to where_terminal
+                    where_done           = where_term)
 
                 rollout_max_ext_reward[policy_id] = \
                     max(rollout_max_ext_reward[policy_id],
@@ -1782,7 +1786,7 @@ class PPO(object):
             Save all information required for a restart.
         """
         if self.verbose:
-            rank_print("\nSaving state")
+            rank_print("Saving state")
 
         if self.test_mode:
             msg = "WARNING: save() was called while in test mode. Disregarding."
