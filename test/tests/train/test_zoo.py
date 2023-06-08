@@ -5,7 +5,7 @@ from utils import run_training, high_score_test
 #
 def test_mpe_simple_tag_mpi():
 
-    num_timesteps = 30000
+    num_timesteps = 100000
     cmd  = f"mpirun -n 2 ppoaf-baselines "
     cmd += f"MPESimpleTag --clobber --num-timesteps {num_timesteps}"
 
