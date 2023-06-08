@@ -38,5 +38,4 @@ jobs:
     - name: Test with pytest
       run: |
         cd test
-        #pytest tests
-        pytest tests/train/test_zoo.py
+        pytest tests
