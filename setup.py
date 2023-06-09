@@ -45,6 +45,6 @@ setup(name             = "ppo_and_friends",
                                 "environments/abmarl/envs/large_maze.txt"]},
       install_requires = dependencies,
       entry_points     = {
-          'console_scripts' : ['ppoaf-baselines=ppo_and_friends.train_baseline:train_baseline']
+          'console_scripts' : ['ppoaf=ppo_and_friends.ppoaf_cli:cli']
       },
       zip_safe         = False)

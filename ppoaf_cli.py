@@ -3,7 +3,8 @@ import random
 import numpy as np
 import argparse
 import sys
-from importlib import import_module
+import importlib.util
+import inspect
 import os
 import re
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -14,19 +15,16 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def split_by_title_word(s):
-    """
-        A nice solution ripped from
-        https://stackoverflow.com/questions/64784769/python-split-a-string-but-keep-contiguous-uppercase-letters
-    """
-    return [chunk for chunk in re.split(r"([A-Z][a-z]+)", s) if chunk]
 
-def train_baseline():
+def cli():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--test", action="store_true",
-        help="Test out an existing policy.")
+    parser.add_argument("--train", type=str, default='',
+        help="A path to a file containing the environment runner to train.")
+
+    parser.add_argument("--test", type=str, default='',
+        help="A path to a file containing the environment runner to test.")
 
     parser.add_argument("--test-explore", action="store_true",
         help="Enable exploration while testing. Note that this flag"
@@ -87,52 +85,13 @@ def train_baseline():
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    parser.add_argument("environment", type=str,
-        help="Which environment should we train or test?",
-        choices=["CartPole",
-                 "Pendulum",
-                 "Acrobot",
-                 "MountainCar",
-                 "MountainCarContinuous",
-                 "LunarLander",
-                 "LunarLanderContinuous",
-                 "BipedalWalker",
-                 "BipedalWalkerHardcore",
-                 "BreakoutPixels",
-                 "BreakoutRAM",
-                 "InvertedPendulum",
-                 "InvertedDoublePendulum",
-                 "Ant",
-                 "Walker2D",
-                 "Hopper",
-                 "Swimmer",
-                 "HalfCheetah",
-                 "HumanoidStandUp",
-                 "Humanoid",
-                 "RobotWarehouseTiny",
-                 "RobotWarehouseSmall",
-                 "LevelBasedForaging",
-                 "PressurePlate",
-                 "AbmarlMaze",
-                 "AbmarlBlindMaze",
-                 "AbmarlLargeMaze",
-                 "AbmarlBlindLargeMaze",
-                 "AbmarlReachTheTarget",
-                 "BinaryCartPole",
-                 "BinaryLunarLander",
-                 "MPESimpleAdversary",
-                 "MPESimpleTag",
-                 "MPESimpleSpread",
-                 ])
-
     args               = parser.parse_args()
-    test               = args.test
+    train              = args.train != ''
+    test               = args.test != ''
     test_explore       = args.test_explore
     random_seed        = args.random_seed + rank
     num_test_runs      = args.num_test_runs
     save_test_scores   = args.save_test_scores
-    env_name           = args.environment
-    state_path         = os.path.join(args.state_path, "saved_states", env_name)
     clobber            = args.clobber
     render             = args.render
     render_gif         = args.render_gif
@@ -144,6 +103,17 @@ def train_baseline():
     envs_per_proc      = args.envs_per_proc
     pickle_class       = args.pickle_class
     device             = torch.device(args.device)
+    runner_file        = args.train if args.train != '' else args.test
+
+    if (not train) and (not test):
+        msg = "ERROR: args train or test must be specified."
+        rank_print(msg)
+        comm.Abort()
+
+    if train and test:
+        msg = "ERROR: training and testing cannot be done simultaneously."
+        rank_print(msg)
+        comm.Abort()
 
     if render and render_gif:
         msg  = "ERROR: render and render_gif are both enabled, "
@@ -173,6 +143,36 @@ def train_baseline():
     if force_determinism:
         torch.use_deterministic_algorithms(True)
 
+    spec = importlib.util.spec_from_file_location("EnvRunner", runner_file)
+    env_runner  = importlib.util.module_from_spec(spec)
+    
+    sys.modules["EnvRunner"] = env_runner
+    spec.loader.exec_module(env_runner)
+    
+    valid_runners = []
+    valid_names   = []
+    for name, obj in inspect.getmembers(env_runner):
+        if inspect.isclass(obj):
+            if '_ppoaf_runner_tag' in dir(obj):
+                valid_runners.append(obj)
+                valid_names.append(name)
+
+    if len(valid_runners) > 1:
+        msg  = "ERROR: found more than one environment runner in "
+        msg += f"the runner file: {valid_names}"
+        rank_print(msg)
+        comm.Abort()
+
+    if len(valid_runners) == 0:
+        msg  = "ERROR: unable to find a valid runner in the given file. "
+        msg += "Make sure that you've added the correct decorator to your "
+        msg += "runner."
+        rank_print(msg)
+        comm.Abort()
+
+    state_path   = os.path.join(args.state_path, "saved_states", valid_names[0])
+    runner_class = valid_runners[0]
+
     load_state = not clobber or test
 
     if clobber and rank == 0:
@@ -183,14 +183,6 @@ def train_baseline():
     rank_print("Using device: {}".format(device))
     rank_print("Number of processors: {}".format(num_procs))
     rank_print("Number of environments per processor: {}".format(envs_per_proc))
-
-    #
-    # Launch PPO.
-    #
-    module_name  = '_'.join(split_by_title_word(env_name)).lower()
-    module       = import_module(f"ppo_and_friends.baselines.{module_name}")
-    class_name   = "{}Runner".format(env_name)
-    runner_class = getattr(module, class_name)
 
     runner = runner_class(
         random_seed           = random_seed,
@@ -213,4 +205,4 @@ def train_baseline():
     runner.run()
 
 if __name__ == "__main__":
-    train_baseline()
+    cli()
