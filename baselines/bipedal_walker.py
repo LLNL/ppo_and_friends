@@ -5,7 +5,9 @@ from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
+@ppoaf_runner
 class BipedalWalkerRunner(GymRunner):
 
     def run(self):

@@ -7,7 +7,9 @@ from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapper
 from gymnasium.spaces import MultiBinary
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
+@ppoaf_runner
 class MultiBinaryLunarLanderWrapper(AlternateActionEnvWrapper):
     """
         A simple multi-binary action version of LunarLander. This is for
