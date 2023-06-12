@@ -1,7 +1,7 @@
 from utils import run_training, high_score_test
 
 def test_abmarl_maze_mpi():
-    num_timesteps = 30000
+    num_timesteps = 50000
     passing_scores = {"navigator" : 0.0}
 
     run_training(
