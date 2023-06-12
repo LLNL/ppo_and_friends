@@ -9,7 +9,6 @@ from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapp
 from gymnasium.spaces import MultiBinary
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
-@ppoaf_runner
 class MultiBinaryCartPoleWrapper(AlternateActionEnvWrapper):
     """
         A simple multi-binary action version of CartPole. This is for
@@ -22,6 +21,7 @@ class MultiBinaryCartPoleWrapper(AlternateActionEnvWrapper):
     def step(self, action):
         return self.env.step(int(action.item()))
 
+@ppoaf_runner
 class BinaryCartPoleRunner(GymRunner):
     """
         This is merely the original CartPole environment wrapped in a

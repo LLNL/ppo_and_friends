@@ -9,7 +9,6 @@ from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapp
 from gymnasium.spaces import MultiBinary
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
-@ppoaf_runner
 class MultiBinaryLunarLanderWrapper(AlternateActionEnvWrapper):
     """
         A simple multi-binary action version of LunarLander. This is for
@@ -36,6 +35,7 @@ class MultiBinaryLunarLanderWrapper(AlternateActionEnvWrapper):
 
         return self.env.step(step_action)
 
+@ppoaf_runner
 class BinaryLunarLanderRunner(GymRunner):
     """
         This is merely the original LunarLander environment wrapped in a

@@ -1,17 +1,5 @@
 from utils import run_training, high_score_test
 
-def run_cart_pole_test(name, num_test_runs=10):
-
-    cmd  = f"ppoaf-baselines "
-    cmd += f"CartPole --test "
-    cmd += f"--num-test-runs {num_test_runs} "
-    cmd += f"--save-test-scores"
-
-    passing_scores = {"agent0" : 200.}
-
-    high_score_test(name, cmd,
-        passing_scores, "CartPole")
-
 def test_cart_pole_serial():
 
     num_timesteps = 70000
@@ -140,4 +128,3 @@ if __name__ == "__main__":
 
     test_mountain_car_mpi()
     test_mountain_car_continous_mpi()
-
