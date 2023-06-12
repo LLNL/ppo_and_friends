@@ -11,7 +11,7 @@ def test_mpe_simple_tag_mpi():
         baseline_runner = 'mpe_simple_tag.py',
         num_timesteps   = num_timesteps,
         num_ranks       = 2,
-        options         = '')
+        options         = '--test-explore')
 
     high_score_test('mpi mpe simple tag'
         'mpe_simple_tag.py', 10, passing_scores)

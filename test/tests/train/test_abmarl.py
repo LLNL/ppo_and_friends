@@ -8,7 +8,7 @@ def test_abmarl_maze_mpi():
         baseline_runner = 'abmarl_maze.py',
         num_timesteps   = num_timesteps,
         num_ranks       = 2,
-        options         = '')
+        options         = '--test-explore')
 
     high_score_test('mpi abmarl maze',
         'abmarl_maze.py', 10, passing_scores)
