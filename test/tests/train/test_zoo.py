@@ -13,7 +13,7 @@ def test_mpe_simple_tag_mpi():
         num_ranks       = 2,
         options         = '--test-explore')
 
-    high_score_test('mpi mpe simple tag'
+    high_score_test('mpi mpe simple tag',
         'mpe_simple_tag.py', 10, passing_scores)
 
 
