@@ -5,7 +5,9 @@ from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
 import torch.nn as nn
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
+@ppoaf_runner
 class AbmarlReachTheTargetRunner(EnvironmentRunner):
 
     def run(self):

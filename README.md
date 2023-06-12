@@ -124,6 +124,11 @@ that can be used to (attempt to) convert spaces from Gym to Gymnasium.
 The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
 for an example.
 
+## Petting Zoo
+
+The `ParallelZooWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
+for an example.
+
 ## Custom
 
 All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
@@ -131,28 +136,101 @@ using a custom environment that doesn't conform to Gym or Abmarl standards,
 you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
 found in `environments/ppo_env_wrappers.py`.
 
+# Environment Runners
 
-# Baseline Environments
+To train an environment, an `EnvironmentRunner` must first be defined. The
+runner will be a class that inherits from
+`ppo_and_friends.runners.env_runner.EnvironmentRunner` or the `GymRunner`
+located within the same module. The only method you need to define is
+`run`, which should call `self.run_ppo(...)`.
 
-Baseline environments and a general idea of good training settings can
-be viewed in the **Tips and Tricks** section of this README. A full list
-can also be viewed by issuing the following command:
+
+**Example**:
 ```
-ppoaf-baselines --help
+import gymnasium as gym
+from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
+from ppo_and_friends.policies.utils import get_single_policy_defaults
+from ppo_and_friends.runners.env_runner import GymRunner
+from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.utils.schedulers import *
+import torch.nn as nn
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
+
+@ppoaf_runner
+class CartPoleRunner(GymRunner):
+
+    def run(self):
+
+        env_generator = lambda : \
+            SingleAgentGymWrapper(gym.make('CartPole-v0',
+                render_mode = self.get_gym_render_mode()))
+
+        actor_kw_args = {}
+        actor_kw_args["activation"] = nn.LeakyReLU()
+        critic_kw_args = actor_kw_args.copy()
+
+        lr = 0.0002
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
+
+        policy_args = {\
+            "ac_network"       : FeedForwardNetwork,
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
+            "lr"               : lr,
+        }
+
+        policy_settings, policy_mapping_fn = get_single_policy_defaults(
+            env_generator = env_generator,
+            policy_args   = policy_args)
+
+        save_when = ChangeInStateScheduler(
+            status_key     = "extrinsic score avg",
+            status_preface = "single_agent",
+            compare_fn     = np.greater_equal,
+            persistent     = True)
+
+        self.run_ppo(**self.kw_run_args,
+                     save_when          = save_when,
+                     env_generator      = env_generator,
+                     policy_settings    = policy_settings,
+                     policy_mapping_fn  = policy_mapping_fn,
+                     batch_size         = 256,
+                     ts_per_rollout     = ts_per_rollout,
+                     max_ts_per_ep      = 32,
+                     obs_clip           = (-10., 10.),
+                     reward_clip        = (-10., 10.),
+                     normalize_obs      = True,
+                     normalize_rewards  = True,
+                     normalize_adv      = True)
 ```
 
-To train a baseline environment, use the following command:
+**Make note of the following requirements**:
+1. your environment MUST be wrapped in one of the available ppo-and-friends
+   environment wrappers. Currently available wrappers are SingleAgentGymWrapper,
+   MultiAgentGymWrapper, AbmarlWrapper, and ParallelZooWrapper.
+2. You must add the `@ppoaf_runner` decorator to your class.
+
+See the `baselines` directory for more examples.
+
+# Training And Testing
+
+To train an environment, use the following command:
 ```
-ppoaf-baselines <env_name> --num-timesteps <max_num_timesteps>
+ppoaf --train <path_to_runner_file>
 ```
 
 Running the same command again will result in loading the previously
 saved state. You can re-run from scratch by using the `--clobber` option.
 
+A complete list of options can be seen with the `help` command:
+```
+ppoaf --help
+```
+
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render
+ppoaf <path_to_runner_file> --num-test-runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render-gif` flag.
 
@@ -160,7 +238,7 @@ By default, exploration is disabled during testing, but you can enable it
 with the `--test-explore` flag. Example:
 
 ```
-ppoaf-baselines <env_name> --num-test-runs <num_test_runs> --render --test-explore
+ppoaf <path_to_runner_file> --num-test-runs <num_test_runs> --render --test-explore
 ```
 
 Note that enabling exploration during testing will have varied results. I've found
@@ -200,12 +278,12 @@ not see a performance gain from increasing `envs-per-proc`.
 
 mpirun:
 ```
-mpirun -n {num_procs} ppoaf-baselines {env_name} -envs-per-proc {envs_per_proc} ...
+mpirun -n {num_procs} ppoaf --envs-per-proc {envs_per_proc} ...
 ```
 
 srun:
 ```
-srun -N1 -n {num_procs} ppoaf-baselines {env_name} --envs-per-proc {envs_per_proc} ...
+srun -N1 -n {num_procs} ppoaf --envs-per-proc {envs_per_proc} ...
 ```
 
 Some things to note:
@@ -443,7 +521,11 @@ the entire grid.
 This environment allows configuration of the number of players. This
 configuration uses 4 players.
 
-# Resulting Policies
+# Baselines
+
+The `baselines` directory contains a number of pre-defined `EnvironmentRunners`
+that can be used as references.
+
 Policies can differ from one training to another, and the longer training
 sessions generally result in better policies. For the results demonstrated
 below, I trained for a moderate amount, which is usually just enough to

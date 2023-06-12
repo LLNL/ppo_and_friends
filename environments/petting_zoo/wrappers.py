@@ -10,13 +10,13 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-class PPOParallelZooWrapper(PPOEnvironmentWrapper):
+class ParallelZooWrapper(PPOEnvironmentWrapper):
     """
         A wrapper for parallel petting zoo environments.
     """
     def __init__(self, *args, **kw_args):
 
-        super(PPOParallelZooWrapper, self).__init__(
+        super(ParallelZooWrapper, self).__init__(
             *args, **kw_args)
 
         self.random_seed = None

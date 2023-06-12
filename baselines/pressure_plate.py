@@ -8,10 +8,12 @@ from ppo_and_friends.environments.gym.version_wrappers import Gym21ToGymnasium
 import torch.nn as nn
 from ppo_and_friends.utils.mpi_utils import rank_print
 import pressureplate
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 
+@ppoaf_runner
 class PressurePlateRunner(GymRunner):
 
     def run(self):

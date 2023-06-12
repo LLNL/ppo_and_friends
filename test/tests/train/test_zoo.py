@@ -4,25 +4,17 @@ from utils import run_training, high_score_test
 # MPE tests
 #
 def test_mpe_simple_tag_mpi():
-
     num_timesteps = 100000
-    cmd  = f"mpirun -n 2 ppoaf-baselines "
-    cmd += f"MPESimpleTag --clobber --num-timesteps {num_timesteps}"
+    passing_scores = {"adversary_1" : 100.0}
 
-    run_training(cmd)
+    run_training(
+        baseline_runner = 'mpe_simple_tag.py',
+        num_timesteps   = num_timesteps,
+        num_ranks       = 2,
+        options         = '--test-explore')
 
-    cmd  = f"ppoaf-baselines "
-    cmd += f"MPESimpleTag --test --num-test-runs 5 "
-    cmd += f"--save-test-scores"
-
-    #
-    # We don't need a resolved policy. We just need something that's
-    # started the learning process.
-    #
-    passing_scores = {"adversary_1" : 100}
-
-    high_score_test("mpe-simple-tag-mpi", cmd,
-        passing_scores, "MPESimpleTag")
+    high_score_test('mpi mpe simple tag',
+        'mpe_simple_tag.py', 10, passing_scores)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,13 @@
 from pettingzoo.mpe import simple_adversary_v3
 from ppo_and_friends.policies.utils import get_single_policy_defaults
-from ppo_and_friends.environments.petting_zoo.wrappers import PPOParallelZooWrapper
+from ppo_and_friends.environments.petting_zoo.wrappers import ParallelZooWrapper
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
+@ppoaf_runner
 class MPESimpleAdversaryRunner(GymRunner):
 
     def run(self):
@@ -14,7 +16,7 @@ class MPESimpleAdversaryRunner(GymRunner):
             else 'agent'
 
         env_generator = lambda : \
-            PPOParallelZooWrapper(
+            ParallelZooWrapper(
                 simple_adversary_v3.parallel_env(
                     N=2,
                     max_cycles=32,

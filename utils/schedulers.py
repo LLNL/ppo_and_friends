@@ -123,7 +123,7 @@ class LinearScheduler(StatusScheduler):
         new_val = self.max_value - (step *
             ((self.max_value - self.min_value) / self.status_max))
 
-        new_val = max(new_val, self.min_value)
+        new_val = min(max(new_val, self.min_value), self.max_value)
         return new_val
 
 

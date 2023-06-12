@@ -5,7 +5,9 @@ from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.abmarl.envs.maze_env import sm_abmarl_maze
 import torch.nn as nn
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
+@ppoaf_runner
 class AbmarlMazeRunner(EnvironmentRunner):
 
     def run(self):

@@ -7,6 +7,7 @@ from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.environments.action_wrappers import AlternateActionEnvWrapper
 from gymnasium.spaces import MultiBinary
+from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 class MultiBinaryCartPoleWrapper(AlternateActionEnvWrapper):
     """
@@ -20,6 +21,7 @@ class MultiBinaryCartPoleWrapper(AlternateActionEnvWrapper):
     def step(self, action):
         return self.env.step(int(action.item()))
 
+@ppoaf_runner
 class BinaryCartPoleRunner(GymRunner):
     """
         This is merely the original CartPole environment wrapped in a
