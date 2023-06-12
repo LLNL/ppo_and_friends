@@ -170,7 +170,8 @@ def cli():
         rank_print(msg)
         comm.Abort()
 
-    state_path   = os.path.join(args.state_path, "saved_states", valid_names[0])
+    file_preface = os.path.basename(runner_file).split('.')[:-1][0]
+    state_path   = os.path.join(args.state_path, "saved_states", file_preface)
     runner_class = valid_runners[0]
 
     load_state = not clobber or test
