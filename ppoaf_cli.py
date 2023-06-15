@@ -40,6 +40,11 @@ def cli():
         help="If used with --test, the test scores for each agent will be "
         "saved as a pickle file in the output directory.")
 
+    parser.add_argument("--save-train-scores", action="store_true",
+        help="If True, each policy's extrinsic score average will be saved "
+        "in a text file every iteration. Each agent will have an individual "
+        "file in the state directory.")
+
     parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
 
@@ -103,6 +108,7 @@ def cli():
     envs_per_proc      = args.envs_per_proc
     pickle_class       = args.pickle_class
     device             = torch.device(args.device)
+    save_train_scores  = args.save_train_scores
     runner_file        = args.train if args.train != '' else args.test
 
     if (not train) and (not test):
@@ -200,6 +206,7 @@ def cli():
         test                  = test,
         explore_while_testing = test_explore,
         save_test_scores      = save_test_scores,
+        save_train_scores     = save_train_scores,
         pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
 

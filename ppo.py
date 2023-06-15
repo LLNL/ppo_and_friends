@@ -51,6 +51,7 @@ class PPO(object):
                  load_state          = False,
                  state_path          = "./saved_state",
                  save_when           = None,
+                 save_train_scores   = False,
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
@@ -113,6 +114,8 @@ class PPO(object):
                  save_when            An instance of ChangeInStateScheduler
                                       that determines when to save. If None,
                                       saving will occur every iteration.
+                 save_train_scores    If True, the extrinsic score averages
+                                      for each policy are saved every iteration.
                  pickle_class         When enabled, the entire PPO class will
                                       be pickled and saved into the output
                                       directory after it's been initialized.
@@ -206,6 +209,7 @@ class PPO(object):
         self.envs_per_proc       = envs_per_proc
         self.verbose             = verbose
         self.save_when           = save_when
+        self.save_train_scores   = save_train_scores
 
         if self.save_when is None:
             self.save_when = ChangeInStateScheduler(
@@ -335,6 +339,13 @@ class PPO(object):
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
+
+        if self.save_train_scores and rank == 0:
+            score_path = os.path.join(state_path, "scores")
+
+            if not os.path.exists(score_path):
+                os.makedirs(score_path)
+
         comm.barrier()
 
         for policy_id in self.policies:
@@ -1436,6 +1447,9 @@ class PPO(object):
             if self.save_when() or iteration == 0:
                 self.save()
 
+            if self.save_train_scores:
+                self._save_extrinsic_score_avg()
+
             data_loaders = {}
             for key in self.policies:
                 data_loaders[key] = DataLoader(
@@ -1848,6 +1862,19 @@ class PPO(object):
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
+
+    def _save_extrinsic_score_avg(self):
+        """
+            Save the extrinsic score averages of each policy to numpy
+            txt files.
+        """
+        for policy_id in self.policies:
+            score = self.status_dict[policy_id]["extrinsic score avg"]
+            score_f = os.path.join(self.state_path,
+                "scores", f"{policy_id}_scores.npy")
+
+            with open(score_f, "ab") as out_f:
+                np.savetxt(out_f, np.array([score]))
 
     def set_test_mode(self, test_mode):
         """
