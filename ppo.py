@@ -341,7 +341,10 @@ class PPO(object):
             os.makedirs(state_path)
 
         if self.save_train_scores and rank == 0:
-            os.makedirs(os.path.join(state_path, "scores"))
+            score_path = os.path.join(state_path, "scores")
+
+            if not os.path.exists(score_path):
+                os.makedirs(score_path)
 
         comm.barrier()
 
