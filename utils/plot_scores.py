@@ -29,16 +29,16 @@ if __name__ == '__main__':
     size = -1
     for sa in score_arrays:
         if size >= 0:
-            assert sa.size == size, "number of episodes must match!"
+            assert sa.size == size, "number of iterations must match!"
         size = sa.size
     
-    episodes = np.arange(size)
+    iterations = np.arange(size)
 
-    plt.xlabel("Episodes")
+    plt.xlabel("Iterations")
     plt.ylabel("Extrinsic Score Average")
 
     for scores in score_arrays:
-        plt.plot(episodes, scores)
+        plt.plot(iterations, scores)
     
     plt.legend(labels=score_names)
     plt.show()
