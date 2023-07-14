@@ -11,7 +11,7 @@ from ppo_and_friends.utils.misc import get_action_dtype
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.actor_critic_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
