@@ -3,6 +3,7 @@
 """
 import torch.nn as nn
 import numpy as np
+from functools import reduce
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -96,7 +97,7 @@ def init_net_parameters(net,
 
 
 def create_sequential_network(
-    in_dim,
+    in_size,
     out_size,
     hidden_size,
     hidden_depth,
@@ -106,12 +107,8 @@ def create_sequential_network(
         Create a Sequential torch network.
 
         Arguments:
-            in_dim          The dimensions of the input data. For
-                            instance, if the expected input shape is
-                            (batch_size, 16, 4), in_dim would be (16, 4).
-            out_dim         The expected dimensions for the output. For
-                            instance, if the expected output shape is
-                            (batch_size, 16, 4), out_dim would be (16, 4).
+            in_size         The size of the input field (int).
+            out_size        The size of the output field (int).
             activation      The activation function to use on the output
                             of hidden layers.
             hidden_size     Can either be an int or list of ints. If an int,
@@ -147,7 +144,7 @@ def create_sequential_network(
 
     if len(hidden_size) != 0:
 
-        layers.append(init_layer(nn.Linear(in_dim, hidden_size[0])))
+        layers.append(init_layer(nn.Linear(in_size, hidden_size[0])))
         layers.append(activation)
 
         inner_layer_list = []
@@ -171,9 +168,32 @@ def create_sequential_network(
                 nn.Linear(hidden_size[-1], out_size)))
     else:
         if out_init != None:
-            layers.append(init_layer(nn.Linear(in_dim, out_size),
+            layers.append(init_layer(nn.Linear(in_size, out_size),
                 weight_std=out_init))
         else:
-            layers.append(init_layer(nn.Linear(in_dim, out_size)))
+            layers.append(init_layer(nn.Linear(in_size, out_size)))
 
     return nn.Sequential(*layers)
+
+
+def get_size_and_shape(descriptor):
+    """
+        Given a shape/size descriptor as either a tuple or int,
+        return the associated shape and size.
+
+        Arguments:
+            descriptor    An int or tuple representing the size/shape.
+
+        Returns:
+            The size and shape as (int, tuple).
+    """
+    assert type(descriptor) == tuple or type(descriptor) == int
+
+    if type(descriptor) == tuple:
+        size  = reduce(lambda a, b: a*b, descriptor)
+        shape = descriptor
+    else:
+        size  = descriptor
+        shape = (descriptor,)
+
+    return size, shape

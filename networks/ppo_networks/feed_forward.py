@@ -1,10 +1,9 @@
 import torch
 from torch import nn
-from functools import reduce
 import numpy as np
 from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.networks.ppo_networks import PPOActorCriticNetwork, SingleSplitObservationNetwork
+from ppo_and_friends.networks.ppo_networks.base import PPONetwork, SingleSplitObservationNetwork
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -12,11 +11,11 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-class FeedForwardNetwork(PPOActorCriticNetwork):
+class FeedForwardNetwork(PPONetwork):
 
     def __init__(self,
-                 in_dim,
-                 out_dim,
+                 in_shape,
+                 out_shape,
                  out_init     = None,
                  activation   = nn.ReLU(),
                  hidden_size  = 128,
@@ -27,12 +26,7 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
             A class defining a customizable feed-forward network.
 
             Arguments:
-                in_dim          The dimensions of the input data. For
-                                instance, if the expected input shape is
-                                (batch_size, 16, 4), in_dim would be (16, 4).
-                out_dim         The expected dimensions for the output. For
-                                instance, if the expected output shape is
-                                (batch_size, 16, 4), out_dim would be (16, 4).
+                out_shape       The shape of the output.
                 out_init        A std weight to apply to the output layer.
                 activation      The activation function to use on the output
                                 of hidden layers.
@@ -53,26 +47,19 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
         """
 
         super(FeedForwardNetwork, self).__init__(
-            out_dim = out_dim,
+            in_shape  = in_shape,
+            out_shape = out_shape,
             **kw_args)
 
         self.is_embedded   = is_embedded
         self.have_hidden   = True
         self.two_layer_net = False
-
-        if type(out_dim) == tuple:
-            out_size     = reduce(lambda a, b: a*b, out_dim)
-            self.out_dim = out_dim
-        else:
-            out_size     = out_dim
-            self.out_dim = (out_dim,)
-
-        self.activation = activation
+        self.activation    = activation
 
         self.sequential_net = \
             create_sequential_network(
-                in_dim       = in_dim,
-                out_size     = out_size,
+                in_size      = self.in_size,
+                out_size     = self.out_size,
                 hidden_size  = hidden_size,
                 hidden_depth = hidden_depth,
                 activation   = activation,
@@ -92,16 +79,13 @@ class FeedForwardNetwork(PPOActorCriticNetwork):
 
         out = self.output_func(out)
 
-        out_shape = (out.shape[0],) + self.out_dim
-        out = out.reshape(out_shape)
-
-        return out
+        return self._shape_output(out)
 
 
 class SplitObsNetwork(SingleSplitObservationNetwork):
     def __init__(self,
-                 in_dim,
-                 out_dim,
+                 in_shape,
+                 out_shape,
                  out_init,
                  left_hidden_size      = 64,
                  left_hidden_depth     = 3,
@@ -125,13 +109,9 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
             to the terrain, etc.).
 
             Arguments:
-
-             in_dim                The dimensions of the input data. For
-                                   instance, if the expected input shape is
-                                   (batch_size, 16, 4), in_dim would be (16, 4).
-             out_dim               The expected dimensions for the output. For
+             out_shape             The expected shape for the output. For
                                    instance, if the expected output shape is
-                                   (batch_size, 16, 4), out_dim would be
+                                   (batch_size, 16, 4), out_shape would be
                                    (16, 4).
              out_init              A std weight to apply to the output layer.
              left_hidden_size      The number of output neurons for each hidden
@@ -161,20 +141,12 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
 
 
         super(SplitObsNetwork, self).__init__(
-            out_dim = out_dim,
             **kw_args)
-
-        if type(out_dim) == tuple:
-            out_size     = reduce(lambda a, b: a*b, out_dim)
-            self.out_dim = out_dim
-        else:
-            out_size     = out_dim
-            self.out_dim = (out_dim,)
 
         self.activation = activation
 
-        side_1_dim = self.split_start
-        side_2_dim = in_dim - self.split_start
+        side_1_size = self.split_start
+        side_2_size = self.in_size - self.split_start
 
         # TODO: in the orignal paper, there is a "low level" section and
         # a "high level" section. The low level section handles
@@ -194,10 +166,10 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         s1_kw_args["name"] = self.name + "_s1"
 
         self.s1_net = FeedForwardNetwork(
-            in_dim       = side_1_dim,
+            in_size      = side_1_size,
             hidden_size  = left_hidden_size,
             hidden_depth = left_hidden_depth,
-            out_dim      = left_out_size,
+            out_shape    = left_out_size,
             activation   = self.activation,
             is_embedded  = True,
             **s1_kw_args)
@@ -209,10 +181,10 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         s2_kw_args["name"] = self.name + "_s2"
 
         self.s2_net = FeedForwardNetwork(
-            in_dim       = side_2_dim,
+            in_size      = side_2_size,
             hidden_size  = right_hidden_size,
             hidden_depth = right_hidden_depth,
-            out_dim      = right_out_size,
+            out_shape    = right_out_size,
             activation   = self.activation,
             is_embedded  = True,
             **s2_kw_args)
@@ -225,10 +197,10 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         c_kw_args["name"] = self.name + "_combined"
 
         self.combined_layers = FeedForwardNetwork(
-            in_dim       = combined_in_size,
+            in_size      = combined_in_size,
             hidden_size  = combined_hidden_size,
             hidden_depth = combined_hidden_depth,
-            out_dim      = out_size,
+            out_shape    = self.out_shape,
             activation   = self.activation,
             is_embedded  = False,
             out_init     = out_init,
@@ -256,4 +228,4 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         out = torch.cat((s1_out, s2_out), dim=1)
         out = self.combined_layers(out)
 
-        return out
+        return self._shape_output(out)

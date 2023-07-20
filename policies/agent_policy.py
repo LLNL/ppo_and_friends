@@ -5,13 +5,14 @@ from copy import deepcopy
 from functools import reduce
 from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
-from ppo_and_friends.networks.icm import ICM
+from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
-from ppo_and_friends.networks.actor_critic_networks.feed_forward import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
+from ppo_and_friends.networks.actor_critic.actor_critic import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
@@ -162,6 +163,7 @@ class AgentPolicy():
         act_type = type(action_space)
         self.act_nvec = None
 
+        #FIXME: remove?
         if issubclass(act_type, Box):
             self.act_dim = action_space.shape
 
@@ -301,11 +303,6 @@ class AgentPolicy():
         #
         # Initialize our networks: actor, critic, and possibly ICM.
         #
-        use_conv2d_setup = False
-        for base in ac_network.__bases__:
-            if base.__name__ == "PPOConv2dNetwork":
-                use_conv2d_setup = True
-
         for base in ac_network.__bases__:
             if base.__name__ == "PPOLSTMNetwork":
                 self.using_lstm = True
@@ -319,59 +316,20 @@ class AgentPolicy():
         # the value network doesn't matter so much. I can't remember
         # where I got 1.0 from... I'll try to track that down.
         #
-        if use_conv2d_setup:
-            self.actor = ac_network(
-                name         = "actor", 
-                in_shape     = self.actor_obs_space.shape,
-                out_dim      = self.act_dim, 
-                out_init     = 0.01,
-                action_nvec  = self.act_nvec,
-                action_dtype = self.action_dtype,
-                test_mode    = self.test_mode,
-                **actor_kw_args)
+        self.actor = to_actor(ac_network)(
+            name         = "actor", 
+            obs_space    = self.actor_obs_space,
+            out_init     = 0.01,
+            action_space = self.action_space,
+            test_mode    = self.test_mode,
+            **actor_kw_args)
 
-            self.critic = ac_network(
-                name         = "critic", 
-                in_shape     = self.critic_obs_space.shape,
-                out_dim      = 1,
-                out_init     = 1.0,
-                action_dtype = self.action_dtype,
-                test_mode    = self.test_mode,
-                **critic_kw_args)
-
-        else:
-            if type(self.actor_obs_space) == Box:
-                actor_obs_dim  = self.actor_obs_space.shape[0]
-                critic_obs_dim = self.critic_obs_space.shape[0]
-
-            elif type(self.actor_obs_space) == Discrete:
-                actor_obs_dim  = self.actor_obs_space.n
-                critic_obs_dim = self.critic_obs_space.n
-
-            else:
-                msg  = f"ERROR: {type(self.actor_obs_space)} is not a "
-                msg += "supported observation space."
-                rank_print(msg)
-                comm.Abort()
-
-            self.actor = ac_network(
-                name         = "actor", 
-                in_dim       = actor_obs_dim,
-                out_dim      = self.act_dim, 
-                out_init     = 0.01,
-                action_nvec  = self.act_nvec,
-                action_dtype = self.action_dtype,
-                test_mode    = self.test_mode,
-                **actor_kw_args)
-
-            self.critic = ac_network(
-                name         = "critic", 
-                in_dim       = critic_obs_dim,
-                out_dim      = 1,
-                out_init     = 1.0,
-                action_dtype = self.action_dtype,
-                test_mode    = self.test_mode,
-                **critic_kw_args)
+        self.critic = to_critic(ac_network)(
+            name         = "critic", 
+            obs_space    = self.critic_obs_space,
+            out_init     = 1.0,
+            test_mode    = self.test_mode,
+            **critic_kw_args)
 
         self.actor  = self.actor.to(self.device)
         self.critic = self.critic.to(self.device)
@@ -381,14 +339,10 @@ class AgentPolicy():
         comm.barrier()
 
         if enable_icm:
-            obs_dim = self.actor_obs_space.shape[0]
-
             self.icm_model = icm_network(
                 name         = "icm",
-                obs_dim      = obs_dim,
-                act_dim      = self.act_dim,
-                action_nvec  = self.act_nvec,
-                action_dtype = self.action_dtype,
+                obs_space    = self.actor_obs_space,
+                action_space = self.action_space,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 

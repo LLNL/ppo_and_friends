@@ -1,9 +1,8 @@
 import torch
 from torch import nn
-from functools import reduce
 from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.networks.ppo_networks import PPOConv2dNetwork
+from ppo_and_friends.networks.ppo_networks.base import PPOConv2dNetwork
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -14,21 +13,22 @@ num_procs = comm.Get_size()
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
-                 in_shape,
-                 out_dim,
                  out_init,
                  activation = nn.ReLU(),
                  **kw_args):
 
         super(AtariPixelNetwork, self).__init__(
-            out_dim = out_dim,
             **kw_args)
+
+        msg  = "ERROR: the observation space must have a 'shape' "
+        msg += "attribute in order to be used with the PPOConv2dNetwork"
+        assert hasattr(self.obs_space, "shape"), msg
 
         self.a_f = activation
 
-        channels   = in_shape[0]
-        height     = in_shape[1]
-        width      = in_shape[2]
+        channels   = self.in_shape[0]
+        height     = self.in_shape[1]
+        width      = self.in_shape[2]
 
         k_s  = 8
         strd = 4
@@ -58,7 +58,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         width  = get_conv2d_out_size(width, pad, k_s, strd)
 
         self.l1 = init_layer(nn.Linear(height * width * 64, 512))
-        self.l2 = init_layer(nn.Linear(512, out_dim), weight_std=out_init)
+        self.l2 = init_layer(nn.Linear(512, self.out_shape), weight_std=out_init)
 
 
     def forward(self, _input):

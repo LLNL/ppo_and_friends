@@ -4,11 +4,12 @@
 import torch
 import torch.nn as nn
 from .utils import *
+from ppo_and_friends.utils.misc import get_flattened_space_length
 
 class LinearObservationEncoder(nn.Module):
 
     def __init__(self,
-                 obs_dim,
+                 obs_size,
                  encoded_dim,
                  out_init,
                  hidden_size,
@@ -29,7 +30,7 @@ class LinearObservationEncoder(nn.Module):
 
         self.activation = activation
 
-        self.enc_1 = init_layer(nn.Linear(obs_dim, hidden_size))
+        self.enc_1 = init_layer(nn.Linear(obs_size, hidden_size))
         self.enc_2 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_3 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_4 = init_layer(nn.Linear(hidden_size, encoded_dim),
@@ -56,7 +57,7 @@ class LinearObservationEncoder(nn.Module):
 class Conv2dObservationEncoder(nn.Module):
 
     def __init__(self,
-                 in_shape,
+                 obsveration_space,
                  encoded_dim,
                  out_init,
                  activation = nn.ReLU(),
@@ -76,6 +77,11 @@ class Conv2dObservationEncoder(nn.Module):
         super(Conv2dObservationEncoder, self).__init__()
 
         self.activation = activation
+
+        msg  = "ERROR: the observation space must have a 'shape' "
+        msg += "attribute in order to be used with the Conv2dObservationEncoder."
+        assert hasattr(observation_space, "shape"), msg
+        in_shape = observation_space.shape
 
         channels   = in_shape[0]
         height     = in_shape[1]

@@ -1,9 +1,9 @@
 import torch
 from torch import nn
-from functools import reduce
 from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.networks.ppo_networks import PPOLSTMNetwork
+from ppo_and_friends.utils.misc import get_flattened_space_length
+from ppo_and_friends.networks.ppo_networks.base import PPOLSTMNetwork
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -14,8 +14,6 @@ num_procs = comm.Get_size()
 class LSTMNetwork(PPOLSTMNetwork):
 
     def __init__(self,
-                 in_dim,
-                 out_dim,
                  sequence_length   = 10,
                  out_init          = None,
                  activation        = nn.ReLU(),
@@ -45,14 +43,6 @@ class LSTMNetwork(PPOLSTMNetwork):
                    learning a robust policy in fairly few iterations.
 
             Arguments:
-                in_dim            The dimensions of the input data. For
-                                  instance, if the expected input shape is
-                                  (length, batch_size, 16), in_dim would be
-                                  (length, 16).
-                out_dim           The expected dimensions for the output. For
-                                  instance, if the expected output shape is
-                                  (length, batch_size, 16), out_dim would be
-                                  (length, 16,).
                 sequence_length   The length of the input sequence.
                 out_init          A std weight to apply to the output layer.
                 activation        The activation function to use on the
@@ -68,22 +58,14 @@ class LSTMNetwork(PPOLSTMNetwork):
         """
 
         super(LSTMNetwork, self).__init__(
-            out_dim = out_dim,
             **kw_args)
-
-        if type(out_dim) == tuple:
-            out_size     = reduce(lambda a, b: a*b, out_dim)
-            self.out_dim = out_dim
-        else:
-            out_size     = out_dim
-            self.out_dim = (out_dim,)
 
         self.sequence_length  = sequence_length
         self.activation       = activation
         self.lstm_hidden_size = lstm_hidden_size
         self.num_lstm_layers  = num_lstm_layers
 
-        self.lstm = nn.LSTM(in_dim, lstm_hidden_size, num_lstm_layers)
+        self.lstm = nn.LSTM(self.in_size, lstm_hidden_size, num_lstm_layers)
         self.lstm = init_net_parameters(self.lstm)
         self.layer_norm = nn.LayerNorm(lstm_hidden_size)
 
@@ -93,10 +75,10 @@ class LSTMNetwork(PPOLSTMNetwork):
         ff_kw_args["name"] = self.name + "_lstm_ff"
 
         self.ff_layers = FeedForwardNetwork(
-            in_dim       = lstm_hidden_size,
+            in_size      = lstm_hidden_size,
             hidden_size  = ff_hidden_size,
             hidden_depth = ff_hidden_depth,
-            out_dim      = out_size,
+            out_shape    = self.out_shape,
             activation   = self.activation,
             is_embedded  = False,
             out_init     = out_init,
@@ -124,4 +106,4 @@ class LSTMNetwork(PPOLSTMNetwork):
 
         out = self.ff_layers(out)
 
-        return out
+        return self._shape_output(out)
