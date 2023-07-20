@@ -12,7 +12,7 @@ from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
-from ppo_and_friends.networks.actor_critic.actor_critic import to_actor, to_critic
+from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
