@@ -20,12 +20,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         super(AtariPixelNetwork, self).__init__(
             **kw_args)
 
-        msg  = "ERROR: the observation space must have a 'shape' "
-        msg += "attribute in order to be used with the PPOConv2dNetwork"
-        assert hasattr(self.obs_space, "shape"), msg
-
-        self.a_f = activation
-
+        self.a_f   = activation
         channels   = self.in_shape[0]
         height     = self.in_shape[1]
         width      = self.in_shape[2]

@@ -27,7 +27,10 @@ class PPONetwork(ABC, nn.Module):
                  **kw_args):
         """
             Arguments:
-                name    The name of the network.
+                in_shape   The shape of the input. (int or tuple)
+                out_shape  The shape of the output. (int or tuple)
+                name       The name of the network. (str)
+                test_mode  Are we testing a trained policy? (bool)
         """
         super(PPONetwork, self).__init__()
 
@@ -53,6 +56,13 @@ class PPONetwork(ABC, nn.Module):
 
     def _shape_output(self, output):
         """
+            Reshape the network output to match our expected output shape.
+
+            Arguments:
+                output    The network output (tensor or numpy array).
+
+            Returns:
+                The output reshaped.
         """
         out_shape = (output.shape[0],) + self.out_shape
         output    = output.reshape(out_shape)
