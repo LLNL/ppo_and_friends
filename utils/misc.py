@@ -196,29 +196,19 @@ def format_seconds(seconds):
     return "{:.2f} {}".format(output_time, output_unit)
 
 
-def add_method(func):
-    """
-        Decorator for adding a function to an existing class.
-
-        Arguments:
-            func    The function to add to the class.
-    """
-    @functools.wraps(func)
-    def wrapper(cls):
-        setattr(cls, func, eval(func))
-        return cls
-    return wrapper
-
 def get_flattened_space_length(space):
     """
         Get the length of a flattened gymnasium space. Only some spaces
         are supported here.
 
-        Arguments:
-            space    The gymnasium space.
+        Parameters
+        ----------
+        space: gymnasium space
+            The space to get the flattened length of.
 
         Returns:
-            The length of the gymnasium space (int).
+        int
+            The length of the gymnasium space.
     """
     if type(space) == Box:
         return reduce(lambda a, b: a*b, space.shape)
@@ -244,10 +234,14 @@ def get_space_shape(space):
         all spaces have a "shape" attribute, but we can infer what
         it realistically would be.
 
-        Arguments:
-            space    The gymnasium space.
+        Parameters
+        ----------
+        space: gymnasium space
+            The space to get the shape of.
 
-        Returns:
+        Returns
+        -------
+        int
             An inferred shape of the space.
     """
     space_type = type(space)
