@@ -13,7 +13,7 @@ num_procs = comm.Get_size()
 
 def to_actor(ac_network):
     """
-        Convert a PPOActorCriticNewtork to an ActorNetwork.
+        Convert a PPONetwork to an ActorNetwork.
     """
 
     class ActorNetwork(ac_network):
@@ -21,6 +21,13 @@ def to_actor(ac_network):
         def __init__(self, obs_space, action_space, **kw_args):
             """
                 Initialize the actor network.
+
+                Parameters
+                ----------
+                obs_space: gymnasium space
+                    The observation space of the actor.
+                action_space: gymnasium space
+                    The action space of the actor.
             """
             super(ActorNetwork, self).__init__(
                 in_shape  = get_space_shape(obs_space),
@@ -59,10 +66,14 @@ def to_actor(ac_network):
                 Send an actor's predicted probabilities through its
                 distribution's refinement method.
         
-                Arguments:
-                    obs      The observation to infer from.
+                Parameters
+                ----------
+                obs: gymnasium space
+                    The observation to infer from.
         
-                Returns:
+                Returns
+                -------
+                float 
                     The predicted result sent through the distribution's
                     refinement method.
             """
@@ -75,12 +86,18 @@ def to_actor(ac_network):
 
 def to_critic(ac_network):
     """
-        Convert a PPOActorCriticNewtork to a CriticNetwork.
+        Convert a PPONetwork to a CriticNetwork.
     """
     
     class CriticNetwork(ac_network):
         def __init__(self, obs_space, **kw_args):
             """
+                Inititalize the critic network.
+
+                Parameters
+                ----------
+                obs_space: gymnasium space
+                    The observation space of the critic.
             """
             super(CriticNetwork, self).__init__(
                 in_shape  = get_space_shape(obs_space),
