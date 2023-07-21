@@ -160,26 +160,6 @@ class AgentPolicy():
         else:
             self.intr_reward_weight = CallableValue(intr_reward_weight)
 
-        act_type = type(action_space)
-        self.act_nvec = None
-
-        #FIXME: remove?
-        if issubclass(act_type, Box):
-            self.act_dim = action_space.shape
-
-        elif (issubclass(act_type, Discrete) or
-            issubclass(act_type, MultiBinary)):
-            self.act_dim = action_space.n
-
-        elif issubclass(act_type, MultiDiscrete):
-            self.act_dim  = reduce(lambda a, b: a+b, action_space.nvec)
-            self.act_nvec = action_space.nvec
-
-        else:
-            msg = "ERROR: unsupported action space {}".format(action_space)
-            rank_print(msg)
-            comm.Abort()
-
         self.action_dtype = get_action_dtype(self.action_space)
 
         if self.action_dtype == "unknown":
@@ -927,7 +907,6 @@ class AgentPolicy():
             and self.lambd              == other.lambd
             and self.dynamic_bs_clip    == other.dynamic_bs_clip
             and self.using_lstm         == other.using_lstm
-            and self.act_dim            == other.act_dim
             and self.action_dtype       == other.action_dtype)
 
         return is_equal
@@ -952,7 +931,6 @@ class AgentPolicy():
         str_self += "    dynamic bs clip: {}\n".format(self.dynamic_bs_clip)
         str_self += "    bootstrap clip: {}\n".format(self.bootstrap_clip)
         str_self += "    using lstm: {}\n".format(self.using_lstm)
-        str_self += "    act dim: {}\n".format(self.act_dim)
         str_self += "    action dtype: {}\n".format(self.action_dtype)
         str_self += "    actor optim: {}\n".format(self.actor_optim)
         str_self += "    critic optim: {}\n".format(self.critic_optim)
