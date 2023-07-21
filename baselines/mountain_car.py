@@ -41,8 +41,7 @@ class MountainCarRunner(GymRunner):
 
             #
             # NOTE: I find that that the chosen bootstrap clip
-            # is VERY important in this environment. Too much
-            # criticism/optimism(?) appears to lead to less exploration.
+            # is VERY important in this environment.
             #
             "bootstrap_clip"   : (-.01, 0.0),
             "enable_icm"       : True,
