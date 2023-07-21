@@ -1,4 +1,6 @@
 import numpy as np
+import functools
+from functools import reduce
 import torch
 from .stats import RunningMeanStd
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
@@ -192,3 +194,70 @@ def format_seconds(seconds):
             output_unit = "hours"
 
     return "{:.2f} {}".format(output_time, output_unit)
+
+
+def get_flattened_space_length(space):
+    """
+        Get the length of a flattened gymnasium space. Only some spaces
+        are supported here.
+
+        Parameters
+        ----------
+        space: gymnasium space
+            The space to get the flattened length of.
+
+        Returns:
+        int
+            The length of the gymnasium space.
+    """
+    if type(space) == Box:
+        return reduce(lambda a, b: a*b, space.shape)
+
+    elif type(space) == Discrete:
+        return space.n
+
+    elif type(space) == MultiDiscrete:
+        return reduce(lambda a, b: a+b, space.nvec)
+
+    elif type(space) == MultiBinary:
+        return space.n
+
+    else:
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
+        msg += "get_flattend_space_length."
+        rank_print(msg) 
+        comm.Abort()
+
+def get_space_shape(space):
+    """
+        Return a hand-wavy shape of a given gymnasium space. Not
+        all spaces have a "shape" attribute, but we can infer what
+        it realistically would be.
+
+        Parameters
+        ----------
+        space: gymnasium space
+            The space to get the shape of.
+
+        Returns
+        -------
+        int
+            An inferred shape of the space.
+    """
+    space_type = type(space)
+
+    if issubclass(space_type, Box):
+        return space.shape
+
+    elif (issubclass(space_type, Discrete) or
+        issubclass(space_type, MultiBinary)):
+        return (space.n,)
+
+    elif issubclass(space_type, MultiDiscrete):
+        return (reduce(lambda a, b: a+b, space.nvec),)
+
+    else:
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
+        msg += "get_space_shape."
+        rank_print(msg) 
+        comm.Abort()

@@ -2,7 +2,7 @@ import gymnasium as gym
 from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
@@ -40,8 +40,7 @@ class MountainCarContinuousRunner(GymRunner):
             "lr"                 : lr,
             #
             # NOTE: I find that that the chosen bootstrap clip
-            # is VERY important in this environment. Too much
-            # optimism appears to lead to less exploration.
+            # is VERY important in this environment.
             #
             "bootstrap_clip"   : (-0.001, 0.0),
             "enable_icm"         : True,

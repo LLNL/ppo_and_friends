@@ -18,7 +18,6 @@ from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
 from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
 import time
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD

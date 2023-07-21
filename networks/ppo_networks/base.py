@@ -3,34 +3,70 @@
 """
 import torch.nn as nn
 import torch
-import sys
-from .distributions import *
 import os
+from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
-import torch.nn.functional as t_functional
-from mpi4py import MPI
+from ppo_and_friends.networks.utils import get_size_and_shape
 
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-class PPONetwork(nn.Module):
+
+class PPONetwork(ABC, nn.Module):
     """
         A base class for PPO networks.
     """
 
     def __init__(self,
-                 name,
+                 in_shape,
+                 out_shape,
+                 name      = "ppo-netork",
                  test_mode = False,
                  **kw_args):
         """
             Arguments:
-                name    The name of the network.
+                in_shape   The shape of the input. (int or tuple)
+                out_shape  The shape of the output. (int or tuple)
+                name       The name of the network. (str)
+                test_mode  Are we testing a trained policy? (bool)
         """
-
         super(PPONetwork, self).__init__()
-        self.name = name
-        self.test_mode = test_mode
+
+        if type(in_shape) != type(None):
+            self.in_size, self.in_shape = get_size_and_shape(in_shape)
+        else:
+            self.in_size  = None
+            self.in_shape = None
+
+        if type(out_shape) != type(None):
+            self.out_size, self.out_shape = get_size_and_shape(out_shape)
+        else:
+            self.out_size  = None
+            self.out_shape = None
+
+        self.output_func = lambda x : x
+        self.name        = name
+        self.test_mode   = test_mode
+
+    @abstractmethod
+    def forward(self, *args, **kw_args):
+        pass
+
+    def _shape_output(self, output):
+        """
+            Reshape the network output to match our expected output shape.
+
+            Arguments:
+                output    The network output (tensor or numpy array).
+
+            Returns:
+                The output reshaped.
+        """
+        out_shape = (output.shape[0],) + self.out_shape
+        output    = output.reshape(out_shape)
+        return output
 
     def save(self, path):
 
@@ -62,85 +98,19 @@ class PPONetwork(nn.Module):
         self.load_state_dict(torch.load(in_f))
 
 
-class PPOActorCriticNetwork(PPONetwork):
-
-    def __init__(self,
-                 action_dtype,
-                 out_dim,
-                 action_nvec = None,
-                 **kw_args):
-        """
-            NOTE: if this class is to behave as a PPO actor, it should be
-            given the name "actor".
-
-            Arguments:
-                action_dtype     The data type of our action space.
-                out_dim          The output dimensions.
-                action_nvec      The nvec attribute of the action space.
-        """
-
-        super(PPOActorCriticNetwork, self).__init__(**kw_args)
-
-        if action_dtype not in ["discrete", "continuous",
-            "multi-binary", "multi-discrete"]:
-
-            msg = "ERROR: unknown action type {}".format(action_dtype)
-            rank_print(msg)
-            comm.Abort()
-
-        self.action_dtype = action_dtype
-        self.output_func  = lambda x : x
-
-        #
-        # Actors have special roles.
-        #
-        if "actor" in self.name:
-
-            if action_dtype == "discrete":
-                self.distribution = CategoricalDistribution(**kw_args)
-                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
-
-            if action_dtype == "multi-discrete":
-                self.distribution = MultiCategoricalDistribution(
-                    nvec = action_nvec, **kw_args)
-                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
-
-            elif action_dtype == "continuous":
-                self.distribution = GaussianDistribution(out_dim, **kw_args)
-
-            elif action_dtype == "multi-binary":
-                self.distribution = BernoulliDistribution(**kw_args)
-                self.output_func  = t_functional.sigmoid
-
-    def get_refined_prediction(self, obs):
-        """
-            Given an observation, return the results of performing
-            inference + any other alterations that should be made
-            to the result before it's fed back into the world.
-
-            Arguments:
-                obs      The observation to infer from.
-
-            Returns:
-                The predicted result with any required alterations.
-        """
-        if self.name == "actor":
-            res = self.__call__(obs)
-            res = self.distribution.refine_prediction(res)
-            return res
-        else:
-            return self.__call__(obs)
-
-
-class PPOConv2dNetwork(PPOActorCriticNetwork):
+class PPOConv2dNetwork(PPONetwork):
 
     def __init__(self, **kw_args):
+        """
+        """
         super(PPOConv2dNetwork, self).__init__(**kw_args)
 
 
-class PPOLSTMNetwork(PPOActorCriticNetwork):
+class PPOLSTMNetwork(PPONetwork):
 
     def __init__(self, **kw_args):
+        """
+        """
         super(PPOLSTMNetwork, self).__init__(**kw_args)
 
     def get_zero_hidden_state(self,
@@ -180,7 +150,7 @@ class PPOLSTMNetwork(PPOActorCriticNetwork):
             batch_size, device)
 
 
-class SingleSplitObservationNetwork(PPOActorCriticNetwork):
+class SingleSplitObservationNetwork(PPONetwork):
     """
         The idea here is to support splitting the observations into
         two sub-networks before merging them back together. This is
