@@ -306,14 +306,14 @@ class ICM(PPONetwork):
         self.ce_loss      = nn.CrossEntropyLoss(reduction="mean")
         self.mse_loss     = nn.MSELoss(reduction="none")
 
-        obs_size  = get_flattened_space_length(obs_space)
-
         #
         # Observation encoder.
         #
         if encoded_obs_dim > 0:
+            obs_shape  = get_space_shape(obs_space)
+
             self.obs_encoder = obs_encoder(
-                obs_size,
+                obs_shape,
                 encoded_obs_dim,
                 out_init,
                 encoder_hidden_size,
