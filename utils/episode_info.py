@@ -10,7 +10,95 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-class EpisodeInfo(object):
+def combine_episodes(episodes, build_hidden_states):
+    """
+    """
+    actions              = []
+    raw_actions          = []
+    critic_observations  = []
+    observations         = []
+    next_observations    = []
+    rewards_to_go        = []
+    log_probs            = []
+    ep_lens              = []
+    advantages           = []
+    values               = []
+    actor_hidden         = []
+    critic_hidden        = []
+    actor_cell           = []
+    critic_cell          = []
+    total_timestates     = 0
+
+    for ep in episodes:
+
+        if not ep.is_finished:
+            msg  = "ERROR: attempting to build a batch using "
+            msg += "an incomplete episode! Bailing..."
+            rank_print(msg)
+            comm.Abort()
+
+        total_timestates += ep.length
+
+        actions.extend(ep.actions)
+        raw_actions.extend(ep.raw_actions)
+        observations.extend(ep.observations)
+        next_observations.extend(ep.next_observations)
+        rewards_to_go.extend(ep.rewards_to_go)
+        log_probs.extend(ep.log_probs)
+        ep_lens.append(ep.length)
+        advantages.extend(ep.advantages)
+        values.extend(ep.values)
+        critic_observations.extend(ep.critic_observations)
+
+        if build_hidden_states:
+            actor_hidden.extend(ep.actor_hidden)
+            critic_hidden.extend(ep.critic_hidden)
+
+            actor_cell.extend(ep.actor_cell)
+            critic_cell.extend(ep.critic_cell)
+
+    if total_timestates != len(observations):
+        error_msg  = "ERROR: expected the total timestates to match "
+        error_msg += "the total number of observations, but got "
+        error_msg += "{} vs {}".format(total_timestates,
+            len(observations))
+        rank_print(error_msg)
+        comm.Abort()
+
+    #
+    # Note that log_probs is a list of tensors, so we'll skip converting
+    # it to a numpy array.
+    #
+    actions                  = np.array(actions)
+    raw_actions              = np.array(raw_actions)
+    critic_observations      = np.array(critic_observations)
+    observations             = np.array(observations)
+    next_observations        = np.array(next_observations)
+    rewards_to_go            = np.array(rewards_to_go)
+    ep_lens                  = np.array(ep_lens)
+    advantages               = np.array(advantages)
+    values                   = torch.tensor(values)
+
+    return (
+        actions,
+        raw_actions,
+        critic_observations,
+        observations,
+        next_observations,
+        rewards_to_go,
+        log_probs,
+        ep_lens,
+        advantages,
+        values,
+        actor_hidden,
+        critic_hidden,
+        actor_cell,
+        critic_cell,
+        total_timestates)
+
+
+
+class EpisodeInfo():
 
     def __init__(self,
                  starting_ts    = 0,
@@ -275,6 +363,102 @@ class EpisodeInfo(object):
         self.compute_advantages()
 
 
+class AgentSharedEpisode():
+
+    def __init__(self, agent_ids):
+        """
+        """
+        self.agent_ids      = agent_ids
+        self.added_agents   = []
+        self.episode_limit  = len(agent_ids)
+        self.episode_count  = 0
+        self.is_finished    = False
+        self.agent_episodes = np.array([None] * agent_limit, dtype=object)
+
+        self.actions             = None
+        self.raw_actions         = None
+        self.critic_observations = None
+        self.observations        = None
+        self.next_observations   = None
+        self.rewards_to_go       = None
+        self.log_probs           = None
+        self.ep_lens             = None
+        self.advantages          = None
+        self.values              = None
+        self.actor_hidden        = None
+        self.critic_hidden       = None
+        self.actor_cell          = None
+        self.critic_cell         = None
+        self.total_timestates    = None
+
+    def verify_agent(self, agent_id):
+        """
+        """
+        if agent_id not in self.agent_ids:
+            msg  = "ERROR: agent id, {agent_id}, not in list of accepted "
+            msg += "agents."
+            rank_print(msg)
+            comm.Abort()
+
+        if agent_id in self.added_agents:
+            msg  = "ERROR: agent id, {agent_id}, has already been added to this "
+            msg += "AgentSharedEpisode!"
+            rank_print(msg)
+            comm.Abort()
+
+    def verify_episode(self, episode):
+        """
+        """
+        if not episode.is_finished:
+            msg  = "ERROR episode must be finished before being added to and "
+            msg += "AgentSharedEpisode object!"
+            rank_print(msg)
+            comm.Abort()
+
+    def add_episode(self, agent_id, episode):
+        """
+        """
+        if self.is_finished:
+            msg  = "ERROR: AgentSharedEpisode is finished! Cannot add "
+            msg += "more episodes."
+            rank_print(msg)
+            comm.Abort()
+
+        self.verify_agent(agent_id)
+        self.verify_episode(episode)
+
+        #FIXME: do we need to maintain a specific ordering here?
+        self.agent_episodes[self.episode_count] = episode
+        self.added_agents.append(agent_id)
+        self.episode_count += 1
+
+        if self.episode_count == self.episode_limit:
+            self.is_finished = True
+            self._merge_episodes()
+
+    def _merge_episodes(self):
+        """
+        """
+        self.actions, \
+        self.raw_actions, \
+        self.critic_observations, \
+        self.observations, \
+        self.next_observations, \
+        self.rewards_to_go, \
+        self.log_probs, \
+        self.ep_lens, \
+        self.advantages, \
+        self.values, \
+        _, \
+        _, \
+        _, \
+        _, \
+        self.total_timestates = \
+            combine_episodes(self.episodes, False)
+
+
+# FIXME: I think we will need a MAT specific PPODataset that enforces
+# collections of agents in the data.
 class PPODataset(Dataset):
 
     def __init__(self,
@@ -324,6 +508,23 @@ class PPODataset(Dataset):
         self.terminal_mask             = None
         self.values                    = None
 
+    # FIXME: we'll need to somehow combine episodes from all agents that
+    # share an episode... How should we do this??
+    # Options:
+    #    1. We could create a "SharedEpisodes" container that holds all
+    #       "shared" episodes from agents.
+    #       Every time we end an episode, we do so for all agents. We would
+    #       add all "ended" episodes to a "SharedEpisodes" container,
+    #       which would consist of the EpisodeInfo for all agents of a
+    #       shared policy. Those episodes could then be concatenated into
+    #       a data shape of (num_timesteps, num_agents, *).
+    #    2. If each EpisodeInfo had an ID associated with it, we could use
+    #       that ID to sort them and then condense the agents into shared
+    #       episodes. We still might need some kind of "SharedEpisode"
+    #       object...
+    #    3. The Policy could track "SharedEpisode" objects if we made
+    #       a MAT specific Policy. We probablly need a MAT specific Policy
+    #       anyways...
     def add_episode(self, episode):
         """
             Add an episode to our dataset.
@@ -372,67 +573,26 @@ class PPODataset(Dataset):
             rank_print(msg)
             comm.Abort()
 
-        #
-        # TODO: let's use numpy arrays to save on space.
-        #
-        self.actions                  = []
-        self.raw_actions              = []
-        self.critic_observations      = []
-        self.observations             = []
-        self.next_observations        = []
-        self.rewards_to_go            = []
-        self.log_probs                = []
-        self.ep_lens                  = []
-        self.advantages               = []
-        self.actor_hidden             = []
-        self.critic_hidden            = []
-        self.actor_cell               = []
-        self.critic_cell              = []
-        self.values                   = []
-
-        self.num_episodes             = len(self.episodes)
-        self.total_timestates         = 0
-
-        for ep in self.episodes:
-            self.total_timestates += ep.length
+        self.num_episodes = len(self.episodes)
 
         if self.build_terminal_mask:
             terminal_mask = np.zeros(self.total_timestates).astype(np.bool)
             cur_ts = 0
 
-        for ep in self.episodes:
+        if self.build_terminal_mask:
+            for ep in self.episodes:
 
-            if not ep.is_finished:
-                msg  = "ERROR: attempting to build a batch using "
-                msg += "an incomplete episode! Bailing..."
-                rank_print(msg)
-                comm.Abort()
+                if not ep.is_finished:
+                    msg  = "ERROR: attempting to build a batch using "
+                    msg += "an incomplete episode! Bailing..."
+                    rank_print(msg)
+                    comm.Abort()
 
-            self.actions.extend(ep.actions)
-            self.raw_actions.extend(ep.raw_actions)
-            self.observations.extend(ep.observations)
-            self.next_observations.extend(ep.next_observations)
-            self.rewards_to_go.extend(ep.rewards_to_go)
-            self.log_probs.extend(ep.log_probs)
-            self.ep_lens.append(ep.length)
-            self.advantages.extend(ep.advantages)
-            self.values.extend(ep.values)
-            self.critic_observations.extend(ep.critic_observations)
-
-            if self.build_hidden_states:
-                self.actor_hidden.extend(ep.actor_hidden)
-                self.critic_hidden.extend(ep.critic_hidden)
-
-                self.actor_cell.extend(ep.actor_cell)
-                self.critic_cell.extend(ep.critic_cell)
-
-            if self.build_terminal_mask:
                 cur_ts += ep.length
 
                 if ep.terminal:
                     terminal_mask[cur_ts - 1] = True
 
-        if self.build_terminal_mask:
             max_ts = self.total_timestates - (self.sequence_length - 1)
             self.terminal_sequence_masks = np.array(
                 [None] * max_ts, dtype=object)
@@ -451,27 +611,22 @@ class PPODataset(Dataset):
 
                 self.terminal_sequence_masks[ts] = mask
 
-        if self.total_timestates != len(self.observations):
-            error_msg  = "ERROR: expected the total timestates to match "
-            error_msg += "the total number of observations, but got "
-            error_msg += "{} vs {}".format(self.total_timestates,
-                len(self.observations))
-            rank_print(error_msg)
-            comm.Abort()
-
-        #
-        # Note that log_probs is a list of tensors, so we'll skip converting
-        # it to a numpy array.
-        #
-        self.actions                  = np.array(self.actions)
-        self.raw_actions              = np.array(self.raw_actions)
-        self.critic_observations      = np.array(self.critic_observations)
-        self.observations             = np.array(self.observations)
-        self.next_observations        = np.array(self.next_observations)
-        self.rewards_to_go            = np.array(self.rewards_to_go)
-        self.ep_lens                  = np.array(self.ep_lens)
-        self.advantages               = np.array(self.advantages)
-        self.values                   = torch.tensor(self.values)
+        self.actions, \
+        self.raw_actions, \
+        self.critic_observations, \
+        self.observations, \
+        self.next_observations, \
+        self.rewards_to_go, \
+        self.log_probs, \
+        self.ep_lens, \
+        self.advantages, \
+        self.values, \
+        self.actor_hidden, \
+        self.critic_hidden, \
+        self.actor_cell, \
+        self.critic_cell, \
+        self.total_timestates = \
+            combine_episodes(self.episodes, self.build_hidden_states)
 
         self.values = self.values.to(self.device)
 
@@ -610,3 +765,24 @@ class PPODataset(Dataset):
                 self.actor_cell[idx],
                 self.critic_cell[idx],
                 idx)
+
+
+class PPOSharedEpisodeDataset(PPODataset):
+
+    def __init__(self, num_envs, agent_ids, *args, **kw_args):
+
+        super(PPOSharedEpisodeDataset, self).__init__(*args, **kw_args)
+
+        self.num_envs      = num_envs
+        self.agent_ids     = agent_ids
+        self.episode_queue = np.array([AgentSharedEpisode(agent_ids)] * num_envs)
+
+    def add_shared_episode(self, episode, agent_id, env_idx):
+        """
+        """
+        self.episode_queue[env_idx].add_episode(agent_id, episode)
+
+        if self.episode_queue[env_idx].is_finished:
+            self.episodes.append(self.episode_queue[env_idx])
+            self.episodes[env_idx] = AgentSharedEpisode(self.agent_ids)
+
