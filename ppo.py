@@ -240,6 +240,7 @@ class PPO(object):
 
             self.policies[policy_id] = \
                 generate_policy(
+                    envs_per_proc            = envs_per_proc,
                     policy_name              = str(policy_id),
                     policy_class             = settings[0],
                     actor_observation_space  = settings[1],
@@ -294,6 +295,7 @@ class PPO(object):
         # for calcultaing advantages. We track separate normalizers for
         # each policy.
         #
+        #FIXME: why not have the value normalizers in the policy?
         if normalize_values:
             self.value_normalizers = {}
 
@@ -618,6 +620,7 @@ class PPO(object):
 
         return have_nat_reward, natural_reward
 
+    #FIXME: move to utils?
     def get_detached_dict(self, attached):
         """
             Given a dictionary mapping agent ids to torch
@@ -661,6 +664,7 @@ class PPO(object):
 
         return denorm_values
 
+    # FIXME do we need this??
     def get_normalized_values(self, values):
         """
             Given a dictionary mapping agent ids to critic values,
@@ -1008,6 +1012,10 @@ class PPO(object):
 
             value = self.get_policy_values(critic_obs)
 
+            # FIXME: this should likely be part of the policy class...
+            # Update: maybe not... this is quite a bit more complicated than
+            # I initially thought. I think it could be, but it would take some
+            # considerable effort.
             if self.normalize_values:
                 value = self.get_denormalized_values(value)
 
@@ -1075,6 +1083,10 @@ class PPO(object):
 
             for agent_id in action:
                 if term_count > 0:
+                    #
+                    # If an environment is terminal, all agents that are
+                    # in that environment are in a terminal state.
+                    #
                     for term_idx in where_term:
                         ep_obs[agent_id][term_idx] = \
                             info[agent_id][term_idx]["terminal observation"]
@@ -1144,7 +1156,9 @@ class PPO(object):
             #
             if term_count > 0:
                 #
-                # Every agent has at least one terminated environment.
+                # Every agent has at least one terminated environment, which
+                # means that every policy has at least one terminated
+                # enviornment.
                 #
                 for agent_id in terminated:
                     policy_id = self.policy_mapping_fn(agent_id)
@@ -1155,8 +1169,7 @@ class PPO(object):
                         episode_lengths = episode_lengths,
                         terminal        = np.ones(term_count).astype(bool),
                         ending_values   = np.zeros(term_count),
-                        ending_rewards  = np.zeros(term_count),
-                        status_dict     = self.status_dict)
+                        ending_rewards  = np.zeros(term_count))
 
                     top_rollout_score[policy_id] = \
                         max(top_rollout_score[policy_id],
@@ -1248,6 +1261,7 @@ class PPO(object):
                 maxed_count = where_maxed.size
 
                 if maxed_count > 0:
+
                     for agent_id in next_reward:
                         policy_id = self.policy_mapping_fn(agent_id)
 
@@ -1257,14 +1271,17 @@ class PPO(object):
 
                             next_reward[agent_id] += surprise.flatten()
                         
+                        # FIXME: refactor? If the value normalizers were inside of the policy class,
+                        # I think we could simplify the end_episodes method. We could maybe create
+                        # two version of end episodes, one for terminal and one for non-terminal?
+                        # => truncate_episode(...) and terminate_episodes(...).
                         self.policies[policy_id].end_episodes(
                             agent_id        = agent_id,
                             env_idxs        = where_maxed,
                             episode_lengths = episode_lengths,
                             terminal        = np.zeros(maxed_count).astype(bool),
                             ending_values   = next_value[agent_id],
-                            ending_rewards  = next_reward[agent_id],
-                            status_dict     = self.status_dict)
+                            ending_rewards  = next_reward[agent_id])
 
                 if total_rollout_ts >= self.ts_per_rollout:
 
@@ -1554,7 +1571,11 @@ class PPO(object):
         for batch_data in data_loader:
             critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell, batch_idxs = batch_data
+               actor_cell, critic_cell, batch_idxs = batch_data
+
+            print(f"RAW ACTIONS SHAPE: {raw_actions.shape}")#FIXME
+            print(f"LOG PROBS SHAPE: {log_probs.shape}")#FIXME
+            print(f"OBS SHAPE: {obs.shape}")#FIXME
 
             torch.cuda.empty_cache()
 

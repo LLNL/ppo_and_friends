@@ -10,7 +10,9 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def combine_episodes(episodes, build_hidden_states):
+def combine_episodes(episodes,
+                     build_hidden_states,
+                     list_combine_func = list.extend):
     """
     """
     actions              = []
@@ -39,45 +41,36 @@ def combine_episodes(episodes, build_hidden_states):
 
         total_timestates += ep.length
 
-        actions.extend(ep.actions)
-        raw_actions.extend(ep.raw_actions)
-        observations.extend(ep.observations)
-        next_observations.extend(ep.next_observations)
-        rewards_to_go.extend(ep.rewards_to_go)
-        log_probs.extend(ep.log_probs)
+        list_combine_func(actions, ep.actions)
+        list_combine_func(raw_actions, ep.raw_actions)
+        list_combine_func(observations, ep.observations)
+        list_combine_func(next_observations, ep.next_observations)
+        list_combine_func(rewards_to_go, ep.rewards_to_go)
+        list_combine_func(log_probs, ep.log_probs)
+        list_combine_func(advantages, ep.advantages)
+        list_combine_func(values, ep.values)
+        list_combine_func(critic_observations, ep.critic_observations)
+
+        #
+        # We always append length because they are integers.
+        #
         ep_lens.append(ep.length)
-        advantages.extend(ep.advantages)
-        values.extend(ep.values)
-        critic_observations.extend(ep.critic_observations)
 
         if build_hidden_states:
-            actor_hidden.extend(ep.actor_hidden)
-            critic_hidden.extend(ep.critic_hidden)
+            list_combine_func(actor_hidden, ep.actor_hidden)
+            list_combine_func(critic_hidden, ep.critic_hidden)
 
-            actor_cell.extend(ep.actor_cell)
-            critic_cell.extend(ep.critic_cell)
+            list_combine_func(actor_cell, ep.actor_cell)
+            list_combine_func(critic_cell, ep.critic_cell)
 
-    if total_timestates != len(observations):
-        error_msg  = "ERROR: expected the total timestates to match "
-        error_msg += "the total number of observations, but got "
-        error_msg += "{} vs {}".format(total_timestates,
-            len(observations))
-        rank_print(error_msg)
-        comm.Abort()
-
-    #
-    # Note that log_probs is a list of tensors, so we'll skip converting
-    # it to a numpy array.
-    #
-    actions                  = np.array(actions)
-    raw_actions              = np.array(raw_actions)
-    critic_observations      = np.array(critic_observations)
-    observations             = np.array(observations)
-    next_observations        = np.array(next_observations)
-    rewards_to_go            = np.array(rewards_to_go)
-    ep_lens                  = np.array(ep_lens)
-    advantages               = np.array(advantages)
-    values                   = torch.tensor(values)
+    #FIXME: this isn't really valid anymore...
+    #if total_timestates != len(observations):
+    #    error_msg  = "ERROR: expected the total timestates to match "
+    #    error_msg += "the total number of observations, but got "
+    #    error_msg += "{} vs {}".format(total_timestates,
+    #        observations.shape)
+    #    rank_print(error_msg)
+    #    comm.Abort()
 
     return (
         actions,
@@ -370,10 +363,10 @@ class AgentSharedEpisode():
         """
         self.agent_ids      = agent_ids
         self.added_agents   = []
-        self.episode_limit  = len(agent_ids)
-        self.episode_count  = 0
+        self.agent_limit    = len(agent_ids)
+        self.agent_count    = 0
         self.is_finished    = False
-        self.agent_episodes = np.array([None] * agent_limit, dtype=object)
+        self.agent_episodes = np.array([None] * self.agent_limit, dtype=object)
 
         self.actions             = None
         self.raw_actions         = None
@@ -382,7 +375,6 @@ class AgentSharedEpisode():
         self.next_observations   = None
         self.rewards_to_go       = None
         self.log_probs           = None
-        self.ep_lens             = None
         self.advantages          = None
         self.values              = None
         self.actor_hidden        = None
@@ -390,6 +382,7 @@ class AgentSharedEpisode():
         self.actor_cell          = None
         self.critic_cell         = None
         self.total_timestates    = None
+        self.length              = 0
 
     def verify_agent(self, agent_id):
         """
@@ -401,7 +394,7 @@ class AgentSharedEpisode():
             comm.Abort()
 
         if agent_id in self.added_agents:
-            msg  = "ERROR: agent id, {agent_id}, has already been added to this "
+            msg  = f"ERROR: agent id, {agent_id}, has already been added to this "
             msg += "AgentSharedEpisode!"
             rank_print(msg)
             comm.Abort()
@@ -428,11 +421,11 @@ class AgentSharedEpisode():
         self.verify_episode(episode)
 
         #FIXME: do we need to maintain a specific ordering here?
-        self.agent_episodes[self.episode_count] = episode
+        self.agent_episodes[self.agent_count] = episode
         self.added_agents.append(agent_id)
-        self.episode_count += 1
+        self.agent_count += 1
 
-        if self.episode_count == self.episode_limit:
+        if self.agent_count == self.agent_limit:
             self.is_finished = True
             self._merge_episodes()
 
@@ -446,7 +439,7 @@ class AgentSharedEpisode():
         self.next_observations, \
         self.rewards_to_go, \
         self.log_probs, \
-        self.ep_lens, \
+        ep_lens, \
         self.advantages, \
         self.values, \
         _, \
@@ -454,7 +447,48 @@ class AgentSharedEpisode():
         _, \
         _, \
         self.total_timestates = \
-            combine_episodes(self.episodes, False)
+            combine_episodes(self.agent_episodes, False, list.append)
+
+        #
+        # Note that log_probs is a list of tensors, so we'll skip converting
+        # it to a numpy array.
+        #
+        self.actions                  = np.stack(self.actions, axis=1)
+        self.raw_actions              = np.stack(self.raw_actions, axis=1)
+        self.critic_observations      = np.stack(self.critic_observations, axis=1)
+        self.observations             = np.stack(self.observations, axis=1)
+        self.next_observations        = np.stack(self.next_observations, axis=1)
+        self.rewards_to_go            = np.stack(self.rewards_to_go, axis=1)
+        self.advantages               = np.stack(self.advantages, axis=1)
+        self.values                   = np.stack(self.values, axis=1)
+
+        print(f"ACTIONS SHAPE: {self.actions.shape}")
+        print(f"VALUES SHAPE: {self.values.shape}")
+        print(f"OBS SHAPE: {self.observations.shape}")
+
+        if len(ep_lens) == 0:
+            msg  = "ERROR: attempting to merge AgentSharedEpisode with "
+            msg += "empty episodes!"
+            rank_print(msg)
+            comm.Abort()
+
+        self.length = ep_lens[0]
+
+        if (ep_lens != self.length).any():
+            msg  = "ERROR: mismatched episodes found in AgentSharedEpisode! "
+            msg += f"Episode lengths: {ep_lens}"
+            rank_print(msg)
+            comm.Abort()
+
+        self.actions
+        self.raw_actions
+        self.critic_observations
+        self.observations
+        self.next_observations
+        self.rewards_to_go
+        self.log_probs
+        self.advantages
+        self.values
 
 
 # FIXME: I think we will need a MAT specific PPODataset that enforces
@@ -574,6 +608,7 @@ class PPODataset(Dataset):
             comm.Abort()
 
         self.num_episodes = len(self.episodes)
+        print(f"NUM EPISODES: {self.num_episodes}")
 
         if self.build_terminal_mask:
             terminal_mask = np.zeros(self.total_timestates).astype(np.bool)
@@ -628,7 +663,24 @@ class PPODataset(Dataset):
         self.total_timestates = \
             combine_episodes(self.episodes, self.build_hidden_states)
 
+        #
+        # Note that log_probs is a list of tensors, so we'll skip converting
+        # it to a numpy array.
+        #
+        self.actions                  = np.array(self.actions)
+        self.raw_actions              = np.array(self.raw_actions)
+        self.critic_observations      = np.array(self.critic_observations)
+        self.observations             = np.array(self.observations)
+        self.next_observations        = np.array(self.next_observations)
+        self.rewards_to_go            = np.array(self.rewards_to_go)
+        self.ep_lens                  = np.array(self.ep_lens)
+        self.advantages               = np.array(self.advantages)
+        self.values                   = torch.tensor(self.values)
         self.values = self.values.to(self.device)
+
+        print(f"FINAL ACTIONS SHAPE: {self.actions.shape}")#FIXME
+        print(f"FINAL OBS SHAPE: {self.observations.shape}")#FIXME
+        print(f"FINAL VALUES SHAPE: {self.values.shape}")#FIXME
 
         if self.build_hidden_states:
             #
@@ -784,5 +836,5 @@ class PPOSharedEpisodeDataset(PPODataset):
 
         if self.episode_queue[env_idx].is_finished:
             self.episodes.append(self.episode_queue[env_idx])
-            self.episodes[env_idx] = AgentSharedEpisode(self.agent_ids)
+            self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
 

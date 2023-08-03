@@ -4,7 +4,7 @@ import torch
 from copy import deepcopy
 from functools import reduce
 from torch.optim import Adam
-from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset
+from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOSharedEpisodeDataset
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
@@ -32,6 +32,7 @@ class AgentPolicy():
                  action_space,
                  actor_observation_space,
                  critic_observation_space,
+                 envs_per_proc,
                  bootstrap_clip      = (-10., 10.),
                  ac_network          = FeedForwardNetwork,
                  actor_kw_args       = {},
@@ -55,68 +56,97 @@ class AgentPolicy():
                  icm_beta            = 0.8,
                  test_mode           = False):
         """
-            Arguments:
-                 name                 The name of this policy.
-                 action_space         The action space of this policy.
-
-                 actor_observation_space   The actor's observation space.
-                 critic_observation-space  The critic's observation space.
-
-                 bootstrap_clip       When using GAE, we bootstrap the values
-                                      and rewards when an epsiode is cut off
-                                      before completion. In these cases, we
-                                      clip the bootstrapped reward to a
-                                      specific range. Why is this? Well, our
-                                      estimated reward (from our value network)
-                                      might be way outside of the expected
-                                      range. We also allow the range min/max
-                                      to be callables from utils/schedulers.
-                 ac_network           The type of network to use for the actor
-                                      and critic.
-                 actor_kw_args        Keyword arguments for the actor network.
-                 critic_kw_args       Keyword arguments for the critic network.
-                 icm_kw_args          Keyword arguments for the icm network.
-                 target_kl            KL divergence used for early stopping.
-                                      This is typically set in the range
-                                      [0.1, 0.5]. Use high values to disable.
-                 surr_clip            The clip value applied to the surrogate
-                                      (standard PPO approach).
-                 vf_clip              An optional clip parameter used for
-                                      clipping the value function loss.
-                 gradient_clip        An optional clip value to use on the
-                                      gradient update.
-                 lr                   The learning rate. Can be
-                                      a number or a scheduler class from
-                                      utils/schedulers.py.
-                 icm_lr               The learning rate. Can be
-                                      a number or a scheduler class from
-                                      utils/schedulers.py.
-                 entropy_weight       The entropy weight. Can be
-                                      a number or a scheduler class from
-                                      utils/schedulers.py.
-                 kl_loss_weight       A "kl coefficient" when adding kl
-                                      divergence to the actor's loss. This
-                                      is only used when > 0.0, and is off
-                                      by default.
-                 use_gae              Should we use Generalized Advantage
-                                      Estimations? If not, fall back on the
-                                      vanilla advantage calculation.
-                 gamma                The gamma parameter used in calculating
-                                      rewards to go.
-                 lambd                The 'lambda' value for calculating GAEs.
-                 dynamic_bs_clip      If set to True, bootstrap_clip will be
-                                      used as the initial clip values, but all
-                                      values thereafter will be taken from the
-                                      global min and max rewards that have been
-                                      seen so far.
-                 enable_icm           Boolean flag. Enable ICM?
-                 icm_network          The network to use for ICM applications.
-                 intr_reward_weight   When using ICM, this weight will be
-                                      applied to the intrinsic reward.
-                                      Can be a number or a class from
-                                      utils/schedulers.py.
-                 icm_beta             The beta value used within the ICM.
-                 test_mode            Boolean flag. Are we in test mode?
+        Parameters:
+        ----------
+        name: str
+            The name of this policy.
+        action_space: gymnasium space
+            The action space of this policy.
+        actor_observation_space: gymnasium space
+            The actor's observation space.
+        critic_observation_space: gymnasium space
+            The critic's observation space.
+        envs_per_proc: int
+            The number of environments each process owns. This means that
+            a single step in the environment is actually stepping in
+            envs_per_proc instances of the environment behind the scenes.
+        bootstrap_clip: tuple or callable.
+            When using GAE, we bootstrap the values
+            and rewards when an epsiode is cut off
+            before completion. In these cases, we
+            clip the bootstrapped reward to a
+            specific range. Why is this? Well, our
+            estimated reward (from our value network)
+            might be way outside of the expected
+            range. We also allow the range min/max
+            to be callables from utils/schedulers.
+        ac_network: PPONetwork
+            The type of network to use for the actor
+            and critic.
+        actor_kw_args: dict
+            Keyword arguments for the actor network.
+        critic_kw_args: dict
+            Keyword arguments for the critic network.
+        icm_kw_args: dict
+            Keyword arguments for the icm network.
+        target_kl: float
+            KL divergence used for early stopping.
+            This is typically set in the range
+            [0.1, 0.5]. Use high values to disable.
+        surr_clip: float
+            The clip value applied to the surrogate
+            (standard PPO approach).
+        vf_clip: float
+            An optional clip parameter used for
+            clipping the value function loss.
+        gradient_clip: float
+            An optional clip value to use on the
+            gradient update.
+        lr: float or scheduler
+            The learning rate. Can be
+            a number or a scheduler class from
+            utils/schedulers.py.
+        icm_lr: float or scheduler
+            The learning rate. Can be
+            a number or a scheduler class from
+            utils/schedulers.py.
+        entropy_weight: float or scheduler
+            The entropy weight. Can be
+            a number or a scheduler class from
+            utils/schedulers.py.
+        kl_loss_weight: float
+            A "kl coefficient" when adding kl
+            divergence to the actor's loss. This
+            is only used when > 0.0, and is off
+            by default.
+        use_gae: bool
+            Should we use Generalized Advantage
+            Estimations? If not, fall back on the
+            vanilla advantage calculation.
+        gamma: float
+            The gamma parameter used in calculating
+            rewards to go.
+        lambd: float
+            The 'lambda' value for calculating GAEs.
+        dynamic_bs_clip: bool
+            If set to True, bootstrap_clip will be
+            used as the initial clip values, but all
+            values thereafter will be taken from the
+            global min and max rewards that have been
+            seen so far.
+        enable_icm: bool
+            Enable ICM?
+        icm_network: PPONetwork
+            The network to use for ICM applications.
+        intr_reward_weight: float
+            When using ICM, this weight will be
+            applied to the intrinsic reward.
+            Can be a number or a class from
+            utils/schedulers.py.
+        icm_beta: float
+            The beta value used within the ICM.
+        test_mode: bool
+            Are we in test mode?
         """
         self.name               = name
         self.action_space       = action_space
@@ -139,6 +169,7 @@ class AgentPolicy():
         self.vf_clip            = vf_clip
         self.gradient_clip      = gradient_clip
         self.kl_loss_weight     = kl_loss_weight
+        self.envs_per_proc      = envs_per_proc
 
         if callable(lr):
             self.lr = lr
@@ -396,6 +427,9 @@ class AgentPolicy():
             rank_print(msg)
             comm.Abort()
 
+    # NOTE: when add episode info, all info is coming from
+    # agents belonging to THIS policy, which means that they
+    # we don't need to distinguish agents for MAT.
     def add_episode_info(
         self, 
         agent_id,
@@ -428,6 +462,10 @@ class AgentPolicy():
                                      done.
         """
         self.validate_agent_id(agent_id)
+
+        #
+        # NOTE: all agents should have the same env_batch_size.
+        #
         env_batch_size = self.episodes[agent_id].size
 
         #
@@ -498,8 +536,7 @@ class AgentPolicy():
         episode_lengths,
         terminal,
         ending_values,
-        ending_rewards,
-        status_dict):
+        ending_rewards):
         """
             End a rollout episode.
 
@@ -510,7 +547,6 @@ class AgentPolicy():
                 terminal         Which episodes are terminally ending.
                 ending_values    Ending values for the episode(s).
                 ending_rewards   Ending rewards for the episode(s)
-                status_dict      The status dictionary.
         """
         self.validate_agent_id(agent_id)
 
@@ -783,7 +819,6 @@ class AgentPolicy():
             Arguments:
                 ep_rewards    A numpy array containing the rewards for
                               this episode.
-                status_dict   The status dictionary.
 
             Returns:
                 A tuple containing the min and max values for the bootstrap
@@ -936,3 +971,339 @@ class AgentPolicy():
         str_self += "    critic optim: {}\n".format(self.critic_optim)
         str_self += "    icm optim: {}\n".format(self.icm_optim)
         return str_self
+
+
+class MATPolicy(AgentPolicy):
+    """
+    """
+
+    def __init__(self, *args, **kw_args):
+        """
+        """
+        super(MATPolicy, self).__init__(*args, **kw_args)
+
+    #TODO: update to use MAT
+    def _initialize_networks(
+        self,
+        ac_network, 
+        enable_icm,
+        icm_network,
+        actor_kw_args,
+        critic_kw_args,
+        icm_kw_args):
+        """
+            Initialize our networks.
+
+            Arguments:
+                ac_network        The network class to use for the actor
+                                  and critic.
+                enable_icm        Whether or not to enable ICM.
+                icm_network       The network class to use for ICM (when
+                                  enabled).
+                actor_kw_args     Keyword args for the actor network.
+                critic_kw_args    Keyword args for the critic network.
+                icm_kw_args       Keyword args for the ICM network.
+        """
+        #
+        # Initialize our networks: actor, critic, and possibly ICM.
+        #
+        for base in ac_network.__bases__:
+            if base.__name__ == "PPOLSTMNetwork":
+                self.using_lstm = True
+
+        #
+        # arXiv:2006.05990v1 suggests initializing the output layer
+        # of the actor network with a weight that's ~100x smaller
+        # than the rest of the layers. We initialize layers with a
+        # value near 1.0 by default, so we set the last layer to
+        # 0.01. The same paper also suggests that the last layer of
+        # the value network doesn't matter so much. I can't remember
+        # where I got 1.0 from... I'll try to track that down.
+        #
+        self.actor = to_actor(ac_network)(
+            name         = "actor", 
+            obs_space    = self.actor_obs_space,
+            out_init     = 0.01,
+            action_space = self.action_space,
+            test_mode    = self.test_mode,
+            **actor_kw_args)
+
+        self.critic = to_critic(ac_network)(
+            name         = "critic", 
+            obs_space    = self.critic_obs_space,
+            out_init     = 1.0,
+            test_mode    = self.test_mode,
+            **critic_kw_args)
+
+        self.actor  = self.actor.to(self.device)
+        self.critic = self.critic.to(self.device)
+
+        broadcast_model_parameters(self.actor)
+        broadcast_model_parameters(self.critic)
+        comm.barrier()
+
+        if enable_icm:
+            self.icm_model = icm_network(
+                name         = "icm",
+                obs_space    = self.actor_obs_space,
+                action_space = self.action_space,
+                test_mode    = self.test_mode,
+                **icm_kw_args)
+
+            self.icm_model = self.icm_model.to(self.device)
+            broadcast_model_parameters(self.icm_model)
+            comm.barrier()
+
+    def initialize_dataset(self):
+        """
+            Initialize a rollout dataset. This should be called at the
+            onset of a rollout.
+        """
+        sequence_length = 1
+        if self.using_lstm:
+            self.actor.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            self.critic.reset_hidden_state(
+                batch_size = 1,
+                device     = self.device)
+
+            sequence_length = self.actor.sequence_length
+
+        self.dataset = PPOSharedEpisodeDataset(
+            device          = self.device,
+            action_dtype    = self.action_dtype,
+            sequence_length = sequence_length,
+            num_envs        = self.envs_per_proc,
+            agent_ids       = self.agent_ids)
+
+    def end_episodes(
+        self,
+        agent_id,
+        env_idxs,
+        episode_lengths,
+        terminal,
+        ending_values,
+        ending_rewards):
+        """
+            End a rollout episode.
+
+            Arguments:
+                agent_id         The associated agent id.
+                env_idxs         The associated environment indices.
+                episode_lengths  The lenghts of the ending episode(s).
+                terminal         Which episodes are terminally ending.
+                ending_values    Ending values for the episode(s).
+                ending_rewards   Ending rewards for the episode(s)
+        """
+        self.validate_agent_id(agent_id)
+
+        for idx, env_i in enumerate(env_idxs):
+            self.episodes[agent_id][env_i].end_episode(
+                ending_ts      = episode_lengths[env_i],
+                terminal       = terminal[idx],
+                ending_value   = ending_values[idx].item(),
+                ending_reward  = ending_rewards[idx].item())
+
+            # FIXME: we need to handle the MAT case.
+            # Options:
+            #    1. replace self.episodes with an array of SharedEpisode objects,
+            #       and add info directly to these (they track agent maps).
+            #    2. add episodes to SharedEpisode containers as we end them
+            #       here.
+            #    3. Create a "shared episode dataset". When we add completed episodes,
+            #       we provide an env idx that corresponds to a shared episode.
+            #       How would this work, though? The dataset would need to somehow
+            #       know when the SharedEpisode has all of its needed info because
+            #       the env idx will be replaced with a new EpisodeInfo object...
+            #       We could add a "limit" to the number of EpisodeInfos for each
+            #       SharedEpisode (which would be the number of agents in the policy).
+            #       But it doesn't seem like we'd need a "shared episode dataset" for
+            #       that...
+            #       We could implement an "add_shared_episode" function that adds
+            #       episodes to a SharedEpisode object, and, once it's full, it
+            #       automatically pulls that SharedEpisode out of an "active SharedEpisodes"
+            #       container, places the completed one into a growing list of 
+            #       completed SharedEpisodes, and adds a fresh SharedEpisodes
+            #       object to the "active" container.
+            #       ^^^^^ I think this is the way.
+            #
+            # In any case, we need to figure out how/when to add the shared
+            # episodes to our dataset... Currently, we add individual agent episodes
+            # to our dataset as we end them, but that's not quite what we want
+            # in the MAT case.
+            #
+
+            self.dataset.add_shared_episode(
+                self.episodes[agent_id][env_i],
+                agent_id,
+                env_i)
+
+            #
+            # If we're using a dynamic bs clip, we clip to the min/max
+            # rewards from the episode. Otherwise, rely on the user
+            # provided range.
+            #
+            bs_min, bs_max = self.get_bs_clip_range(
+                self.episodes[agent_id][env_i].rewards)
+
+            #
+            # If we're terminal, the start of the next episode is 0.
+            # Otherwise, we pick up where we left off.
+            #
+            starting_ts = 0 if terminal[idx] else episode_lengths[env_i]
+
+            self.episodes[agent_id][env_i] = EpisodeInfo(
+                starting_ts    = starting_ts,
+                use_gae        = self.use_gae,
+                gamma          = self.gamma,
+                lambd          = self.lambd,
+                bootstrap_clip = (bs_min, bs_max))
+
+    #TODO: update for MAT
+    def get_training_actions(self, obs):
+        """
+            Given observations from our environment, determine what the
+            next actions should be taken while allowing natural exploration.
+
+            This method is explicitly meant to be used in training and will
+            return more than just the environment actions.
+
+            Arguments:
+                obs    The environment observations.
+
+            Returns:
+                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+                is the distribution sample before any "squashing" takes place,
+                "action" is the the action value that should be fed to the
+                environment, and log_prob is the log probabilities from our
+                probability distribution.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg ++ "batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+
+        with torch.no_grad():
+            action_pred = self.actor(t_obs)
+
+        action_pred = action_pred.cpu().detach()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        #
+        # Our distribution gives us two potentially distinct actions, one of
+        # which is guaranteed to be a raw sample from the distribution. The
+        # other might be altered in some way (usually to enforce a range).
+        #
+        action, raw_action = self.actor.distribution.sample_distribution(dist)
+        log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+
+        action     = action.detach().numpy()
+        raw_action = raw_action.detach().numpy()
+
+        return raw_action, action, log_prob.detach()
+
+    #TODO: upate for MAT
+    def _get_action_with_exploration(self, obs):
+        """
+            Given observations from our environment, determine what the
+            next actions should be taken while allowing natural exploration.
+
+            Arguments:
+                obs    The environment observations.
+
+            Returns:
+                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+                is the distribution sample before any "squashing" takes place,
+                "action" is the the action value that should be fed to the
+                environment, and log_prob is the log probabilities from our
+                probability distribution.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg ++ "batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+
+        with torch.no_grad():
+            action_pred = self.actor(t_obs)
+
+        action_pred = action_pred.cpu().detach()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        #
+        # Our distribution gives us two potentially distinct actions, one of
+        # which is guaranteed to be a raw sample from the distribution. The
+        # other might be altered in some way (usually to enforce a range).
+        #
+        action, _ = self.actor.distribution.sample_distribution(dist)
+        return action
+
+    #TODO: upate for MAT
+    def _get_action_without_exploration(self, obs):
+        """
+            Given observations from our environment, determine what the
+            next actions should be while not allowing any exploration.
+
+            Arguments:
+                obs    The environment observations.
+
+            Returns:
+                The next actions to perform.
+        """
+        if len(obs.shape) < 2:
+            msg  = "ERROR: _get_action_without_exploration expects a "
+            msg ++ "batch of observations but "
+            msg += "instead received shape {}.".format(obs.shape)
+            rank_print(msg)
+            comm.Abort()
+
+        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+
+        with torch.no_grad():
+            return self.actor.get_refined_prediction(t_obs)
+
+    #TODO: upate for MAT
+    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
+        """
+            Given a batch of observations, use our critic to approximate
+            the expected return values. Also use a batch of corresponding
+            actions to retrieve some other useful information.
+
+            Arguments:
+                batch_critic_obs   A batch of observations for the critic.
+                batch_obs          A batch of standard observations.
+                batch_actions      A batch of actions corresponding to the batch of
+                                   observations.
+
+            Returns:
+                A tuple of form (values, log_probs, entropies) s.t. values are
+                the critic predicted value, log_probs are the log probabilities
+                from our probability distribution, and entropies are the
+                entropies from our distribution.
+        """
+        values      = self.critic(batch_critic_obs).squeeze()
+        action_pred = self.actor(batch_obs).cpu()
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
+
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+
+        return values, log_probs.to(self.device), entropy.to(self.device)
+
