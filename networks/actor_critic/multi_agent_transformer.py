@@ -5,18 +5,14 @@ import math
 import numpy as np
 from torch.distributions import Categorical
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
+from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
+from ppo_and_friends.utils.misc import get_space_shape
+from ppo_and_friends.utils.misc import get_action_dtype
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
-
-#FIXME:
-#from mat.algorithms.utils.util import check, init
-#from mat.algorithms.utils.transformer_act import discrete_autoregreesive_act
-#from mat.algorithms.utils.transformer_act import discrete_parallel_act
-#from mat.algorithms.utils.transformer_act import continuous_autoregreesive_act
-#from mat.algorithms.utils.transformer_act import continuous_parallel_act
 
 #FIXME: add optoin to our init for gain? Or, we could just keep there init function too...
 def init_(m, gain=0.01, activate=False):
@@ -24,6 +20,7 @@ def init_(m, gain=0.01, activate=False):
         gain = nn.init.calculate_gain('relu')
     return init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=gain)
 
+#############################################################################
 # FIXME: move SelfAttention and Encoder to some kind of utilities file. Maybe the encoders.py? It
 # might be better to create an encoders directory that contains multiple styles of encoders.
 class SelfAttention(nn.Module):
@@ -127,11 +124,11 @@ class DecodeBlock(nn.Module):
         x = self.ln2(rep_enc + self.attn2(key=x, value=x, query=rep_enc))
         x = self.ln3(x + self.mlp(x))
         return x
+#############################################################################
 
 
 
 
-#FIXME: these might need to be moved to the actor_critic directory.
 class MATCritic(PPONetwork):
 
     def __init__(self,
@@ -184,22 +181,34 @@ class MATActor(PPONetwork):
 
     def __init__(
         self,
-        obs_dim,
-        action_dim,
-        n_block,
-        embedding_size,
-        num_heads,
+        obs_space,
+        action_space,
         num_agents,
-        action_type='Discrete'):
+        embedding_size = 64,
+        num_blocks     = 1,
+        num_heads      = 1):
         """
         """
         super(MATActor, self).__init__()
 
-        self.action_dim = action_dim
-        self.embedding_size = embedding_size
-        self.action_type = action_type
+        self.obs_space = obs_space
+        self.distribution, self.output_func = \
+            get_actor_distribution(action_space, **kw_args)
 
-        if action_type == 'Discrete':
+        self.action_shape   = get_space_shape(action_space)
+        self.action_dtype   = get_action_dtype(action_space)
+        self.embedding_size = embedding_size
+
+        # TODO: let's update to support binary and multi-binary as well.
+        supported_types = ["continuous", "discrete"]
+        if self.action_dtype not in supported_types:
+            msg  = "ERROR: you're using action space of type {action_dtype}, "
+            msg += "but the multi-agent transformer currently only supports "
+            msg += f"{supported_types}."
+            rank_print(msg)
+            comm.Abort()
+
+        if action_dtype == 'discrete':
             self.action_encoder = nn.Sequential(
                 init_(nn.Linear(action_dim + 1, embedding_size, bias=False), activate=True),
                 nn.GELU())
@@ -215,7 +224,7 @@ class MATActor(PPONetwork):
 
         self.ln     = nn.LayerNorm(embedding_size)
         self.blocks = nn.Sequential(
-            *[DecodeBlock(embedding_size, num_heads, num_agents) for _ in range(n_block)])
+            *[DecodeBlock(embedding_size, num_heads, num_agents) for _ in range(num_blocks)])
 
         self.head   = nn.Sequential(
             init_(nn.Linear(embedding_size, embedding_size), activate=True),
