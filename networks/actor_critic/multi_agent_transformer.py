@@ -8,6 +8,7 @@ from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
 from ppo_and_friends.utils.misc import get_space_shape
 from ppo_and_friends.utils.misc import get_action_dtype
+from ppo_and_friends.utils.misc import get_flattened_space_length
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -129,52 +130,6 @@ class DecodeBlock(nn.Module):
 
 
 
-class MATCritic(PPONetwork):
-
-    def __init__(self,
-        obs_dim,
-        num_blocks,
-        embedding_size,
-        num_heads,
-        num_agents):
-        """
-        """
-
-        super(MATCritic, self).__init__()
-
-        self.obs_dim        = obs_dim
-        self.embedding_size = embedding_size
-        self.num_agents     = num_agents
-
-        self.obs_encoder = nn.Sequential(
-            nn.LayerNorm(obs_dim),
-            init_(nn.Linear(obs_dim, embedding_size), activate=True),
-            nn.GELU())
-
-        self.ln     = nn.LayerNorm(embedding_size)
-        self.blocks = nn.Sequential(
-            *[EncodeBlock(embedding_size, num_heads, num_agents) for _ in range(num_blocks)])
-
-        self.head   = nn.Sequential(
-            init_(nn.Linear(embedding_size, embedding_size), activate=True),
-            nn.GELU(),
-            nn.LayerNorm(embedding_size),
-            init_(nn.Linear(embedding_size, 1)))
-
-    def encode_obs(self, obs):
-        """
-        """
-        x = self.obs_encoder(obs)
-        return self.blocks(self.ln(x))
-
-    def forward(self, obs):
-        # NOTE Encoder should receive a sequence of agent observations.
-
-        # obs: (batch, num_agents, obs_dim)
-        #print(f"\nEncoder obs shape: {obs.shape}")#FIXME
-        # Encoder obs shape: torch.Size([N, num_agents, obs_size])
-
-        return self.head(self.encode_obs(obs))
 
 
 class MATActor(PPONetwork):
@@ -197,6 +152,7 @@ class MATActor(PPONetwork):
 
         self.action_shape   = get_space_shape(action_space)
         self.action_dtype   = get_action_dtype(action_space)
+        self.obs_size       = get_flattend_space_length(obs_space)
         self.embedding_size = embedding_size
 
         # TODO: let's update to support binary and multi-binary as well.
@@ -218,8 +174,8 @@ class MATActor(PPONetwork):
                 nn.GELU())
 
         self.obs_encoder = nn.Sequential(
-            nn.LayerNorm(obs_dim),
-            init_(nn.Linear(obs_dim, embedding_size), activate=True),
+            nn.LayerNorm(self.obs_size),
+            init_(nn.Linear(self.obs_size, embedding_size), activate=True),
             nn.GELU())
 
         self.ln     = nn.LayerNorm(embedding_size)
@@ -254,3 +210,52 @@ class MATActor(PPONetwork):
             x = block(x, encoded_obs)
 
         return self.head(x)
+
+
+class MATCritic(PPONetwork):
+
+    def __init__(self,
+        obs_space,
+        num_agents,
+        embedding_size = 64,
+        num_blocks     = 1,
+        num_heads      = 1):
+        """
+        """
+
+        super(MATCritic, self).__init__()
+
+        self.obs_space      = obs_space
+        self.obs_size       = get_flattend_space_length(obs_space)
+        self.embedding_size = embedding_size
+        self.num_agents     = num_agents
+
+        self.obs_encoder = nn.Sequential(
+            nn.LayerNorm(self.obs_size),
+            init_(nn.Linear(self.obs_size, embedding_size), activate=True),
+            nn.GELU())
+
+        self.ln     = nn.LayerNorm(embedding_size)
+        self.blocks = nn.Sequential(
+            *[EncodeBlock(embedding_size, num_heads, num_agents) for _ in range(num_blocks)])
+
+        self.head   = nn.Sequential(
+            init_(nn.Linear(embedding_size, embedding_size), activate=True),
+            nn.GELU(),
+            nn.LayerNorm(embedding_size),
+            init_(nn.Linear(embedding_size, 1)))
+
+    def encode_obs(self, obs):
+        """
+        """
+        x = self.obs_encoder(obs)
+        return self.blocks(self.ln(x))
+
+    def forward(self, obs):
+        # NOTE Encoder should receive a sequence of agent observations.
+
+        # obs: (batch, num_agents, obs_dim)
+        #print(f"\nEncoder obs shape: {obs.shape}")#FIXME
+        # Encoder obs shape: torch.Size([N, num_agents, obs_size])
+
+        return self.head(self.encode_obs(obs))
