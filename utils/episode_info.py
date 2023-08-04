@@ -63,15 +63,6 @@ def combine_episodes(episodes,
             list_combine_func(actor_cell, ep.actor_cell)
             list_combine_func(critic_cell, ep.critic_cell)
 
-    #FIXME: this isn't really valid anymore...
-    #if total_timestates != len(observations):
-    #    error_msg  = "ERROR: expected the total timestates to match "
-    #    error_msg += "the total number of observations, but got "
-    #    error_msg += "{} vs {}".format(total_timestates,
-    #        observations.shape)
-    #    rank_print(error_msg)
-    #    comm.Abort()
-
     return (
         actions,
         raw_actions,
@@ -462,9 +453,18 @@ class AgentSharedEpisode():
         self.advantages               = np.stack(self.advantages, axis=1)
         self.values                   = np.stack(self.values, axis=1)
 
-        print(f"ACTIONS SHAPE: {self.actions.shape}")
-        print(f"VALUES SHAPE: {self.values.shape}")
-        print(f"OBS SHAPE: {self.observations.shape}")
+        #
+        # log_probs is a special case that needs to remain in tensor form.
+        #
+        self.log_probs                = [torch.tensor(lp) for lp in self.log_probs]
+        self.log_probs                = torch.stack(self.log_probs, axis=1)
+
+        #print(f"ACTIONS SHAPE: {self.actions.shape}")
+        #print(f"VALUES SHAPE: {self.values.shape}")
+        #print(f"OBS SHAPE: {self.observations.shape}")
+        #print(f"LOG PROBS SHAPE: {self.log_probs.shape}")
+        #print(f"REWARDS TO GO SHAPE: {self.rewards_to_go.shape}")
+        #sys.exit(0)
 
         if len(ep_lens) == 0:
             msg  = "ERROR: attempting to merge AgentSharedEpisode with "
@@ -610,6 +610,29 @@ class PPODataset(Dataset):
         self.num_episodes = len(self.episodes)
         print(f"NUM EPISODES: {self.num_episodes}")
 
+        self.actions, \
+        self.raw_actions, \
+        self.critic_observations, \
+        self.observations, \
+        self.next_observations, \
+        self.rewards_to_go, \
+        self.log_probs, \
+        self.ep_lens, \
+        self.advantages, \
+        self.values, \
+        self.actor_hidden, \
+        self.critic_hidden, \
+        self.actor_cell, \
+        self.critic_cell, \
+        self.total_timestates = \
+            combine_episodes(self.episodes, self.build_hidden_states)
+
+        # FIXME: total timestates needs to be updated to reflect combined episodes...
+        # Maybe we should calculate it ourselves here? Or we could
+        # alter the "combine_episodes" function, but that could be tricky...
+        # I think we should remove it from combine_episodes,and calculate
+        # it ourselves both here and in the AgentSharedEpisode.
+
         if self.build_terminal_mask:
             terminal_mask = np.zeros(self.total_timestates).astype(np.bool)
             cur_ts = 0
@@ -646,41 +669,29 @@ class PPODataset(Dataset):
 
                 self.terminal_sequence_masks[ts] = mask
 
-        self.actions, \
-        self.raw_actions, \
-        self.critic_observations, \
-        self.observations, \
-        self.next_observations, \
-        self.rewards_to_go, \
-        self.log_probs, \
-        self.ep_lens, \
-        self.advantages, \
-        self.values, \
-        self.actor_hidden, \
-        self.critic_hidden, \
-        self.actor_cell, \
-        self.critic_cell, \
-        self.total_timestates = \
-            combine_episodes(self.episodes, self.build_hidden_states)
-
         #
         # Note that log_probs is a list of tensors, so we'll skip converting
         # it to a numpy array.
         #
-        self.actions                  = np.array(self.actions)
-        self.raw_actions              = np.array(self.raw_actions)
-        self.critic_observations      = np.array(self.critic_observations)
-        self.observations             = np.array(self.observations)
-        self.next_observations        = np.array(self.next_observations)
-        self.rewards_to_go            = np.array(self.rewards_to_go)
-        self.ep_lens                  = np.array(self.ep_lens)
-        self.advantages               = np.array(self.advantages)
-        self.values                   = torch.tensor(self.values)
-        self.values = self.values.to(self.device)
+        self.actions              = np.array(self.actions)
+        self.raw_actions          = np.array(self.raw_actions)
+        self.critic_observations  = np.array(self.critic_observations)
+        self.observations         = np.array(self.observations)
+        self.next_observations    = np.array(self.next_observations)
+        self.rewards_to_go        = np.array(self.rewards_to_go)
+        self.ep_lens              = np.array(self.ep_lens)
+        self.advantages           = np.array(self.advantages)
+        self.values               = torch.tensor(self.values)
 
-        print(f"FINAL ACTIONS SHAPE: {self.actions.shape}")#FIXME
-        print(f"FINAL OBS SHAPE: {self.observations.shape}")#FIXME
-        print(f"FINAL VALUES SHAPE: {self.values.shape}")#FIXME
+        self.values               = self.values.to(self.device)
+
+        if self.total_timestates != len(self.observations):
+            error_msg  = "ERROR: expected the total timestates to match "
+            error_msg += "the total number of observations, but got "
+            error_msg += "{} vs {}".format(self.total_timestates,
+                self.observations.shape)
+            rank_print(error_msg)
+            comm.Abort()
 
         if self.build_hidden_states:
             #
@@ -727,8 +738,7 @@ class PPODataset(Dataset):
         self.critic_observations = torch.tensor(self.critic_observations,
             dtype=torch.float).to(self.device)
 
-        self.log_probs = torch.tensor(self.log_probs,
-            dtype=torch.float).to(self.device)
+        self.log_probs = torch.stack(self.log_probs).float().to(self.device)
 
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
@@ -745,6 +755,12 @@ class PPODataset(Dataset):
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.long).to(self.device)
+
+        #print(f"FINAL ACTIONS SHAPE: {self.actions.shape}")#FIXME
+        #print(f"FINAL OBS SHAPE: {self.observations.shape}")#FIXME
+        #print(f"FINAL VALUES SHAPE: {self.values.shape}")#FIXME
+        #print(f"FINAL LOG PROBS SHAPE: {self.log_probs.shape}")#FIXME
+        #print(f"TOTAL TIMESTATES: {self.total_timestates}")#FIXME
 
         self.is_built = True
 
@@ -838,3 +854,9 @@ class PPOSharedEpisodeDataset(PPODataset):
             self.episodes.append(self.episode_queue[env_idx])
             self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
 
+    #FIXME: this needs to change. Or... Maybe we need to alter total_timestates?
+    def __len__(self):
+        """
+        Get the length of our dataset.
+        """
+        return self.total_timestates - (self.sequence_length - 1)
