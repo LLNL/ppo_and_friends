@@ -24,19 +24,20 @@ def init_(m, gain=0.01, activate=False):
         gain = nn.init.calculate_gain('relu')
     return init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=gain)
 
-
+# FIXME: move SelfAttention and Encoder to some kind of utilities file. Maybe the encoders.py? It
+# might be better to create an encoders directory that contains multiple styles of encoders.
 class SelfAttention(nn.Module):
 
-    def __init__(self, embedding_size, n_head, num_agents, masked=False):
+    def __init__(self, embedding_size, num_heads, num_agents, masked=False):
         """
         """
         super(SelfAttention, self).__init__()
 
         #FIXME: replace with MPI
-        assert embedding_size % n_head == 0
+        assert embedding_size % num_heads == 0
 
         self.masked = masked
-        self.n_head = n_head
+        self.num_heads = num_heads
 
         # key, query, value projections for all heads
         #FIXME: replace with our init?
@@ -60,9 +61,9 @@ class SelfAttention(nn.Module):
         B, L, D = query.size()
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        k = self.key(key).view(B, L, self.n_head, D // self.n_head).transpose(1, 2)  # (B, nh, L, hs)
-        q = self.query(query).view(B, L, self.n_head, D // self.n_head).transpose(1, 2)  # (B, nh, L, hs)
-        v = self.value(value).view(B, L, self.n_head, D // self.n_head).transpose(1, 2)  # (B, nh, L, hs)
+        k = self.key(key).view(B, L, self.num_heads, D // self.num_heads).transpose(1, 2)  # (B, nh, L, hs)
+        q = self.query(query).view(B, L, self.num_heads, D // self.num_heads).transpose(1, 2)  # (B, nh, L, hs)
+        v = self.value(value).view(B, L, self.num_heads, D // self.num_heads).transpose(1, 2)  # (B, nh, L, hs)
 
         # causal attention: (B, nh, L, hs) x (B, nh, hs, L) -> (B, nh, L, L)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
@@ -83,12 +84,14 @@ class SelfAttention(nn.Module):
 class EncodeBlock(nn.Module):
     """ an unassuming Transformer block """
 
-    def __init__(self, embedding_size, n_head, num_agents):
+    def __init__(self, embedding_size, num_heads, num_agents):
+        """
+        """
         super(EncodeBlock, self).__init__()
 
         self.ln1  = nn.LayerNorm(embedding_size)
         self.ln2  = nn.LayerNorm(embedding_size)
-        self.attn = SelfAttention(embedding_size, n_head, num_agents, masked=False)
+        self.attn = SelfAttention(embedding_size, num_heads, num_agents, masked=False)
 
         self.mlp  = nn.Sequential(
             init_(nn.Linear(embedding_size, 1 * embedding_size), activate=True),
@@ -105,14 +108,14 @@ class EncodeBlock(nn.Module):
 class DecodeBlock(nn.Module):
     """ an unassuming Transformer block """
 
-    def __init__(self, embedding_size, n_head, num_agents):
+    def __init__(self, embedding_size, num_heads, num_agents):
         super(DecodeBlock, self).__init__()
 
         self.ln1   = nn.LayerNorm(embedding_size)
         self.ln2   = nn.LayerNorm(embedding_size)
         self.ln3   = nn.LayerNorm(embedding_size)
-        self.attn1 = SelfAttention(embedding_size, n_head, num_agents, masked=True)
-        self.attn2 = SelfAttention(embedding_size, n_head, num_agents, masked=True)
+        self.attn1 = SelfAttention(embedding_size, num_heads, num_agents, masked=True)
+        self.attn2 = SelfAttention(embedding_size, num_heads, num_agents, masked=True)
         self.mlp   = nn.Sequential(
             init_(nn.Linear(embedding_size, 1 * embedding_size), activate=True),
             nn.GELU(),
@@ -126,10 +129,21 @@ class DecodeBlock(nn.Module):
         return x
 
 
-class Encoder(nn.Module):
 
-    def __init__(self, obs_dim, n_block, embedding_size, n_head, num_agents):
-        super(Encoder, self).__init__()
+
+#FIXME: these might need to be moved to the actor_critic directory.
+class MATCritic(PPONetwork):
+
+    def __init__(self,
+        obs_dim,
+        num_blocks,
+        embedding_size,
+        num_heads,
+        num_agents):
+        """
+        """
+
+        super(MATCritic, self).__init__()
 
         self.obs_dim        = obs_dim
         self.embedding_size = embedding_size
@@ -142,7 +156,7 @@ class Encoder(nn.Module):
 
         self.ln     = nn.LayerNorm(embedding_size)
         self.blocks = nn.Sequential(
-            *[EncodeBlock(embedding_size, n_head, num_agents) for _ in range(n_block)])
+            *[EncodeBlock(embedding_size, num_heads, num_agents) for _ in range(num_blocks)])
 
         self.head   = nn.Sequential(
             init_(nn.Linear(embedding_size, embedding_size), activate=True),
@@ -150,22 +164,23 @@ class Encoder(nn.Module):
             nn.LayerNorm(embedding_size),
             init_(nn.Linear(embedding_size, 1)))
 
+    def encode_obs(self, obs):
+        """
+        """
+        x = self.obs_encoder(obs)
+        return self.blocks(self.ln(x))
+
     def forward(self, obs):
         # NOTE Encoder should receive a sequence of agent observations.
 
         # obs: (batch, num_agents, obs_dim)
         #print(f"\nEncoder obs shape: {obs.shape}")#FIXME
-        # Encoder obs shape: torch.Size([N, 3, 21])
-        obs_embeddings = self.obs_encoder(obs)
-        x = obs_embeddings
+        # Encoder obs shape: torch.Size([N, num_agents, obs_size])
 
-        rep = self.blocks(self.ln(x))
-        v_loc = self.head(rep)
-
-        return v_loc, rep
+        return self.head(self.encode_obs(obs))
 
 
-class Decoder(nn.Module):
+class MATActor(PPONetwork):
 
     def __init__(
         self,
@@ -173,54 +188,44 @@ class Decoder(nn.Module):
         action_dim,
         n_block,
         embedding_size,
-        n_head,
+        num_heads,
         num_agents,
         action_type='Discrete'):
         """
         """
-        super(Decoder, self).__init__()
+        super(MATActor, self).__init__()
 
         self.action_dim = action_dim
         self.embedding_size = embedding_size
         self.action_type = action_type
 
-        if action_type != 'Discrete':
-            log_std      = torch.ones(action_dim)
-            self.log_std = torch.nn.Parameter(log_std)
-
+        if action_type == 'Discrete':
+            self.action_encoder = nn.Sequential(
+                init_(nn.Linear(action_dim + 1, embedding_size, bias=False), activate=True),
+                nn.GELU())
         else:
-            if action_type == 'Discrete':
-                self.action_encoder = nn.Sequential(
-                    init_(nn.Linear(action_dim + 1, embedding_size, bias=False), activate=True),
-                    nn.GELU())
-            else:
-                self.action_encoder = nn.Sequential(
-                    init_(nn.Linear(action_dim, embedding_size), activate=True),
-                    nn.GELU())
-
-            self.obs_encoder = nn.Sequential(
-                nn.LayerNorm(obs_dim),
-                init_(nn.Linear(obs_dim, embedding_size), activate=True),
+            self.action_encoder = nn.Sequential(
+                init_(nn.Linear(action_dim, embedding_size), activate=True),
                 nn.GELU())
 
-            self.ln     = nn.LayerNorm(embedding_size)
-            self.blocks = nn.Sequential(
-                *[DecodeBlock(embedding_size, n_head, num_agents) for _ in range(n_block)])
+        self.obs_encoder = nn.Sequential(
+            nn.LayerNorm(obs_dim),
+            init_(nn.Linear(obs_dim, embedding_size), activate=True),
+            nn.GELU())
 
-            self.head   = nn.Sequential(
-                init_(nn.Linear(embedding_size, embedding_size), activate=True),
-                nn.GELU(),
-                nn.LayerNorm(embedding_size),
-                init_(nn.Linear(embedding_size, action_dim)))
+        self.ln     = nn.LayerNorm(embedding_size)
+        self.blocks = nn.Sequential(
+            *[DecodeBlock(embedding_size, num_heads, num_agents) for _ in range(n_block)])
 
-    #FIXME: only used for one environment.
-    #def zero_std(self, device):
-    #    if self.action_type != 'Discrete':
-    #        #FIXME: what's happening here?
-    #        log_std = torch.zeros(self.action_dim).to(device)
-    #        self.log_std.data = log_std
+        self.head   = nn.Sequential(
+            init_(nn.Linear(embedding_size, embedding_size), activate=True),
+            nn.GELU(),
+            nn.LayerNorm(embedding_size),
+            init_(nn.Linear(embedding_size, action_dim)))
 
-    def forward(self, action, obs_rep, obs):
+    def forward(self, action, encoded_obs):
+        """
+        """
         # action: (batch, num_agents, action_dim), one-hot/logits?
         # obs_rep: (batch, num_agents, embedding_size)
         #print(f"\nDecoder action shape: {action.shape}")#FIXME
@@ -233,129 +238,10 @@ class Decoder(nn.Module):
         # for the next agent in line. Note that the action space is only expanded for
         # discrete actions! Continuous actions are the same dimensions.
 
-        action_embeddings = self.action_encoder(action)
-        x = self.ln(action_embeddings)
+        x = self.action_encoder(action)
+        x = self.ln(x)
 
         for block in self.blocks:
-            x = block(x, obs_rep)
-        logit = self.head(x)
+            x = block(x, encoded_obs)
 
-        return logit
-
-
-class MultiAgentTransformer(PPONetwork):
-
-    def __init__(
-        self,
-        obs_dim,
-        action_dim,
-        num_agents,
-        n_block,
-        embedding_size,
-        n_head,
-        device=torch.device("cpu"),
-        action_type='Discrete'):
-        """
-        """
-        super(MultiAgentTransformer, self).__init__()
-
-        self.num_agents    = num_agents
-        self.action_dim    = action_dim
-        self.device        = device
-        self.action_type   = action_type
-        self.device        = device
-
-        self.encoder = Encoder(
-            obs_dim,
-            n_block,
-            embedding_size,
-            n_head,
-            num_agents)
-
-        self.decoder = Decoder(
-            obs_dim,
-            action_dim,
-            n_block,
-            embedding_size,
-            n_head,
-            num_agents,
-            self.action_type)
-        self.to(device)
-
-    #FIXME: only used for one env.
-    #def zero_std(self):
-    #    if self.action_type != 'Discrete':
-    #        self.decoder.zero_std(self.device)
-
-    def forward(self, obs, action):
-        # obs: (batch, num_agents, obs_dim)
-        # action: (batch, num_agents, 1)
-
-        obs    = obs.to(self.device)
-        action = action.to(self.device)
-
-        batch_size     = obs.shape[0]
-        v_loc, obs_rep = self.encoder(obs)
-
-        if self.action_type == 'Discrete':
-            action = action.long()
-            action_log, entropy = discrete_parallel_act(
-                self.decoder,
-                obs_rep,
-                obs,
-                action,
-                batch_size,
-                self.num_agents,
-                self.action_dim,
-                self.device)
-
-        else:
-            action_log, entropy = continuous_parallel_act(
-                self.decoder,
-                obs_rep,
-                obs,
-                action,
-                batch_size,
-                self.num_agents,
-                self.action_dim,
-                self.device)
-
-        return action_log, v_loc, entropy
-
-    def get_actions(self, obs, deterministic=False):
-
-        obs = obs.to(self.device)
-
-        batch_size     = np.shape(obs)[0]
-        v_loc, obs_rep = self.encoder(obs)
-
-        if self.action_type == "Discrete":
-            output_action, output_action_log = discrete_autoregreesive_act(
-                self.decoder,
-                obs_rep,
-                obs,
-                batch_size,
-                self.num_agents,
-                self.action_dim,
-                self.device,
-                deterministic)
-        else:
-            output_action, output_action_log = continuous_autoregreesive_act(
-                self.decoder,
-                obs_rep,
-                obs,
-                batch_size,
-                self.num_agents,
-                self.action_dim,
-                self.device,
-                deterministic)
-
-        return output_action, output_action_log, v_loc
-
-    def get_values(self, obs):
-        obs = obs.to(self.device)
-        v_tot, obs_rep = self.encoder(obs)
-        return v_tot
-
-
-
+        return self.head(x)
