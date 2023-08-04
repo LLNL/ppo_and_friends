@@ -3,6 +3,7 @@
 """
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.utils.mpi_utils import rank_print
+from collections import OrderedDict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -81,7 +82,7 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
                 A copy of actions where the actions are reshaped to match
                 the agent's action space.
         """
-        c_actions = {}
+        c_actions = OrderedDict({})
         for agent_id in actions:
             c_actions[agent_id] = \
                 actions[agent_id].reshape(self.action_space[agent_id].shape)
@@ -143,7 +144,7 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
 
         self._reset_done_agents()
 
-        done = {a_id : False for a_id in obs}
+        done = OrderedDict({a_id : False for a_id in obs})
         critic_obs = self._construct_critic_observation(
             obs, done)
 

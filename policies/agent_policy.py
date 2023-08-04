@@ -13,6 +13,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
+import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 
 from mpi4py import MPI
@@ -985,32 +986,37 @@ class MATPolicy(AgentPolicy):
     #TODO: update to use MAT
     def _initialize_networks(
         self,
-        ac_network, 
         enable_icm,
         icm_network,
         actor_kw_args,
         critic_kw_args,
-        icm_kw_args):
+        icm_kw_args,
+        actor_network  = mat.MATActor,
+        critic_network = mat.MATCritic):
         """
-            Initialize our networks.
+        Initialize our networks.
 
-            Arguments:
-                ac_network        The network class to use for the actor
-                                  and critic.
-                enable_icm        Whether or not to enable ICM.
-                icm_network       The network class to use for ICM (when
-                                  enabled).
-                actor_kw_args     Keyword args for the actor network.
-                critic_kw_args    Keyword args for the critic network.
-                icm_kw_args       Keyword args for the ICM network.
+        Parameters:
+        -----------
+        enable_icm: bool
+            Whether or not to enable ICM.
+        icm_network: class of type PPONetwork
+            The network class to use for ICM (when enabled).
+        actor_kw_args: dict
+            Keyword args for the actor network.
+        critic_kw_args: dict
+            Keyword args for the critic network.
+        icm_kw_args: dict
+            Keyword args for the ICM network.
+        actor_network: class of type PPONetwork
+            The network to use for the actor.
+        critic_network: class of type PPONetwork
+            The network to use for the critic.
         """
         #
         # Initialize our networks: actor, critic, and possibly ICM.
         #
-        for base in ac_network.__bases__:
-            if base.__name__ == "PPOLSTMNetwork":
-                self.using_lstm = True
-
+        # FIXME: let's try integrating this into the MAT networks.
         #
         # arXiv:2006.05990v1 suggests initializing the output layer
         # of the actor network with a weight that's ~100x smaller
@@ -1020,18 +1026,22 @@ class MATPolicy(AgentPolicy):
         # the value network doesn't matter so much. I can't remember
         # where I got 1.0 from... I'll try to track that down.
         #
-        self.actor = to_actor(ac_network)(
+
+
+        self.actor = actor_network(
             name         = "actor", 
             obs_space    = self.actor_obs_space,
-            out_init     = 0.01,
+            #out_init     = 0.01,#FIXME
             action_space = self.action_space,
+            num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,
             **actor_kw_args)
 
-        self.critic = to_critic(ac_network)(
+        self.critic = critic_network(
             name         = "critic", 
             obs_space    = self.critic_obs_space,
-            out_init     = 1.0,
+            #out_init     = 1.0,#FIXME
+            num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,
             **critic_kw_args)
 
@@ -1078,6 +1088,8 @@ class MATPolicy(AgentPolicy):
             num_envs        = self.envs_per_proc,
             agent_ids       = self.agent_ids)
 
+    # TODO: this is identical to the general case excpet for how
+    # we add data to our dataset. There may be a better approach to this...
     def end_episodes(
         self,
         agent_id,
@@ -1106,35 +1118,6 @@ class MATPolicy(AgentPolicy):
                 ending_value   = ending_values[idx].item(),
                 ending_reward  = ending_rewards[idx].item())
 
-            # FIXME: we need to handle the MAT case.
-            # Options:
-            #    1. replace self.episodes with an array of SharedEpisode objects,
-            #       and add info directly to these (they track agent maps).
-            #    2. add episodes to SharedEpisode containers as we end them
-            #       here.
-            #    3. Create a "shared episode dataset". When we add completed episodes,
-            #       we provide an env idx that corresponds to a shared episode.
-            #       How would this work, though? The dataset would need to somehow
-            #       know when the SharedEpisode has all of its needed info because
-            #       the env idx will be replaced with a new EpisodeInfo object...
-            #       We could add a "limit" to the number of EpisodeInfos for each
-            #       SharedEpisode (which would be the number of agents in the policy).
-            #       But it doesn't seem like we'd need a "shared episode dataset" for
-            #       that...
-            #       We could implement an "add_shared_episode" function that adds
-            #       episodes to a SharedEpisode object, and, once it's full, it
-            #       automatically pulls that SharedEpisode out of an "active SharedEpisodes"
-            #       container, places the completed one into a growing list of 
-            #       completed SharedEpisodes, and adds a fresh SharedEpisodes
-            #       object to the "active" container.
-            #       ^^^^^ I think this is the way.
-            #
-            # In any case, we need to figure out how/when to add the shared
-            # episodes to our dataset... Currently, we add individual agent episodes
-            # to our dataset as we end them, but that's not quite what we want
-            # in the MAT case.
-            #
-
             self.dataset.add_shared_episode(
                 self.episodes[agent_id][env_i],
                 agent_id,
@@ -1162,23 +1145,18 @@ class MATPolicy(AgentPolicy):
                 bootstrap_clip = (bs_min, bs_max))
 
     #TODO: update for MAT
+    # I think this needs to use the "aoturegressive_act" functions.
     def get_training_actions(self, obs):
         """
-            Given observations from our environment, determine what the
-            next actions should be taken while allowing natural exploration.
 
-            This method is explicitly meant to be used in training and will
-            return more than just the environment actions.
-
-            Arguments:
-                obs    The environment observations.
-
-            Returns:
-                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-                is the distribution sample before any "squashing" takes place,
-                "action" is the the action value that should be fed to the
-                environment, and log_prob is the log probabilities from our
-                probability distribution.
+        Returns:
+        --------
+        tuple
+            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+            is the distribution sample before any "squashing" takes place,
+            "action" is the the action value that should be fed to the
+            environment, and log_prob is the log probabilities from our
+            probability distribution.
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: _get_action_with_exploration expects a "
@@ -1189,6 +1167,7 @@ class MATPolicy(AgentPolicy):
 
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
+        #FIXME: this will need to use the autoregressive methods.
         with torch.no_grad():
             action_pred = self.actor(t_obs)
 

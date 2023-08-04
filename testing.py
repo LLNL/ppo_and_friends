@@ -5,6 +5,7 @@ from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
+from collections import OrderedDict
 
 def test_policy(ppo,
                 explore,
@@ -36,15 +37,15 @@ def test_policy(ppo,
     render     = ppo.render
     policy_map = ppo.policy_mapping_fn
 
-    action_dtype = {}
+    action_dtype = OrderedDict({})
     for agent_id in env.agent_ids:
         action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
 
     max_int      = np.iinfo(np.int32).max
     num_steps    = 0
-    total_scores = {agent_id : 0.0 for agent_id in env.agent_ids}
-    min_scores   = {agent_id : max_int for agent_id in env.agent_ids}
-    max_scores   = {agent_id : -max_int for agent_id in env.agent_ids}
+    total_scores = OrderedDict({agent_id : 0.0 for agent_id in env.agent_ids})
+    min_scores   = OrderedDict({agent_id : max_int for agent_id in env.agent_ids})
+    max_scores   = OrderedDict({agent_id : -max_int for agent_id in env.agent_ids})
 
     if render_gif:
         gif_frames = []
@@ -57,7 +58,7 @@ def test_policy(ppo,
         obs, _   = env.reset()
         done     = False
 
-        episode_score = {agent_id : 0.0 for agent_id in env.agent_ids}
+        episode_score = OrderedDict({agent_id : 0.0 for agent_id in env.agent_ids})
 
         while not done:
             num_steps += 1
@@ -68,7 +69,7 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render())
 
-            actions = {}
+            actions = OrderedDict({})
             for agent_id in obs:
 
                 obs[agent_id] = torch.tensor(obs[agent_id],
@@ -104,7 +105,7 @@ def test_policy(ppo,
                 episode_score[agent_id])
 
     if save_test_scores:
-        score_info = {}
+        score_info = OrderedDict({})
         score_info["num_test_runs"]    = num_test_runs
         score_info["total_time_steps"] = num_steps
 

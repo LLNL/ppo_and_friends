@@ -10,6 +10,7 @@ from gymnasium.spaces import Box, Discrete
 import cv2
 from abc import ABC
 from mpi4py import MPI
+from collections import OrderedDict
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
@@ -316,7 +317,7 @@ class PixelHistEnvWrapper(AtariPixels):
 
         self.prev_frame  = cur_frame.copy()
 
-        return self.frame_cache.copy(), {}
+        return self.frame_cache.copy(), OrderedDict({})
 
     def step(self, action):
         cur_frame, reward, terminated, truncated, info = self.env.step(action)
@@ -389,7 +390,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         if true_done:
             self._reset_ram_cache(cur_ram)
 
-        return self.ram_cache.copy(), {}
+        return self.ram_cache.copy(), OrderedDict({})
 
     def step(self, action):
         cur_ram, reward, terminated, truncated, info = self.env.step(action)

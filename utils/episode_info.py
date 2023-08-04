@@ -468,6 +468,7 @@ class AgentSharedEpisode():
         self.log_probs                = [torch.tensor(lp) for lp in self.log_probs]
         self.log_probs                = torch.stack(self.log_probs, axis=1)
 
+        #FIXME: remove
         #print(f"ACTIONS SHAPE: {self.actions.shape}")
         #print(f"VALUES SHAPE: {self.values.shape}")
         #print(f"ADVANTAGES SHAPE: {self.advantages.shape}")
@@ -599,7 +600,6 @@ class PPODataset(Dataset):
             comm.Abort()
 
         self.num_episodes = len(self.episodes)
-        print(f"NUM EPISODES: {self.num_episodes}")
 
         self.actions, \
         self.raw_actions, \
