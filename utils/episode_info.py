@@ -420,6 +420,15 @@ class AgentSharedEpisode():
             self.is_finished = True
             self._merge_episodes()
 
+    def compute_advantages(self):
+        """
+        """
+        for i in range(self.agent_limit):
+            self.agent_episodes[i].values = self.values[:, i]
+            self.agent_episodes[i].compute_advantages()
+
+            self.advantages[:, i] = self.agent_episodes[i].advantages
+
     def _merge_episodes(self):
         """
         """
@@ -461,6 +470,7 @@ class AgentSharedEpisode():
 
         #print(f"ACTIONS SHAPE: {self.actions.shape}")
         #print(f"VALUES SHAPE: {self.values.shape}")
+        #print(f"ADVANTAGES SHAPE: {self.advantages.shape}")
         #print(f"OBS SHAPE: {self.observations.shape}")
         #print(f"LOG PROBS SHAPE: {self.log_probs.shape}")
         #print(f"REWARDS TO GO SHAPE: {self.rewards_to_go.shape}")
@@ -491,8 +501,6 @@ class AgentSharedEpisode():
         self.values
 
 
-# FIXME: I think we will need a MAT specific PPODataset that enforces
-# collections of agents in the data.
 class PPODataset(Dataset):
 
     def __init__(self,
@@ -542,23 +550,6 @@ class PPODataset(Dataset):
         self.terminal_mask             = None
         self.values                    = None
 
-    # FIXME: we'll need to somehow combine episodes from all agents that
-    # share an episode... How should we do this??
-    # Options:
-    #    1. We could create a "SharedEpisodes" container that holds all
-    #       "shared" episodes from agents.
-    #       Every time we end an episode, we do so for all agents. We would
-    #       add all "ended" episodes to a "SharedEpisodes" container,
-    #       which would consist of the EpisodeInfo for all agents of a
-    #       shared policy. Those episodes could then be concatenated into
-    #       a data shape of (num_timesteps, num_agents, *).
-    #    2. If each EpisodeInfo had an ID associated with it, we could use
-    #       that ID to sort them and then condense the agents into shared
-    #       episodes. We still might need some kind of "SharedEpisode"
-    #       object...
-    #    3. The Policy could track "SharedEpisode" objects if we made
-    #       a MAT specific Policy. We probablly need a MAT specific Policy
-    #       anyways...
     def add_episode(self, episode):
         """
             Add an episode to our dataset.
@@ -626,12 +617,6 @@ class PPODataset(Dataset):
         self.critic_cell, \
         self.total_timestates = \
             combine_episodes(self.episodes, self.build_hidden_states)
-
-        # FIXME: total timestates needs to be updated to reflect combined episodes...
-        # Maybe we should calculate it ourselves here? Or we could
-        # alter the "combine_episodes" function, but that could be tricky...
-        # I think we should remove it from combine_episodes,and calculate
-        # it ourselves both here and in the AgentSharedEpisode.
 
         if self.build_terminal_mask:
             terminal_mask = np.zeros(self.total_timestates).astype(np.bool)
@@ -854,7 +839,6 @@ class PPOSharedEpisodeDataset(PPODataset):
             self.episodes.append(self.episode_queue[env_idx])
             self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
 
-    #FIXME: this needs to change. Or... Maybe we need to alter total_timestates?
     def __len__(self):
         """
         Get the length of our dataset.
