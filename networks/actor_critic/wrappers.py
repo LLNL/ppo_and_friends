@@ -1,19 +1,15 @@
-from ppo_and_friends.networks.distributions import *
-import torch.nn.functional as t_functional
-import sys
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_action_dtype, get_space_shape
-from ppo_and_friends.utils.misc import get_flattened_space_length
+from ppo_and_friends.utils.misc import get_space_shape
+from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-
 def to_actor(ac_network):
     """
-        Convert a PPONetwork to an ActorNetwork.
+        Convert a general PPONetwork to an ActorNetwork.
     """
 
     class ActorNetwork(ac_network):
@@ -35,31 +31,8 @@ def to_actor(ac_network):
                 **kw_args)
 
             self.obs_space = obs_space
-            action_dtype   = get_action_dtype(action_space)
-
-            if action_dtype not in ["discrete", "continuous",
-                "multi-binary", "multi-discrete"]:
-
-                msg = "ERROR: unknown action type {}".format(action_dtype)
-                rank_print(msg)
-                comm.Abort()
-
-            if action_dtype == "discrete":
-                self.distribution = CategoricalDistribution(**kw_args)
-                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
-        
-            if action_dtype == "multi-discrete":
-                self.distribution = MultiCategoricalDistribution(
-                    nvec = action_space.nvec, **kw_args)
-                self.output_func  = lambda x : t_functional.softmax(x, dim=-1)
-        
-            elif action_dtype == "continuous":
-                out_size = get_flattened_space_length(action_space)
-                self.distribution = GaussianDistribution(out_size, **kw_args)
-        
-            elif action_dtype == "multi-binary":
-                self.distribution = BernoulliDistribution(**kw_args)
-                self.output_func  = t_functional.sigmoid
+            self.distribution, self.output_func = \
+                get_actor_distribution(action_space, **kw_args)
     
         def get_refined_prediction(self, obs):
             """
@@ -86,7 +59,7 @@ def to_actor(ac_network):
 
 def to_critic(ac_network):
     """
-        Convert a PPONetwork to a CriticNetwork.
+        Convert a general PPONetwork to a CriticNetwork.
     """
     
     class CriticNetwork(ac_network):
