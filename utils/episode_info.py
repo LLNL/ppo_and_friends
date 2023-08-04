@@ -525,6 +525,7 @@ class PPODataset(Dataset):
         self.build_hidden_states  = False
         self.sequence_length      = sequence_length
         self.build_terminal_mask  = False
+        self.shared               = False
 
         if self.sequence_length <= 0:
             msg  = "ERROR: PPODataset must have a sequence length >= 1 "
@@ -723,7 +724,11 @@ class PPODataset(Dataset):
         self.critic_observations = torch.tensor(self.critic_observations,
             dtype=torch.float).to(self.device)
 
-        self.log_probs = torch.stack(self.log_probs).float().to(self.device)
+        if self.shared:
+            self.log_probs = torch.stack(self.log_probs).float().to(self.device)
+        else:
+            self.log_probs = torch.tensor(self.log_probs,
+                dtype=torch.float).to(self.device)
 
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
@@ -829,6 +834,7 @@ class PPOSharedEpisodeDataset(PPODataset):
         self.num_envs      = num_envs
         self.agent_ids     = agent_ids
         self.episode_queue = np.array([AgentSharedEpisode(agent_ids)] * num_envs)
+        self.shared        = True
 
     def add_shared_episode(self, episode, agent_id, env_idx):
         """
