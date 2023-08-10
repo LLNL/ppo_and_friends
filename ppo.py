@@ -497,14 +497,18 @@ class PPO(object):
         #
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
+        # Also, some algorithms (like MAT) need agent's to be batched
+        # together.
         #
         policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
             num_agents = batch_obs.shape[0]
-            batch_obs  = batch_obs.reshape((-1,) + \
-                self.policies[policy_id].actor_obs_space.shape)
+
+            if not self.policies[policy_id].agent_grouping:
+                batch_obs  = batch_obs.reshape((-1,) + \
+                    self.policies[policy_id].actor_obs_space.shape)
 
             batch_raw_actions, batch_actions, batch_log_probs = \
                 self.policies[policy_id].get_training_actions(batch_obs)

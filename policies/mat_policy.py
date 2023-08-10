@@ -33,7 +33,8 @@ class MATPolicy(AgentPolicy):
         """
         """
         super(MATPolicy, self).__init__(*args, **kw_args)
-        self.action_dim = get_flattened_space_length(self.action_space)
+        self.action_dim     = get_flattened_space_length(self.action_space)
+        self.agent_grouping = True
 
     #TODO: update to use MAT
     def _initialize_networks(
@@ -244,9 +245,6 @@ class MATPolicy(AgentPolicy):
     def _get_autoregressive_actions(encoded_obs):
         """
         """
-        encoded_obs = torch.tensor(encoded_obs, dtype=torch.float)
-        encoded_obs = encoded_obs.to(self.device)
-    
         # FIXME: This might break during rollouts becauset the observations
         # might be of shape (obs_size,).
         batch_size = encoded_obs.shape[0]
@@ -287,8 +285,6 @@ class MATPolicy(AgentPolicy):
 
         return output_action, output_raw_action, output_action_log
 
-    #TODO: update for MAT
-    # I think this needs to use the "aoturegressive_act" functions.
     def get_training_actions(self, obs):
         """
 
@@ -308,13 +304,96 @@ class MATPolicy(AgentPolicy):
             rank_print(msg)
             comm.Abort()
 
-        encoded_obs = self.critic.encode_obs(obs)
-        raw_actions, actions, log_probs = self._get_autoregressive_actions(encoded_obs)
+        #
+        # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
+        # (num_envs, num_agents, obs_size).
+        #
+        obs = np.swapaxes(obs, 0, 1)
+        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = t_obs.to(self.device)
 
+        encoded_obs = self.critic.encode_obs(t_obs)
+        actions, raw_actions, log_probs = self._get_autoregressive_actions(encoded_obs)
+
+        actions     = torch.swapaxes(actions, 0, 1)
+        raw_actions = torch.swapaxes(raw_actions, 0, 1)
+        log_probs   = torch.swapaxes(log_probs, 0, 1)
+
+        # FIXME: this is reverse order from the distributions, 
+        # which is a bit confusing. It's all over the place...
         return raw_actions, actions, log_probs.detach()
 
+    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
+        """
+        Given a batch of observations, use our critic to approximate
+        the expected return values. Also use a batch of corresponding
+        actions to retrieve some other useful information.
+
+        Arguments:
+            batch_critic_obs   A batch of observations for the critic.
+            batch_obs          A batch of standard observations.
+            batch_actions      A batch of actions corresponding to the batch of
+                               observations.
+
+        Returns:
+            A tuple of form (values, log_probs, entropies) s.t. values are
+            the critic predicted value, log_probs are the log probabilities
+            from our probability distribution, and entropies are the
+            entropies from our distribution.
+        """
+        #
+        # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
+        # (num_envs, num_agents, obs_size).
+        #
+        batch_critic_obs = torch.swapaxes(batch_critic_obs, 0, 1)
+        batch_obs        = torch.swapaxes(batch_obs, 0, 1)
+        batch_actions    = torch.swapaxes(batch_actions, 0, 1)
+
+        values      = self.critic(batch_critic_obs).squeeze()
+
+        encoded_obs = self.critic.encode_obs(batch_critic_obs)
+        action_pred = self._get_parallel_actions(encoded_obs)
+        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
+
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+
+        values    = torch.swapaxes(values, 0, 1)
+        log_probs = torch.swapaxes(log_probs, 0, 1)
+        entropy   = torch.swapaxes(entropy, 0, 1)
+
+        return values, log_probs.to(self.device), entropy.to(self.device)
+
+    #FIXME: update for MAT
+    def get_inference_actions(self, obs, explore):
+        """
+        Given observations from our environment, determine what the
+        actions should be.
+
+        This method is meant to be used for inference only, and it
+        will return the environment actions alone.
+
+        Arguments:
+            obs       The environment observation.
+            explore   Should we allow exploration?
+
+        Returns:
+            Predicted actions to perform in the environment.
+        """
+        if explore:
+            return self._get_action_with_exploration(obs)
+        return self._get_action_without_exploration(obs)
+
     #TODO: upate for MAT
-    def _get_action_with_exploration(self, obs):
+    def _get_actions_with_exploration(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be taken while allowing natural exploration.
@@ -336,24 +415,23 @@ class MATPolicy(AgentPolicy):
             rank_print(msg)
             comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-        with torch.no_grad():
-            action_pred = self.actor(t_obs)
-
-        action_pred = action_pred.cpu().detach()
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
         #
-        # Our distribution gives us two potentially distinct actions, one of
-        # which is guaranteed to be a raw sample from the distribution. The
-        # other might be altered in some way (usually to enforce a range).
+        # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
+        # (num_envs, num_agents, obs_size).
         #
-        action, _ = self.actor.distribution.sample_distribution(dist)
-        return action
+        obs = np.swapaxes(obs, 0, 1)
+        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = t_obs.to(self.device)
+
+        encoded_obs = self.critic.encode_obs(t_obs)
+        actions, _, _ = self._get_autoregressive_actions(encoded_obs)
+
+        actions = torch.swapaxes(actions, 0, 1)
+
+        return actions
 
     #TODO: upate for MAT
-    def _get_action_without_exploration(self, obs):
+    def _get_actions_without_exploration(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be while not allowing any exploration.
@@ -375,41 +453,3 @@ class MATPolicy(AgentPolicy):
 
         with torch.no_grad():
             return self.actor.get_refined_prediction(t_obs)
-
-    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
-        """
-        Given a batch of observations, use our critic to approximate
-        the expected return values. Also use a batch of corresponding
-        actions to retrieve some other useful information.
-
-        Arguments:
-            batch_critic_obs   A batch of observations for the critic.
-            batch_obs          A batch of standard observations.
-            batch_actions      A batch of actions corresponding to the batch of
-                               observations.
-
-        Returns:
-            A tuple of form (values, log_probs, entropies) s.t. values are
-            the critic predicted value, log_probs are the log probabilities
-            from our probability distribution, and entropies are the
-            entropies from our distribution.
-        """
-        values      = self.critic(batch_critic_obs).squeeze()
-
-        encoded_obs = self.critic.encode_obs(batch_critic_obs)
-        action_pred = self._get_parallel_actions(encoded_obs)
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
-        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
-
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-        return values, log_probs.to(self.device), entropy.to(self.device)
-
