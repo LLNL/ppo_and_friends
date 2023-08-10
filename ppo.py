@@ -393,51 +393,62 @@ class PPO(object):
 
         comm.barrier()
 
-    def get_policy_batches(self, obs, component):
+    def get_policy_batches(self, obs, component, shuffle_agents=False):
         """
-            This method will take all of the observations from a step
-            and compress them into numpy array batches. This allows for
-            much faster inference during rollouts.
+        This method will take all of the observations from a step
+        and compress them into numpy array batches. This allows for
+        much faster inference during rollouts.
 
-            Arguments:
-                obs        The observations to create batches from. This
-                           should be a dictionary mapping agent ids to
-                           their observations.
-                component  The network component these observations are
-                           associated with. This can be set to "actor"
-                           or "critic".
+        Parameters:
+        -----------
+        obs: array-like
+            The observations to create batches from. This
+            should be a dictionary mapping agent ids to
+            their observations.
+        component: str
+            The network component these observations are
+            associated with. This can be set to "actor"
+            or "critic".
+        shuffle_agents: bool
+            If True, shuffle the agent ids for each policy. This results
+            in the ordering of the agents in their batches being shuffled.
 
-            Returns:
-                A tuple containing two dictionaries. The first maps
-                policy ids to agent ids, and the second maps policy
-                ids to batches of observations (which can span
-                multiple agents).
+        Returns:
+        tuple:
+            A tuple containing two dictionaries. The first maps
+            policy ids to agent ids, and the second maps policy
+            ids to batches of observations (which can span
+            multiple agents).
         """
         assert component in ["actor", "critic"]
 
         policy_batches = OrderedDict({})
-        policy_agents  = OrderedDict({})
         agent_counts   = OrderedDict({p_id : 0 for p_id in self.policies})
 
         #
-        # First, create our dictionary  mapping policy ids to
-        # to agent ids. This can be used to later reconstruct
-        # "non-batched" data.
+        # First, let's populate our "agent_counts" dictionary, which maps
+        # policy ids to number of agents from these observations that
+        # correspond to the policy.
         #
         for a_id in obs:
             policy_id = self.policy_mapping_fn(a_id)
             agent_counts[policy_id] += 1
-
-            if policy_id not in policy_agents:
-                policy_agents[policy_id] = []
-
-            policy_agents[policy_id].append(a_id)
 
         #
         # Next, combine observations from all agents that share policies.
         # We'll add these to our dictionary mapping policy ids to batches.
         #
         for policy_id in agent_counts:
+
+            if (agent_counts[policy_id] !=
+                len(self.policies[policy_id].agent_ids)):
+
+                msg  = "ERROR: expected obs of policy {policy_id} to have "
+                msg += "{len(self.policies[policy_id].agent_ids)} agents "
+                msg += "but recieved {len(agent_counts[policy_id])!"
+                rank_print(msg)
+                comm.Abort()
+
             if component == "actor":
                 policy_shape = self.policies[policy_id].actor_obs_space.shape
             elif component == "critic":
@@ -453,20 +464,18 @@ class PPO(object):
                 policy_batches[policy_id] = np.zeros(batch_shape).astype(
                     self.policies[policy_id].critic_obs_space.dtype)
 
-            policy_agents[policy_id] = tuple(policy_agents[policy_id])
+            #FIXME: is this needed?
+            if shuffle_agents:
+                self.policies[policy_id].shuffle_agent_ids()
 
-        policy_idxs = OrderedDict({p_id : 0 for p_id in policy_batches})
+            #
+            # NOTE: this enforces agent ordering which is needed for
+            # order-sensitive algorithms like MAT.
+            #
+            for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+                policy_batches[policy_id][a_idx] = obs[a_id]
 
-        for a_id in obs:
-            policy_id = self.policy_mapping_fn(a_id)
-            b_idx     = policy_idxs[policy_id]
-
-            policy_batches[policy_id][b_idx] = \
-                obs[a_id]
-
-            policy_idxs[policy_id] += 1
-
-        return policy_agents, policy_batches
+        return policy_batches
 
     def get_policy_actions(self, obs):
         """
@@ -489,10 +498,7 @@ class PPO(object):
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
         #
-        # FIXME: for MAT, order matters! We need to make sure that our
-        # agent dicts are OrderedDict!
-        #
-        policy_agents, policy_batches = self.get_policy_batches(obs, "actor")
+        policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
@@ -515,7 +521,7 @@ class PPO(object):
             batch_log_probs   = batch_log_probs.reshape(num_agents,
                 self.envs_per_proc, -1)
 
-            for p_idx, a_id in enumerate(policy_agents[policy_id]):
+            for p_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
                 raw_actions[a_id] = batch_raw_actions[p_idx]
                 actions[a_id]     = batch_actions[p_idx]
                 log_probs[a_id]   = batch_log_probs[p_idx]
@@ -572,7 +578,7 @@ class PPO(object):
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
         #
-        policy_agents, policy_batches = self.get_policy_batches(obs, "critic")
+        policy_batches = self.get_policy_batches(obs, "critic")
         policy_batches = self.np_dict_to_tensor_dict(policy_batches)
 
         for policy_id in policy_batches:
@@ -585,7 +591,7 @@ class PPO(object):
 
             batch_values = batch_values.reshape((num_agents, -1))
 
-            for b_idx, a_id in enumerate(policy_agents[policy_id]):
+            for b_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
                 values[a_id] = batch_values[b_idx]
 
         return values
@@ -1577,9 +1583,9 @@ class PPO(object):
                 rewards_tg, actor_hidden, critic_hidden, \
                actor_cell, critic_cell, batch_idxs = batch_data
 
-#            print(f"RAW ACTIONS SHAPE: {raw_actions.shape}")#FIXME
-#            print(f"LOG PROBS SHAPE: {log_probs.shape}")#FIXME
-#            print(f"OBS SHAPE: {obs.shape}")#FIXME
+            #print(f"RAW ACTIONS SHAPE: {raw_actions.shape}")#FIXME
+            #print(f"LOG PROBS SHAPE: {log_probs.shape}")#FIXME
+            #print(f"OBS SHAPE: {obs.shape}")#FIXME
 
             torch.cuda.empty_cache()
 
