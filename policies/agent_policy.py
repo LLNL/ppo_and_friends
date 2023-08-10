@@ -15,12 +15,14 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
+from ppo_and_friends.utils.misc import get_flattened_space_length
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+#FIXME: Rename?
 class AgentPolicy():
     """
         A class representing a policy. A policy can be
@@ -162,7 +164,7 @@ class AgentPolicy():
         self.using_lstm         = False
         self.dataset            = None
         self.device             = torch.device("cpu")
-        self.agent_ids          = set()
+        self.agent_ids          = np.array([])
         self.episodes           = {}
         self.icm_beta           = icm_beta
         self.target_kl          = target_kl
@@ -275,7 +277,16 @@ class AgentPolicy():
             Arguments:
                 agent_id    The id of the agent to register.
         """
-        self.agent_ids = self.agent_ids.union({agent_id})
+        self.agent_ids = np.array(list(set(self.agent_ids).union({agent_id})))
+        self.agent_ids = self.agent_ids
+
+
+    def shuffle_agent_ids(self):
+        """
+        """
+        shuffled_idxs = np.arange(len(self.agent_ids)) 
+        np.random.shuffle(shuffled_idxs)
+        self.agent_ids = self.agent_ids[shuffled_idxs]
 
     def to(self, device):
         """
@@ -972,317 +983,3 @@ class AgentPolicy():
         str_self += "    critic optim: {}\n".format(self.critic_optim)
         str_self += "    icm optim: {}\n".format(self.icm_optim)
         return str_self
-
-
-class MATPolicy(AgentPolicy):
-    """
-    """
-
-    def __init__(self, *args, **kw_args):
-        """
-        """
-        super(MATPolicy, self).__init__(*args, **kw_args)
-
-    #TODO: update to use MAT
-    def _initialize_networks(
-        self,
-        enable_icm,
-        icm_network,
-        actor_kw_args,
-        critic_kw_args,
-        icm_kw_args,
-        actor_network  = mat.MATActor,
-        critic_network = mat.MATCritic):
-        """
-        Initialize our networks.
-
-        Parameters:
-        -----------
-        enable_icm: bool
-            Whether or not to enable ICM.
-        icm_network: class of type PPONetwork
-            The network class to use for ICM (when enabled).
-        actor_kw_args: dict
-            Keyword args for the actor network.
-        critic_kw_args: dict
-            Keyword args for the critic network.
-        icm_kw_args: dict
-            Keyword args for the ICM network.
-        actor_network: class of type PPONetwork
-            The network to use for the actor.
-        critic_network: class of type PPONetwork
-            The network to use for the critic.
-        """
-        #
-        # Initialize our networks: actor, critic, and possibly ICM.
-        #
-        # FIXME: let's try integrating this into the MAT networks.
-        #
-        # arXiv:2006.05990v1 suggests initializing the output layer
-        # of the actor network with a weight that's ~100x smaller
-        # than the rest of the layers. We initialize layers with a
-        # value near 1.0 by default, so we set the last layer to
-        # 0.01. The same paper also suggests that the last layer of
-        # the value network doesn't matter so much. I can't remember
-        # where I got 1.0 from... I'll try to track that down.
-        #
-
-
-        self.actor = actor_network(
-            name         = "actor", 
-            obs_space    = self.actor_obs_space,
-            #out_init     = 0.01,#FIXME
-            action_space = self.action_space,
-            num_agents   = len(self.agent_ids),
-            test_mode    = self.test_mode,
-            **actor_kw_args)
-
-        self.critic = critic_network(
-            name         = "critic", 
-            obs_space    = self.critic_obs_space,
-            #out_init     = 1.0,#FIXME
-            num_agents   = len(self.agent_ids),
-            test_mode    = self.test_mode,
-            **critic_kw_args)
-
-        self.actor  = self.actor.to(self.device)
-        self.critic = self.critic.to(self.device)
-
-        broadcast_model_parameters(self.actor)
-        broadcast_model_parameters(self.critic)
-        comm.barrier()
-
-        if enable_icm:
-            self.icm_model = icm_network(
-                name         = "icm",
-                obs_space    = self.actor_obs_space,
-                action_space = self.action_space,
-                test_mode    = self.test_mode,
-                **icm_kw_args)
-
-            self.icm_model = self.icm_model.to(self.device)
-            broadcast_model_parameters(self.icm_model)
-            comm.barrier()
-
-    def initialize_dataset(self):
-        """
-            Initialize a rollout dataset. This should be called at the
-            onset of a rollout.
-        """
-        sequence_length = 1
-        if self.using_lstm:
-            self.actor.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            self.critic.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            sequence_length = self.actor.sequence_length
-
-        self.dataset = PPOSharedEpisodeDataset(
-            device          = self.device,
-            action_dtype    = self.action_dtype,
-            sequence_length = sequence_length,
-            num_envs        = self.envs_per_proc,
-            agent_ids       = self.agent_ids)
-
-    # TODO: this is identical to the general case excpet for how
-    # we add data to our dataset. There may be a better approach to this...
-    def end_episodes(
-        self,
-        agent_id,
-        env_idxs,
-        episode_lengths,
-        terminal,
-        ending_values,
-        ending_rewards):
-        """
-            End a rollout episode.
-
-            Arguments:
-                agent_id         The associated agent id.
-                env_idxs         The associated environment indices.
-                episode_lengths  The lenghts of the ending episode(s).
-                terminal         Which episodes are terminally ending.
-                ending_values    Ending values for the episode(s).
-                ending_rewards   Ending rewards for the episode(s)
-        """
-        self.validate_agent_id(agent_id)
-
-        for idx, env_i in enumerate(env_idxs):
-            self.episodes[agent_id][env_i].end_episode(
-                ending_ts      = episode_lengths[env_i],
-                terminal       = terminal[idx],
-                ending_value   = ending_values[idx].item(),
-                ending_reward  = ending_rewards[idx].item())
-
-            self.dataset.add_shared_episode(
-                self.episodes[agent_id][env_i],
-                agent_id,
-                env_i)
-
-            #
-            # If we're using a dynamic bs clip, we clip to the min/max
-            # rewards from the episode. Otherwise, rely on the user
-            # provided range.
-            #
-            bs_min, bs_max = self.get_bs_clip_range(
-                self.episodes[agent_id][env_i].rewards)
-
-            #
-            # If we're terminal, the start of the next episode is 0.
-            # Otherwise, we pick up where we left off.
-            #
-            starting_ts = 0 if terminal[idx] else episode_lengths[env_i]
-
-            self.episodes[agent_id][env_i] = EpisodeInfo(
-                starting_ts    = starting_ts,
-                use_gae        = self.use_gae,
-                gamma          = self.gamma,
-                lambd          = self.lambd,
-                bootstrap_clip = (bs_min, bs_max))
-
-    #TODO: update for MAT
-    # I think this needs to use the "aoturegressive_act" functions.
-    def get_training_actions(self, obs):
-        """
-
-        Returns:
-        --------
-        tuple
-            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-            is the distribution sample before any "squashing" takes place,
-            "action" is the the action value that should be fed to the
-            environment, and log_prob is the log probabilities from our
-            probability distribution.
-        """
-        if len(obs.shape) < 2:
-            msg  = "ERROR: _get_action_with_exploration expects a "
-            msg ++ "batch of observations but "
-            msg += "instead received shape {}.".format(obs.shape)
-            rank_print(msg)
-            comm.Abort()
-
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-        #FIXME: this will need to use the autoregressive methods.
-        with torch.no_grad():
-            action_pred = self.actor(t_obs)
-
-        action_pred = action_pred.cpu().detach()
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
-        #
-        # Our distribution gives us two potentially distinct actions, one of
-        # which is guaranteed to be a raw sample from the distribution. The
-        # other might be altered in some way (usually to enforce a range).
-        #
-        action, raw_action = self.actor.distribution.sample_distribution(dist)
-        log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
-
-        action     = action.detach().numpy()
-        raw_action = raw_action.detach().numpy()
-
-        return raw_action, action, log_prob.detach()
-
-    #TODO: upate for MAT
-    def _get_action_with_exploration(self, obs):
-        """
-            Given observations from our environment, determine what the
-            next actions should be taken while allowing natural exploration.
-
-            Arguments:
-                obs    The environment observations.
-
-            Returns:
-                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-                is the distribution sample before any "squashing" takes place,
-                "action" is the the action value that should be fed to the
-                environment, and log_prob is the log probabilities from our
-                probability distribution.
-        """
-        if len(obs.shape) < 2:
-            msg  = "ERROR: _get_action_with_exploration expects a "
-            msg ++ "batch of observations but "
-            msg += "instead received shape {}.".format(obs.shape)
-            rank_print(msg)
-            comm.Abort()
-
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-        with torch.no_grad():
-            action_pred = self.actor(t_obs)
-
-        action_pred = action_pred.cpu().detach()
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
-        #
-        # Our distribution gives us two potentially distinct actions, one of
-        # which is guaranteed to be a raw sample from the distribution. The
-        # other might be altered in some way (usually to enforce a range).
-        #
-        action, _ = self.actor.distribution.sample_distribution(dist)
-        return action
-
-    #TODO: upate for MAT
-    def _get_action_without_exploration(self, obs):
-        """
-            Given observations from our environment, determine what the
-            next actions should be while not allowing any exploration.
-
-            Arguments:
-                obs    The environment observations.
-
-            Returns:
-                The next actions to perform.
-        """
-        if len(obs.shape) < 2:
-            msg  = "ERROR: _get_action_without_exploration expects a "
-            msg ++ "batch of observations but "
-            msg += "instead received shape {}.".format(obs.shape)
-            rank_print(msg)
-            comm.Abort()
-
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-        with torch.no_grad():
-            return self.actor.get_refined_prediction(t_obs)
-
-    #TODO: upate for MAT
-    def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
-        """
-            Given a batch of observations, use our critic to approximate
-            the expected return values. Also use a batch of corresponding
-            actions to retrieve some other useful information.
-
-            Arguments:
-                batch_critic_obs   A batch of observations for the critic.
-                batch_obs          A batch of standard observations.
-                batch_actions      A batch of actions corresponding to the batch of
-                                   observations.
-
-            Returns:
-                A tuple of form (values, log_probs, entropies) s.t. values are
-                the critic predicted value, log_probs are the log probabilities
-                from our probability distribution, and entropies are the
-                entropies from our distribution.
-        """
-        values      = self.critic(batch_critic_obs).squeeze()
-        action_pred = self.actor(batch_obs).cpu()
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
-        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
-
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-        return values, log_probs.to(self.device), entropy.to(self.device)
-

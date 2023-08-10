@@ -3,7 +3,6 @@ import torch.nn as nn
 from torch.nn import functional as F
 import math
 import numpy as np
-from torch.distributions import Categorical
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
 from ppo_and_friends.utils.misc import get_space_shape
@@ -215,7 +214,9 @@ class MATActor(PPONetwork):
         for block in self.blocks:
             x = block(x, encoded_obs)
 
-        return self.head(x)
+        x = self.head(x)
+        x = self.output_func(x)
+        return x
 
 
 class MATCritic(PPONetwork):

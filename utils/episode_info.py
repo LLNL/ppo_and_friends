@@ -825,6 +825,8 @@ class PPODataset(Dataset):
                 idx)
 
 
+# FIXME: I think we need some way of shuffling the order of the agents.
+# The standard Torch dataset will only shuffle the batch samples.
 class PPOSharedEpisodeDataset(PPODataset):
 
     def __init__(self, num_envs, agent_ids, *args, **kw_args):

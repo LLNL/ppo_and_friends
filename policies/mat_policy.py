@@ -227,7 +227,7 @@ class MATPolicy(AgentPolicy):
 
         #FIXME: is there a better way to handle this?
         action_offset = 0
-        if self.action_dtype = "discrete":
+        if self.action_dtype == "discrete":
             action_offset = 1
 
         action_block[:, 1:, action_offset:] = action[:, :-1, :]
@@ -241,7 +241,6 @@ class MATPolicy(AgentPolicy):
 
         return action, raw_action, log_prob
 
-    # FIXME: WE ALSO NEED TO ASSOCIATE AGENTS DURING ROLLOUTS!
     def _get_autoregressive_actions(encoded_obs):
         """
         """
@@ -261,7 +260,7 @@ class MATPolicy(AgentPolicy):
 
         #FIXME: is there a better way to handle this?
         action_offset = 0
-        if self.action_dtype = "discrete":
+        if self.action_dtype == "discrete":
             action_offset = 1
 
         with torch.no_grad():
