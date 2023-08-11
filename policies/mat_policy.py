@@ -304,6 +304,10 @@ class MATPolicy(AgentPolicy):
             rank_print(msg)
             comm.Abort()
 
+        # FIXME: during rollouts, our agents are always acting in the same order.
+        # we can shuffle them between rollouts, but I think that's all we have
+        # right now. Is that okay???
+
         #
         # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
         # (num_envs, num_agents, obs_size).
@@ -371,7 +375,6 @@ class MATPolicy(AgentPolicy):
 
         return values, log_probs.to(self.device), entropy.to(self.device)
 
-    #FIXME: update for MAT
     def get_inference_actions(self, obs, explore):
         """
         Given observations from our environment, determine what the
@@ -394,7 +397,6 @@ class MATPolicy(AgentPolicy):
             return self._get_action_with_exploration(obs)
         return self._get_action_without_exploration(obs)
 
-    #TODO: upate for MAT
     def _get_actions_with_exploration(self, obs):
         """
         Given observations from our environment, determine what the
@@ -410,9 +412,9 @@ class MATPolicy(AgentPolicy):
             environment, and log_prob is the log probabilities from our
             probability distribution.
         """
-        if len(obs.shape) < 2:
+        if len(obs.shape) < 3:
             msg  = "ERROR: _get_action_with_exploration expects a "
-            msg ++ "batch of observations but "
+            msg ++ "batch of agent observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
@@ -444,14 +446,24 @@ class MATPolicy(AgentPolicy):
         Returns:
             The next actions to perform.
         """
-        if len(obs.shape) < 2:
+        if len(obs.shape) < 3:
             msg  = "ERROR: _get_action_without_exploration expects a "
-            msg ++ "batch of observations but "
+            msg ++ "batch of agent observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        #t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
-        with torch.no_grad():
-            return self.actor.get_refined_prediction(t_obs)
+        #with torch.no_grad():
+        #    return self.actor.get_refined_prediction(t_obs)
+
+        #
+        # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
+        # (num_envs, num_agents, obs_size).
+        #
+        obs = np.swapaxes(obs, 0, 1)
+        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = t_obs.to(self.device)
+
+        encoded_obs = self.critic.encode_obs(t_obs)

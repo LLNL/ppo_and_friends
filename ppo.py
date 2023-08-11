@@ -469,7 +469,6 @@ class PPO(object):
                 policy_batches[policy_id] = np.zeros(batch_shape).astype(
                     self.policies[policy_id].critic_obs_space.dtype)
 
-            #FIXME: is this needed?
             if shuffle_agents:
                 self.policies[policy_id].shuffle_agent_ids()
 
@@ -604,8 +603,11 @@ class PPO(object):
         #
         for policy_id in policy_obs:
             if type(self.policies[policy_id]) == type(MATPolicy):
+                #FIXME: we probably want to shuffle, right? This is abit tricky...
                 batch_obs = self.get_policy_batches(
-                    policy_obs[policy_id], "actor")[policy_id]
+                    obs            = policy_obs[policy_id],
+                    component      = "actor",
+                    shuffle_agents = False)[policy_id]
 
                 batch_actions = \
                     self.policies[policy_id].get_inference_actions(batch_obs)
@@ -1518,8 +1520,12 @@ class PPO(object):
         #
         # Finalize our datasets.
         #
-        for key in self.policies:
-            self.policies[key].finalize_dataset()
+        for policy_id in self.policies:
+            self.policies[policy_id].finalize_dataset()
+
+            # FIXME is shuffling between rollouts enough for MAT?
+            if self.have_mat_policies:
+                self.policies[policy_id].shuffle_agent_ids()
 
         comm.barrier()
         stop_time = time.time()

@@ -35,7 +35,6 @@ def test_policy(ppo,
     env        = ppo.env
     policies   = ppo.policies
     render     = ppo.render
-    policy_map = ppo.policy_mapping_fn
 
     action_dtype = OrderedDict({})
     for agent_id in env.agent_ids:
@@ -70,20 +69,6 @@ def test_policy(ppo,
                 gif_frames.append(env.render())
 
             actions = ppo.get_inference_actions(obs, explore)
-            #actions = OrderedDict({})
-            #for agent_id in obs:
-
-            #    obs[agent_id] = torch.tensor(obs[agent_id],
-            #        dtype=torch.float).to(device)
-
-            #    obs[agent_id] = obs[agent_id].unsqueeze(0)
-            #    policy_id     = policy_map(agent_id)
-
-            #    agent_action = policies[policy_id].get_inference_actions(
-            #        obs[agent_id], explore)
-
-            #    actions[agent_id] = agent_action.numpy()
-
             obs, _, reward, terminated, truncated, info = env.step(actions)
 
             done = env.get_all_done()

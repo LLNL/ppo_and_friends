@@ -349,6 +349,9 @@ class EpisodeInfo():
 
 class AgentSharedEpisode():
 
+    # FIXME: I think these "agent_ids" need to match what's in the Policy class at the
+    # time the agents are inserted. Let's guarantee this is happening and then add a note
+    # for future dev.
     def __init__(self, agent_ids):
         """
         """
@@ -756,20 +759,23 @@ class PPODataset(Dataset):
 
     def __len__(self):
         """
-            Get the length of our dataset.
+        Get the length of our dataset.
         """
         return self.total_timestates - (self.sequence_length - 1)
 
     def __getitem__(self, idx):
         """
-            Get data of length self.sequence_length starting at index
-            idx.
+        Get data from the requested index.
 
-            Arguments:
-                idx    The starting point of the data to retrieve.
+        Parameters:
+        -----------
+        idx: int
+            The index to retrieve data from.
 
-            Returns:
-                All data associated with the given index in our dataset.
+        Returns:
+        --------
+        tuple
+            All data associated with the given index in our dataset.
         """
         #
         # First, handle the easy case of using single time states.
@@ -828,8 +834,18 @@ class PPODataset(Dataset):
 # FIXME: I think we need some way of shuffling the order of the agents.
 # The standard Torch dataset will only shuffle the batch samples.
 class PPOSharedEpisodeDataset(PPODataset):
+    """
+    """
 
-    def __init__(self, num_envs, agent_ids, *args, **kw_args):
+    def __init__(
+        self,
+        num_envs,
+        agent_ids,
+        shuffle_every = 1,
+        *args,
+        **kw_args):
+        """
+        """
 
         super(PPOSharedEpisodeDataset, self).__init__(*args, **kw_args)
 
@@ -837,6 +853,11 @@ class PPOSharedEpisodeDataset(PPODataset):
         self.agent_ids     = agent_ids
         self.episode_queue = np.array([AgentSharedEpisode(agent_ids)] * num_envs)
         self.shared        = True
+        self.shuffle_every = shuffle_every
+        self.counter       = 0
+
+        # FIXME: we should probably have a "validate" method that confirms
+        # that hidden states are empty for MAT.
 
     def add_shared_episode(self, episode, agent_id, env_idx):
         """
@@ -847,8 +868,57 @@ class PPOSharedEpisodeDataset(PPODataset):
             self.episodes.append(self.episode_queue[env_idx])
             self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
 
+    def shuffle_agents(self):
+        """
+        """
+        if self.is_built:
+            num_agents  = len(self.agent_ids)
+            random_perm = np.random.permutation(num_agents)
+            self.agent_ids = self.agent_ids[random_perm]
+
+            self.critic_observations  = self.critic_observations[:, random_perm]
+            self.observations         = self.observations[:, random_perm]
+            self.next_observations    = self.next_observations[:, random_perm]
+            self.raw_actions          = self.raw_actions[:, random_perm]
+            self.actions              = self.actions[:, random_perm]
+            self.advantages           = self.advantages[:, random_perm]
+            self.log_probs            = self.log_probs[:, random_perm]
+            self.rewards_to_go        = self.rewards_to_go[:, random_perm]
+
     def __len__(self):
         """
         Get the length of our dataset.
         """
-        return self.total_timestates - (self.sequence_length - 1)
+        return self.total_timestates
+
+    def __getitem__(self, idx):
+        """
+        Shuffle our agents and return data.
+
+        Parameters:
+        -----------
+        idx: int
+            The index to retrieve data from.
+
+        Returns:
+        --------
+        tuple
+            All data associated with the given index in our dataset.
+        """
+        self.counter += 1
+        if self.counter % shuffle_every == 0:
+            self.shuffle_agents()
+
+        return (self.critic_observations[idx],
+                self.observations[idx],
+                self.next_observations[idx],
+                self.raw_actions[idx],
+                self.actions[idx],
+                self.advantages[idx],
+                self.log_probs[idx],
+                self.rewards_to_go[idx],
+                self.actor_hidden[idx],
+                self.critic_hidden[idx],
+                self.actor_cell[idx],
+                self.critic_cell[idx],
+                idx)
