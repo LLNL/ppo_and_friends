@@ -69,27 +69,20 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render())
 
-            actions = OrderedDict({})
-            # FIXME: for MAT, we need to send in the whole batch
-            # of agents. Maybe we should update "get_inference_actions"
-            # to take in the obs dictionary, but we would need to split
-            # up the observations into policy dictionaries...
-            # That might be slightly slower in the non-MAT case... Maybe it's
-            # better to handle each case separately? We could create two
-            # functions in this file; one would use the approach below,
-            # and the other would use the MAT approach.
-            for agent_id in obs:
+            actions = ppo.get_inference_actions(obs, explore)
+            #actions = OrderedDict({})
+            #for agent_id in obs:
 
-                obs[agent_id] = torch.tensor(obs[agent_id],
-                    dtype=torch.float).to(device)
+            #    obs[agent_id] = torch.tensor(obs[agent_id],
+            #        dtype=torch.float).to(device)
 
-                obs[agent_id] = obs[agent_id].unsqueeze(0)
-                policy_id     = policy_map(agent_id)
+            #    obs[agent_id] = obs[agent_id].unsqueeze(0)
+            #    policy_id     = policy_map(agent_id)
 
-                agent_action = policies[policy_id].get_inference_actions(
-                    obs[agent_id], explore)
+            #    agent_action = policies[policy_id].get_inference_actions(
+            #        obs[agent_id], explore)
 
-                actions[agent_id] = agent_action.numpy()
+            #    actions[agent_id] = agent_action.numpy()
 
             obs, _, reward, terminated, truncated, info = env.step(actions)
 

@@ -608,7 +608,7 @@ class AgentPolicy():
         self.dataset  = None
         self.episodes = {}
 
-    def get_training_actions(self, obs):
+    def get_rollout_actions(self, obs):
         """
             Given observations from our environment, determine what the
             next actions should be taken while allowing natural exploration.
@@ -627,7 +627,7 @@ class AgentPolicy():
                 probability distribution.
         """
         if len(obs.shape) < 2:
-            msg  = "ERROR: get_training_actions expects a "
+            msg  = "ERROR: get_rollout_actions expects a "
             msg ++ "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
@@ -654,7 +654,6 @@ class AgentPolicy():
 
         return raw_action, action, log_prob.detach()
 
-    #FIXME: update to take in dictionary of agents.
     def get_inference_actions(self, obs, explore):
         """
             Given observations from our environment, determine what the
@@ -670,23 +669,6 @@ class AgentPolicy():
             Returns:
                 Predicted actions to perform in the environment.
         """
-        #actions = OrderedDict({})
-        #for agent_id in obs:
-        #    obs[agent_id] = torch.tensor(obs[agent_id],
-        #        dtype=torch.float).to(device)
-
-        #    obs[agent_id] = obs[agent_id].unsqueeze(0)
-
-        #    if explore:
-        #        agent_action = _get_inference_actions_with_exploration(
-        #            obs[agent_id], explore)
-        #    else:
-        #        agent_action = _get_inference_actions_without_exploration(
-        #            obs[agent_id], explore)
-
-        #    actions[agent_id] = agent_action.numpy()
-
-
         if explore:
             return self._get_actions_with_exploration(obs)
         return self._get_actions_without_exploration(obs)

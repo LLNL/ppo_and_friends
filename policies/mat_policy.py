@@ -285,7 +285,7 @@ class MATPolicy(AgentPolicy):
 
         return output_action, output_raw_action, output_action_log
 
-    def get_training_actions(self, obs):
+    def get_rollout_actions(self, obs):
         """
 
         Returns:
@@ -349,8 +349,7 @@ class MATPolicy(AgentPolicy):
         batch_obs        = torch.swapaxes(batch_obs, 0, 1)
         batch_actions    = torch.swapaxes(batch_actions, 0, 1)
 
-        values      = self.critic(batch_critic_obs).squeeze()
-
+        values      = self.critic(batch_critic_obs).squeeze()#FIXME: do we want this squeeze?
         encoded_obs = self.critic.encode_obs(batch_critic_obs)
         action_pred = self._get_parallel_actions(encoded_obs)
         dist        = self.actor.distribution.get_distribution(action_pred)
@@ -388,6 +387,9 @@ class MATPolicy(AgentPolicy):
         Returns:
             Predicted actions to perform in the environment.
         """
+        # FIXME: we need to combine and the "un-combine" agents.
+        # we should be able to use the "get_policy_batches" function
+        # in ppo.py. Let's turn that into a utility outside of that class.
         if explore:
             return self._get_action_with_exploration(obs)
         return self._get_action_without_exploration(obs)

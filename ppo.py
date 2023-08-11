@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.utils import generate_policy
+from ppo_and_friends.policies.mat_policy import MATPolicy
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, ObservationNormalizer
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
@@ -236,6 +237,8 @@ class PPO(object):
             self.soft_resets = CallableValue(soft_resets)
 
         self.policies = OrderedDict({})
+        self.have_mat_policies = False
+
         for policy_id in policy_settings:
             settings = policy_settings[policy_id]
 
@@ -249,6 +252,9 @@ class PPO(object):
                     action_space             = settings[3],
                     test_mode                = test_mode,
                     **settings[4])
+
+            if type(settings[0]) == type(MATPolicy):
+                self.have_mat_policies = True
 
         for agent_id in self.env.agent_ids:
             policy_id = self.policy_mapping_fn(agent_id)
@@ -414,11 +420,10 @@ class PPO(object):
             in the ordering of the agents in their batches being shuffled.
 
         Returns:
-        tuple:
-            A tuple containing two dictionaries. The first maps
-            policy ids to agent ids, and the second maps policy
-            ids to batches of observations (which can span
-            multiple agents).
+        --------
+        dict:
+            A dictionary mapping policy ids to batches of agent observations.
+            These batches have shape (num_agents, envs_per_proc, obs_shape).
         """
         assert component in ["actor", "critic"]
 
@@ -477,7 +482,7 @@ class PPO(object):
 
         return policy_batches
 
-    def get_policy_actions(self, obs):
+    def get_rollout_actions(self, obs):
         """
             Given a dictionary mapping agent ids to observations,
             generate an dictionary of actions from our policy.
@@ -511,7 +516,7 @@ class PPO(object):
                     self.policies[policy_id].actor_obs_space.shape)
 
             batch_raw_actions, batch_actions, batch_log_probs = \
-                self.policies[policy_id].get_training_actions(batch_obs)
+                self.policies[policy_id].get_rollout_actions(batch_obs)
 
             #
             # We now need to reverse our batching to get actions of
@@ -525,14 +530,14 @@ class PPO(object):
             batch_log_probs   = batch_log_probs.reshape(num_agents,
                 self.envs_per_proc, -1)
 
-            for p_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
-                raw_actions[a_id] = batch_raw_actions[p_idx]
-                actions[a_id]     = batch_actions[p_idx]
-                log_probs[a_id]   = batch_log_probs[p_idx]
+            for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+                raw_actions[a_id] = batch_raw_actions[a_idx]
+                actions[a_id]     = batch_actions[a_idx]
+                log_probs[a_id]   = batch_log_probs[a_idx]
 
         return raw_actions, actions, log_probs
 
-    def get_policy_actions_from_aug_obs(self, obs):
+    def get_rollout_actions_from_aug_obs(self, obs):
         """
             Given a dictionary mapping agent ids to augmented
             batches of observations,
@@ -556,13 +561,90 @@ class PPO(object):
 
             obs_slice = obs[agent_id][0:1]
             raw_action, action, log_prob = \
-                self.policies[policy_id].get_training_actions(obs_slice)
+                self.policies[policy_id].get_rollout_actions(obs_slice)
 
             raw_actions[agent_id] = raw_action
             actions[agent_id]     = action
             log_probs[agent_id]   = log_prob
 
         return raw_actions, actions, log_probs
+
+    def get_inference_actions(self, obs, explore):
+        """
+        """
+        if self.have_mat_policies:
+            return self._get_policy_grouped_inference_actions(obs, explore)
+        return self._get_mappo_inference_actions(obs, explore)
+
+    def _get_policy_grouped_inference_actions(self, obs, explore):
+        """
+        """
+        actions    = OrderedDict({})
+        policy_obs = OrderedDict({})
+
+        #
+        # First, let's split the agents up into separate obs dictionaries
+        # for each policy. The MAT policies
+        #
+        for agent_id in obs:
+            policy_id = self.policy_mapping_fn(agent_id)
+
+            if policy_id not in policy_obs:
+                policy_obs[policy_id] = OrderedDict({})
+
+            poicy_obs[policy_id][agent_id] = obs[agent_id]
+
+        actions = OrderedDict({})
+
+        #
+        # Next, we handle MAT policies and standard PPO policies
+        # distinctly. Standard PPO policies take in a single agent's
+        # observation, while MAT policies take in all of the agent's
+        # observations.
+        #
+        for policy_id in policy_obs:
+            if type(self.policies[policy_id]) == type(MATPolicy):
+                batch_obs = self.get_policy_batches(
+                    policy_obs[policy_id], "actor")[policy_id]
+
+                batch_actions = \
+                    self.policies[policy_id].get_inference_actions(batch_obs)
+
+                #
+                # We now need to reverse our batching and put the agents
+                # back into dictionary form.
+                #
+                actions_shape = (num_agents,) +\
+                    self.policies[policy_id].action_space.shape
+                batch_actions = batch_actions.reshape(actions_shape).numpy()
+
+                policy_actions = OrderedDict({})
+                for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+                    policy_actions[a_id] = batch_actions[a_idx]
+
+            else:
+                policy_actions = self._get_mappo_inference_actions(
+                    policy_obs[policy_id])
+
+            actions.update(policy_actions)
+
+        return actions
+
+    def _get_mappo_inference_actions(self, obs, explore):
+        """
+        """
+        actions = OrderedDict({})
+        for agent_id in obs: 
+
+            obs[agent_id] = np.expand_dims(obs[agent_id], 0)
+            policy_id     = self.policy_mapping_fn(agent_id)
+
+            agent_action = self.policies[policy_id].get_inference_actions(
+                obs[agent_id], explore)
+
+            actions[agent_id] = agent_action.numpy()
+
+        return actions
 
     def get_policy_values(self, obs):
         """
@@ -1019,10 +1101,10 @@ class PPO(object):
 
             if self.obs_augment:
                 raw_action, action, log_prob = \
-                    self.get_policy_actions_from_aug_obs(obs)
+                    self.get_rollout_actions_from_aug_obs(obs)
             else:
                 raw_action, action, log_prob = \
-                    self.get_policy_actions(obs)
+                    self.get_rollout_actions(obs)
 
             value = self.get_policy_values(critic_obs)
 
