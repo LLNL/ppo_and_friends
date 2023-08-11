@@ -13,7 +13,6 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
-import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length
 
@@ -57,7 +56,8 @@ class AgentPolicy():
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
-                 test_mode           = False):
+                 test_mode           = False,
+                 **kw_args):
         """
         Parameters:
         ----------
@@ -243,7 +243,8 @@ class AgentPolicy():
             icm_network    = icm_network,
             actor_kw_args  = actor_kw_args,
             critic_kw_args = critic_kw_args,
-            icm_kw_args    = icm_kw_args)
+            icm_kw_args    = icm_kw_args, 
+            **kw_args)
 
     def finalize(self, status_dict):
         """
@@ -310,19 +311,25 @@ class AgentPolicy():
         icm_network,
         actor_kw_args,
         critic_kw_args,
-        icm_kw_args):
+        icm_kw_args,
+        **kw_args):
         """
-            Initialize our networks.
+        Initialize our networks.
 
-            Arguments:
-                ac_network        The network class to use for the actor
-                                  and critic.
-                enable_icm        Whether or not to enable ICM.
-                icm_network       The network class to use for ICM (when
-                                  enabled).
-                actor_kw_args     Keyword args for the actor network.
-                critic_kw_args    Keyword args for the critic network.
-                icm_kw_args       Keyword args for the ICM network.
+        Parameters:
+        -----------
+        ac_network: class of type PPONetwork
+            The network to use for the actor and critic.
+        enable_icm: bool
+            Whether or not to enable ICM.
+        icm_network: class of type PPONetwork
+            The network class to use for ICM (when enabled).
+        actor_kw_args: dict
+            Keyword args for the actor network.
+        critic_kw_args: dict
+            Keyword args for the critic network.
+        icm_kw_args: dict
+            Keyword args for the ICM network.
         """
         #
         # Initialize our networks: actor, critic, and possibly ICM.

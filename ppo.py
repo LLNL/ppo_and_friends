@@ -672,8 +672,10 @@ class PPO(object):
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
             num_agents = batch_obs.shape[0]
-            batch_obs  = batch_obs.reshape((-1,) + \
-                self.policies[policy_id].critic_obs_space.shape)
+
+            if not self.policies[policy_id].agent_grouping:
+                batch_obs  = batch_obs.reshape((-1,) + \
+                    self.policies[policy_id].actor_obs_space.shape)
 
             batch_values = self.policies[policy_id].critic(batch_obs)
 
@@ -1720,7 +1722,7 @@ class PPO(object):
                 obs,
                 raw_actions)
 
-            data_loader.dataset.values[batch_idxs] = values
+            data_loader.dataset.values[batch_idxs] = values.squeeze().detach()
 
             #
             # The heart of PPO: arXiv:1707.06347v2
@@ -1782,6 +1784,8 @@ class PPO(object):
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
+            else:
+                values = values.squeeze()
 
             #
             # Calculate the critic loss. Optionally, we can use the clipped

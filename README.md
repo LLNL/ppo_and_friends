@@ -23,6 +23,7 @@ Some of our friends:
 * KL punishment
 * Splitting observations by proprioceptive and exteroceptive information
 * Observation, advantage, and reward normalization
+* Advantage re-calculation
 * Learning rate annealing
 * Entropy annealing
 * Intrinsic reward weight annealing

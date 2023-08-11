@@ -61,6 +61,7 @@ class SelfAttention(nn.Module):
 
     def forward(self, key, value, query):
         #FIXME: update names
+        #print(f"QUERY: {query.size()}")#FIXME
         B, L, D = query.size()
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -146,30 +147,35 @@ class MATActor(PPONetwork):
         num_agents,
         embedding_size = 64,
         num_blocks     = 1,
-        num_heads      = 1):
+        num_heads      = 1,
+        name           = 'actor',
+        **kw_args):
         """
         """
-        super(MATActor, self).__init__()
+        super(MATActor, self).__init__(
+            name      = name,
+            in_shape  = (embedding_size,),#FIXME: is this right?? Maybe these shapes should be None?
+            out_shape = get_space_shape(action_space),
+            **kw_args)
 
         self.obs_space = obs_space
         self.distribution, self.output_func = \
             get_actor_distribution(action_space, **kw_args)
 
-        self.action_shape   = get_space_shape(action_space)
         self.action_dtype   = get_action_dtype(action_space)
-        self.obs_size       = get_flattend_space_length(obs_space)
         self.embedding_size = embedding_size
+        action_dim          = get_flattened_space_length(action_space)
 
         # TODO: let's update to support binary and multi-binary as well.
         supported_types = ["continuous", "discrete"]
         if self.action_dtype not in supported_types:
-            msg  = "ERROR: you're using action space of type {action_dtype}, "
+            msg  = "ERROR: you're using action space of type {self.action_dtype}, "
             msg += "but the multi-agent transformer currently only supports "
             msg += f"{supported_types}."
             rank_print(msg)
             comm.Abort()
 
-        if action_dtype == 'discrete':
+        if self.action_dtype == 'discrete':
             self.action_encoder = nn.Sequential(
                 init_(nn.Linear(action_dim + 1, embedding_size, bias=False), activate=True),
                 nn.GELU())
@@ -177,11 +183,6 @@ class MATActor(PPONetwork):
             self.action_encoder = nn.Sequential(
                 init_(nn.Linear(action_dim, embedding_size), activate=True),
                 nn.GELU())
-
-        self.obs_encoder = nn.Sequential(
-            nn.LayerNorm(self.obs_size),
-            init_(nn.Linear(self.obs_size, embedding_size), activate=True),
-            nn.GELU())
 
         self.ln     = nn.LayerNorm(embedding_size)
         self.blocks = nn.Sequential(
@@ -226,20 +227,25 @@ class MATCritic(PPONetwork):
         num_agents,
         embedding_size = 64,
         num_blocks     = 1,
-        num_heads      = 1):
+        num_heads      = 1,
+        name           = 'critic',
+        **kw_args):
         """
         """
 
-        super(MATCritic, self).__init__()
+        super(MATCritic, self).__init__(
+            name      = name,
+            in_shape  = get_space_shape(obs_space),
+            out_shape = (1,),
+            **kw_args)
 
         self.obs_space      = obs_space
-        self.obs_size       = get_flattend_space_length(obs_space)
         self.embedding_size = embedding_size
         self.num_agents     = num_agents
 
         self.obs_encoder = nn.Sequential(
-            nn.LayerNorm(self.obs_size),
-            init_(nn.Linear(self.obs_size, embedding_size), activate=True),
+            nn.LayerNorm(self.in_size),
+            init_(nn.Linear(self.in_size, embedding_size), activate=True),
             nn.GELU())
 
         self.ln     = nn.LayerNorm(embedding_size)
@@ -255,8 +261,10 @@ class MATCritic(PPONetwork):
     def encode_obs(self, obs):
         """
         """
+        #print(f"ENCODING OBS OF SHAPE: {obs.shape}")#FIXME
         x = self.obs_encoder(obs)
-        return self.blocks(self.ln(x))
+        x = self.ln(x)
+        return self.blocks(x)
 
     def forward(self, obs):
         # NOTE Encoder should receive a sequence of agent observations.
@@ -265,4 +273,5 @@ class MATCritic(PPONetwork):
         #print(f"\nEncoder obs shape: {obs.shape}")#FIXME
         # Encoder obs shape: torch.Size([N, num_agents, obs_size])
 
+        #print(f"CRITIC GETTING OBS OF SHAPE {obs.shape}")#FIXME
         return self.head(self.encode_obs(obs))

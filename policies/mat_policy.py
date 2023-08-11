@@ -29,28 +29,38 @@ class MATPolicy(AgentPolicy):
     """
     """
 
-    def __init__(self, *args, **kw_args):
+    def __init__(self,
+                 actor_network  = mat.MATActor,
+                 critic_network = mat.MATCritic, 
+                 **kw_args):
         """
         """
-        super(MATPolicy, self).__init__(*args, **kw_args)
+        super(MATPolicy, self).__init__(
+            actor_network  = actor_network,
+            critic_network = critic_network,
+            **kw_args)
         self.action_dim     = get_flattened_space_length(self.action_space)
         self.agent_grouping = True
 
-    #TODO: update to use MAT
     def _initialize_networks(
         self,
+        actor_network,
+        critic_network,
         enable_icm,
         icm_network,
         actor_kw_args,
         critic_kw_args,
         icm_kw_args,
-        actor_network  = mat.MATActor,
-        critic_network = mat.MATCritic):
+        **kw_args):
         """
         Initialize our networks.
 
         Parameters:
         -----------
+        actor_network: class of type PPONetwork
+            The network to use for the actor.
+        critic_network: class of type PPONetwork
+            The network to use for the critic.
         enable_icm: bool
             Whether or not to enable ICM.
         icm_network: class of type PPONetwork
@@ -61,10 +71,6 @@ class MATPolicy(AgentPolicy):
             Keyword args for the critic network.
         icm_kw_args: dict
             Keyword args for the ICM network.
-        actor_network: class of type PPONetwork
-            The network to use for the actor.
-        critic_network: class of type PPONetwork
-            The network to use for the critic.
         """
         #
         # Initialize our networks: actor, critic, and possibly ICM.
@@ -200,7 +206,7 @@ class MATPolicy(AgentPolicy):
     def _get_tokened_action_block(self, batch_size):
         """
         """
-        num_agents = len(self.agent_ids),
+        num_agents = len(self.agent_ids)
 
         if self.action_dtype == "continuous":
             action_block = torch.zeros(
@@ -213,48 +219,54 @@ class MATPolicy(AgentPolicy):
 
         return action_block
 
-    def _get_parallel_actions(encoded_obs):
+    #FIXME: rename to evaluate actions?
+    def _evaluate_actions(self, encoded_obs, batch_actions):
         """
         """
-        encoded_obs = torch.tensor(encoded_obs, dtype=torch.float)
-        encoded_obs = encoded_obs.to(self.device)
-    
         # FIXME: This might break during rollouts becauset the observations
         # might be of shape (obs_size,).
         batch_size = encoded_obs.shape[0]
-        num_agents = len(self.agent_ids),
+        num_agents = len(self.agent_ids)
 
         action_block = self._get_tokened_action_block(batch_size)
 
         #FIXME: is there a better way to handle this?
-        action_offset = 0
         if self.action_dtype == "discrete":
-            action_offset = 1
+            action_block[:, 1:, 1:] = t_func.one_hot(batch_actions,
+                num_classes=self.action_dim)[:, :-1, :]
+        else:
+            action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
-        action_block[:, 1:, action_offset:] = action[:, :-1, :]
-    
-        with torch.no_grad():
-            action_pred = self.actor(action_block, encoded_obs)
+        #with torch.no_grad():#FIXME: I think this needs to include gradient.
+        action_pred = self.actor(action_block, encoded_obs)
 
-        dist = self.actor.distribution.get_distribution(action_pred)
-        action, raw_action = self.actor.distribution.sample_distribution(dist)
-        log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+        dist    = self.actor.distribution.get_distribution(action_pred)
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
 
-        return action, raw_action, log_prob
+        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
 
-    def _get_autoregressive_actions(encoded_obs):
+        return action_pred, log_probs, entropy
+
+    def _get_autoregressive_actions(self, encoded_obs):
         """
         """
         # FIXME: This might break during rollouts becauset the observations
         # might be of shape (obs_size,).
         batch_size = encoded_obs.shape[0]
-        num_agents = len(self.agent_ids),
+        num_agents = len(self.agent_ids)
 
         action_block = self._get_tokened_action_block(batch_size)
 
         output_action     = torch.zeros((batch_size, num_agents, 1), dtype=torch.long)#FIXME: change this to float32
         output_raw_action = torch.zeros_like(output_action, dtype=torch.float32)
-        output_action_log = torch.zeros_like(output_action, dtype=torch.float32)
+        output_log_prob   = torch.zeros_like(output_action, dtype=torch.float32)
 
         #FIXME: is there a better way to handle this?
         action_offset = 0
@@ -273,17 +285,17 @@ class MATPolicy(AgentPolicy):
                 if self.action_dtype == "discrete":
                     output_action[:, i, :]     = action.unsqueeze(-1)
                     output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
-                    output_action_log[:, i, :] = action_log.unsqueeze(-1)
+                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
                     action = t_func.one_hot(action, num_classes=self.action_dim)
                 else:
                     output_action[:, i, :]     = action
                     output_raw_action[:, i, :] = raw_action
-                    output_action_log[:, i, :] = action_log
+                    output_log_prob[:, i, :]   = log_prob
 
                 if i + 1 < num_agents:
                     action_block[:, i + 1, action_offset:] = action
 
-        return output_action, output_raw_action, output_action_log
+        return output_action, output_raw_action, output_log_prob
 
     def get_rollout_actions(self, obs):
         """
@@ -303,6 +315,8 @@ class MATPolicy(AgentPolicy):
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
+
+        #print(f"GETTING ROLLOUT ACTIONS FROM MAT: {obs.shape}")#FIXME
 
         # FIXME: during rollouts, our agents are always acting in the same order.
         # we can shuffle them between rollouts, but I think that's all we have
@@ -346,32 +360,13 @@ class MATPolicy(AgentPolicy):
             entropies from our distribution.
         """
         #
-        # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
-        # (num_envs, num_agents, obs_size).
+        # NOTE: when evaluating, our incoming data is coming from our
+        # torch dataset, and it has already been re-shaped into the expected
+        # (batch_size, num_agents, *) format.
         #
-        batch_critic_obs = torch.swapaxes(batch_critic_obs, 0, 1)
-        batch_obs        = torch.swapaxes(batch_obs, 0, 1)
-        batch_actions    = torch.swapaxes(batch_actions, 0, 1)
-
-        values      = self.critic(batch_critic_obs).squeeze()#FIXME: do we want this squeeze?
+        values      = self.critic(batch_critic_obs)
         encoded_obs = self.critic.encode_obs(batch_critic_obs)
-        action_pred = self._get_parallel_actions(encoded_obs)
-        dist        = self.actor.distribution.get_distribution(action_pred)
-
-        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
-
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-        values    = torch.swapaxes(values, 0, 1)
-        log_probs = torch.swapaxes(log_probs, 0, 1)
-        entropy   = torch.swapaxes(entropy, 0, 1)
+        _, log_probs, entropy = self._evaluate_actions(encoded_obs, batch_actions)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
 

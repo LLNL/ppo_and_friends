@@ -349,9 +349,6 @@ class EpisodeInfo():
 
 class AgentSharedEpisode():
 
-    # FIXME: I think these "agent_ids" need to match what's in the Policy class at the
-    # time the agents are inserted. Let's guarantee this is happening and then add a note
-    # for future dev.
     def __init__(self, agent_ids):
         """
         """
@@ -382,13 +379,13 @@ class AgentSharedEpisode():
         """
         """
         if agent_id not in self.agent_ids:
-            msg  = "ERROR: agent id, {agent_id}, not in list of accepted "
+            msg  = "ERROR: {agent_id} not in list of accepted "
             msg += "agents."
             rank_print(msg)
             comm.Abort()
 
         if agent_id in self.added_agents:
-            msg  = f"ERROR: agent id, {agent_id}, has already been added to this "
+            msg  = f"ERROR: {agent_id} has already been added to this "
             msg += "AgentSharedEpisode!"
             rank_print(msg)
             comm.Abort()
@@ -851,13 +848,15 @@ class PPOSharedEpisodeDataset(PPODataset):
 
         self.num_envs      = num_envs
         self.agent_ids     = agent_ids
-        self.episode_queue = np.array([AgentSharedEpisode(agent_ids)] * num_envs)
         self.shared        = True
         self.shuffle_every = shuffle_every
         self.counter       = 0
 
-        # FIXME: we should probably have a "validate" method that confirms
-        # that hidden states are empty for MAT.
+        shared_episodes = []
+        for _ in range(num_envs):
+            shared_episodes.append(AgentSharedEpisode(agent_ids))
+
+        self.episode_queue = np.array(shared_episodes)
 
     def add_shared_episode(self, episode, agent_id, env_idx):
         """
@@ -906,7 +905,9 @@ class PPOSharedEpisodeDataset(PPODataset):
             All data associated with the given index in our dataset.
         """
         self.counter += 1
-        if self.counter % shuffle_every == 0:
+        if self.counter % self.shuffle_every == 0:
+            #FIXME: are we sure that this shuffling isn't going to have an
+            # odd effect on the data retrieval?? I think it should be okay...
             self.shuffle_agents()
 
         return (self.critic_observations[idx],

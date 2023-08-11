@@ -367,7 +367,7 @@ class PPOEnvironmentWrapper(ABC):
                  env,
                  test_mode         = False,
                  add_agent_ids     = False,
-                 critic_view       = "global",
+                 critic_view       = "policy",
                  policy_mapping_fn = None,
                  death_mask_reward = 0.0,
                  **kw_args):
