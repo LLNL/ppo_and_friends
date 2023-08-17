@@ -56,6 +56,7 @@ class AgentPolicy():
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
+                 shared_reward_fn    = None,
                  test_mode           = False,
                  **kw_args):
         """
@@ -148,6 +149,9 @@ class AgentPolicy():
             utils/schedulers.py.
         icm_beta: float
             The beta value used within the ICM.
+        shared_reward_fn: numpy function or None
+            If not None, rewards will be reduced using this function
+            so that all agents receive the same reward.
         test_mode: bool
             Are we in test mode?
         """
@@ -174,6 +178,7 @@ class AgentPolicy():
         self.kl_loss_weight     = kl_loss_weight
         self.envs_per_proc      = envs_per_proc
         self.agent_grouping     = False
+        self.shared_reward_fn   = shared_reward_fn
 
         if callable(lr):
             self.lr = lr
@@ -656,8 +661,8 @@ class AgentPolicy():
         action, raw_action = self.actor.distribution.sample_distribution(dist)
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-        action     = action.detach().numpy()
         raw_action = raw_action.detach().numpy()
+        action     = action.detach().numpy()
 
         return raw_action, action, log_prob.detach()
 

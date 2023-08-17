@@ -25,20 +25,27 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
+# FIXME: we need to somehow ensure that ALL agents sharing a policy
+# receive the SAME reward. Maybe we need a special wrapper for this?
+# Or we could just perform a check to make sure tha this is true and
+# put the responsibility on the environment (seems more sensible).
 class MATPolicy(AgentPolicy):
     """
     """
 
     def __init__(self,
-                 actor_network  = mat.MATActor,
-                 critic_network = mat.MATCritic, 
+                 actor_network       = mat.MATActor,
+                 critic_network      = mat.MATCritic, 
+                 shared_reward_fn    = np.max,
                  **kw_args):
         """
         """
         super(MATPolicy, self).__init__(
-            actor_network  = actor_network,
-            critic_network = critic_network,
+            actor_network    = actor_network,
+            critic_network   = critic_network,
+            shared_reward_fn = shared_reward_fn,
             **kw_args)
+
         self.action_dim     = get_flattened_space_length(self.action_space)
         self.agent_grouping = True
 
@@ -264,14 +271,18 @@ class MATPolicy(AgentPolicy):
 
         action_block = self._get_tokened_action_block(batch_size)
 
-        output_action     = torch.zeros((batch_size, num_agents, 1), dtype=torch.long)#FIXME: change this to float32
-        output_raw_action = torch.zeros_like(output_action, dtype=torch.float32)
+        output_action     = torch.zeros((batch_size, num_agents, 1))
+        output_raw_action = torch.zeros_like(output_action)
         output_log_prob   = torch.zeros_like(output_action, dtype=torch.float32)
 
-        #FIXME: is there a better way to handle this?
         action_offset = 0
         if self.action_dtype == "discrete":
-            action_offset = 1
+            output_action     = output_action.long()
+            output_raw_action = output_raw_action.long()
+            action_offset     = 1
+        else:
+            output_action     = output_action.float()
+            output_raw_action = output_raw_action.float()
 
         with torch.no_grad():
             for i in range(num_agents):
@@ -337,6 +348,9 @@ class MATPolicy(AgentPolicy):
         raw_actions = torch.swapaxes(raw_actions, 0, 1)
         log_probs   = torch.swapaxes(log_probs, 0, 1)
 
+        actions     = actions.detach().numpy()
+        raw_actions = raw_actions.detach().numpy()
+
         # FIXME: this is reverse order from the distributions, 
         # which is a bit confusing. It's all over the place...
         return raw_actions, actions, log_probs.detach()
@@ -389,8 +403,8 @@ class MATPolicy(AgentPolicy):
         # we should be able to use the "get_policy_batches" function
         # in ppo.py. Let's turn that into a utility outside of that class.
         if explore:
-            return self._get_action_with_exploration(obs)
-        return self._get_action_without_exploration(obs)
+            return self._get_actions_with_exploration(obs)
+        return self._get_actions_without_exploration(obs)
 
     def _get_actions_with_exploration(self, obs):
         """
@@ -409,7 +423,7 @@ class MATPolicy(AgentPolicy):
         """
         if len(obs.shape) < 3:
             msg  = "ERROR: _get_action_with_exploration expects a "
-            msg ++ "batch of agent observations but "
+            msg += "batch of agent observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()

@@ -156,8 +156,36 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
-        env = wrap_environment(
+        #
+        # Create our policies.
+        #
+        self.policies = OrderedDict({})
+        self.have_agent_grouping = False
+
+        for policy_id in policy_settings:
+            settings = policy_settings[policy_id]
+
+            self.policies[policy_id] = \
+                generate_policy(
+                    envs_per_proc            = envs_per_proc,
+                    policy_name              = str(policy_id),
+                    policy_class             = settings[0],
+                    actor_observation_space  = settings[1],
+                    critic_observation_space = settings[2],
+                    action_space             = settings[3],
+                    test_mode                = test_mode,
+                    **settings[4])
+
+            if self.policies[policy_id].agent_grouping:
+                self.have_agent_grouping = True
+
+        #
+        # Create our environment instances.
+        #
+        self.env = wrap_environment(
             env_generator     = env_generator,
+            policy_mapping_fn = policy_mapping_fn,
+            policies          = self.policies,
             envs_per_proc     = envs_per_proc,
             random_seed       = random_seed,
             obs_augment       = obs_augment,
@@ -173,21 +201,27 @@ class PPO(object):
         # when in inference.
         #
         self.save_env_info = False
-        if (env.has_wrapper(RewardNormalizer) or
-            env.has_wrapper(ObservationNormalizer)):
+        if (self.env.has_wrapper(RewardNormalizer) or
+            self.env.has_wrapper(ObservationNormalizer)):
             self.save_env_info = True
+
+        #
+        # Register our agents with our policies.
+        #
+        for agent_id in self.env.agent_ids:
+            policy_id = policy_mapping_fn(agent_id)
+            self.policies[policy_id].register_agent(agent_id)
 
         #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
         #
-        self.test_mode_dependencies = [env]
+        self.test_mode_dependencies = [self.env]
         self.pickle_safe_test_mode_dependencies = []
 
         #
         # Establish some class variables.
         #
-        self.env                 = env
         self.device              = device
         self.state_path          = state_path
         self.render              = render
@@ -235,30 +269,6 @@ class PPO(object):
 
         else:
             self.soft_resets = CallableValue(soft_resets)
-
-        self.policies = OrderedDict({})
-        self.have_mat_policies = False
-
-        for policy_id in policy_settings:
-            settings = policy_settings[policy_id]
-
-            self.policies[policy_id] = \
-                generate_policy(
-                    envs_per_proc            = envs_per_proc,
-                    policy_name              = str(policy_id),
-                    policy_class             = settings[0],
-                    actor_observation_space  = settings[1],
-                    critic_observation_space = settings[2],
-                    action_space             = settings[3],
-                    test_mode                = test_mode,
-                    **settings[4])
-
-            if type(settings[0]) == type(MATPolicy):
-                self.have_mat_policies = True
-
-        for agent_id in self.env.agent_ids:
-            policy_id = self.policy_mapping_fn(agent_id)
-            self.policies[policy_id].register_agent(agent_id)
 
         #
         # Create a dictionary to track the status of training.
@@ -428,7 +438,7 @@ class PPO(object):
         assert component in ["actor", "critic"]
 
         policy_batches = OrderedDict({})
-        agent_counts   = OrderedDict({p_id : 0 for p_id in self.policies})
+        agent_counts   = OrderedDict({})
 
         #
         # First, let's populate our "agent_counts" dictionary, which maps
@@ -437,6 +447,10 @@ class PPO(object):
         #
         for a_id in obs:
             policy_id = self.policy_mapping_fn(a_id)
+
+            if policy_id not in agent_counts:
+                agent_counts[policy_id] = 0
+
             agent_counts[policy_id] += 1
 
         #
@@ -448,9 +462,9 @@ class PPO(object):
             if (agent_counts[policy_id] !=
                 len(self.policies[policy_id].agent_ids)):
 
-                msg  = "ERROR: expected obs of policy {policy_id} to have "
-                msg += "{len(self.policies[policy_id].agent_ids)} agents "
-                msg += "but recieved {len(agent_counts[policy_id])!"
+                msg  = f"ERROR: expected obs of policy {policy_id} to have "
+                msg += f"{len(self.policies[policy_id].agent_ids)} agents "
+                msg += f"but recieved {agent_counts[policy_id]}!"
                 rank_print(msg)
                 comm.Abort()
 
@@ -571,7 +585,7 @@ class PPO(object):
     def get_inference_actions(self, obs, explore):
         """
         """
-        if self.have_mat_policies:
+        if self.have_agent_grouping:
             return self._get_policy_grouped_inference_actions(obs, explore)
         return self._get_mappo_inference_actions(obs, explore)
 
@@ -591,7 +605,7 @@ class PPO(object):
             if policy_id not in policy_obs:
                 policy_obs[policy_id] = OrderedDict({})
 
-            poicy_obs[policy_id][agent_id] = obs[agent_id]
+            policy_obs[policy_id][agent_id] = obs[agent_id]
 
         actions = OrderedDict({})
 
@@ -602,7 +616,7 @@ class PPO(object):
         # observations.
         #
         for policy_id in policy_obs:
-            if type(self.policies[policy_id]) == type(MATPolicy):
+            if self.policies[policy_id].agent_grouping:
                 #FIXME: we probably want to shuffle, right? This is abit tricky...
                 batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
@@ -610,12 +624,14 @@ class PPO(object):
                     shuffle_agents = False)[policy_id]
 
                 batch_actions = \
-                    self.policies[policy_id].get_inference_actions(batch_obs)
+                    self.policies[policy_id].get_inference_actions(
+                        batch_obs, explore)
 
                 #
                 # We now need to reverse our batching and put the agents
                 # back into dictionary form.
                 #
+                num_agents    = len(self.policies[policy_id].agent_ids)
                 actions_shape = (num_agents,) +\
                     self.policies[policy_id].action_space.shape
                 batch_actions = batch_actions.reshape(actions_shape).numpy()
@@ -626,7 +642,7 @@ class PPO(object):
 
             else:
                 policy_actions = self._get_mappo_inference_actions(
-                    policy_obs[policy_id])
+                    policy_obs[policy_id], explore)
 
             actions.update(policy_actions)
 
@@ -675,7 +691,7 @@ class PPO(object):
 
             if not self.policies[policy_id].agent_grouping:
                 batch_obs  = batch_obs.reshape((-1,) + \
-                    self.policies[policy_id].actor_obs_space.shape)
+                    self.policies[policy_id].critic_obs_space.shape)
 
             batch_values = self.policies[policy_id].critic(batch_obs)
 
@@ -1526,7 +1542,7 @@ class PPO(object):
             self.policies[policy_id].finalize_dataset()
 
             # FIXME is shuffling between rollouts enough for MAT?
-            if self.have_mat_policies:
+            if self.agent_grouping:
                 self.policies[policy_id].shuffle_agent_ids()
 
         comm.barrier()
