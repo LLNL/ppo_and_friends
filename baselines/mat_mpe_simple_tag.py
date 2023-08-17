@@ -9,7 +9,7 @@ import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 @ppoaf_runner
-class MPESimpleTagRunner(GymRunner):
+class MATMPESimpleTagRunner(GymRunner):
 
     def run(self):
 
@@ -35,7 +35,7 @@ class MPESimpleTagRunner(GymRunner):
                 # to take the critic observations in the MAT case, but it's a bit funny since the
                 # actor would always be acting from the critic's view anyways...
                 # 
-                critic_view       = "policy",
+                critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
