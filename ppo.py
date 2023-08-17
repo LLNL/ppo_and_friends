@@ -621,7 +621,7 @@ class PPO(object):
                 batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
                     component      = "actor",
-                    shuffle_agents = False)[policy_id]
+                    shuffle_agents = True)[policy_id]
 
                 batch_actions = \
                     self.policies[policy_id].get_inference_actions(
@@ -1542,7 +1542,7 @@ class PPO(object):
             self.policies[policy_id].finalize_dataset()
 
             # FIXME is shuffling between rollouts enough for MAT?
-            if self.agent_grouping:
+            if self.have_agent_grouping:
                 self.policies[policy_id].shuffle_agent_ids()
 
         comm.barrier()
