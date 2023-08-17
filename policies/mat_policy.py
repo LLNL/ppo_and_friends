@@ -25,12 +25,10 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-# FIXME: we need to somehow ensure that ALL agents sharing a policy
-# receive the SAME reward. Maybe we need a special wrapper for this?
-# Or we could just perform a check to make sure tha this is true and
-# put the responsibility on the environment (seems more sensible).
 class MATPolicy(AgentPolicy):
     """
+    The Multi-Agent transformer policy. This implementation is based off of
+    arXiv:2205.14953
     """
 
     def __init__(self,
@@ -39,6 +37,21 @@ class MATPolicy(AgentPolicy):
                  shared_reward_fn    = np.max,
                  **kw_args):
         """
+        Initialize the policy.
+
+        Parameters:
+        -----------
+        actor_network: class
+            The class to use for the actor. This should be of type/subtype
+            MATActor.
+        critic_network: class
+            The class to use for the critic. This should be of type/subtype
+            MATCritic.
+        shared_reward_fn: np function 
+            This is a numpy "reduction" function that will be used to
+            create shared rewards in environments that don't already have them.
+            Current options are np.min, np.max, np.mean. MAT requires that
+            all agents of a policy receive the same reward.
         """
         super(MATPolicy, self).__init__(
             actor_network    = actor_network,
@@ -143,8 +156,8 @@ class MATPolicy(AgentPolicy):
 
     def initialize_dataset(self):
         """
-            Initialize a rollout dataset. This should be called at the
-            onset of a rollout.
+        Initialize a rollout dataset. This should be called at the
+        onset of a rollout.
         """
         sequence_length = 1
         if self.using_lstm:
@@ -176,15 +189,22 @@ class MATPolicy(AgentPolicy):
         ending_values,
         ending_rewards):
         """
-            End a rollout episode.
+        End a rollout episode.
 
-            Arguments:
-                agent_id         The associated agent id.
-                env_idxs         The associated environment indices.
-                episode_lengths  The lenghts of the ending episode(s).
-                terminal         Which episodes are terminally ending.
-                ending_values    Ending values for the episode(s).
-                ending_rewards   Ending rewards for the episode(s)
+        Parameters:
+        -----------
+        agent_id: string
+            The associated agent id.
+        env_idxs: array-like
+            The associated environment indices.
+        episode_lengths: array-like
+            The lenghts of the ending episode(s).
+        terminal: array-like
+            Which episodes are terminally ending.
+        ending_values: array-like
+            Ending values for the episode(s).
+        ending_rewards: array-like
+            Ending rewards for the episode(s)
         """
         self.validate_agent_id(agent_id)
 
@@ -237,25 +257,20 @@ class MATPolicy(AgentPolicy):
 
         return action_block
 
-    #FIXME: rename to evaluate actions?
     def _evaluate_actions(self, encoded_obs, batch_actions):
         """
         """
-        # FIXME: This might break during rollouts becauset the observations
-        # might be of shape (obs_size,).
         batch_size = encoded_obs.shape[0]
         num_agents = len(self.agent_ids)
 
         action_block = self._get_tokened_action_block(batch_size)
 
-        #FIXME: is there a better way to handle this?
         if self.action_dtype == "discrete":
             action_block[:, 1:, 1:] = t_func.one_hot(batch_actions,
                 num_classes=self.action_dim)[:, :-1, :]
         else:
             action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
-        #with torch.no_grad():#FIXME: I think this needs to include gradient.
         action_pred = self.actor(action_block, encoded_obs)
 
         dist    = self.actor.distribution.get_distribution(action_pred)
@@ -275,8 +290,6 @@ class MATPolicy(AgentPolicy):
     def _get_autoregressive_actions(self, encoded_obs):
         """
         """
-        # FIXME: This might break during rollouts becauset the observations
-        # might be of shape (obs_size,).
         batch_size = encoded_obs.shape[0]
         num_agents = len(self.agent_ids)
 
@@ -303,7 +316,6 @@ class MATPolicy(AgentPolicy):
                 action, raw_action = self.actor.distribution.sample_distribution(dist)
                 log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-                #FIXME: is there a better way of doing this?
                 if self.action_dtype == "discrete":
                     output_action[:, i, :]     = action.unsqueeze(-1)
                     output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
@@ -338,10 +350,6 @@ class MATPolicy(AgentPolicy):
             rank_print(msg)
             comm.Abort()
 
-        # FIXME: during rollouts, our agents are always acting in the same order.
-        # we can shuffle them between rollouts, but I think that's all we have
-        # right now. Is that okay???
-
         #
         # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
         # (num_envs, num_agents, obs_size).
@@ -360,8 +368,6 @@ class MATPolicy(AgentPolicy):
         actions     = actions.detach().numpy()
         raw_actions = raw_actions.detach().numpy()
 
-        # FIXME: this is reverse order from the distributions, 
-        # which is a bit confusing. It's all over the place...
         return raw_actions, actions, log_probs.detach()
 
     def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
@@ -401,16 +407,18 @@ class MATPolicy(AgentPolicy):
         This method is meant to be used for inference only, and it
         will return the environment actions alone.
 
-        Arguments:
-            obs       The environment observation.
-            explore   Should we allow exploration?
+        Parameters:
+        -----------
+        obs: dict
+            The environment observation.
+        explore: bool
+            Should we allow exploration?
 
         Returns:
+        --------
+        dict:
             Predicted actions to perform in the environment.
         """
-        # FIXME: we need to combine and the "un-combine" agents.
-        # we should be able to use the "get_policy_batches" function
-        # in ppo.py. Let's turn that into a utility outside of that class.
         if explore:
             return self._get_actions_with_exploration(obs)
         return self._get_actions_without_exploration(obs)
@@ -420,10 +428,14 @@ class MATPolicy(AgentPolicy):
         Given observations from our environment, determine what the
         next actions should be taken while allowing natural exploration.
 
-        Arguments:
-            obs    The environment observations.
+        Parameters:
+        -----------
+        obs: dict
+            The environment observations.
 
         Returns:
+        --------
+        tuple:
             A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
             is the distribution sample before any "squashing" takes place,
             "action" is the the action value that should be fed to the
@@ -452,16 +464,19 @@ class MATPolicy(AgentPolicy):
 
         return actions
 
-    #TODO: upate for MAT
     def _get_actions_without_exploration(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be while not allowing any exploration.
 
-        Arguments:
-            obs    The environment observations.
+        Parameters:
+        -----------
+        obs: dict
+            The environment observations.
 
         Returns:
+        --------
+        dict:
             The next actions to perform.
         """
         if len(obs.shape) < 3:
@@ -470,11 +485,6 @@ class MATPolicy(AgentPolicy):
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
-
-        #t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
-
-        #with torch.no_grad():
-        #    return self.actor.get_refined_prediction(t_obs)
 
         #
         # The incoming shape is (num_agents, num_envs, obs_size). MAT wants
@@ -497,8 +507,19 @@ class MATPolicy(AgentPolicy):
         """
         """
         if self.have_step_constraints:
+            #
+            # For MAT, the critic and actor are entwined. The observations that
+            # are fed to the actor are first encoded by the critic, so they
+            # need to see the same observations.
+            #
             for agent_id in self.agent_ids:
                 obs[agent_id] = critic_obs[agent_id]
+
+                for env_idx in range(self.envs_per_proc):
+                    if terminated[agent_id][env_idx]:
+                        info[agent_id][env_idx]["terminal observation"] =\
+                            info[agent_id][env_idx]["terminal critic observation"]
+                
 
         return obs, critic_obs, reward, terminated, truncated, info
 
@@ -509,6 +530,11 @@ class MATPolicy(AgentPolicy):
         """
         """
         if self.have_reset_constraints:
+            #
+            # For MAT, the critic and actor are entwined. The observations that
+            # are fed to the actor are first encoded by the critic, so they
+            # need to see the same observations.
+            #
             for agent_id in self.agent_ids:
                 obs[agent_id] = critic_obs[agent_id]
 
