@@ -160,7 +160,9 @@ class PPO(object):
         # Create our policies.
         #
         self.policies = OrderedDict({})
-        self.have_agent_grouping = False
+        self.have_agent_grouping           = False
+        self.have_policy_step_constraints  = False
+        self.have_policy_reset_constraints = False
 
         for policy_id in policy_settings:
             settings = policy_settings[policy_id]
@@ -178,6 +180,12 @@ class PPO(object):
 
             if self.policies[policy_id].agent_grouping:
                 self.have_agent_grouping = True
+
+            if self.policies[policy_id].have_step_constraints:
+                self.have_policy_step_constraints = True
+
+            if self.policies[policy_id].have_reset_constraints:
+                self.have_policy_reset_constraints = True
 
         #
         # Create our environment instances.
@@ -312,7 +320,7 @@ class PPO(object):
         # for calcultaing advantages. We track separate normalizers for
         # each policy.
         #
-        #FIXME: why not have the value normalizers in the policy?
+        # TODO: should we move the value normalizers to the policies?
         if normalize_values:
             self.value_normalizers = OrderedDict({})
 
@@ -497,16 +505,24 @@ class PPO(object):
 
     def get_rollout_actions(self, obs):
         """
-            Given a dictionary mapping agent ids to observations,
-            generate an dictionary of actions from our policy.
+        Given a dictionary mapping agent ids to observations,
+        generate an dictionary of actions from our policy.
 
-            Arguments:
-                obs    A dictionary mapping agent ids to observations.
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        ac_component: string
+            Either 'actor' or 'critic'. This should match which component the
+            observations are associated with. In most cases, this is
+            the actor, but cases like MAT only use the critic observations.
 
-            Returns:
-                A tuple of the form (raw_actions, actions, log_probs).
-                'actions' have potentially been altered for the environment,
-                but 'raw_actions' are guaranteed to be unaltered.
+        Returns:
+        --------
+        tuple:
+            A tuple of the form (raw_actions, actions, log_probs).
+            'actions' have potentially been altered for the environment,
+            but 'raw_actions' are guaranteed to be unaltered.
         """
         raw_actions = OrderedDict({})
         actions     = OrderedDict({})
@@ -617,7 +633,11 @@ class PPO(object):
         #
         for policy_id in policy_obs:
             if self.policies[policy_id].agent_grouping:
-                #FIXME: we probably want to shuffle, right? This is abit tricky...
+                #
+                # We shuffle the agents here because algorithms that use
+                # agent grouping (like MAT) should perform best when agent
+                # ordering is shuffled around.
+                #
                 batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
                     component      = "actor",
@@ -969,7 +989,7 @@ class PPO(object):
 
     def update_learning_rate(self):
         """
-            Update the learning rate.
+        Update the learning rate.
         """
         for policy_id in self.policies:
             self.policies[policy_id].update_learning_rate()
@@ -983,13 +1003,14 @@ class PPO(object):
 
     def update_entropy_weight(self):
         """
-            Update the entropy weight.
+        Update the entropy weight.
         """
         for policy_id in self.policies:
             self.status_dict[policy_id]["entropy weight"] = \
                 self.policies[policy_id].entropy_weight()
 
     def verify_truncated(self, terminated, truncated):
+        #FIXME: docs
         """
         """
         first_agent     = next(iter(truncated))
@@ -1014,23 +1035,62 @@ class PPO(object):
 
         return where_truncated
 
+    def apply_policy_reset_constraints(
+        self,
+        obs,
+        critic_obs):
+        """
+        """
+        if self.have_policy_reset_constraints:
+            for policy_id in self.policies:
+                obs, critic_obs  = \
+                    self.policies[policy_id].apply_reset_constraints(
+                        obs,
+                        critic_obs)
+
+        return obs, critic_obs
+
+    def apply_policy_step_constraints(
+        self,
+        obs,
+        critic_obs,
+        reward,
+        terminated,
+        truncated,
+        info):
+        """
+        """
+        if self.have_policy_step_constraints:
+            for policy_id in self.policies:
+                obs, critic_obs, reward, terminated, truncated, info = \
+                    self.policies[policy_id].apply_step_constraints(
+                        obs,
+                        critic_obs,
+                        reward,
+                        terminated,
+                        truncated,
+                        info)
+
+        return obs, critic_obs, reward, terminated, truncated, info
+
     def rollout(self):
         """
-            Create a "rollout" of episodes. This system uses "fixed-length
-            trajectories", which are sometimes referred to as "vectorized"
-            episodes. In short, we step through our environment for a fixed
-            number of iterations, and only allow a fixed number of steps
-            per episode. This fixed number of steps per episode becomes a
-            trajectory. In most cases, our trajectory length < max steps
-            in the environment, which results in trajectories ending before
-            the episode ends. In those cases, we bootstrap the ending value
-            by using our critic to approximate the next value. A key peice
-            of this logic is that the enviorment's state is saved after a
-            trajectory ends, meaning that a new trajectory can start in the
-            middle of an episode.
+        Create a "rollout" of episodes. This system uses "fixed-length
+        trajectories", which are sometimes referred to as "vectorized"
+        episodes. In short, we step through our environment for a fixed
+        number of iterations, and only allow a fixed number of steps
+        per episode. This fixed number of steps per episode becomes a
+        trajectory. In most cases, our trajectory length < max steps
+        in the environment, which results in trajectories ending before
+        the episode ends. In those cases, we bootstrap the ending value
+        by using our critic to approximate the next value. A key peice
+        of this logic is that the enviorment's state is saved after a
+        trajectory ends, meaning that a new trajectory can start in the
+        middle of an episode.
 
-            Returns:
-                A PyTorch dataset containing our rollout.
+        Returns:
+        --------
+            A PyTorch dataset containing our rollout.
         """
         start_time = time.time()
 
@@ -1063,8 +1123,10 @@ class PPO(object):
         else:
             initial_reset_func = self.env.reset
 
-        obs, critic_obs    = initial_reset_func()
-        env_batch_size     = self.env.get_batch_size()
+        obs, critic_obs = self.apply_policy_reset_constraints(
+            *initial_reset_func())
+
+        env_batch_size  = self.env.get_batch_size()
 
         top_rollout_score       = OrderedDict({})
         rollout_max_ext_reward  = OrderedDict({})
@@ -1151,7 +1213,7 @@ class PPO(object):
             # the results from a single environment.
             #
             obs, critic_obs, ext_reward, terminated, truncated, info = \
-                self.env.step(action)
+                self.apply_policy_step_constraints(*self.env.step(action))
 
             #
             # Because we always death mask, any environment that's done for
@@ -1541,7 +1603,6 @@ class PPO(object):
         for policy_id in self.policies:
             self.policies[policy_id].finalize_dataset()
 
-            # FIXME is shuffling between rollouts enough for MAT?
             if self.have_agent_grouping:
                 self.policies[policy_id].shuffle_agent_ids()
 
@@ -1692,10 +1753,6 @@ class PPO(object):
             critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
                actor_cell, critic_cell, batch_idxs = batch_data
-
-            #print(f"RAW ACTIONS SHAPE: {raw_actions.shape}")#FIXME
-            #print(f"LOG PROBS SHAPE: {log_probs.shape}")#FIXME
-            #print(f"OBS SHAPE: {obs.shape}")#FIXME
 
             torch.cuda.empty_cache()
 

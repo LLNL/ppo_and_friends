@@ -54,7 +54,7 @@ def test_policy(ppo,
 
     for _ in range(num_test_runs):
 
-        obs, _   = env.reset()
+        obs, _   = ppo.apply_policy_reset_constraints(*env.reset())
         done     = False
 
         episode_score = OrderedDict({agent_id : 0.0 for agent_id in env.agent_ids})
@@ -69,7 +69,8 @@ def test_policy(ppo,
                 gif_frames.append(env.render())
 
             actions = ppo.get_inference_actions(obs, explore)
-            obs, _, reward, terminated, truncated, info = env.step(actions)
+            obs, _, reward, terminated, truncated, info = \
+                ppo.apply_policy_step_constraints(*env.step(actions))
 
             done = env.get_all_done()
 

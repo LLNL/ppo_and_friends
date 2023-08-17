@@ -155,30 +155,32 @@ class AgentPolicy():
         test_mode: bool
             Are we in test mode?
         """
-        self.name               = name
-        self.action_space       = action_space
-        self.actor_obs_space    = actor_observation_space
-        self.critic_obs_space   = critic_observation_space
-        self.enable_icm         = enable_icm
-        self.test_mode          = test_mode
-        self.use_gae            = use_gae
-        self.gamma              = gamma
-        self.lambd              = lambd
-        self.dynamic_bs_clip    = dynamic_bs_clip
-        self.using_lstm         = False
-        self.dataset            = None
-        self.device             = torch.device("cpu")
-        self.agent_ids          = np.array([])
-        self.episodes           = {}
-        self.icm_beta           = icm_beta
-        self.target_kl          = target_kl
-        self.surr_clip          = surr_clip
-        self.vf_clip            = vf_clip
-        self.gradient_clip      = gradient_clip
-        self.kl_loss_weight     = kl_loss_weight
-        self.envs_per_proc      = envs_per_proc
-        self.agent_grouping     = False
-        self.shared_reward_fn   = shared_reward_fn
+        self.name                   = name
+        self.action_space           = action_space
+        self.actor_obs_space        = actor_observation_space
+        self.critic_obs_space       = critic_observation_space
+        self.enable_icm             = enable_icm
+        self.test_mode              = test_mode
+        self.use_gae                = use_gae
+        self.gamma                  = gamma
+        self.lambd                  = lambd
+        self.dynamic_bs_clip        = dynamic_bs_clip
+        self.using_lstm             = False
+        self.dataset                = None
+        self.device                 = torch.device("cpu")
+        self.agent_ids              = np.array([])
+        self.episodes               = {}
+        self.icm_beta               = icm_beta
+        self.target_kl              = target_kl
+        self.surr_clip              = surr_clip
+        self.vf_clip                = vf_clip
+        self.gradient_clip          = gradient_clip
+        self.kl_loss_weight         = kl_loss_weight
+        self.envs_per_proc          = envs_per_proc
+        self.agent_grouping         = False
+        self.shared_reward_fn       = shared_reward_fn
+        self.have_step_constraints  = False
+        self.have_reset_constraints = False
 
         if callable(lr):
             self.lr = lr
@@ -858,6 +860,16 @@ class AgentPolicy():
             bs_max = self.bootstrap_clip[1]()
 
         return (bs_min, bs_max)
+
+    def apply_step_constraints(self, *args):
+        """
+        """
+        return args
+
+    def apply_reset_constraints(self, *args):
+        """
+        """
+        return args
 
     def save(self, save_path):
         """

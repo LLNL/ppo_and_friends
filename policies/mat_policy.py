@@ -46,8 +46,19 @@ class MATPolicy(AgentPolicy):
             shared_reward_fn = shared_reward_fn,
             **kw_args)
 
-        self.action_dim     = get_flattened_space_length(self.action_space)
-        self.agent_grouping = True
+        self.action_dim      = get_flattened_space_length(self.action_space)
+        self.agent_grouping  = True
+
+        #
+        # MAT really only uses the critic observation space. So, if our
+        # env is returning different spaces for actor and critic, we need
+        # to put in some extra work to transfer the critic observations
+        # to the actor observations.
+        #
+        if self.actor_obs_space != self.critic_obs_space:
+            self.have_step_constraints  = True
+            self.have_reset_constraints = True
+            self.actor_obs_space        = self.critic_obs_space
 
     def _initialize_networks(
         self,
@@ -327,8 +338,6 @@ class MATPolicy(AgentPolicy):
             rank_print(msg)
             comm.Abort()
 
-        #print(f"GETTING ROLLOUT ACTIONS FROM MAT: {obs.shape}")#FIXME
-
         # FIXME: during rollouts, our agents are always acting in the same order.
         # we can shuffle them between rollouts, but I think that's all we have
         # right now. Is that okay???
@@ -476,3 +485,31 @@ class MATPolicy(AgentPolicy):
         t_obs = t_obs.to(self.device)
 
         encoded_obs = self.critic.encode_obs(t_obs)
+
+    def apply_step_constraints(
+        self,
+        obs,
+        critic_obs,
+        reward,
+        terminated,
+        truncated,
+        info):
+        """
+        """
+        if self.have_step_constraints:
+            for agent_id in self.agent_ids:
+                obs[agent_id] = critic_obs[agent_id]
+
+        return obs, critic_obs, reward, terminated, truncated, info
+
+    def apply_reset_constraints(
+        self,
+        obs,
+        critic_obs):
+        """
+        """
+        if self.have_reset_constraints:
+            for agent_id in self.agent_ids:
+                obs[agent_id] = critic_obs[agent_id]
+
+        return obs, critic_obs

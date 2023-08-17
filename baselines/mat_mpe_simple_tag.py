@@ -16,8 +16,6 @@ class MPESimpleTagRunner(GymRunner):
         policy_map = lambda name : 'adversary' if 'adversary' in name \
             else 'agent'
 
-        # FIXME: need a version of this environment that uses
-        # shared rewards!
         env_generator = lambda : \
             ParallelZooWrapper(
                 simple_tag_v3.parallel_env(
@@ -37,7 +35,7 @@ class MPESimpleTagRunner(GymRunner):
                 # to take the critic observations in the MAT case, but it's a bit funny since the
                 # actor would always be acting from the critic's view anyways...
                 # 
-                critic_view       = "local",
+                critic_view       = "policy",
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
