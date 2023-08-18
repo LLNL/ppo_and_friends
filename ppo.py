@@ -800,7 +800,6 @@ class PPO(object):
 
         return denorm_values
 
-    # FIXME do we need this??
     def get_normalized_values(self, values):
         """
             Given a dictionary mapping agent ids to critic values,
@@ -1758,8 +1757,10 @@ class PPO(object):
             torch.cuda.empty_cache()
 
             if self.normalize_values:
+                orig_shape = rewards_tg.shape
                 rewards_tg = \
-                    self.value_normalizers[policy_id].normalize(rewards_tg)
+                    self.value_normalizers[policy_id].normalize(
+                        rewards_tg.flatten()).reshape(orig_shape)
 
             if obs.shape[0] == 1:
                 continue

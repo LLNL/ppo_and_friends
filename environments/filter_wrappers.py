@@ -550,7 +550,7 @@ class SharedRewardWrapper(IdentityWrapper):
             env,
             **kw_args)
 
-        valid_reward_fns = [np.min, np.max, np.mean, None]
+        valid_reward_fns = [np.min, np.max, np.mean, np.sum, None]
 
         self.policy_mapping_fn = policy_mapping_fn
         self.policies          = policies
@@ -562,7 +562,7 @@ class SharedRewardWrapper(IdentityWrapper):
             msg  = "ERROR: found invalid policy reward function, "
             msg += "{self.policies[policy_id].shared_reward_fn}, in "
             msg += "SharedRewardWrapper. Valid functions are "
-            msg += "[np.min, np.max, np.mean, None]."
+            msg += "[np.min, np.max, np.mean, np.sum, None]."
             assert self.policies[policy_id].shared_reward_fn in valid_reward_fns, msg
 
             if type(self.policies[policy_id].shared_reward_fn) != type(None):

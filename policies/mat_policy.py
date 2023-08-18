@@ -34,7 +34,7 @@ class MATPolicy(AgentPolicy):
     def __init__(self,
                  actor_network       = mat.MATActor,
                  critic_network      = mat.MATCritic, 
-                 shared_reward_fn    = np.max,
+                 shared_reward_fn    = np.sum,
                  **kw_args):
         """
         Initialize the policy.
@@ -50,8 +50,8 @@ class MATPolicy(AgentPolicy):
         shared_reward_fn: np function 
             This is a numpy "reduction" function that will be used to
             create shared rewards in environments that don't already have them.
-            Current options are np.min, np.max, np.mean. MAT requires that
-            all agents of a policy receive the same reward.
+            Current options are np.min, np.max, np.mean, np.max. MAT requires
+            that all agents of a policy receive the same reward.
         """
         super(MATPolicy, self).__init__(
             actor_network    = actor_network,
