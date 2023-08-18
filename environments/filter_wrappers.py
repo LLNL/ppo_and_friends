@@ -404,6 +404,8 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, terminated, truncated,
                 and info tuple.
         """
+        rank_print("NORMALIZING REWARD")#FIXME
+        comm.Abort()#FIXME
 
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(action)
@@ -597,6 +599,8 @@ class SharedRewardWrapper(IdentityWrapper):
 
         for agent_id in reward:
 
+            agent_reward = reward[agent_id]
+
             #
             # NOTE: when training, we always receive an ndarray. When testing,
             # it's a flat value. We also add the natural rewards for all agents,
@@ -615,6 +619,8 @@ class SharedRewardWrapper(IdentityWrapper):
                     info[agent_id]["natural reward"] = \
                         deepcopy(reward[agent_id])
 
+                agent_reward = np.array([reward[agent_id]])
+
             #
             # Only enforce reward sharing on the specified policies.
             #
@@ -622,7 +628,7 @@ class SharedRewardWrapper(IdentityWrapper):
             if policy_id not in self.enabled_policies:
                 continue
 
-            self.policy_reward_arrays[policy_id].append(reward[agent_id])
+            self.policy_reward_arrays[policy_id].append(agent_reward)
 
         for policy_id in self.policy_reward_arrays:
             #
@@ -634,11 +640,22 @@ class SharedRewardWrapper(IdentityWrapper):
             shared_rewards = self.policies[policy_id].shared_reward_fn(
                 policy_rewards, axis=1)
 
+            max_r = np.max(policy_rewards)#FIXME
+            max_sr = np.max(shared_rewards)#FIXME
+
+            if max_r != max_sr:
+                print(f"MISSMATCH: {max_r} vs {max_sr}")#FIXME
+                comm.Abort()
+
+            if max_r != max_reward_found:
+                print(f"MISSMATCH BETWEEN MAX FOUND AND MAX ASSIGNED: {max_r} vs {max_reward_found}")#FIXME
+                comm.Abort()
+
             #
             # Assing the shared rewards.
             #
             for agent_id in self.policies[policy_id].agent_ids:
-                reward[agent_id] = shared_rewards
+                reward[agent_id] = shared_rewards.copy()
 
         for policy_id in self.policy_reward_arrays:
             self.policy_reward_arrays[policy_id] = []
@@ -821,6 +838,8 @@ class RewardClipper(GenericClipper):
         """
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(actions)
+        rank_print("CLIPPING REWARD")#FIXME
+        comm.Abort()#FIXME
 
         for agent_id in reward:
             #
@@ -931,6 +950,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
         batch_truncated  = OrderedDict({})
         batch_infos      = OrderedDict({})
 
+        # TODO: update for terminal critic obs
         for agent_id in obs:
             if "terminal observation" in info[0]:
                 batch_infos[agent_id] = np.array([None] * batch_size,
@@ -995,6 +1015,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             batch_critic_obs[agent_id] = \
                 batch_critic_obs[agent_id][self.test_idx]
 
+        # TODO: update for terminal critic obs
         for agent_id in info:
             if "terminal observation" in info[agent_id]:
                 terminal_obs = info[agent_id]["terminal observation"]

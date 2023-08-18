@@ -565,15 +565,22 @@ class AgentPolicy():
         ending_values,
         ending_rewards):
         """
-            End a rollout episode.
+        End a rollout episode.
 
-            Arguments:
-                agent_id         The associated agent id.
-                env_idxs         The associated environment indices.
-                episode_lengths  The lenghts of the ending episode(s).
-                terminal         Which episodes are terminally ending.
-                ending_values    Ending values for the episode(s).
-                ending_rewards   Ending rewards for the episode(s)
+        Parameters:
+        -----------
+        agent_id: string
+            The associated agent id.
+        env_idxs: array-like
+            The associated environment indices.
+        episode_lengths: array-like
+            The lenghts of the ending episode(s).
+        terminal: array-like
+            Which episodes are terminally ending.
+        ending_values: array-like
+            Ending values for the episode(s).
+        ending_rewards: array-like
+            Ending rewards for the episode(s)
         """
         self.validate_agent_id(agent_id)
 

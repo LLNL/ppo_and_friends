@@ -15,7 +15,7 @@ def get_actor_distribution(
     """
     """
     action_dtype    = get_action_dtype(action_space)
-    output_function = lambda x : x
+    output_func = lambda x : x
 
     if action_dtype not in ["discrete", "continuous",
         "multi-binary", "multi-discrete"]:

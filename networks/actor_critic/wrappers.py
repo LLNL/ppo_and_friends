@@ -16,14 +16,14 @@ def to_actor(ac_network):
     
         def __init__(self, obs_space, action_space, **kw_args):
             """
-                Initialize the actor network.
+            Initialize the actor network.
 
-                Parameters
-                ----------
-                obs_space: gymnasium space
-                    The observation space of the actor.
-                action_space: gymnasium space
-                    The action space of the actor.
+            Parameters
+            ----------
+            obs_space: gymnasium space
+                The observation space of the actor.
+            action_space: gymnasium space
+                The action space of the actor.
             """
             super(ActorNetwork, self).__init__(
                 in_shape  = get_space_shape(obs_space),
@@ -36,19 +36,19 @@ def to_actor(ac_network):
     
         def get_refined_prediction(self, obs):
             """
-                Send an actor's predicted probabilities through its
-                distribution's refinement method.
+            Send an actor's predicted probabilities through its
+            distribution's refinement method.
         
-                Parameters
-                ----------
-                obs: gymnasium space
-                    The observation to infer from.
+            Parameters
+            ----------
+            obs: gymnasium space
+                The observation to infer from.
         
-                Returns
-                -------
-                float 
-                    The predicted result sent through the distribution's
-                    refinement method.
+            Returns
+            -------
+            float 
+                The predicted result sent through the distribution's
+                refinement method.
             """
             res = self.__call__(obs)
             res = self.distribution.refine_prediction(res)
@@ -59,18 +59,18 @@ def to_actor(ac_network):
 
 def to_critic(ac_network):
     """
-        Convert a general PPONetwork to a CriticNetwork.
+    Convert a general PPONetwork to a CriticNetwork.
     """
     
     class CriticNetwork(ac_network):
         def __init__(self, obs_space, **kw_args):
             """
-                Inititalize the critic network.
+            Inititalize the critic network.
 
-                Parameters
-                ----------
-                obs_space: gymnasium space
-                    The observation space of the critic.
+            Parameters
+            ----------
+            obs_space: gymnasium space
+                The observation space of the critic.
             """
             super(CriticNetwork, self).__init__(
                 in_shape  = get_space_shape(obs_space),

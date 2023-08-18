@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
+from torch.nn import functional as t_func
 import math
 import numpy as np
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
@@ -75,7 +75,7 @@ class SelfAttention(nn.Module):
         if self.masked:
             att = att.masked_fill(self.mask[:, :, :L, :L] == 0, float('-inf'))
 
-        att = F.softmax(att, dim=-1)
+        att = t_func.softmax(att, dim=-1)
 
         y = att @ v  # (B, nh, L, L) x (B, nh, L, hs) -> (B, nh, L, hs)
         y = y.transpose(1, 2).contiguous().view(B, L, D)  # re-assemble all head outputs side by side
@@ -218,6 +218,26 @@ class MATActor(PPONetwork):
         x = self.head(x)
         x = self.output_func(x)
         return x
+
+    def get_refined_prediction(self, action, encoded_obs):
+        """
+        Send an actor's predicted probabilities through its
+        distribution's refinement method.
+    
+        Parameters
+        ----------
+        obs: gymnasium space
+            The observation to infer from.
+    
+        Returns
+        -------
+        float 
+            The predicted result sent through the distribution's
+            refinement method.
+        """
+        res = self.__call__(action, encoded_obs)
+        res = self.distribution.refine_prediction(res)
+        return res
 
 
 class MATCritic(PPONetwork):

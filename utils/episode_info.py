@@ -465,17 +465,12 @@ class AgentSharedEpisode():
         #
         # log_probs is a special case that needs to remain in tensor form.
         #
-        self.log_probs                = [torch.tensor(lp) for lp in self.log_probs]
+        #print(f"LOG PROBS: {self.log_probs}")#FIXME
+        #print(f"LOG PROBS LEN: {len(self.log_probs)}")#FIXME
+        #sys.exit()
+        #FIXME: is cat the right move here??
+        self.log_probs                = [torch.cat(lp) for lp in self.log_probs]
         self.log_probs                = torch.stack(self.log_probs, axis=1)
-
-        #FIXME: remove
-        #print(f"ACTIONS SHAPE: {self.actions.shape}")
-        #print(f"VALUES SHAPE: {self.values.shape}")
-        #print(f"ADVANTAGES SHAPE: {self.advantages.shape}")
-        #print(f"OBS SHAPE: {self.observations.shape}")
-        #print(f"LOG PROBS SHAPE: {self.log_probs.shape}")
-        #print(f"REWARDS TO GO SHAPE: {self.rewards_to_go.shape}")
-        #sys.exit(0)
 
         if len(ep_lens) == 0:
             msg  = "ERROR: attempting to merge AgentSharedEpisode with "
@@ -746,12 +741,6 @@ class PPODataset(Dataset):
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.long).to(self.device)
 
-        #print(f"FINAL ACTIONS SHAPE: {self.actions.shape}")#FIXME
-        #print(f"FINAL OBS SHAPE: {self.observations.shape}")#FIXME
-        #print(f"FINAL VALUES SHAPE: {self.values.shape}")#FIXME
-        #print(f"FINAL LOG PROBS SHAPE: {self.log_probs.shape}")#FIXME
-        #print(f"TOTAL TIMESTATES: {self.total_timestates}")#FIXME
-
         self.is_built = True
 
     def __len__(self):
@@ -828,8 +817,6 @@ class PPODataset(Dataset):
                 idx)
 
 
-# FIXME: I think we need some way of shuffling the order of the agents.
-# The standard Torch dataset will only shuffle the batch samples.
 class PPOSharedEpisodeDataset(PPODataset):
     """
     """

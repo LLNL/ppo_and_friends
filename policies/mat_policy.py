@@ -248,7 +248,7 @@ class MATPolicy(AgentPolicy):
 
         if self.action_dtype == "continuous":
             action_block = torch.zeros(
-               (batch_size, num_agents, self.action_dim)).to(device)
+               (batch_size, num_agents, self.action_dim)).to(self.device)
 
         elif self.action_dtype == "discrete":
             action_block = torch.zeros(
@@ -287,26 +287,24 @@ class MATPolicy(AgentPolicy):
 
         return action_pred, log_probs, entropy
 
-    def _get_autoregressive_actions(self, encoded_obs):
+    def _get_autoregressive_actions_with_exploration(self, encoded_obs):
         """
         """
-        batch_size = encoded_obs.shape[0]
-        num_agents = len(self.agent_ids)
-
+        batch_size   = encoded_obs.shape[0]
+        num_agents   = len(self.agent_ids)
         action_block = self._get_tokened_action_block(batch_size)
 
-        output_action     = torch.zeros((batch_size, num_agents, 1))
-        output_raw_action = torch.zeros_like(output_action)
-        output_log_prob   = torch.zeros_like(output_action, dtype=torch.float32)
-
-        action_offset = 0
         if self.action_dtype == "discrete":
-            output_action     = output_action.long()
-            output_raw_action = output_raw_action.long()
             action_offset     = 1
+            output_action     = torch.zeros((batch_size, num_agents, 1)).long()
+            output_raw_action = torch.zeros_like(output_action).long()
         else:
+            action_offset = 0
+            output_action     = torch.zeros((batch_size, num_agents, self.action_dim))
             output_action     = output_action.float()
-            output_raw_action = output_raw_action.float()
+            output_raw_action = torch.zeros_like(output_action).float()
+
+        output_log_prob = torch.zeros_like(output_action, dtype=torch.float32)
 
         with torch.no_grad():
             for i in range(num_agents):
@@ -330,6 +328,42 @@ class MATPolicy(AgentPolicy):
                     action_block[:, i + 1, action_offset:] = action
 
         return output_action, output_raw_action, output_log_prob
+
+    def _get_autoregressive_actions_without_exploration(self, encoded_obs):
+        """
+        """
+        batch_size   = encoded_obs.shape[0]
+        num_agents   = len(self.agent_ids)
+        action_block = self._get_tokened_action_block(batch_size)
+
+        if self.action_dtype == "discrete":
+            action_offset = 1
+            output_action = torch.zeros((batch_size, num_agents, 1)).long()
+        else:
+            action_offset = 0
+            output_action = torch.zeros((batch_size, num_agents, self.action_dim))
+            output_action = output_action.float()
+
+        with torch.no_grad():
+            for i in range(num_agents):
+                action = self.actor.get_refined_prediction(
+                    action_block, encoded_obs)
+
+                if len(action.shape) < 3:
+                    action = action.unsqueeze(-1)
+
+                action = action[:, i, :]
+
+                if self.action_dtype == "discrete":
+                    output_action[:, i, :] = action.unsqueeze(-1)
+                    action = t_func.one_hot(action, num_classes=self.action_dim)
+                else:
+                    output_action[:, i, :] = action
+
+                if i + 1 < num_agents:
+                    action_block[:, i + 1, action_offset:] = action
+
+        return output_action
 
     def get_rollout_actions(self, obs):
         """
@@ -359,7 +393,8 @@ class MATPolicy(AgentPolicy):
         t_obs = t_obs.to(self.device)
 
         encoded_obs = self.critic.encode_obs(t_obs)
-        actions, raw_actions, log_probs = self._get_autoregressive_actions(encoded_obs)
+        actions, raw_actions, log_probs = \
+            self._get_autoregressive_actions_with_exploration(encoded_obs)
 
         actions     = torch.swapaxes(actions, 0, 1)
         raw_actions = torch.swapaxes(raw_actions, 0, 1)
@@ -458,7 +493,8 @@ class MATPolicy(AgentPolicy):
         t_obs = t_obs.to(self.device)
 
         encoded_obs = self.critic.encode_obs(t_obs)
-        actions, _, _ = self._get_autoregressive_actions(encoded_obs)
+        actions, _, _ = \
+            self._get_autoregressive_actions_with_exploration(encoded_obs)
 
         actions = torch.swapaxes(actions, 0, 1)
 
@@ -495,6 +531,13 @@ class MATPolicy(AgentPolicy):
         t_obs = t_obs.to(self.device)
 
         encoded_obs = self.critic.encode_obs(t_obs)
+
+        actions = \
+            self._get_autoregressive_actions_without_exploration(encoded_obs)
+
+        actions = torch.swapaxes(actions, 0, 1)
+
+        return actions
 
     def apply_step_constraints(
         self,

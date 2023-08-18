@@ -303,7 +303,7 @@ class PPO(object):
             self.status_dict[policy_id] = OrderedDict({})
             self.status_dict[policy_id]["episode reward avg"]  = 0
             self.status_dict[policy_id]["extrinsic score avg"] = 0
-            self.status_dict[policy_id]["top score"]           = -max_int
+            self.status_dict[policy_id]["top episode score"]   = -max_int
             self.status_dict[policy_id]["weighted entropy"]    = 0
             self.status_dict[policy_id]["actor loss"]          = 0
             self.status_dict[policy_id]["critic loss"]         = 0
@@ -854,7 +854,7 @@ class PPO(object):
             ICM.
 
             Arguments:
-                ex_rewards    The extrinsic rewards dictionary.
+                ext_rewards    The extrinsic rewards dictionary.
                 prev_obs      The previous observation dictionary.
                 obs           The current observation dictionary.
                 actions       The actions dictionary.
@@ -1190,10 +1190,6 @@ class PPO(object):
 
             value = self.get_policy_values(critic_obs)
 
-            # FIXME: this should likely be part of the policy class...
-            # Update: maybe not... this is quite a bit more complicated than
-            # I initially thought. I think it could be, but it would take some
-            # considerable effort.
             if self.normalize_values:
                 value = self.get_denormalized_values(value)
 
@@ -1360,7 +1356,7 @@ class PPO(object):
                         total_intr_rewards[policy_id][where_term] += \
                             ep_intr_rewards[policy_id][where_term]
 
-                    total_rewards[policy_id] += \
+                    total_rewards[policy_id][where_term] += \
                         ep_rewards[policy_id][where_term]
 
                     ep_rewards[policy_id][where_term]      = 0
@@ -1449,10 +1445,6 @@ class PPO(object):
 
                             next_reward[agent_id] += surprise.flatten()
                         
-                        # FIXME: refactor? If the value normalizers were inside of the policy class,
-                        # I think we could simplify the end_episodes method. We could maybe create
-                        # two version of end episodes, one for terminal and one for non-terminal?
-                        # => truncate_episode(...) and terminate_episodes(...).
                         self.policies[policy_id].end_episodes(
                             agent_id        = agent_id,
                             env_idxs        = where_maxed,
@@ -1488,6 +1480,7 @@ class PPO(object):
 
 
                     for policy_id in self.policies:
+
                         total_ext_rewards[policy_id] += \
                             ep_nat_rewards[policy_id]
 
@@ -1551,11 +1544,11 @@ class PPO(object):
             ext_reward_sum = total_ext_rewards[policy_id].sum()
             ext_reward_sum = comm.allreduce(ext_reward_sum, MPI.SUM)
 
-            agent_rewards  = total_rewards[policy_id].sum()
-            agent_rewards  = comm.allreduce(agent_rewards, MPI.SUM)
+            total_rewards_sum  = total_rewards[policy_id].sum()
+            total_rewards_sum  = comm.allreduce(total_rewards_sum, MPI.SUM)
 
             running_ext_score = ext_reward_sum / total_episodes
-            running_score     = agent_rewards / total_episodes
+            running_score     = total_rewards_sum / total_episodes
             rw_range          = (min_reward, max_reward)
             obs_range         = (min_obs, max_obs)
 
@@ -1563,9 +1556,12 @@ class PPO(object):
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
+            #FIXME: these names are still confusing. It seems like the difference
+            # between episode reward avg and extrinsic score avg is whether or
+            # not they're using "natural" rewards. let's better name them.
             self.status_dict[policy_id]["episode reward avg"]  = running_score
             self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
-            self.status_dict[policy_id]["top score"]           = top_score
+            self.status_dict[policy_id]["top episode score"]   = top_score
             self.status_dict[policy_id]["obs range"]           = obs_range
             self.status_dict[policy_id]["ext reward range"]    = rw_range
             self.status_dict[policy_id]["top reward"]          = global_top_reward
@@ -1603,6 +1599,11 @@ class PPO(object):
         for policy_id in self.policies:
             self.policies[policy_id].finalize_dataset()
 
+            # FIXME: we currently only support shuffling after a rollout,
+            # but it would likely be better to shuffle throughout episodes..
+            # is there a way to accomplish this?
+            # Does it even matter if we shuffle after stepping?? Let's look into
+            # this...
             if self.have_agent_grouping:
                 self.policies[policy_id].shuffle_agent_ids()
 

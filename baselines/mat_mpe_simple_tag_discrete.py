@@ -9,7 +9,7 @@ import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 @ppoaf_runner
-class MATMPESimpleTagRunner(GymRunner):
+class MATMPESimpleTagDiscreteRunner(GymRunner):
 
     def run(self):
 

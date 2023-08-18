@@ -506,12 +506,16 @@ uses 3 agents in a "tiny" warehouse.
 This environment has very sparse rewards, so it can take a while for the
 agents to explore enough to reach a good policy.
 
+NOTE: this environment requires gym version 0.21 and pyglet version 1.5
+
 ### RobotWarehouseSmall
 There are many configuration options for the robot warehouse. This one
 uses 4 agents in a "small" warehouse.
 This is the same as RobotWarehouseTiny, except that it is slightly larger. The
 complexity of the environment is increased with the increase in size, so
 learning takes longer.
+
+NOTE: this environment requires gym version 0.21 and pyglet version 1.5
 
 ### LevelBasedForaging
 There are many configuration options for this environment. This configuration
