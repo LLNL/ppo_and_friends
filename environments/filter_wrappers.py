@@ -404,9 +404,6 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, terminated, truncated,
                 and info tuple.
         """
-        rank_print("NORMALIZING REWARD")#FIXME
-        comm.Abort()#FIXME
-
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(action)
 
@@ -838,8 +835,6 @@ class RewardClipper(GenericClipper):
         """
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(actions)
-        rank_print("CLIPPING REWARD")#FIXME
-        comm.Abort()#FIXME
 
         for agent_id in reward:
             #

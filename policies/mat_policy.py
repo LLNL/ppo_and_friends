@@ -178,8 +178,6 @@ class MATPolicy(AgentPolicy):
             num_envs        = self.envs_per_proc,
             agent_ids       = self.agent_ids)
 
-    # TODO: this is identical to the general case excpet for how
-    # we add data to our dataset. There may be a better approach to this...
     def end_episodes(
         self,
         agent_id,

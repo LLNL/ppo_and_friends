@@ -26,15 +26,6 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
 
-                #
-                # Using the "policy" view (MAPPO) results in much more
-                # interesting behvaiors from the adversaries in this game.
-                #
-                # FIXME: do we want to support other views? Does that even make sense?
-                # I think we could suppor this if we just altered the get_rollout_actions function
-                # to take the critic observations in the MAT case, but it's a bit funny since the
-                # actor would always be acting from the critic's view anyways...
-                # 
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
@@ -86,8 +77,8 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                      max_ts_per_ep       = 64,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 256,
-                     normalize_obs       = False,
+                     normalize_obs       = True,
                      obs_clip            = None,
-                     normalize_rewards   = False,
+                     normalize_rewards   = True,
                      reward_clip         = None,
                      **self.kw_run_args)

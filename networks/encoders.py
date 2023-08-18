@@ -36,7 +36,7 @@ class LinearObservationEncoder(nn.Module):
         self.enc_2 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_3 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_4 = init_layer(nn.Linear(hidden_size, encoded_dim),
-            weight_std=out_init)
+            gain=out_init)
 
     def forward(self,
                 obs):

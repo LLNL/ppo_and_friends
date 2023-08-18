@@ -709,11 +709,16 @@ class PPO(object):
             batch_obs  = policy_batches[policy_id]
             num_agents = batch_obs.shape[0]
 
-            if not self.policies[policy_id].agent_grouping:
+            if self.policies[policy_id].agent_grouping:
+                batch_obs = batch_obs.swapaxes(0, 1)
+            else:
                 batch_obs  = batch_obs.reshape((-1,) + \
                     self.policies[policy_id].critic_obs_space.shape)
 
             batch_values = self.policies[policy_id].critic(batch_obs)
+
+            if self.policies[policy_id].agent_grouping:
+                batch_obs = batch_obs.swapaxes(0, 1)
 
             batch_values = batch_values.reshape((num_agents, -1))
 
