@@ -103,21 +103,6 @@ class MATActor(PPONetwork):
     def forward(self, action, encoded_obs):
         """
         """
-        # action: (batch, num_agents, action_dim), one-hot/logits?
-        # obs_rep: (batch, num_agents, embedding_size)
-        #print(f"\nDecoder action shape: {action.shape}")#FIXME
-        #print(f"\nDecoder action: {action}")#FIXME
-        #Decoder action shape: torch.Size([N, 3, 6])
-        # NOTE: I think what's happening here is we get a batch of action sequences as
-        # (N, A, D) s.t. N is the batch size, A is `(num_agents - 1) + 1`, and D is
-        # the action dimension + 1 for the start token. A is the sequence of actions so
-        # so far (at most num_agents - 1) + the start token. We are predicting the action
-        # for the next agent in line. Note that the action space is only expanded for
-        # discrete actions! Continuous actions are the same dimensions.
-
-        #print(f"\nACTOR INCOMING ACTION SHAPE: {action.shape}")#FIXME
-        #print(f"ACTOR INCOMING ENCODED OBS SHAPE: {encoded_obs.shape}")#FIXME
-
         x = self.action_encoder(action)
         x = self.ln(x)
 
@@ -207,23 +192,14 @@ class MATCritic(PPONetwork):
             init_layer(nn.Linear(embedding_size, 1),
                 gain = out_init))
 
-    #def encode_obs(self, obs):
-    #    """
-    #    """
-    #    #print(f"\nCRITIC INCOMING ENCODER OBS SHAPE: {obs.shape}")#FIXME
-    #    x = self.obs_encoder(obs)
-    #    x = self.ln(x)
-    #    x = self.blocks(x)
-    #    #print(f"CRITIC ENCODER OUTPUT OBS SHAPE: {x.shape}")#FIXME
-    #    return x
-
-    def forward(self, obs):
-        #print(f"\nCRITIC INCOMING FORWARD OBS SHAPE: {obs.shape}")#FIXME
-        #encoded_obs = self.encode_obs(obs) 
+    def encode_obs(self, obs):
+        """
+        """
         x = self.obs_encoder(obs)
         x = self.ln(x)
-        encoded_obs = self.blocks(x)
+        x = self.blocks(x)
+        return x
 
-        #print(f"CRITIC ENCODED OBS SHAPE: {encoded_obs.shape}")#FIXME
-
+    def forward(self, obs):
+        encoded_obs = self.encode_obs(obs)
         return encoded_obs, self.head(encoded_obs)

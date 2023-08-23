@@ -77,7 +77,7 @@ class MATPolicy(AgentPolicy):
         # Shuffle agents right off the bat so that different processors
         # have different ordering.
         #
-        #self.shuffle_agent_ids()#FIXME: testing not shuffling
+        self.shuffle_agent_ids()
 
     def _initialize_networks(
         self,
@@ -127,7 +127,6 @@ class MATPolicy(AgentPolicy):
         self.actor = actor_network(
             name         = "actor", 
             obs_space    = self.actor_obs_space,
-            #out_init     = 0.01,#FIXME
             action_space = self.action_space,
             num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,
@@ -136,7 +135,6 @@ class MATPolicy(AgentPolicy):
         self.critic = critic_network(
             name         = "critic", 
             obs_space    = self.critic_obs_space,
-            #out_init     = 1.0,#FIXME
             num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,
             **critic_kw_args)
@@ -165,6 +163,7 @@ class MATPolicy(AgentPolicy):
         Initialize a rollout dataset. This should be called at the
         onset of a rollout.
         """
+        #FIXME: raise error if using_lstm
         sequence_length = 1
         if self.using_lstm:
             self.actor.reset_hidden_state(
@@ -310,26 +309,26 @@ class MATPolicy(AgentPolicy):
 
         output_log_prob = torch.zeros_like(output_action, dtype=torch.float32)
 
-        #with torch.no_grad():#FIXME
-        for i in range(num_agents):
-            action_pred = self.actor(action_block, encoded_obs)[:, i, :]
-            dist        = self.actor.distribution.get_distribution(action_pred)
+        with torch.no_grad():
+            for i in range(num_agents):
+                action_pred = self.actor(action_block, encoded_obs)[:, i, :]
+                dist        = self.actor.distribution.get_distribution(action_pred)
 
-            action, raw_action = self.actor.distribution.sample_distribution(dist)
-            log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+                action, raw_action = self.actor.distribution.sample_distribution(dist)
+                log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-            if self.action_dtype == "discrete":
-                output_action[:, i, :]     = action.unsqueeze(-1)
-                output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
-                output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
-                action = t_func.one_hot(action, num_classes=self.action_dim)
-            else:
-                output_action[:, i, :]     = action
-                output_raw_action[:, i, :] = raw_action
-                output_log_prob[:, i, :]   = log_prob
+                if self.action_dtype == "discrete":
+                    output_action[:, i, :]     = action.unsqueeze(-1)
+                    output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
+                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
+                    action = t_func.one_hot(action, num_classes=self.action_dim)
+                else:
+                    output_action[:, i, :]     = action
+                    output_raw_action[:, i, :] = raw_action
+                    output_log_prob[:, i, :]   = log_prob
 
-            if i + 1 < num_agents:
-                action_block[:, i + 1, action_offset:] = action
+                if i + 1 < num_agents:
+                    action_block[:, i + 1, action_offset:] = action
 
         return output_action, output_raw_action, output_log_prob
 
@@ -348,24 +347,24 @@ class MATPolicy(AgentPolicy):
             output_action = torch.zeros((batch_size, num_agents, self.action_dim))
             output_action = output_action.float()
 
-        #with torch.no_grad():#FIXME
-        for i in range(num_agents):
-            action = self.actor.get_refined_prediction(
-                action_block, encoded_obs)
+        with torch.no_grad():
+            for i in range(num_agents):
+                action = self.actor.get_refined_prediction(
+                    action_block, encoded_obs)
 
-            if len(action.shape) < 3:
-                action = action.unsqueeze(-1)
+                if len(action.shape) < 3:
+                    action = action.unsqueeze(-1)
 
-            action = action[:, i, :]
+                action = action[:, i, :]
 
-            if self.action_dtype == "discrete":
-                output_action[:, i, :] = action.unsqueeze(-1)
-                action = t_func.one_hot(action, num_classes=self.action_dim)
-            else:
-                output_action[:, i, :] = action
+                if self.action_dtype == "discrete":
+                    output_action[:, i, :] = action.unsqueeze(-1)
+                    action = t_func.one_hot(action, num_classes=self.action_dim)
+                else:
+                    output_action[:, i, :] = action
 
-            if i + 1 < num_agents:
-                action_block[:, i + 1, action_offset:] = action
+                if i + 1 < num_agents:
+                    action_block[:, i + 1, action_offset:] = action
 
         return output_action
 
@@ -396,7 +395,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.critic(t_obs)
+        encoded_obs = self.critic.encode_obs(t_obs)
         actions, raw_actions, log_probs = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -436,6 +435,23 @@ class MATPolicy(AgentPolicy):
         _, log_probs, entropy = self._evaluate_actions(encoded_obs, batch_actions)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
+
+    def get_critic_values(self, obs):
+        """
+        Get the predicted values from the critic.
+
+        Parameters:
+        -----------
+        obs: array-like
+            An array of observations to predict values for.
+
+        Returns:
+        --------
+        torch tensor:
+            The predicted values.
+        """
+        _, values = self.critic(obs)
+        return values
 
     def get_inference_actions(self, obs, explore):
         """
@@ -495,7 +511,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.critic.encode_obs(t_obs)
+        encoded_obs = self.critic.encode_obs(t_obs)
         actions, _, _ = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -533,7 +549,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.critic.encode_obs(t_obs)
+        encoded_obs = self.critic.encode_obs(t_obs)
 
         actions = \
             self._get_autoregressive_actions_without_exploration(encoded_obs)

@@ -740,9 +740,7 @@ class PPO(object):
                 batch_obs  = batch_obs.reshape((-1,) + \
                     self.policies[policy_id].critic_obs_space.shape)
 
-            #FIXME: debugging
-            #batch_values = self.policies[policy_id].critic(batch_obs)
-            _, batch_values = self.policies[policy_id].critic(batch_obs)
+            batch_values = self.policies[policy_id].get_critic_values(batch_obs)
 
             if self.policies[policy_id].agent_grouping:
                 batch_obs = batch_obs.swapaxes(0, 1)
@@ -1197,8 +1195,11 @@ class PPO(object):
             self.policies[policy_id].initialize_episodes(
                 env_batch_size, self.status_dict)
 
-            #FIXME: needed? It sounds like the paper is using this approach, but
-            # let's confirm.
+            #
+            # NOTE: The MAT paper proposes shuffling agents once per iteration.
+            # I didn't actually see this happening in their code, but I find
+            # that it does improve training quality a bit.
+            #
             if self.policies[policy_id].agent_grouping:
                 self.policies[policy_id].shuffle_agent_ids()
 

@@ -835,6 +835,22 @@ class AgentPolicy():
 
         return intr_reward
 
+    def get_critic_values(self, obs):
+        """
+        Get the predicted values from the critic.
+
+        Parameters:
+        -----------
+        obs: array-like
+            An array of observations to predict values for.
+
+        Returns:
+        --------
+        torch tensor:
+            The predicted values.
+        """
+        return self.critic(obs)
+
     def update_learning_rate(self):
         """
             Update the learning rate.

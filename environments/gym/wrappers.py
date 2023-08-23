@@ -24,10 +24,13 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
         This will also return a critic observation along with the
         actor observation.
     """
-    def __init__(self, *args, **kw_args):
+    def __init__(self,
+                 *args,
+                 **kw_args):
 
         super(PPOGymWrapper, self).__init__(
-            *args, **kw_args)
+            *args,
+            **kw_args)
 
         self.random_seed = None
 

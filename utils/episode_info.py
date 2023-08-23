@@ -412,6 +412,7 @@ class AgentSharedEpisode():
         self.verify_episode(episode)
 
         #FIXME: do we need to maintain a specific ordering here?
+        # I don't think so?
         agent_idx = np.where(self.agent_ids == agent_id)#FIXME: testing
 
         self.agent_episodes[agent_idx] = episode
