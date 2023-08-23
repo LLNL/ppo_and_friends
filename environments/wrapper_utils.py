@@ -120,10 +120,11 @@ def wrap_environment(
             need_shared_rewards = True
             break
 
-    if need_shared_rewards:
-        env = SharedRewardWrapper(
-            env               = env,
-            policy_mapping_fn = policy_mapping_fn,
-            policies          = policies)
+    #FIXME:
+    #if need_shared_rewards:
+    #    env = SharedRewardWrapper(
+    #        env               = env,
+    #        policy_mapping_fn = policy_mapping_fn,
+    #        policies          = policies)
 
     return env

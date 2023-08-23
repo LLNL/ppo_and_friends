@@ -88,6 +88,7 @@ def test_policy(ppo,
         for agent_id in total_scores:
             min_scores[agent_id] = min(min_scores[agent_id],
                 episode_score[agent_id])
+
             max_scores[agent_id] = max(max_scores[agent_id],
                 episode_score[agent_id])
 

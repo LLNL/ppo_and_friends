@@ -345,6 +345,8 @@ class ObservationNormalizer(ObservationFilter):
         self._check_env_load(path)
 
 
+# FIXME: the reward normalizers won't quite work for MAT unless we use
+# the shared reward wrapper...
 class RewardNormalizer(IdentityWrapper):
     """
         This wrapper uses running statistics to normalize rewards.
@@ -637,22 +639,18 @@ class SharedRewardWrapper(IdentityWrapper):
             shared_rewards = self.policies[policy_id].shared_reward_fn(
                 policy_rewards, axis=1)
 
-            max_r = np.max(policy_rewards)#FIXME
-            max_sr = np.max(shared_rewards)#FIXME
+            #max_r = np.max(policy_rewards)#FIXME
+            #max_sr = np.max(shared_rewards)#FIXME
 
-            if max_r != max_sr:
-                print(f"MISSMATCH: {max_r} vs {max_sr}")#FIXME
-                comm.Abort()
-
-            if max_r != max_reward_found:
-                print(f"MISSMATCH BETWEEN MAX FOUND AND MAX ASSIGNED: {max_r} vs {max_reward_found}")#FIXME
-                comm.Abort()
+            #if max_r != max_sr:
+            #    print(f"MISSMATCH: {max_r} vs {max_sr}")#FIXME
+            #    comm.Abort()
 
             #
             # Assing the shared rewards.
             #
             for agent_id in self.policies[policy_id].agent_ids:
-                reward[agent_id] = shared_rewards.copy()
+                reward[agent_id] = shared_rewards.copy()#FIXME: does this need to be a deep copy?
 
         for policy_id in self.policy_reward_arrays:
             self.policy_reward_arrays[policy_id] = []

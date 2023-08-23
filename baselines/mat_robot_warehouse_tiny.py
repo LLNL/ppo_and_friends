@@ -30,33 +30,28 @@ class MATRobotWarehouseTinyRunner(GymRunner):
                 Gym21ToGymnasium(old_gym.make('rware-tiny-3ag-v1')),
                 critic_view = "local",
                 policy_mapping_fn = lambda *args : "rware",
-                add_agent_ids = True)
+                add_agent_ids = False)
 
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 256
-
+        actor_kw_args  = {}
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 512
 
         lr = LinearScheduler(
             status_key    = "timesteps",
-            status_max    = 1000000,
+            status_max    = 10000000,
             max_value     = 0.0003,
-            min_value     = 0.0001)
+            min_value     = 0.00005)
 
         entropy_weight = LinearScheduler(
             status_key    = "timesteps",
-            status_max    = 1000000,
+            status_max    = 5000000,
             max_value     = 0.015,
             min_value     = 0.01)
 
         policy_args = {\
-            "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-            "bootstrap_clip"     : (0., 10.),
+            "bootstrap_clip"     : (0., 10.),#FIXME: try a higher lower end?
             "entropy_weight"     : entropy_weight,
         }
 
@@ -90,10 +85,10 @@ class MATRobotWarehouseTinyRunner(GymRunner):
                 policy_settings    = policy_settings,
                 policy_mapping_fn  = policy_mapping_fn,
                 batch_size         = 10000,
-                epochs_per_iter    = 5,
+                epochs_per_iter    = 15,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                normalize_obs      = False,
+                normalize_obs      = True,
                 obs_clip           = None,
                 normalize_rewards  = False,
                 reward_clip        = None,

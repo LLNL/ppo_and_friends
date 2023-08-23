@@ -73,6 +73,12 @@ class MATPolicy(AgentPolicy):
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
 
+        #
+        # Shuffle agents right off the bat so that different processors
+        # have different ordering.
+        #
+        #self.shuffle_agent_ids()#FIXME: testing not shuffling
+
     def _initialize_networks(
         self,
         actor_network,
@@ -297,33 +303,33 @@ class MATPolicy(AgentPolicy):
             output_action     = torch.zeros((batch_size, num_agents, 1)).long()
             output_raw_action = torch.zeros_like(output_action).long()
         else:
-            action_offset = 0
+            action_offset     = 0
             output_action     = torch.zeros((batch_size, num_agents, self.action_dim))
             output_action     = output_action.float()
             output_raw_action = torch.zeros_like(output_action).float()
 
         output_log_prob = torch.zeros_like(output_action, dtype=torch.float32)
 
-        with torch.no_grad():
-            for i in range(num_agents):
-                action_pred = self.actor(action_block, encoded_obs)[:, i, :]
-                dist        = self.actor.distribution.get_distribution(action_pred)
+        #with torch.no_grad():#FIXME
+        for i in range(num_agents):
+            action_pred = self.actor(action_block, encoded_obs)[:, i, :]
+            dist        = self.actor.distribution.get_distribution(action_pred)
 
-                action, raw_action = self.actor.distribution.sample_distribution(dist)
-                log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+            action, raw_action = self.actor.distribution.sample_distribution(dist)
+            log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
-                if self.action_dtype == "discrete":
-                    output_action[:, i, :]     = action.unsqueeze(-1)
-                    output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
-                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
-                    action = t_func.one_hot(action, num_classes=self.action_dim)
-                else:
-                    output_action[:, i, :]     = action
-                    output_raw_action[:, i, :] = raw_action
-                    output_log_prob[:, i, :]   = log_prob
+            if self.action_dtype == "discrete":
+                output_action[:, i, :]     = action.unsqueeze(-1)
+                output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
+                output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
+                action = t_func.one_hot(action, num_classes=self.action_dim)
+            else:
+                output_action[:, i, :]     = action
+                output_raw_action[:, i, :] = raw_action
+                output_log_prob[:, i, :]   = log_prob
 
-                if i + 1 < num_agents:
-                    action_block[:, i + 1, action_offset:] = action
+            if i + 1 < num_agents:
+                action_block[:, i + 1, action_offset:] = action
 
         return output_action, output_raw_action, output_log_prob
 
@@ -342,24 +348,24 @@ class MATPolicy(AgentPolicy):
             output_action = torch.zeros((batch_size, num_agents, self.action_dim))
             output_action = output_action.float()
 
-        with torch.no_grad():
-            for i in range(num_agents):
-                action = self.actor.get_refined_prediction(
-                    action_block, encoded_obs)
+        #with torch.no_grad():#FIXME
+        for i in range(num_agents):
+            action = self.actor.get_refined_prediction(
+                action_block, encoded_obs)
 
-                if len(action.shape) < 3:
-                    action = action.unsqueeze(-1)
+            if len(action.shape) < 3:
+                action = action.unsqueeze(-1)
 
-                action = action[:, i, :]
+            action = action[:, i, :]
 
-                if self.action_dtype == "discrete":
-                    output_action[:, i, :] = action.unsqueeze(-1)
-                    action = t_func.one_hot(action, num_classes=self.action_dim)
-                else:
-                    output_action[:, i, :] = action
+            if self.action_dtype == "discrete":
+                output_action[:, i, :] = action.unsqueeze(-1)
+                action = t_func.one_hot(action, num_classes=self.action_dim)
+            else:
+                output_action[:, i, :] = action
 
-                if i + 1 < num_agents:
-                    action_block[:, i + 1, action_offset:] = action
+            if i + 1 < num_agents:
+                action_block[:, i + 1, action_offset:] = action
 
         return output_action
 
@@ -390,7 +396,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.critic(t_obs)
         actions, raw_actions, log_probs = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -426,8 +432,7 @@ class MATPolicy(AgentPolicy):
         # torch dataset, and it has already been re-shaped into the expected
         # (batch_size, num_agents, *) format.
         #
-        values      = self.critic(batch_critic_obs)
-        encoded_obs = self.critic.encode_obs(batch_critic_obs)
+        encoded_obs, values = self.critic(batch_critic_obs)
         _, log_probs, entropy = self._evaluate_actions(encoded_obs, batch_actions)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
@@ -490,7 +495,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.critic.encode_obs(t_obs)
         actions, _, _ = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -528,7 +533,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.critic.encode_obs(t_obs)
 
         actions = \
             self._get_autoregressive_actions_without_exploration(encoded_obs)
@@ -556,11 +561,20 @@ class MATPolicy(AgentPolicy):
             for agent_id in self.agent_ids:
                 obs[agent_id] = critic_obs[agent_id]
 
-                for env_idx in range(self.envs_per_proc):
-                    if terminated[agent_id][env_idx]:
-                        info[agent_id][env_idx]["terminal observation"] =\
-                            info[agent_id][env_idx]["terminal critic observation"]
-                
+                #
+                # NOTE: when training, we always receive an ndarray. When testing,
+                # it's a flat value.
+                #
+                if self.test_mode:
+                    for env_idx in range(self.envs_per_proc):
+                        if terminated[agent_id]:
+                            info[agent_id]["terminal observation"] =\
+                                info[agent_id]["terminal critic observation"]
+                else:
+                    for env_idx in range(self.envs_per_proc):
+                        if terminated[agent_id][env_idx]:
+                            info[agent_id][env_idx]["terminal observation"] =\
+                                info[agent_id][env_idx]["terminal critic observation"]
 
         return obs, critic_obs, reward, terminated, truncated, info
 

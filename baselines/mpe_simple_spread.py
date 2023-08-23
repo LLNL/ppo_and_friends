@@ -12,8 +12,7 @@ class MPESimpleSpreadRunner(GymRunner):
 
     def run(self):
 
-        policy_map = lambda name : 'adversary' if 'adversary' in name \
-            else 'agent'
+        policy_map = lambda x: 'agent'
 
         env_generator = lambda : \
             ParallelZooWrapper(
@@ -35,8 +34,6 @@ class MPESimpleSpreadRunner(GymRunner):
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
-
-        critic_kw_args = actor_kw_args.copy()
 
         lr = 0.0003
 
@@ -73,6 +70,6 @@ class MPESimpleSpreadRunner(GymRunner):
                      batch_size          = 128,
                      normalize_obs       = False,
                      obs_clip            = None,
-                     normalize_rewards   = True,
+                     normalize_rewards   = False,
                      reward_clip         = None,
                      **self.kw_run_args)

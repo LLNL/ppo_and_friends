@@ -440,6 +440,14 @@ class PPOEnvironmentWrapper(ABC):
         for a_idx, a_id in enumerate(self.agent_ids):
             self.agent_int_ids[a_id] = a_idx
 
+        #FIXME: one hot might work better than ID.
+        #self.agent_one_hot_ids = OrderedDict({})
+        #num_agents = len(self.agent_ids)
+        #for a_idx, a_id in enumerate(self.agent_ids):
+        #    one_hot = np.zeros(num_agents)#FIXME: debugging MPE simple spread
+        #    one_hot[a_idx] = 1
+        #    self.agent_one_hot_ids[a_id] = one_hot.copy()
+
     def _expand_space_for_ids(self, space):
         """
             Expand a given space to include agent ids.
@@ -460,14 +468,17 @@ class PPOEnvironmentWrapper(ABC):
             low   = low.flatten()
             high  = high.flatten()
             shape = (reduce(lambda a, b: a * b, shape) + 1,)
+            #shape = (reduce(lambda a, b: a * b, shape) + 3,)#FIXME: debugging
 
-            low   = np.concatenate((low, (0,)))
+            low   = np.concatenate((low, (0,)))#FIXME
+            #low   = np.concatenate((low, np.zeros(3)))
 
             #
             # NOTE: because we normalize ids, we set the cap
             # to 1.
             #
-            high  = np.concatenate((high, (1,)))
+            high  = np.concatenate((high, (1,)))#FIXME
+            #high  = np.concatenate((high, np.ones(3)))
 
             return Box(
                 low   = low,
@@ -603,6 +614,10 @@ class PPOEnvironmentWrapper(ABC):
             obs[a_id] = np.concatenate((obs[a_id],
                 (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
                 self.num_agents
+
+            #FIXME: use one hots?
+            #obs[a_id] = np.concatenate((obs[a_id],#FIXME: debugging
+            #    self.agent_one_hot_ids[a_id])).astype(obs[a_id].dtype)
 
         return obs
 

@@ -115,6 +115,9 @@ class MATActor(PPONetwork):
         # for the next agent in line. Note that the action space is only expanded for
         # discrete actions! Continuous actions are the same dimensions.
 
+        #print(f"\nACTOR INCOMING ACTION SHAPE: {action.shape}")#FIXME
+        #print(f"ACTOR INCOMING ENCODED OBS SHAPE: {encoded_obs.shape}")#FIXME
+
         x = self.action_encoder(action)
         x = self.ln(x)
 
@@ -204,13 +207,23 @@ class MATCritic(PPONetwork):
             init_layer(nn.Linear(embedding_size, 1),
                 gain = out_init))
 
-    def encode_obs(self, obs):
-        """
-        """
-        x = self.obs_encoder(obs)
-        x = self.ln(x)
-        return self.blocks(x)
+    #def encode_obs(self, obs):
+    #    """
+    #    """
+    #    #print(f"\nCRITIC INCOMING ENCODER OBS SHAPE: {obs.shape}")#FIXME
+    #    x = self.obs_encoder(obs)
+    #    x = self.ln(x)
+    #    x = self.blocks(x)
+    #    #print(f"CRITIC ENCODER OUTPUT OBS SHAPE: {x.shape}")#FIXME
+    #    return x
 
     def forward(self, obs):
-        encoded_obs = self.encode_obs(obs) 
-        return self.head(encoded_obs)
+        #print(f"\nCRITIC INCOMING FORWARD OBS SHAPE: {obs.shape}")#FIXME
+        #encoded_obs = self.encode_obs(obs) 
+        x = self.obs_encoder(obs)
+        x = self.ln(x)
+        encoded_obs = self.blocks(x)
+
+        #print(f"CRITIC ENCODED OBS SHAPE: {encoded_obs.shape}")#FIXME
+
+        return encoded_obs, self.head(encoded_obs)

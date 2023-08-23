@@ -439,14 +439,17 @@ class PPO(object):
 
         Returns:
         --------
-        dict:
-            A dictionary mapping policy ids to batches of agent observations.
+        tuple:
+            The first element is dictionary mapping policy ids to arrays of
+            agent ids in the order they appear in the batches. Next is
+            a dictionary mapping policy ids to batches of agent observations.
             These batches have shape (num_agents, envs_per_proc, obs_shape).
         """
         assert component in ["actor", "critic"]
 
-        policy_batches = OrderedDict({})
-        agent_counts   = OrderedDict({})
+        policy_batches   = OrderedDict({})
+        agent_counts     = OrderedDict({})
+        policy_agent_ids = OrderedDict({})
 
         #
         # First, let's populate our "agent_counts" dictionary, which maps
@@ -491,17 +494,24 @@ class PPO(object):
                 policy_batches[policy_id] = np.zeros(batch_shape).astype(
                     self.policies[policy_id].critic_obs_space.dtype)
 
-            if shuffle_agents:
-                self.policies[policy_id].shuffle_agent_ids()
+            agent_ids = self.policies[policy_id].agent_ids.copy()
+
+            #FIXME: needed?
+            #if shuffle_agents:
+            #    shuffled_idxs = np.arange(len(agent_ids)) 
+            #    np.random.shuffle(shuffled_idxs)
+            #    agent_ids = agent_ids[shuffled_idxs]
+
+            policy_agent_ids[policy_id] = agent_ids
 
             #
             # NOTE: this enforces agent ordering which is needed for
             # order-sensitive algorithms like MAT.
             #
-            for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+            for a_idx, a_id in enumerate(policy_agent_ids[policy_id]):
                 policy_batches[policy_id][a_idx] = obs[a_id]
 
-        return policy_batches
+        return policy_agent_ids, policy_batches
 
     def get_rollout_actions(self, obs):
         """
@@ -534,7 +544,18 @@ class PPO(object):
         # Also, some algorithms (like MAT) need agent's to be batched
         # together.
         #
-        policy_batches = self.get_policy_batches(obs, "actor")
+        # FIXME: I don't think we can shuffle here because the
+        # agent ids are added to the SharedEpisode buffer when it's
+        # created, and those are used when the episode is finished?
+        # Why does the ordering need to be consistent across steps, though??
+        # Shouldn't it be fine as long as the observations, actions, and
+        # rewards are correctly correlated?? And those are added on
+        # a per-step basis right?
+        # UPDATE: Order SHOULDN'T matter because the order is shuffled
+        # during training to let the model learn what would have happened
+        # if the order had been different! This implies we should be shuffling
+        # regularly...
+        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "actor", shuffle_agents=False)
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
@@ -559,7 +580,7 @@ class PPO(object):
             batch_log_probs   = batch_log_probs.reshape(num_agents,
                 self.envs_per_proc, -1)
 
-            for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+            for a_idx, a_id in enumerate(policy_agent_ids[policy_id]):
                 raw_actions[a_id] = batch_raw_actions[a_idx]
                 actions[a_id]     = batch_actions[a_idx]
                 log_probs[a_id]   = batch_log_probs[a_idx]
@@ -621,6 +642,7 @@ class PPO(object):
             if policy_id not in policy_obs:
                 policy_obs[policy_id] = OrderedDict({})
 
+            #FIXME: don't these observations need to shuffle with the policy ids???
             policy_obs[policy_id][agent_id] = obs[agent_id]
 
         actions = OrderedDict({})
@@ -638,10 +660,13 @@ class PPO(object):
                 # agent grouping (like MAT) should perform best when agent
                 # ordering is shuffled around.
                 #
-                batch_obs = self.get_policy_batches(
+                policy_agent_ids, batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
                     component      = "actor",
-                    shuffle_agents = True)[policy_id]
+                    shuffle_agents = False)
+
+                agent_ids = policy_agent_ids[policy_id]
+                batch_obs = batch_obs[policy_id]
 
                 batch_actions = \
                     self.policies[policy_id].get_inference_actions(
@@ -651,13 +676,13 @@ class PPO(object):
                 # We now need to reverse our batching and put the agents
                 # back into dictionary form.
                 #
-                num_agents    = len(self.policies[policy_id].agent_ids)
+                num_agents    = len(agent_ids)
                 actions_shape = (num_agents,) +\
                     self.policies[policy_id].action_space.shape
                 batch_actions = batch_actions.reshape(actions_shape).numpy()
 
                 policy_actions = OrderedDict({})
-                for a_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+                for a_idx, a_id in enumerate(agent_ids):
                     policy_actions[a_id] = batch_actions[a_idx]
 
             else:
@@ -702,7 +727,7 @@ class PPO(object):
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
         #
-        policy_batches = self.get_policy_batches(obs, "critic")
+        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "critic")
         policy_batches = self.np_dict_to_tensor_dict(policy_batches)
 
         for policy_id in policy_batches:
@@ -715,14 +740,16 @@ class PPO(object):
                 batch_obs  = batch_obs.reshape((-1,) + \
                     self.policies[policy_id].critic_obs_space.shape)
 
-            batch_values = self.policies[policy_id].critic(batch_obs)
+            #FIXME: debugging
+            #batch_values = self.policies[policy_id].critic(batch_obs)
+            _, batch_values = self.policies[policy_id].critic(batch_obs)
 
             if self.policies[policy_id].agent_grouping:
                 batch_obs = batch_obs.swapaxes(0, 1)
 
             batch_values = batch_values.reshape((num_agents, -1))
 
-            for b_idx, a_id in enumerate(self.policies[policy_id].agent_ids):
+            for b_idx, a_id in enumerate(policy_agent_ids[policy_id]):
                 values[a_id] = batch_values[b_idx]
 
         return values
@@ -1145,7 +1172,6 @@ class PPO(object):
         total_ext_rewards       = OrderedDict({})
         total_intr_rewards      = OrderedDict({})
         total_rewards           = OrderedDict({})
-        agents_per_policy       = OrderedDict({})
         top_reward              = OrderedDict({})
 
         for policy_id in self.policies:
@@ -1162,20 +1188,21 @@ class PPO(object):
             total_ext_rewards[policy_id]       = np.zeros((env_batch_size, 1))
             total_intr_rewards[policy_id]      = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]           = np.zeros((env_batch_size, 1))
-            agents_per_policy[policy_id]       = 0
             top_reward[policy_id]              = -np.finfo(np.float32).max
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
 
-        for key in self.policies:
-            self.policies[key].initialize_episodes(
+        for policy_id in self.policies:
+            self.policies[policy_id].initialize_episodes(
                 env_batch_size, self.status_dict)
 
-        while total_rollout_ts < self.ts_per_rollout:
+            #FIXME: needed? It sounds like the paper is using this approach, but
+            # let's confirm.
+            if self.policies[policy_id].agent_grouping:
+                self.policies[policy_id].shuffle_agent_ids()
 
-            for policy_id in agents_per_policy:
-                agents_per_policy[policy_id] = 0
+        while total_rollout_ts < self.ts_per_rollout:
 
             ep_ts += 1
 
@@ -1271,6 +1298,7 @@ class PPO(object):
 
                 policy_id = self.policy_mapping_fn(agent_id)
 
+                #FIXME: is this adding in the correct order?
                 self.policies[policy_id].add_episode_info(
                     agent_id             = agent_id,
                     critic_observations  = prev_critic_obs[agent_id],
@@ -1308,19 +1336,9 @@ class PPO(object):
                 ep_rewards[policy_id]        += reward[agent_id]
                 ep_nat_rewards[policy_id]    += natural_reward[agent_id]
                 ep_intr_rewards[policy_id]   += intr_reward[agent_id]
-                agents_per_policy[policy_id] += 1
 
                 top_reward[policy_id] = max(top_reward[policy_id],
                     natural_reward[agent_id].max())
-
-            #
-            # Since each policy can have multiple agents, we average
-            # the scores to get a more interpretable value.
-            #
-            for policy_id in agents_per_policy:
-                ep_rewards[policy_id]      /= agents_per_policy[policy_id]
-                ep_nat_rewards[policy_id]  /= agents_per_policy[policy_id]
-                ep_intr_rewards[policy_id] /= agents_per_policy[policy_id]
 
             #
             # Episode end cases.
@@ -1545,9 +1563,13 @@ class PPO(object):
             max_obs = comm.allreduce(max_obs, MPI.MAX)
             min_obs = comm.allreduce(min_obs, MPI.MIN)
 
-            ext_reward_sum = total_ext_rewards[policy_id].sum()
-            ext_reward_sum = comm.allreduce(ext_reward_sum, MPI.SUM)
+            num_agents = len(self.policies[policy_id].agent_ids)
 
+            total_ext_rewards[policy_id] /= num_agents
+            ext_reward_sum  = total_ext_rewards[policy_id].sum()
+            ext_reward_sum  = comm.allreduce(ext_reward_sum, MPI.SUM)
+
+            total_rewards[policy_id] /= num_agents
             total_rewards_sum  = total_rewards[policy_id].sum()
             total_rewards_sum  = comm.allreduce(total_rewards_sum, MPI.SUM)
 
@@ -1571,6 +1593,7 @@ class PPO(object):
             self.status_dict[policy_id]["top reward"]          = global_top_reward
 
             if self.policies[policy_id].enable_icm:
+                total_intr_rewards[policy_id] /= num_agents
                 intr_reward = total_intr_rewards[policy_id].sum()
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
@@ -1603,13 +1626,13 @@ class PPO(object):
         for policy_id in self.policies:
             self.policies[policy_id].finalize_dataset()
 
-            # FIXME: we currently only support shuffling after a rollout,
-            # but it would likely be better to shuffle throughout episodes..
-            # is there a way to accomplish this?
-            # Does it even matter if we shuffle after stepping?? Let's look into
-            # this...
-            if self.have_agent_grouping:
-                self.policies[policy_id].shuffle_agent_ids()
+            ## FIXME: we currently only support shuffling after a rollout,
+            ## but it would likely be better to shuffle throughout episodes..
+            ## is there a way to accomplish this?
+            ## Does it even matter if we shuffle after stepping?? Let's look into
+            ## this...
+            #if self.have_agent_grouping:
+            #    self.policies[policy_id].shuffle_agent_ids()
 
         comm.barrier()
         stop_time = time.time()
@@ -1678,6 +1701,9 @@ class PPO(object):
                     #
                     if epoch_idx > 0:
                         data_loaders[policy_id].dataset.recalculate_advantages()
+
+                        #FIXME: testing. I don't think they even suggest this in the paper.
+                        #data_loaders[policy_id].dataset.shuffle_agents()
 
                     self._ppo_batch_train(data_loaders[policy_id], policy_id)
 
@@ -1802,7 +1828,18 @@ class PPO(object):
                 obs,
                 raw_actions)
 
-            data_loader.dataset.values[batch_idxs] = values.squeeze().detach()
+            #print(f"\nVALUES SHAPE: {values.shape}")#FIXME
+            #print(f"LOG PROBS SHAPE: {curr_log_probs.shape}")#FIXME
+            #print(f"ADVANTAGES SHAPE: {advantages.shape}")#FIXME
+
+            data_loader.dataset.values[batch_idxs] = values.squeeze(-1).detach()
+
+            curr_log_probs = curr_log_probs.flatten()
+            log_probs      = log_probs.flatten()
+            advantages     = advantages.flatten()
+            entropy        = entropy.flatten()
+            values         = values.flatten()
+            rewards_tg     = rewards_tg.flatten()
 
             #
             # The heart of PPO: arXiv:1707.06347v2
@@ -1871,7 +1908,9 @@ class PPO(object):
             # Calculate the critic loss. Optionally, we can use the clipped
             # version.
             #
-            critic_loss = nn.MSELoss()(values, rewards_tg)
+            #FIXME: testing HuberLoss
+            #critic_loss = nn.MSELoss()(values, rewards_tg)
+            critic_loss = nn.HuberLoss(delta=10.0)(values, rewards_tg)#FIXME
 
             #
             # This clipping strategy comes from arXiv:2005.12729v1, which
@@ -1884,7 +1923,8 @@ class PPO(object):
                     -self.policies[policy_id].vf_clip,
                     self.policies[policy_id].vf_clip)
 
-                clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
+                #clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)#FIXME
+                clipped_loss = nn.HuberLoss(delta=10.0)(clipped_values, rewards_tg)#FIXME
                 critic_loss  = torch.max(critic_loss, clipped_loss)
 
             total_critic_loss += critic_loss.item()
@@ -1895,9 +1935,12 @@ class PPO(object):
             # arXiv:2005.12729v1 suggests that gradient clipping can
             # have a positive effect on training.
             #
+            # FIXME: if we put all of this stuff into the policy, we could
+            # create a shared actor critic for MAT.
             self.policies[policy_id].actor_optim.zero_grad()
             actor_loss.backward(
-                retain_graph = self.policies[policy_id].using_lstm)
+                retain_graph = True)#FIXME: testing
+                #retain_graph = self.policies[policy_id].using_lstm)#FIXME: debugging
             mpi_avg_gradients(self.policies[policy_id].actor)
 
             if self.policies[policy_id].gradient_clip is not None:
@@ -1909,7 +1952,9 @@ class PPO(object):
 
             self.policies[policy_id].critic_optim.zero_grad()
             critic_loss.backward(
-                retain_graph = self.policies[policy_id].using_lstm)
+                retain_graph = True)
+                #retain_graph = self.policies[policy_id].using_lstm)#FIXME:debugging
+
             mpi_avg_gradients(self.policies[policy_id].critic)
 
             if self.policies[policy_id].gradient_clip is not None:

@@ -35,7 +35,7 @@ class AgentPolicy():
                  actor_observation_space,
                  critic_observation_space,
                  envs_per_proc,
-                 bootstrap_clip      = (-10., 10.),
+                 bootstrap_clip      = (-100., 100.),#FIXME: make sure this doesn't worsen baselines.
                  ac_network          = FeedForwardNetwork,
                  actor_kw_args       = {},
                  critic_kw_args      = {},
@@ -288,7 +288,6 @@ class AgentPolicy():
         """
         self.agent_ids = np.array(list(set(self.agent_ids).union({agent_id})))
         self.agent_ids = self.agent_ids
-
 
     def shuffle_agent_ids(self):
         """

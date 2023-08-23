@@ -412,7 +412,9 @@ class AgentSharedEpisode():
         self.verify_episode(episode)
 
         #FIXME: do we need to maintain a specific ordering here?
-        self.agent_episodes[self.agent_count] = episode
+        agent_idx = np.where(self.agent_ids == agent_id)#FIXME: testing
+
+        self.agent_episodes[agent_idx] = episode
         self.added_agents.append(agent_id)
         self.agent_count += 1
 
@@ -825,7 +827,6 @@ class PPOSharedEpisodeDataset(PPODataset):
         self,
         num_envs,
         agent_ids,
-        shuffle_every = 1,
         *args,
         **kw_args):
         """
@@ -836,9 +837,10 @@ class PPOSharedEpisodeDataset(PPODataset):
         self.num_envs      = num_envs
         self.agent_ids     = agent_ids
         self.shared        = True
-        self.shuffle_every = shuffle_every
-        self.counter       = 0
 
+        #
+        # Construct a "queue" of agent shared episodes.
+        #
         shared_episodes = []
         for _ in range(num_envs):
             shared_episodes.append(AgentSharedEpisode(agent_ids))
@@ -850,7 +852,14 @@ class PPOSharedEpisodeDataset(PPODataset):
         """
         self.episode_queue[env_idx].add_episode(agent_id, episode)
 
+        #
+        # If we've added all agent episodes, the shared episode will be
+        # flagged as finished. We then add the shared episode to our
+        # list of general episodes and replace its spot in the queue with
+        # a new shared episode.
+        #
         if self.episode_queue[env_idx].is_finished:
+
             self.episodes.append(self.episode_queue[env_idx])
             self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
 
@@ -891,11 +900,15 @@ class PPOSharedEpisodeDataset(PPODataset):
         tuple
             All data associated with the given index in our dataset.
         """
-        self.counter += 1
-        if self.counter % self.shuffle_every == 0:
-            #FIXME: are we sure that this shuffling isn't going to have an
-            # odd effect on the data retrieval?? I think it should be okay...
-            self.shuffle_agents()
+        #print("\n")#FIXME
+        #print(self.critic_observations.shape)
+        #print(self.observations.shape)
+        #print(self.next_observations.shape)
+        #print(self.raw_actions.shape)
+        #print(self.actions.shape)
+        #print(self.advantages.shape)
+        #print(self.log_probs.shape)
+        #print(self.rewards_to_go.shape)
 
         return (self.critic_observations[idx],
                 self.observations[idx],

@@ -40,8 +40,6 @@ class MPESimpleTagRunner(GymRunner):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
 
-        critic_kw_args = actor_kw_args.copy()
-
         lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
