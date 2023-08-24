@@ -128,10 +128,21 @@ class MATActor(PPONetwork):
             init_layer(nn.Linear(embedding_size, action_dim),
                 gain = out_init))
 
-    def forward(self, action, encoded_obs):
+    def forward(self, actions, encoded_obs):
         """
+        Parameters:
+        -----------
+        actions: torch tensor
+            The previous actions chosen by other agents.
+        encoded_obs: torch tensor
+            The encoded/embedded observation from the critic.
+
+        Returns:
+        --------
+        torch tensor:
+            The predicted action distribution for the next agent.
         """
-        x = self.action_encoder(action)
+        x = self.action_encoder(actions)
         x = self.ln(x)
 
         for block in self.blocks:
@@ -249,6 +260,17 @@ class MATCritic(PPONetwork):
 
     def encode_obs(self, obs):
         """
+        Encode an observation.
+
+        Parameters:
+        -----------
+        obs: torch tensor
+            An observation to encode.
+
+        Returns:
+        --------
+        torch tensor:
+            The encoded observation.
         """
         x = self.obs_encoder(obs)
         x = self.ln(x)
@@ -256,6 +278,17 @@ class MATCritic(PPONetwork):
         return x
 
     def forward(self, obs):
+        """
+        Parameters:
+        -----------
+        obs: torch tensor
+            The observations to get values from.
+
+        Returns:
+        --------
+        torch tensor:
+            The predicted values.
+        """
         encoded_obs = self.encode_obs(obs)
         return encoded_obs, self.head(encoded_obs)
 
@@ -300,7 +333,19 @@ class MATActorCritic(PPONetwork):
             **kw_args)
 
     def forward(self, obs, action_block):
+        """
+        Parameters:
+        -----------
+        obs: torch tensor
+            Agent observations.
+        action_block: torch tensor
+            Agent actions.
 
+        Returns:
+        --------
+        tuple:
+            values and predicted action distributions for given agents.
+        """
         encoded_obs, values = self.critic(obs)
         action_pred         = self.actor(action_block, encoded_obs)
         return values, action_pred

@@ -102,6 +102,13 @@ class MATPolicy(AgentPolicy):
         icm_kw_args: dict
             Keyword args for the ICM network.
         """
+        if not issubclass(ac_network, mat.MATActorCritic):
+            msg  = "ERROR: ac_network for MATPolicy must be a "
+            msg += "subtype of MATActorCritic, but received "
+            msg += f"{ac_network}."
+            rank_print(msg)
+            comm.Abort()
+
         #
         # Initialize our networks: actor, critic, and possibly ICM.
         #
@@ -115,7 +122,6 @@ class MATPolicy(AgentPolicy):
         # the value network doesn't matter so much. I can't remember
         # where I got 1.0 from... I'll try to track that down.
         #
-
         self.actor_critic = ac_network(
             name         = "actor_critic", 
             obs_space    = self.actor_obs_space,

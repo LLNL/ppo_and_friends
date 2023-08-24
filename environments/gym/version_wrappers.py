@@ -19,14 +19,14 @@ def gym_space_to_gymnasium_space(space):
             The input space converted to gymnasium.
     """
     import gym as old_gym
-    if type(space) == old_gym.spaces.Box:
+    if issubclass(type(space), old_gym.spaces.Box):
         space = gym.spaces.Box(
             low   = space.low,
             high  = space.high,
             shape = space.shape,
             dtype = space.dtype)
 
-    elif type(space) == old_gym.spaces.Discrete:
+    elif issubclass(type(space), old_gym.spaces.Discrete):
         try:
             space = gym.spaces.Discrete(
                 n     = space.n,
@@ -35,16 +35,16 @@ def gym_space_to_gymnasium_space(space):
             space = gym.spaces.Discrete(
                 n = space.n)
 
-    elif type(space) == old_gym.spaces.MultiBinary:
+    elif issubclass(type(space), old_gym.spaces.MultiBinary):
         space = gym.spaces.MultiBinary(
             n = space.n)
 
-    elif type(space) == old_gym.spaces.MultiDiscrete:
+    elif issubclass(type(space), old_gym.spaces.MultiDiscrete):
         space = gym.spaces.MultiDiscrete(
             nvec  = space.nvec,
             dtype = space.dtype)
 
-    elif type(space) == old_gym.spaces.Dict:
+    elif issubclass(type(space), old_gym.spaces.Dict):
         new_space = gym.spaces.Dict()
 
         for key in space:
@@ -52,7 +52,7 @@ def gym_space_to_gymnasium_space(space):
 
         space = new_space
 
-    elif type(space) == old_gym.spaces.Tuple:
+    elif issubclass(type(space), old_gym.spaces.Tuple):
         new_space = []
 
         for subspace in space:

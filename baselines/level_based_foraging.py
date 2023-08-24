@@ -27,7 +27,8 @@ class LevelBasedForagingRunner(GymRunner):
 
         env_generator = lambda : \
             MultiAgentGymWrapper(Gym21ToGymnasium(
-                old_gym.make('Foraging-8x8-3p-2f-v2')))
+                old_gym.make('Foraging-8x8-3p-2f-v2')),
+                critic_view="global")
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
