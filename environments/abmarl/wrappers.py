@@ -211,7 +211,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             self.fig, _ = plt.subplots()
 
         self.env.render(fig=self.fig)
-
+        plt.pause(1e-12)
 
     def seed(self, seed):
         """
