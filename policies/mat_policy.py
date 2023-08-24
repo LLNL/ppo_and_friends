@@ -2,6 +2,7 @@ import numpy as np
 import os
 import torch
 from torch.nn import functional as t_func
+from torch import nn
 from copy import deepcopy
 from functools import reduce
 from torch.optim import Adam
@@ -10,10 +11,9 @@ from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
-from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
+from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
-from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length
@@ -32,21 +32,18 @@ class MATPolicy(AgentPolicy):
     """
 
     def __init__(self,
-                 actor_network       = mat.MATActor,
-                 critic_network      = mat.MATCritic, 
-                 shared_reward_fn    = np.sum,
+                 ac_network       = mat.MATActorCritic,
+                 mat_kw_args      = {},
+                 shared_reward_fn = np.sum,
                  **kw_args):
         """
         Initialize the policy.
 
         Parameters:
         -----------
-        actor_network: class
-            The class to use for the actor. This should be of type/subtype
-            MATActor.
-        critic_network: class
-            The class to use for the critic. This should be of type/subtype
-            MATCritic.
+        ac_network: class
+            The class to use for our actor/critic. This should be of type/subtype
+            PPONetwork.
         shared_reward_fn: np function 
             This is a numpy "reduction" function that will be used to
             create shared rewards in environments that don't already have them.
@@ -54,9 +51,9 @@ class MATPolicy(AgentPolicy):
             that all agents of a policy receive the same reward.
         """
         super(MATPolicy, self).__init__(
-            actor_network    = actor_network,
-            critic_network   = critic_network,
+            ac_network       = ac_network,
             shared_reward_fn = shared_reward_fn,
+            mat_kw_args      = mat_kw_args,
             **kw_args)
 
         self.action_dim      = get_flattened_space_length(self.action_space)
@@ -73,6 +70,8 @@ class MATPolicy(AgentPolicy):
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
 
+        #FIXME: throw error if using_lstm == True.
+
         #
         # Shuffle agents right off the bat so that different processors
         # have different ordering.
@@ -81,12 +80,10 @@ class MATPolicy(AgentPolicy):
 
     def _initialize_networks(
         self,
-        actor_network,
-        critic_network,
+        ac_network,
         enable_icm,
         icm_network,
-        actor_kw_args,
-        critic_kw_args,
+        mat_kw_args,
         icm_kw_args,
         **kw_args):
         """
@@ -94,18 +91,14 @@ class MATPolicy(AgentPolicy):
 
         Parameters:
         -----------
-        actor_network: class of type PPONetwork
-            The network to use for the actor.
-        critic_network: class of type PPONetwork
-            The network to use for the critic.
+        ac_network: class of type PPONetwork
+            The network to use for the actor/critic.
         enable_icm: bool
             Whether or not to enable ICM.
         icm_network: class of type PPONetwork
             The network class to use for ICM (when enabled).
-        actor_kw_args: dict
-            Keyword args for the actor network.
-        critic_kw_args: dict
-            Keyword args for the critic network.
+        mat_kw_args: dict
+            Keyword args for the MAT network.
         icm_kw_args: dict
             Keyword args for the ICM network.
         """
@@ -123,27 +116,17 @@ class MATPolicy(AgentPolicy):
         # where I got 1.0 from... I'll try to track that down.
         #
 
-
-        self.actor = actor_network(
-            name         = "actor", 
+        self.actor_critic = ac_network(
+            name         = "actor_critic", 
             obs_space    = self.actor_obs_space,
             action_space = self.action_space,
             num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,
-            **actor_kw_args)
+            **mat_kw_args)
 
-        self.critic = critic_network(
-            name         = "critic", 
-            obs_space    = self.critic_obs_space,
-            num_agents   = len(self.agent_ids),
-            test_mode    = self.test_mode,
-            **critic_kw_args)
+        self.actor_critic  = self.actor_critic.to(self.device)
 
-        self.actor  = self.actor.to(self.device)
-        self.critic = self.critic.to(self.device)
-
-        broadcast_model_parameters(self.actor)
-        broadcast_model_parameters(self.critic)
+        broadcast_model_parameters(self.actor_critic)
         comm.barrier()
 
         if enable_icm:
@@ -163,25 +146,50 @@ class MATPolicy(AgentPolicy):
         Initialize a rollout dataset. This should be called at the
         onset of a rollout.
         """
-        #FIXME: raise error if using_lstm
-        sequence_length = 1
-        if self.using_lstm:
-            self.actor.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            self.critic.reset_hidden_state(
-                batch_size = 1,
-                device     = self.device)
-
-            sequence_length = self.actor.sequence_length
-
         self.dataset = PPOSharedEpisodeDataset(
             device          = self.device,
             action_dtype    = self.action_dtype,
-            sequence_length = sequence_length,
+            sequence_length = 1,
             num_envs        = self.envs_per_proc,
             agent_ids       = self.agent_ids)
+
+    def finalize(self, status_dict):
+        """
+        Perfrom any finalizing tasks before we start using the policy.
+
+        Parameters:
+        -----------
+        status_dict: dict
+            The status dict for training.
+        """
+        self.lr.finalize(status_dict)
+        self.icm_lr.finalize(status_dict)
+        self.entropy_weight.finalize(status_dict)
+        self.intr_reward_weight.finalize(status_dict)
+        self.bootstrap_clip[0].finalize(status_dict)
+        self.bootstrap_clip[1].finalize(status_dict)
+
+        self.actor_critic_optim = Adam(
+            self.actor_critic.parameters(), lr=self.lr(), eps=1e-5)
+
+        if self.enable_icm:
+            self.icm_optim = Adam(self.icm_model.parameters(),
+                lr=self.icm_lr(), eps=1e-5)
+        else:
+            self.icm_optim = None
+
+    def to(self, device):
+        """
+            Send this policy to a specified device.
+
+            Arguments:
+                device    The device to send this policy to.
+        """
+        self.device       = device
+        self.actor_critic = self.actor_critic.to(self.device)
+
+        if self.enable_icm:
+            self.icm_model = self.icm_model.to(self.device)
 
     def end_episodes(
         self,
@@ -260,10 +268,10 @@ class MATPolicy(AgentPolicy):
 
         return action_block
 
-    def _evaluate_actions(self, encoded_obs, batch_actions):
+    def _evaluate_actions(self, obs, batch_actions):
         """
         """
-        batch_size = encoded_obs.shape[0]
+        batch_size = obs.shape[0]
         num_agents = len(self.agent_ids)
 
         action_block = self._get_tokened_action_block(batch_size)
@@ -274,21 +282,9 @@ class MATPolicy(AgentPolicy):
         else:
             action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
-        action_pred = self.actor(action_block, encoded_obs)
+        values, action_pred, log_probs, entropy = self.actor_critic(obs, batch_actions, action_block)
 
-        dist    = self.actor.distribution.get_distribution(action_pred)
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-        if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
-
-        return action_pred, log_probs, entropy
+        return values, action_pred, log_probs, entropy
 
     def _get_autoregressive_actions_with_exploration(self, encoded_obs):
         """
@@ -311,11 +307,11 @@ class MATPolicy(AgentPolicy):
 
         with torch.no_grad():
             for i in range(num_agents):
-                action_pred = self.actor(action_block, encoded_obs)[:, i, :]
-                dist        = self.actor.distribution.get_distribution(action_pred)
+                action_pred = self.actor_critic.actor(action_block, encoded_obs)[:, i, :]
+                dist        = self.actor_critic.actor.distribution.get_distribution(action_pred)
 
-                action, raw_action = self.actor.distribution.sample_distribution(dist)
-                log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
+                action, raw_action = self.actor_critic.actor.distribution.sample_distribution(dist)
+                log_prob = self.actor_critic.actor.distribution.get_log_probs(dist, raw_action)
 
                 if self.action_dtype == "discrete":
                     output_action[:, i, :]     = action.unsqueeze(-1)
@@ -349,7 +345,7 @@ class MATPolicy(AgentPolicy):
 
         with torch.no_grad():
             for i in range(num_agents):
-                action = self.actor.get_refined_prediction(
+                action = self.actor_critic.actor.get_refined_prediction(
                     action_block, encoded_obs)
 
                 if len(action.shape) < 3:
@@ -395,7 +391,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.actor_critic.critic(t_obs)
         actions, raw_actions, log_probs = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -431,8 +427,7 @@ class MATPolicy(AgentPolicy):
         # torch dataset, and it has already been re-shaped into the expected
         # (batch_size, num_agents, *) format.
         #
-        encoded_obs, values = self.critic(batch_critic_obs)
-        _, log_probs, entropy = self._evaluate_actions(encoded_obs, batch_actions)
+        values, _, log_probs, entropy = self._evaluate_actions(batch_critic_obs, batch_actions)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
 
@@ -450,8 +445,24 @@ class MATPolicy(AgentPolicy):
         torch tensor:
             The predicted values.
         """
-        _, values = self.critic(obs)
+        _, values = self.actor_critic.critic(obs)
         return values
+
+    def update_weights(self, actor_loss, critic_loss):
+        """
+        """
+        actor_critic_loss = actor_loss + critic_loss
+
+        self.actor_critic_optim.zero_grad()
+        actor_critic_loss.backward()
+        mpi_avg_gradients(self.actor_critic)
+
+        if self.gradient_clip is not None:
+            nn.utils.clip_grad_norm_(
+                self.actor_critic.parameters(),
+                self.gradient_clip)
+
+        self.actor_critic_optim.step()
 
     def get_inference_actions(self, obs, explore):
         """
@@ -511,7 +522,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.actor_critic.critic(t_obs)
         actions, _, _ = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -549,7 +560,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs = self.critic.encode_obs(t_obs)
+        encoded_obs, _ = self.actor_critic.critic(t_obs)
 
         actions = \
             self._get_autoregressive_actions_without_exploration(encoded_obs)
@@ -610,3 +621,66 @@ class MATPolicy(AgentPolicy):
                 obs[agent_id] = critic_obs[agent_id]
 
         return obs, critic_obs
+
+    def update_learning_rate(self):
+        """
+        Update the learning rate.
+        """
+        update_optimizer_lr(self.actor_critic_optim, self.lr())
+
+        if self.enable_icm:
+            update_optimizer_lr(self.icm_optim, self.icm_lr())
+
+    def save(self, save_path):
+        """
+            Save our policy.
+
+            Arguments:
+                save_path    The path to save the policy to.
+        """
+        policy_dir = "{}-policy".format(self.name)
+        policy_save_path = os.path.join(save_path, policy_dir)
+
+        if rank == 0 and not os.path.exists(policy_save_path):
+            os.makedirs(policy_save_path)
+
+        comm.barrier()
+
+        self.actor_critic.save(policy_save_path)
+
+        if self.enable_icm:
+            self.icm_model.save(policy_save_path)
+
+    def load(self, load_path):
+        """
+            Load our policy.
+
+            Arguments:
+                load_path    The path to load the policy from.
+        """
+        policy_dir = "{}-policy".format(self.name)
+        policy_load_path = os.path.join(load_path, policy_dir)
+
+        self.actor_critic.load(policy_load_path)
+
+        if self.enable_icm:
+            self.icm_model.load(policy_load_path)
+
+    def eval(self):
+        """
+            Set the policy to evaluation mode.
+        """
+        self.actor_critic.eval()
+
+        if self.enable_icm:
+            self.icm_model.eval()
+
+    def train(self):
+        """
+            Set the policy to train mode.
+        """
+        self.actor_critic.train()
+
+        if self.enable_icm:
+            self.icm_model.train()
+

@@ -4,12 +4,13 @@ import torch
 from copy import deepcopy
 from functools import reduce
 from torch.optim import Adam
+from torch import nn
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOSharedEpisodeDataset
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
-from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters
+from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
@@ -834,6 +835,34 @@ class AgentPolicy():
         intr_reward *= self.intr_reward_weight()
 
         return intr_reward
+
+    def update_weights(self, actor_loss, critic_loss):
+        """
+        """
+        self.actor_optim.zero_grad()
+        actor_loss.backward(
+            retain_graph = self.using_lstm)
+        mpi_avg_gradients(self.actor)
+
+        if self.gradient_clip is not None:
+            nn.utils.clip_grad_norm_(
+                self.actor.parameters(),
+                self.gradient_clip)
+
+        self.actor_optim.step()
+
+        self.critic_optim.zero_grad()
+        critic_loss.backward(
+            retain_graph = self.using_lstm)
+
+        mpi_avg_gradients(self.critic)
+
+        if self.gradient_clip is not None:
+            nn.utils.clip_grad_norm_(
+                self.critic.parameters(),
+                self.gradient_clip)
+
+        self.critic_optim.step()
 
     def get_critic_values(self, obs):
         """

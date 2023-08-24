@@ -36,12 +36,11 @@ class MATActor(PPONetwork):
         decoder_activation      = nn.GELU(),
         self_atten_internal_init = 0.01,
         self_atten_out_init      = 0.01,
-        name                     = 'actor',
         **kw_args):
         """
         """
         super(MATActor, self).__init__(
-            name      = name,
+            name      = "mat_actor",
             in_shape  = (embedding_size,),
             out_shape = get_space_shape(action_space),
             **kw_args)
@@ -150,13 +149,12 @@ class MATCritic(PPONetwork):
         encoder_activation       = nn.GELU(),
         self_atten_internal_init = 0.01,
         self_atten_out_init      = 0.01,
-        name                     = 'critic',
         **kw_args):
         """
         """
 
         super(MATCritic, self).__init__(
-            name      = name,
+            name      = "mat_critic",
             in_shape  = get_space_shape(obs_space),
             out_shape = (1,),
             **kw_args)
@@ -203,3 +201,53 @@ class MATCritic(PPONetwork):
     def forward(self, obs):
         encoded_obs = self.encode_obs(obs)
         return encoded_obs, self.head(encoded_obs)
+
+
+class MATActorCritic(PPONetwork):
+
+    def __init__(
+        self,
+        obs_space,
+        action_space,
+        num_agents,
+        name = 'actor_critic',
+        **kw_args):
+
+        super(MATActorCritic, self).__init__(
+            name      = name,
+            in_shape  = None,
+            out_shape = None,
+            **kw_args)
+
+        self.actor = MATActor(
+            obs_space    = obs_space,
+            action_space = action_space,
+            num_agents   = num_agents,
+            **kw_args)
+
+        self.critic = MATCritic(
+            obs_space    = obs_space,
+            action_space = action_space,
+            num_agents   = num_agents,
+            **kw_args)
+
+    def forward(self, obs, batch_actions, action_block):
+
+        # FIXME: maybe just return the action_pred and values, then
+        # let the policy class handle getting the log probs and entropy
+        encoded_obs, values = self.critic(obs)
+        action_pred         = self.actor(action_block, encoded_obs)
+
+        dist    = self.actor.distribution.get_distribution(action_pred)
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+
+        if self.actor.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
+
+        return values, action_pred, log_probs, entropy

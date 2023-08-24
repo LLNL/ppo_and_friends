@@ -104,12 +104,6 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
         obs, reward, terminal, truncated, info = \
             self.env.step(self._conform_actions(actions))
 
-        #FIXME: testing weird hack
-        for agent_id in truncated:
-            if truncated[agent_id]:
-                terminal[agent_id]  = True 
-                truncated[agent_id] = False
-
         done = self._get_done_dict(terminal, truncated)
 
         self.all_done = self._get_all_done(done)

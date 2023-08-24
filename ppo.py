@@ -56,6 +56,7 @@ class PPO(object):
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
+                 use_huber_loss      = True,#FIXME: default to false
                  test_mode           = False,
                  verbose             = False,
                  **kw_args):
@@ -250,6 +251,7 @@ class PPO(object):
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
+        self.use_huber_loss      = use_huber_loss
         self.verbose             = verbose
         self.save_when           = save_when
         self.save_train_scores   = save_train_scores
@@ -1566,6 +1568,7 @@ class PPO(object):
 
             num_agents = len(self.policies[policy_id].agent_ids)
 
+            #FIXME: do we want to average across agents??
             total_ext_rewards[policy_id] /= num_agents
             ext_reward_sum  = total_ext_rewards[policy_id].sum()
             ext_reward_sum  = comm.allreduce(ext_reward_sum, MPI.SUM)
@@ -1909,9 +1912,10 @@ class PPO(object):
             # Calculate the critic loss. Optionally, we can use the clipped
             # version.
             #
-            #FIXME: testing HuberLoss
-            #critic_loss = nn.MSELoss()(values, rewards_tg)
-            critic_loss = nn.HuberLoss(delta=10.0)(values, rewards_tg)#FIXME
+            if self.use_huber_loss:
+                critic_loss = nn.HuberLoss(delta=10.0)(values, rewards_tg)
+            else:
+                critic_loss = nn.MSELoss()(values, rewards_tg)
 
             #
             # This clipping strategy comes from arXiv:2005.12729v1, which
@@ -1924,46 +1928,52 @@ class PPO(object):
                     -self.policies[policy_id].vf_clip,
                     self.policies[policy_id].vf_clip)
 
-                #clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)#FIXME
-                clipped_loss = nn.HuberLoss(delta=10.0)(clipped_values, rewards_tg)#FIXME
+                if self.user_huber_loss:
+                    clipped_loss = nn.HuberLoss(delta=10.0)(clipped_values, rewards_tg)
+                else:
+                    clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
                 critic_loss  = torch.max(critic_loss, clipped_loss)
 
             total_critic_loss += critic_loss.item()
 
-            #
-            # Perform our backwards steps, and average gradients across ranks.
-            #
-            # arXiv:2005.12729v1 suggests that gradient clipping can
-            # have a positive effect on training.
-            #
-            # FIXME: if we put all of this stuff into the policy, we could
-            # create a shared actor critic for MAT.
-            self.policies[policy_id].actor_optim.zero_grad()
-            actor_loss.backward(
-                retain_graph = True)#FIXME: testing
-                #retain_graph = self.policies[policy_id].using_lstm)#FIXME: debugging
-            mpi_avg_gradients(self.policies[policy_id].actor)
 
-            if self.policies[policy_id].gradient_clip is not None:
-                nn.utils.clip_grad_norm_(
-                    self.policies[policy_id].actor.parameters(),
-                    self.policies[policy_id].gradient_clip)
+            #FIXME: testing
+            self.policies[policy_id].update_weights(actor_loss, critic_loss)
 
-            self.policies[policy_id].actor_optim.step()
 
-            self.policies[policy_id].critic_optim.zero_grad()
-            critic_loss.backward(
-                retain_graph = True)
-                #retain_graph = self.policies[policy_id].using_lstm)#FIXME:debugging
 
-            mpi_avg_gradients(self.policies[policy_id].critic)
+            ##
+            ## Perform our backwards steps, and average gradients across ranks.
+            ##
+            ## arXiv:2005.12729v1 suggests that gradient clipping can
+            ## have a positive effect on training.
+            ##
+            ## FIXME: if we put all of this stuff into the policy, we could
+            ## create a shared actor critic for MAT.
+            #self.policies[policy_id].actor_optim.zero_grad()
+            #actor_loss.backward(
+            #    retain_graph = self.policies[policy_id].using_lstm)
+            #mpi_avg_gradients(self.policies[policy_id].actor)
 
-            if self.policies[policy_id].gradient_clip is not None:
-                nn.utils.clip_grad_norm_(
-                    self.policies[policy_id].critic.parameters(),
-                    self.policies[policy_id].gradient_clip)
+            #if self.policies[policy_id].gradient_clip is not None:
+            #    nn.utils.clip_grad_norm_(
+            #        self.policies[policy_id].actor.parameters(),
+            #        self.policies[policy_id].gradient_clip)
 
-            self.policies[policy_id].critic_optim.step()
+            #self.policies[policy_id].actor_optim.step()
+
+            #self.policies[policy_id].critic_optim.zero_grad()
+            #critic_loss.backward(
+            #    retain_graph = self.policies[policy_id].using_lstm)
+
+            #mpi_avg_gradients(self.policies[policy_id].critic)
+
+            #if self.policies[policy_id].gradient_clip is not None:
+            #    nn.utils.clip_grad_norm_(
+            #        self.policies[policy_id].critic.parameters(),
+            #        self.policies[policy_id].gradient_clip)
+
+            #self.policies[policy_id].critic_optim.step()
 
             #
             # The idea here is similar to re-computing advantages, but now
