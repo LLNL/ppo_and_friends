@@ -839,6 +839,12 @@ class AgentPolicy():
     def update_weights(self, actor_loss, critic_loss):
         """
         """
+        #
+        # Perform our backwards steps, and average gradients across ranks.
+        #
+        # arXiv:2005.12729v1 suggests that gradient clipping can
+        # have a positive effect on training
+        #
         self.actor_optim.zero_grad()
         actor_loss.backward(
             retain_graph = self.using_lstm)

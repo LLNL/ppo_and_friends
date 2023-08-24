@@ -61,81 +61,110 @@ class PPO(object):
                  verbose             = False,
                  **kw_args):
         """
-            Initialize the PPO trainer.
+        Initialize the PPO trainer.
 
-            Parameters:
-                 env_generator        A function that creates instances of
-                                      the environment to learn from.
-                 policy_settings      A dictionary containing RLLib-like
-                                      policy settings.
-                 policy_mapping_fn    A function mapping agent ids to
-                                      policy ids.
-                 device               A torch device to use for training.
-                 random_seed          A random seed to use.
-                 envs_per_proc        The number of environment instances each
-                                      processor owns.
-                 lr                   The initial learning rate.
-                 max_ts_per_ep        The maximum timesteps to allow per
-                                      episode.
-                 batch_size           The batch size to use when training/
-                                      updating the networks.
-                 ts_per_rollout       A soft limit on the number of timesteps
-                                      to allow per rollout (can span multiple
-                                      episodes). Note that our actual timestep
-                                      count can exceed this limit, but we won't
-                                      start any new episodes once it has.
-                 gamma                The 'gamma' value for calculating
-                                      advantages and discounting rewards
-                                      when normalizing them.
-                 epochs_per_iter      'Epoch' is used loosely and with a variety
-                                      of meanings in RL. In this case, a single
-                                      epoch is a single update of all networks.
-                                      epochs_per_iter is the number of updates
-                                      to perform after a single rollout (which
-                                      may contain multiple episodes).
-                 ext_reward_weight    An optional weight for the extrinsic
-                                      reward.
-                 normalize_adv        Should we normalize the advantages? This
-                                      occurs at the minibatch level.
-                 normalize_obs        Should we normalize the observations?
-                 normalize_rewards    Should we normalize the rewards?
-                 normalize_values     Should we normalize the "values" that our
-                                      critic calculates loss against?
-                 obs_clip             Disabled if None. Otherwise, this should
-                                      be a tuple containing a clip range for
-                                      the observation space as (min, max).
-                 reward_clip          Disabled if None. Otherwise, this should
-                                      be a tuple containing a clip range for
-                                      the reward as (min, max).
-                 render               Should we render the environment while
-                                      training?
-                 frame_pause          If render is True, sleep frame_pause
-                                      seconds between renderings.
-                 load_state           Should we load a saved state?
-                 state_path           The path to save/load our state.
-                 save_when            An instance of ChangeInStateScheduler
-                                      that determines when to save. If None,
-                                      saving will occur every iteration.
-                 save_train_scores    If True, the extrinsic score averages
-                                      for each policy are saved every iteration.
-                 pickle_class         When enabled, the entire PPO class will
-                                      be pickled and saved into the output
-                                      directory after it's been initialized.
-                 soft_resets          Use "soft resets" during rollouts. This
-                                      can be a bool or an instance of
-                                      LinearStepScheduler.
-                 obs_augment          This is a funny option that can only be
-                                      enabled with environments that have a
-                                      "observation_augment" method defined.
-                                      When enabled, this method will be used to
-                                      augment observations into batches of
-                                      observations that all require the same
-                                      treatment (a single action).
-                 test_mode            Most of this class is not used for
-                                      testing, but some of its attributes are.
-                                      Setting this to True will enable test
-                                      mode.
-                 verbose              Enable verbosity?
+        Parameters:
+        -----------
+        env_generator: function
+            A function that creates instances of
+            the environment to learn from.
+        policy_settings: dict
+            A dictionary containing RLLib-like
+            policy settings.
+        policy_mapping_fn: function
+            A function mapping agent ids to
+            policy ids.
+        device: torch.device
+            A torch device to use for training.
+        random_seed: int
+            A random seed to use.
+        envs_per_proc: int
+            The number of environment instances each
+            processor owns.
+        lr: float
+            The initial learning rate.
+        max_ts_per_ep: int
+            The maximum timesteps to allow per episode.
+        batch_size: int
+            The batch size to use when training/updating the networks.
+        ts_per_rollout: int
+            A soft limit on the number of timesteps
+            to allow per rollout (can span multiple
+            episodes). Note that our actual timestep
+            count can exceed this limit, but we won't
+            start any new episodes once it has.
+        gamma: float
+            The 'gamma' value for calculating
+            advantages and discounting rewards
+            when normalizing them.
+        epochs_per_iter: int
+            'Epoch' is used loosely and with a variety
+            of meanings in RL. In this case, a single
+            epoch is a single update of all networks.
+            epochs_per_iter is the number of updates
+            to perform after a single rollout (which
+            may contain multiple episodes).
+        ext_reward_weight: float
+            An optional weight for the extrinsic
+            reward.
+        normalize_adv: bool
+            Should we normalize the advantages? This
+            occurs at the minibatch level.
+        normalize_obs: bool
+            Should we normalize the observations?
+        normalize_rewards: bool
+            Should we normalize the rewards?
+        normalize_values: bool
+            Should we normalize the "values" that our
+            critic calculates loss against?
+        obs_clip: tuple or None
+            Disabled if None. Otherwise, this should
+            be a tuple containing a clip range for
+            the observation space as (min, max).
+        reward_clip: tuple or None
+            Disabled if None. Otherwise, this should
+            be a tuple containing a clip range for
+            the reward as (min, max).
+        render: bool
+            Should we render the environment while training?
+        frame_pause: float
+            If render is True, sleep frame_pause seconds between renderings.
+        load_state: bool
+            Should we load a saved state?
+        state_path: str
+            The path to save/load our state.
+        save_when: subclass of ChangeInStateScheduler
+            An instance of ChangeInStateScheduler
+            that determines when to save. If None,
+            saving will occur every iteration.
+        save_train_scores: bool
+            If True, the extrinsic score averages
+            for each policy are saved every iteration.
+        pickle_class: bool
+            When enabled, the entire PPO class will
+            be pickled and saved into the output
+            directory after it's been initialized.
+        soft_resets: bool
+            Use "soft resets" during rollouts. This can be a bool or an
+            instance of LinearStepScheduler.
+        obs_augment: bool
+            This is a funny option that can only be
+            enabled with environments that have a
+            "observation_augment" method defined.
+            When enabled, this method will be used to
+            augment observations into batches of
+            observations that all require the same
+            treatment (a single action).
+        use_huber_loss: bool
+            Should we use Huber loss instead of MSE when performing
+            PPO policy updates?
+        test_mode: bool
+            Most of this class is not used for
+            testing, but some of its attributes are.
+            Setting this to True will enable test
+            mode.
+        verbose: bool
+            Enable verbosity?
         """
         set_torch_threads()
 
@@ -419,7 +448,7 @@ class PPO(object):
 
         comm.barrier()
 
-    def get_policy_batches(self, obs, component, shuffle_agents=False):
+    def get_policy_batches(self, obs, component):
         """
         This method will take all of the observations from a step
         and compress them into numpy array batches. This allows for
@@ -435,9 +464,6 @@ class PPO(object):
             The network component these observations are
             associated with. This can be set to "actor"
             or "critic".
-        shuffle_agents: bool
-            If True, shuffle the agent ids for each policy. This results
-            in the ordering of the agents in their batches being shuffled.
 
         Returns:
         --------
@@ -498,12 +524,6 @@ class PPO(object):
 
             agent_ids = self.policies[policy_id].agent_ids.copy()
 
-            #FIXME: needed?
-            #if shuffle_agents:
-            #    shuffled_idxs = np.arange(len(agent_ids)) 
-            #    np.random.shuffle(shuffled_idxs)
-            #    agent_ids = agent_ids[shuffled_idxs]
-
             policy_agent_ids[policy_id] = agent_ids
 
             #
@@ -546,18 +566,7 @@ class PPO(object):
         # Also, some algorithms (like MAT) need agent's to be batched
         # together.
         #
-        # FIXME: I don't think we can shuffle here because the
-        # agent ids are added to the SharedEpisode buffer when it's
-        # created, and those are used when the episode is finished?
-        # Why does the ordering need to be consistent across steps, though??
-        # Shouldn't it be fine as long as the observations, actions, and
-        # rewards are correctly correlated?? And those are added on
-        # a per-step basis right?
-        # UPDATE: Order SHOULDN'T matter because the order is shuffled
-        # during training to let the model learn what would have happened
-        # if the order had been different! This implies we should be shuffling
-        # regularly...
-        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "actor", shuffle_agents=False)
+        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
@@ -644,7 +653,6 @@ class PPO(object):
             if policy_id not in policy_obs:
                 policy_obs[policy_id] = OrderedDict({})
 
-            #FIXME: don't these observations need to shuffle with the policy ids???
             policy_obs[policy_id][agent_id] = obs[agent_id]
 
         actions = OrderedDict({})
@@ -664,8 +672,7 @@ class PPO(object):
                 #
                 policy_agent_ids, batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
-                    component      = "actor",
-                    shuffle_agents = False)
+                    component      = "actor")
 
                 agent_ids = policy_agent_ids[policy_id]
                 batch_obs = batch_obs[policy_id]
@@ -788,7 +795,6 @@ class PPO(object):
 
         return have_nat_reward, natural_reward
 
-    #FIXME: move to utils?
     def get_detached_dict(self, attached):
         """
             Given a dictionary mapping agent ids to torch
@@ -1301,7 +1307,6 @@ class PPO(object):
 
                 policy_id = self.policy_mapping_fn(agent_id)
 
-                #FIXME: is this adding in the correct order?
                 self.policies[policy_id].add_episode_info(
                     agent_id             = agent_id,
                     critic_observations  = prev_critic_obs[agent_id],
@@ -1630,14 +1635,6 @@ class PPO(object):
         for policy_id in self.policies:
             self.policies[policy_id].finalize_dataset()
 
-            ## FIXME: we currently only support shuffling after a rollout,
-            ## but it would likely be better to shuffle throughout episodes..
-            ## is there a way to accomplish this?
-            ## Does it even matter if we shuffle after stepping?? Let's look into
-            ## this...
-            #if self.have_agent_grouping:
-            #    self.policies[policy_id].shuffle_agent_ids()
-
         comm.barrier()
         stop_time = time.time()
         self.status_dict["general"]["rollout time"] = stop_time - start_time
@@ -1705,9 +1702,6 @@ class PPO(object):
                     #
                     if epoch_idx > 0:
                         data_loaders[policy_id].dataset.recalculate_advantages()
-
-                        #FIXME: testing. I don't think they even suggest this in the paper.
-                        #data_loaders[policy_id].dataset.shuffle_agents()
 
                     self._ppo_batch_train(data_loaders[policy_id], policy_id)
 
@@ -1832,10 +1826,6 @@ class PPO(object):
                 obs,
                 raw_actions)
 
-            #print(f"\nVALUES SHAPE: {values.shape}")#FIXME
-            #print(f"LOG PROBS SHAPE: {curr_log_probs.shape}")#FIXME
-            #print(f"ADVANTAGES SHAPE: {advantages.shape}")#FIXME
-
             data_loader.dataset.values[batch_idxs] = values.squeeze(-1).detach()
 
             curr_log_probs = curr_log_probs.flatten()
@@ -1936,44 +1926,11 @@ class PPO(object):
 
             total_critic_loss += critic_loss.item()
 
-
-            #FIXME: testing
+            #
+            # Let the policies update their weights given the actor
+            # and critic losses.
+            #
             self.policies[policy_id].update_weights(actor_loss, critic_loss)
-
-
-
-            ##
-            ## Perform our backwards steps, and average gradients across ranks.
-            ##
-            ## arXiv:2005.12729v1 suggests that gradient clipping can
-            ## have a positive effect on training.
-            ##
-            ## FIXME: if we put all of this stuff into the policy, we could
-            ## create a shared actor critic for MAT.
-            #self.policies[policy_id].actor_optim.zero_grad()
-            #actor_loss.backward(
-            #    retain_graph = self.policies[policy_id].using_lstm)
-            #mpi_avg_gradients(self.policies[policy_id].actor)
-
-            #if self.policies[policy_id].gradient_clip is not None:
-            #    nn.utils.clip_grad_norm_(
-            #        self.policies[policy_id].actor.parameters(),
-            #        self.policies[policy_id].gradient_clip)
-
-            #self.policies[policy_id].actor_optim.step()
-
-            #self.policies[policy_id].critic_optim.zero_grad()
-            #critic_loss.backward(
-            #    retain_graph = self.policies[policy_id].using_lstm)
-
-            #mpi_avg_gradients(self.policies[policy_id].critic)
-
-            #if self.policies[policy_id].gradient_clip is not None:
-            #    nn.utils.clip_grad_norm_(
-            #        self.policies[policy_id].critic.parameters(),
-            #        self.policies[policy_id].gradient_clip)
-
-            #self.policies[policy_id].critic_optim.step()
 
             #
             # The idea here is similar to re-computing advantages, but now

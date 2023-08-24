@@ -129,6 +129,9 @@ class MATPolicy(AgentPolicy):
         broadcast_model_parameters(self.actor_critic)
         comm.barrier()
 
+        self.actor  = self.actor_critic.actor
+        self.critic = self.actor_critic.critic
+
         if enable_icm:
             self.icm_model = icm_network(
                 name         = "icm",
@@ -282,7 +285,19 @@ class MATPolicy(AgentPolicy):
         else:
             action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
-        values, action_pred, log_probs, entropy = self.actor_critic(obs, batch_actions, action_block)
+        values, action_pred = self.actor_critic(obs, action_block)
+
+        dist    = self.actor.distribution.get_distribution(action_pred)
+        entropy = self.actor.distribution.get_entropy(dist, action_pred)
+
+        if self.actor.action_dtype == "continuous" and len(batch_actions.shape) < 2:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.unsqueeze(1).cpu())
+        else:
+            log_probs = self.actor.distribution.get_log_probs(
+                dist,
+                batch_actions.cpu())
 
         return values, action_pred, log_probs, entropy
 
@@ -307,11 +322,11 @@ class MATPolicy(AgentPolicy):
 
         with torch.no_grad():
             for i in range(num_agents):
-                action_pred = self.actor_critic.actor(action_block, encoded_obs)[:, i, :]
-                dist        = self.actor_critic.actor.distribution.get_distribution(action_pred)
+                action_pred = self.actor(action_block, encoded_obs)[:, i, :]
+                dist        = self.actor.distribution.get_distribution(action_pred)
 
-                action, raw_action = self.actor_critic.actor.distribution.sample_distribution(dist)
-                log_prob = self.actor_critic.actor.distribution.get_log_probs(dist, raw_action)
+                action, raw_action = self.actor.distribution.sample_distribution(dist)
+                log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
                 if self.action_dtype == "discrete":
                     output_action[:, i, :]     = action.unsqueeze(-1)
@@ -345,7 +360,7 @@ class MATPolicy(AgentPolicy):
 
         with torch.no_grad():
             for i in range(num_agents):
-                action = self.actor_critic.actor.get_refined_prediction(
+                action = self.actor.get_refined_prediction(
                     action_block, encoded_obs)
 
                 if len(action.shape) < 3:
@@ -391,7 +406,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.actor_critic.critic(t_obs)
+        encoded_obs, _ = self.critic(t_obs)
         actions, raw_actions, log_probs = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -445,7 +460,7 @@ class MATPolicy(AgentPolicy):
         torch tensor:
             The predicted values.
         """
-        _, values = self.actor_critic.critic(obs)
+        _, values = self.critic(obs)
         return values
 
     def update_weights(self, actor_loss, critic_loss):
@@ -522,7 +537,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.actor_critic.critic(t_obs)
+        encoded_obs, _ = self.critic(t_obs)
         actions, _, _ = \
             self._get_autoregressive_actions_with_exploration(encoded_obs)
 
@@ -560,7 +575,7 @@ class MATPolicy(AgentPolicy):
         t_obs = torch.tensor(obs, dtype=torch.float)
         t_obs = t_obs.to(self.device)
 
-        encoded_obs, _ = self.actor_critic.critic(t_obs)
+        encoded_obs, _ = self.critic(t_obs)
 
         actions = \
             self._get_autoregressive_actions_without_exploration(encoded_obs)
@@ -633,10 +648,12 @@ class MATPolicy(AgentPolicy):
 
     def save(self, save_path):
         """
-            Save our policy.
+        Save our policy.
 
-            Arguments:
-                save_path    The path to save the policy to.
+        Parameters:
+        -----------
+        save_path: str
+            The path to save the policy to.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_save_path = os.path.join(save_path, policy_dir)
@@ -653,10 +670,12 @@ class MATPolicy(AgentPolicy):
 
     def load(self, load_path):
         """
-            Load our policy.
+        Load our policy.
 
-            Arguments:
-                load_path    The path to load the policy from.
+        Parameters:
+        -----------
+        load_path: str
+            The path to load the policy from.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_load_path = os.path.join(load_path, policy_dir)
@@ -668,7 +687,7 @@ class MATPolicy(AgentPolicy):
 
     def eval(self):
         """
-            Set the policy to evaluation mode.
+        Set the policy to evaluation mode.
         """
         self.actor_critic.eval()
 
@@ -677,7 +696,7 @@ class MATPolicy(AgentPolicy):
 
     def train(self):
         """
-            Set the policy to train mode.
+        Set the policy to train mode.
         """
         self.actor_critic.train()
 

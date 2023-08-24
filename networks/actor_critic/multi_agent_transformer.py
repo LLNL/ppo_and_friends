@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as t_func
-import math
 import numpy as np
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
@@ -38,6 +37,36 @@ class MATActor(PPONetwork):
         self_atten_out_init      = 0.01,
         **kw_args):
         """
+        Parameters:
+        -----------
+        obs_space: gymnasium space
+            The observation space for this actor.
+        action_space: gymnasium space
+            The action space for this actor.
+        num_agents: int
+            The number of agents we're training.
+        embedding_size: int
+            The size of the embedded/encoded observations.
+        num_blocks: int
+            The number of self-attention decoding blocks to use.
+        num_heads: int
+            The number of heads for each self-attention decoding block.
+        internal_init: float
+            Gain initialization for internal layers.
+        out_init: float
+            Gain initialization for the output layer.
+        activation: activation function
+            The activation function to use.
+        decoder_internal_init: float
+            Gain for the internal layers of the decoder.
+        decoder_out_init: float
+            Gain for the output layers of the decoder.
+        decoder_activation: activation function
+            The activation function for the decoder.
+        self_atten_internal_init: float
+            Gain for the internal self-attention layers.
+        self_atten_out_init: float
+            Gain for the output self-attention layer.
         """
         super(MATActor, self).__init__(
             name      = "mat_actor",
@@ -151,6 +180,34 @@ class MATCritic(PPONetwork):
         self_atten_out_init      = 0.01,
         **kw_args):
         """
+        Parameters:
+        -----------
+        obs_space: gymnasium space
+            The observation space for this critic.
+        num_agents: int
+            The number of agents we're training.
+        embedding_size: int
+            The size of the embedded/encoded observations.
+        num_blocks: int
+            The number of self-attention decoding blocks to use.
+        num_heads: int
+            The number of heads for each self-attention decoding block.
+        internal_init: float
+            Gain initialization for internal layers.
+        out_init: float
+            Gain initialization for the output layer.
+        activation: activation function
+            The activation function to use.
+        encoder_internal_init: float
+            Gain for the internal layers of the encoder.
+        encoder_out_init: float
+            Gain for the output layers of the encoder.
+        encoder_activation: activation function
+            The activation function for the encoder.
+        self_atten_internal_init: float
+            Gain for the internal self-attention layers.
+        self_atten_out_init: float
+            Gain for the output self-attention layer.
         """
 
         super(MATCritic, self).__init__(
@@ -212,7 +269,18 @@ class MATActorCritic(PPONetwork):
         num_agents,
         name = 'actor_critic',
         **kw_args):
-
+        """
+        Parameters:
+        -----------
+        obs_space: gymnasium space
+            The observation space for this actor.
+        action_space: gymnasium space
+            The action space for this actor.
+        num_agents: int
+            The number of agents we're training.
+        name: str
+            The name of this class.
+        """
         super(MATActorCritic, self).__init__(
             name      = name,
             in_shape  = None,
@@ -231,23 +299,8 @@ class MATActorCritic(PPONetwork):
             num_agents   = num_agents,
             **kw_args)
 
-    def forward(self, obs, batch_actions, action_block):
+    def forward(self, obs, action_block):
 
-        # FIXME: maybe just return the action_pred and values, then
-        # let the policy class handle getting the log probs and entropy
         encoded_obs, values = self.critic(obs)
         action_pred         = self.actor(action_block, encoded_obs)
-
-        dist    = self.actor.distribution.get_distribution(action_pred)
-        entropy = self.actor.distribution.get_entropy(dist, action_pred)
-
-        if self.actor.action_dtype == "continuous" and len(batch_actions.shape) < 2:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.unsqueeze(1).cpu())
-        else:
-            log_probs = self.actor.distribution.get_log_probs(
-                dist,
-                batch_actions.cpu())
-
-        return values, action_pred, log_probs, entropy
+        return values, action_pred
