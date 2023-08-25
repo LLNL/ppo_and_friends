@@ -42,7 +42,9 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
         #
         # This environment is multi-agent and requires different policies.
         #
-        policy_settings = { "target" : \
+        # FIXME: target isn't acting for some reason!
+        policy_settings = {
+            "target" :
             (None,
              env_generator().observation_space["target"],
              env_generator().critic_observation_space["target"],

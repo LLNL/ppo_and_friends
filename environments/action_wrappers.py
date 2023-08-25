@@ -1,4 +1,4 @@
-from gymnasium.spaces import MultiBinary, Box, MultiDiscrete
+from gymnasium.spaces import Box, MultiDiscrete
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 import numpy as np
@@ -80,15 +80,27 @@ class BoxIntActionWrapper():
             rank_print(msg)
             comm.Abort()
 
-        assert len(space.shape) == 1
+        if len(space.shape) > 1:
+            msg  = "ERROR: converting Box int spaces with shapes having length "
+            msg += "greater than 1 is not currently supported. Given space: "
+            msg += "{space}."
+            rank_print(msg)
+            comm.Abort()
 
         self.box_space = space
-
-        self.range     = space.high - space.low
-        self.offsets   = space.low
         self.dtype     = space.dtype
 
-        self.multi_discrete_space = MultiDiscrete(self.range - space.low)
+        size             = len(space.low)
+        self.range       = np.zeros(size)
+        self.true_values = np.array([None] * size)
+
+        for i in range(size):
+            self.true_values[i] = np.arange(space.low[i],
+                space.high[i] + 1).astype(self.dtype)
+
+            self.range[i] = len(self.true_values[i])
+
+        self.multi_discrete_space = MultiDiscrete(self.range)
 
     def sample(self):
         """
@@ -106,7 +118,10 @@ class BoxIntActionWrapper():
             Returns:
                 An action converted from Box int to MultiDiscrete.
         """
-        return (action - self.offsets).astype(self.dtype)
+        wrapped = np.zeros_like(action)
+        for idx, bi_a in enumerate(action):
+            wrapped[idx] = np.where(self.true_values[idx] == bi_a) [0]
+        return wrapped
 
     def unwrap_action(self, action):
         """
@@ -118,7 +133,10 @@ class BoxIntActionWrapper():
             Returns:
                 An action converted from MultiDiscrete to Box int.
         """
-        return (action + self.offsets).astype(self.dtype)
+        unwrapped = np.zeros_like(action)
+        for idx, md_a in enumerate(action):
+            unwrapped[idx] = self.true_values[idx][md_a]
+        return unwrapped
 
 
 class IdentityActionWrapper():

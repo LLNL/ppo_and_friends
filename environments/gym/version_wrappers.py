@@ -60,17 +60,9 @@ def gym_space_to_gymnasium_space(space):
 
         space = gym.spaces.Tuple(new_space)
 
-    elif type(space) == list:
-        new_space = []
-
-        for subspace in space:
-            new_space.append(gym_space_to_gymnasium_space(subspace))
-
-        space = gym.spaces.Tuple(new_space)
-
     else:
         msg  = "WARNING: skipping conversion of space "
-        msg += f"{type(space)}."
+        msg += f"{space} with type {type(space)}."
         print(msg)
 
     return space
