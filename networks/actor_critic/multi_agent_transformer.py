@@ -6,10 +6,12 @@ from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
 from ppo_and_friends.networks.attention import SelfAttentionEncodingBlock
 from ppo_and_friends.networks.attention import SelfAttentionDecodingBlock
-from ppo_and_friends.utils.misc import get_space_shape
+from ppo_and_friends.utils.misc import get_space_shape, get_action_prediction_shape
 from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.utils.misc import get_flattened_space_length
 from ppo_and_friends.networks.utils import init_layer
+from ppo_and_friends.utils.misc import get_size_and_shape
+from ppo_and_friends.utils.mpi_utils import rank_print
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -71,7 +73,7 @@ class MATActor(PPONetwork):
         super(MATActor, self).__init__(
             name      = "mat_actor",
             in_shape  = (embedding_size,),
-            out_shape = get_space_shape(action_space),
+            out_shape = get_action_prediction_shape(action_space),
             **kw_args)
 
         self.obs_space = obs_space
@@ -80,10 +82,14 @@ class MATActor(PPONetwork):
 
         self.action_dtype   = get_action_dtype(action_space)
         self.embedding_size = embedding_size
-        action_dim          = get_flattened_space_length(action_space)
+
+        #
+        # We're predicting actions but also taking in previous actions.
+        #
+        action_dim = self.out_size
 
         # TODO: let's update to support binary and multi-binary as well.
-        supported_types = ["continuous", "discrete"]
+        supported_types = ["continuous", "discrete", "multi-discrete"]
         if self.action_dtype not in supported_types:
             msg  = "ERROR: you're using action space of type {self.action_dtype}, "
             msg += "but the multi-agent transformer currently only supports "
@@ -96,7 +102,7 @@ class MATActor(PPONetwork):
         #
         internal_gain = nn.init.calculate_gain('relu')
 
-        if self.action_dtype == 'discrete':
+        if 'discrete' in self.action_dtype:
             self.action_encoder = nn.Sequential(
                 init_layer(nn.Linear(action_dim + 1, embedding_size, bias=False),
                     gain = internal_init),

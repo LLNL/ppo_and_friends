@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from ppo_and_friends.networks.utils import *
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_flattened_space_length
 from ppo_and_friends.networks.ppo_networks.base import PPOLSTMNetwork
 
 from mpi4py import MPI

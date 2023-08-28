@@ -15,7 +15,6 @@ from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
-from ppo_and_friends.utils.misc import get_flattened_space_length
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -59,6 +58,7 @@ class AgentPolicy():
                  icm_beta            = 0.8,
                  shared_reward_fn    = None,
                  test_mode           = False,
+                 verbose             = False,
                  **kw_args):
         """
         Parameters:
@@ -155,6 +155,8 @@ class AgentPolicy():
             so that all agents receive the same reward.
         test_mode: bool
             Are we in test mode?
+        verbose: bool
+            Enable verbosity?
         """
         self.name                   = name
         self.action_space           = action_space
@@ -182,6 +184,7 @@ class AgentPolicy():
         self.shared_reward_fn       = shared_reward_fn
         self.have_step_constraints  = False
         self.have_reset_constraints = False
+        self.verbose                = verbose
 
         if callable(lr):
             self.lr = lr
@@ -243,6 +246,14 @@ class AgentPolicy():
             msg += "and also set the bootstrap clip to be callables. This is "
             msg += "redundant, and the dynamic clip will override the given "
             msg += "functions."
+            rank_print(msg)
+
+        self.action_dim       = get_flattened_space_length(self.action_space)
+        self.action_pred_size = get_action_prediction_shape(self.action_space)[0]
+
+        if self.verbose:
+            msg  = f"Policy {self.name} is using action dim {self.action_dim} "
+            msg += "and action prediction size {self.action_pred_size}"
             rank_print(msg)
 
         self._initialize_networks(

@@ -11,9 +11,6 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 class SelfAttention(nn.Module):
-    """
-    Self attention network.
-    """
 
     def __init__(self,
                  embedding_size,
@@ -23,6 +20,11 @@ class SelfAttention(nn.Module):
                  out_init      = 0.01,
                  masked        = False):
         """
+        Parameters:
+        -----------
+        embedding_size: int
+            The size of our embedding layers.
+        num_heads: int
         """
         super(SelfAttention, self).__init__()
 
@@ -43,36 +45,40 @@ class SelfAttention(nn.Module):
         self.proj = init_layer(nn.Linear(embedding_size, embedding_size),
             out_init)
 
-        # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("mask", torch.tril(torch.ones(num_agents + 1, num_agents + 1))
-                             .view(1, 1, num_agents + 1, num_agents + 1))
+        #
+        # causal mask to ensure that attention is only applied to
+        # the left in the input sequence
+        #
+        self.register_buffer(
+            "mask",
+            torch.tril(torch.ones(
+                num_agents + 1, num_agents + 1)).view(
+                1, 1, num_agents + 1, num_agents + 1))
 
     def forward(self, key, value, query):
         """
         """
-        #print(f"{query.size()}")#FIXME;
-        # (batch_size, num_agents, encoded_dim)
-        #FIXME: I'm getting wrong sizes some times! It should be (batch_size, 3, 64) for mpe, but I'm seeing (3, batch_size, 64) at times.
+        #print(query.size())#FIXME
         batch_size, L, D = query.size()
 
         #
         # calculate query, key, values for all heads in batch and
         # move head forward to be the batch dim.
         #
-        # (batch_size, nh, L, hs)
+        # (batch_size, num_heads, L, hs)
         k = self.key_net(key).view(
             batch_size, L, self.num_heads, D // self.num_heads).transpose(1, 2)
 
-        # (batch_size, nh, L, hs)
+        # (batch_size, num_heads, L, hs)
         q = self.query_net(query).view(
             batch_size, L, self.num_heads, D // self.num_heads).transpose(1, 2)
 
-        # (batch_size, nh, L, hs)
+        # (batch_size, num_heads, L, hs)
         v = self.value_net(value).view(
             batch_size, L, self.num_heads, D // self.num_heads).transpose(1, 2)
 
-        # causal attention: (batch_size, nh, L, hs) x (batch_size, nh, hs, L)
-        # -> (batch_size, nh, L, L)
+        # causal attention: (batch_size, num_heads, L, hs) x (batch_size, num_heads, hs, L)
+        # -> (batch_size, num_heads, L, L)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
 
         if self.masked:
@@ -80,8 +86,8 @@ class SelfAttention(nn.Module):
 
         att = t_func.softmax(att, dim=-1)
 
-        # (batch_size, nh, L, L) x (batch_size, nh, L, hs) -> 
-        # (batch_size, nh, L, hs)
+        # (batch_size, num_heads, L, L) x (batch_size, num_heads, L, hs) -> 
+        # (batch_size, num_heads, L, hs)
         y = att @ v  
 
         # re-assemble all head outputs side by side

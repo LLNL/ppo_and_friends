@@ -81,7 +81,7 @@ def cli():
     parser.add_argument("--num-timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
 
-    parser.add_argument("--random-seed", default=2, type=int,
+    parser.add_argument("--random-seed", default=0, type=int,
         help="The random seed to use.")
 
     parser.add_argument("--envs-per-proc", default=1, type=int,

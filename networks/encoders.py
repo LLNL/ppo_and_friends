@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 from .utils import *
-from ppo_and_friends.networks.utils import  get_size_and_shape
+from ppo_and_friends.utils.misc import get_size_and_shape
 
 class LinearObservationEncoder(nn.Module):
 

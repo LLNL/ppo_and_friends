@@ -196,38 +196,6 @@ def format_seconds(seconds):
     return "{:.2f} {}".format(output_time, output_unit)
 
 
-def get_flattened_space_length(space):
-    """
-        Get the length of a flattened gymnasium space. Only some spaces
-        are supported here.
-
-        Parameters
-        ----------
-        space: gymnasium space
-            The space to get the flattened length of.
-
-        Returns:
-        int
-            The length of the gymnasium space.
-    """
-    if type(space) == Box:
-        return reduce(lambda a, b: a*b, space.shape)
-
-    elif type(space) == Discrete:
-        return space.n
-
-    elif type(space) == MultiDiscrete:
-        return reduce(lambda a, b: a+b, space.nvec)
-
-    elif type(space) == MultiBinary:
-        return space.n
-
-    else:
-        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
-        msg += "get_flattend_space_length."
-        rank_print(msg) 
-        comm.Abort()
-
 def get_space_shape(space):
     """
         Return a hand-wavy shape of a given gymnasium space. Not
@@ -243,6 +211,76 @@ def get_space_shape(space):
         -------
         int
             An inferred shape of the space.
+    """
+    space_type = type(space)
+
+    if issubclass(space_type, Box):
+        return space.shape
+
+    elif issubclass(space_type, Discrete):
+        return (1,)
+
+    elif issubclass(space_type, MultiBinary):
+        return (space.n,)
+
+    elif issubclass(space_type, MultiDiscrete):
+        return space.shape
+
+    else:
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
+        msg += "get_space_shape."
+        rank_print(msg) 
+        comm.Abort()
+
+
+def get_flattened_space_length(space):
+    """
+        Get the length of a flattened gymnasium space. Only some spaces
+        are supported here.
+
+        Parameters
+        ----------
+        space: gymnasium space
+            The space to get the flattened length of.
+
+        Returns:
+        int
+            The length of the gymnasium space.
+    """
+    space_shape = get_space_shape(space)
+    return reduce(lambda a, b: a*b, space_shape)
+
+
+def get_size_and_shape(descriptor):
+    """
+    Given a shape/size descriptor as either a tuple or int,
+    return the associated shape and size.
+
+    Parameters:
+    -----------
+    descriptor: tuple or int
+        An int or tuple representing the size/shape.
+
+    Returns:
+    --------
+    tuple:
+        The size and shape as (int, tuple).
+    """
+    desc_type = type(descriptor)
+    assert desc_type == tuple or desc_type == int or desc_type == np.ndarray
+
+    if desc_type == tuple or desc_type == np.ndarray:
+        size  = reduce(lambda a, b: a*b, descriptor)
+        shape = descriptor
+    else:
+        size  = descriptor
+        shape = (descriptor,)
+
+    return size, shape
+
+
+def get_action_prediction_shape(space):
+    """
     """
     space_type = type(space)
 

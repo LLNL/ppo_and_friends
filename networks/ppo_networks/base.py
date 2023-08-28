@@ -6,7 +6,7 @@ import torch
 import os
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.networks.utils import get_size_and_shape
+from ppo_and_friends.utils.misc import get_size_and_shape
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD

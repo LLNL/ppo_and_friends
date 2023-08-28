@@ -1,7 +1,7 @@
 from ppo_and_friends.networks.distributions import *
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_action_dtype, get_space_shape
+from ppo_and_friends.utils.misc import get_action_dtype
 from ppo_and_friends.utils.misc import get_flattened_space_length
 
 from mpi4py import MPI

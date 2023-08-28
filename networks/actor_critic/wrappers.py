@@ -1,5 +1,5 @@
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_space_shape
+from ppo_and_friends.utils.misc import get_space_shape, get_action_prediction_shape
 from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
 
 from mpi4py import MPI
@@ -27,7 +27,7 @@ def to_actor(ac_network):
             """
             super(ActorNetwork, self).__init__(
                 in_shape  = get_space_shape(obs_space),
-                out_shape = get_space_shape(action_space),
+                out_shape = get_action_prediction_shape(action_space),
                 **kw_args)
 
             self.obs_space = obs_space

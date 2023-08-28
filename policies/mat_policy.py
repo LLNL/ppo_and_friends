@@ -16,7 +16,8 @@ from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
-from ppo_and_friends.utils.misc import get_flattened_space_length
+from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
+from ppo_and_friends.utils.misc import get_size_and_shape
 from ppo_and_friends.policies.agent_policy import AgentPolicy
 
 from mpi4py import MPI
@@ -56,8 +57,7 @@ class MATPolicy(AgentPolicy):
             mat_kw_args      = mat_kw_args,
             **kw_args)
 
-        self.action_dim      = get_flattened_space_length(self.action_space)
-        self.agent_grouping  = True
+        self.agent_grouping = True
 
         #
         # MAT really only uses the critic observation space. So, if our
@@ -110,17 +110,7 @@ class MATPolicy(AgentPolicy):
             comm.Abort()
 
         #
-        # Initialize our networks: actor, critic, and possibly ICM.
-        #
-        # FIXME: let's try integrating this into the MAT networks.
-        #
-        # arXiv:2006.05990v1 suggests initializing the output layer
-        # of the actor network with a weight that's ~100x smaller
-        # than the rest of the layers. We initialize layers with a
-        # value near 1.0 by default, so we set the last layer to
-        # 0.01. The same paper also suggests that the last layer of
-        # the value network doesn't matter so much. I can't remember
-        # where I got 1.0 from... I'll try to track that down.
+        # Initialize our networks: actor-critic, and possibly ICM.
         #
         self.actor_critic = ac_network(
             name         = "actor_critic", 
@@ -189,10 +179,12 @@ class MATPolicy(AgentPolicy):
 
     def to(self, device):
         """
-            Send this policy to a specified device.
+        Send this policy to a specified device.
 
-            Arguments:
-                device    The device to send this policy to.
+        Parameters:
+        -----------
+        device: torch.device
+            The device to send this policy to.
         """
         self.device       = device
         self.actor_critic = self.actor_critic.to(self.device)
@@ -268,11 +260,11 @@ class MATPolicy(AgentPolicy):
 
         if self.action_dtype == "continuous":
             action_block = torch.zeros(
-               (batch_size, num_agents, self.action_dim)).to(self.device)
+               (batch_size, num_agents, self.action_pred_size)).to(self.device)
 
-        elif self.action_dtype == "discrete":
+        elif self.action_dtype in ["discrete", "multi-discrete"]:
             action_block = torch.zeros(
-                (batch_size, num_agents, self.action_dim + 1)).to(self.device)
+                (batch_size, num_agents, self.action_pred_size + 1)).to(self.device)
             action_block[:, 0, 0] = 1
 
         return action_block
@@ -287,11 +279,26 @@ class MATPolicy(AgentPolicy):
 
         if self.action_dtype == "discrete":
             action_block[:, 1:, 1:] = t_func.one_hot(batch_actions,
-                num_classes=self.action_dim)[:, :-1, :]
+                num_classes=self.action_pred_size)[:, :-1, :]
+
+        elif self.action_dtype == "multi-discrete":
+            #FIXME: move to func
+            one_hot_actions = torch.zeros((batch_size, num_agents, self.action_pred_size))
+            start = 0
+            for a_idx, dim in enumerate(self.action_space.nvec):
+                stop = start + dim
+                one_hot_actions[:, :, start : stop] = \
+                    t_func.one_hot(batch_actions[:, :, a_idx], dim)
+
+            action_block[:, 1:, 1:] = one_hot_actions[:, :-1, :]
         else:
             action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
         values, action_pred = self.actor_critic(obs, action_block)
+
+        if self.action_dtype == "multi-discrete":
+            action_pred   = action_pred.reshape((-1, self.action_pred_size))
+            batch_actions = batch_actions.reshape((-1, self.action_dim))
 
         dist    = self.actor.distribution.get_distribution(action_pred)
         entropy = self.actor.distribution.get_entropy(dist, action_pred)
@@ -305,6 +312,13 @@ class MATPolicy(AgentPolicy):
                 dist,
                 batch_actions.cpu())
 
+        if self.action_dtype == "multi-discrete":
+            action_pred = action_pred.reshape((batch_size,
+                num_agents, self.action_pred_size))
+
+            log_probs = log_probs.reshape((batch_size, num_agents, -1))
+            entropy   = entropy.reshape((batch_size, num_agents, -1))
+
         return values, action_pred, log_probs, entropy
 
     def _get_autoregressive_actions_with_exploration(self, encoded_obs):
@@ -314,9 +328,12 @@ class MATPolicy(AgentPolicy):
         num_agents   = len(self.agent_ids)
         action_block = self._get_tokened_action_block(batch_size)
 
-        if self.action_dtype == "discrete":
+        if self.action_dtype in ["discrete", "multi-discrete"]:
             action_offset     = 1
-            output_action     = torch.zeros((batch_size, num_agents, 1)).long()
+
+            output_action     = torch.zeros((batch_size,
+                num_agents, self.action_dim)).long()
+
             output_raw_action = torch.zeros_like(output_action).long()
         else:
             action_offset     = 0
@@ -335,10 +352,26 @@ class MATPolicy(AgentPolicy):
                 log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
                 if self.action_dtype == "discrete":
-                    output_action[:, i, :]     = action.unsqueeze(-1)
-                    output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
-                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
-                    action = t_func.one_hot(action, num_classes=self.action_dim)
+                    output_action[:, i, :]     = action.unsqueeze(0)
+                    output_raw_action[:, i, :] = raw_action.unsqueeze(0)
+                    output_log_prob[:, i, :]   = log_prob.unsqueeze(0)
+                    action = t_func.one_hot(action, num_classes=self.action_pred_size)
+
+                elif self.action_dtype == "multi-discrete":
+                    output_action[:, i, :]     = action
+                    output_raw_action[:, i, :] = raw_action
+                    output_log_prob[:, i, :]   = log_prob
+
+                    #FIXME: move to function
+                    action = action.flatten()
+                    one_hot_action = torch.zeros(self.action_pred_size)
+                    start = 0
+                    for a_idx, dim in enumerate(self.action_space.nvec):
+                        stop = start + dim
+                        one_hot_action[start : stop] = t_func.one_hot(action[a_idx], dim)
+
+                    action = one_hot_action 
+
                 else:
                     output_action[:, i, :]     = action
                     output_raw_action[:, i, :] = raw_action
@@ -356,7 +389,7 @@ class MATPolicy(AgentPolicy):
         num_agents   = len(self.agent_ids)
         action_block = self._get_tokened_action_block(batch_size)
 
-        if self.action_dtype == "discrete":
+        if self.action_dtype in ["discrete", "multi-discrete"]:
             action_offset = 1
             output_action = torch.zeros((batch_size, num_agents, 1)).long()
         else:
@@ -375,8 +408,22 @@ class MATPolicy(AgentPolicy):
                 action = action[:, i, :]
 
                 if self.action_dtype == "discrete":
-                    output_action[:, i, :] = action.unsqueeze(-1)
-                    action = t_func.one_hot(action, num_classes=self.action_dim)
+                    output_action[:, i, :] = action.unsqueeze(0)
+                    action = t_func.one_hot(action, num_classes=self.action_pred_size)
+
+                elif self.action_dtype == "multi-discrete":
+                    output_action[:, i, :] = action.unsqueeze(0)
+
+                    # FIXME: create function for this.
+                    action = action.flatten()
+                    one_hot_action = torch.zeros(self.action_pred_size)
+                    start = 0
+                    for a_idx, dim in enumerate(self.action_space.nvec):
+                        stop = start + dim
+                        one_hot_action[start : stop] = t_func.one_hot(action[a_idx], dim)
+
+                    action = one_hot_action 
+
                 else:
                     output_action[:, i, :] = action
 
@@ -431,13 +478,18 @@ class MATPolicy(AgentPolicy):
         the expected return values. Also use a batch of corresponding
         actions to retrieve some other useful information.
 
-        Arguments:
-            batch_critic_obs   A batch of observations for the critic.
-            batch_obs          A batch of standard observations.
-            batch_actions      A batch of actions corresponding to the batch of
-                               observations.
+        Parameters:
+        -----------
+        batch_critic_obs: torch tensor
+            A batch of observations for the critic.
+        batch_obs: torch tensor
+            A batch of standard observations.
+        batch_actions: torch tensor
+            A batch of actions corresponding to the batch of observations.
 
         Returns:
+        --------
+        tuple:
             A tuple of form (values, log_probs, entropies) s.t. values are
             the critic predicted value, log_probs are the log probabilities
             from our probability distribution, and entropies are the

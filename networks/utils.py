@@ -189,26 +189,3 @@ def create_sequential_network(
             layers.append(init_layer(nn.Linear(in_size, out_size)))
 
     return nn.Sequential(*layers)
-
-
-def get_size_and_shape(descriptor):
-    """
-        Given a shape/size descriptor as either a tuple or int,
-        return the associated shape and size.
-
-        Arguments:
-            descriptor    An int or tuple representing the size/shape.
-
-        Returns:
-            The size and shape as (int, tuple).
-    """
-    assert type(descriptor) == tuple or type(descriptor) == int
-
-    if type(descriptor) == tuple:
-        size  = reduce(lambda a, b: a*b, descriptor)
-        shape = descriptor
-    else:
-        size  = descriptor
-        shape = (descriptor,)
-
-    return size, shape

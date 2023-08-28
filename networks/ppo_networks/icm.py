@@ -5,12 +5,13 @@ from ppo_and_friends.networks.encoders import *
 import torch
 import torch.nn as nn
 from functools import reduce
-from ppo_and_friends.networks.utils import init_layer, create_sequential_network, get_size_and_shape
+from ppo_and_friends.networks.utils import init_layer, create_sequential_network
+from ppo_and_friends.utils.misc import get_size_and_shape
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_flattened_space_length
-from ppo_and_friends.utils.misc import get_action_dtype, get_space_shape
+from ppo_and_friends.utils.misc import get_action_dtype, get_space_shape, get_action_prediction_shape
 
 
 from mpi4py import MPI
@@ -291,7 +292,7 @@ class ICM(PPONetwork):
             out_shape = None,
             **kw_args)
 
-        act_shape = get_space_shape(action_space)
+        act_shape = get_action_prediction_shape(action_space)
 
         act_size, act_shape = get_size_and_shape(act_shape)
 
