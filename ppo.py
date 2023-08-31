@@ -56,7 +56,6 @@ class PPO(object):
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
-                 use_huber_loss      = True,#FIXME: default to false
                  test_mode           = False,
                  verbose             = False,
                  **kw_args):
@@ -155,9 +154,6 @@ class PPO(object):
             augment observations into batches of
             observations that all require the same
             treatment (a single action).
-        use_huber_loss: bool
-            Should we use Huber loss instead of MSE when performing
-            PPO policy updates?
         test_mode: bool
             Most of this class is not used for
             testing, but some of its attributes are.
@@ -280,7 +276,6 @@ class PPO(object):
         self.actor_obs_shape     = self.env.observation_space.shape
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
-        self.use_huber_loss      = use_huber_loss
         self.verbose             = verbose
         self.save_when           = save_when
         self.save_train_scores   = save_train_scores
@@ -665,11 +660,6 @@ class PPO(object):
         #
         for policy_id in policy_obs:
             if self.policies[policy_id].agent_grouping:
-                #
-                # We shuffle the agents here because algorithms that use
-                # agent grouping (like MAT) should perform best when agent
-                # ordering is shuffled around.
-                #
                 policy_agent_ids, batch_obs = self.get_policy_batches(
                     obs            = policy_obs[policy_id],
                     component      = "actor")
@@ -1904,7 +1894,7 @@ class PPO(object):
             # Calculate the critic loss. Optionally, we can use the clipped
             # version.
             #
-            if self.use_huber_loss:
+            if self.policies[policy_id].use_huber_loss:
                 critic_loss = nn.HuberLoss(delta=10.0)(values, rewards_tg)
             else:
                 critic_loss = nn.MSELoss()(values, rewards_tg)

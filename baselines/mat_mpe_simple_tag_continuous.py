@@ -35,6 +35,12 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
         adversary_kw_args  = {}
         adversary_kw_args["distribution_min"] = 0.0
         adversary_kw_args["distribution_max"] = 1.0
+        #adversary_kw_args["activation"] = nn.Tanh()
+        #adversary_kw_args["decoder_activation"] = nn.Tanh()
+        #adversary_kw_args["encoder_activation"] = nn.Tanh()
+        #adversary_kw_args["internal_init"] = nn.init.calculate_gain('tanh')
+        #adversary_kw_args["encoder_internal_init"] = nn.init.calculate_gain('tanh')
+        #adversary_kw_args["decoder_internal_init"] = nn.init.calculate_gain('tanh')
 
         lr = 0.0003
 
@@ -43,7 +49,6 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
         adversary_policy_args = {\
             "mat_kw_args"      : adversary_kw_args,
             "lr"               : lr,
-            "shared_reward_fn" : np.sum,
         }
 
         agent_actor_kw_args  = {}

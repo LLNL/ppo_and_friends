@@ -351,6 +351,15 @@ class AgentSharedEpisode():
 
     def __init__(self, agent_ids):
         """
+        A container for agent shared episodes. This allows us to associate
+        the episodes from agents on the same team. For instance, if a team
+        contains 3 agents and we collect 5 episodes worth of experience, we
+        have 15 total episodes, but they can be grouped into 5 shared episodes.
+
+        Parameters:
+        -----------
+        agent_ids: array-like
+            An array of agent ids on this team.
         """
         self.agent_ids      = agent_ids
         self.added_agents   = []
@@ -377,6 +386,12 @@ class AgentSharedEpisode():
 
     def verify_agent(self, agent_id):
         """
+        Verify that an agent id belongs to this team.
+
+        Parameters: 
+        -----------
+        agent_id: str
+            The agent id to check.
         """
         if agent_id not in self.agent_ids:
             msg  = "ERROR: {agent_id} not in list of accepted "
@@ -392,6 +407,13 @@ class AgentSharedEpisode():
 
     def verify_episode(self, episode):
         """
+        Verify that an episode is in an appropriate state to be added to
+        this container.
+
+        Parameters:
+        -----------
+        episode: EpisodeInfo object.
+            An instance of EpisodeInfo.
         """
         if not episode.is_finished:
             msg  = "ERROR episode must be finished before being added to and "
@@ -401,6 +423,14 @@ class AgentSharedEpisode():
 
     def add_episode(self, agent_id, episode):
         """
+        Add an agent's episode.
+
+        Parameters:
+        -----------
+        agent_id: str
+            The agent's id.
+        episode: EpisodeInfo object
+            The episode to add.
         """
         if self.is_finished:
             msg  = "ERROR: AgentSharedEpisode is finished! Cannot add "
@@ -411,9 +441,9 @@ class AgentSharedEpisode():
         self.verify_agent(agent_id)
         self.verify_episode(episode)
 
-        #FIXME: do we need to maintain a specific ordering here?
-        # I don't think so?
-        agent_idx = np.where(self.agent_ids == agent_id)#FIXME: testing
+        # FIXME: I don't think we need to maintain this ordering,
+        # but let's double check.
+        agent_idx = np.where(self.agent_ids == agent_id)
 
         self.agent_episodes[agent_idx] = episode
         self.added_agents.append(agent_id)
@@ -425,6 +455,7 @@ class AgentSharedEpisode():
 
     def compute_advantages(self):
         """
+        Compute the advantages of our agents.
         """
         for i in range(self.agent_limit):
             self.agent_episodes[i].values = self.values[:, i]
@@ -434,6 +465,8 @@ class AgentSharedEpisode():
 
     def _merge_episodes(self):
         """
+        Merge all of our episodes so that our datasets have shapes
+        of (batch_size, num_agents, data_size).
         """
         self.actions, \
         self.raw_actions, \
@@ -468,10 +501,6 @@ class AgentSharedEpisode():
         #
         # log_probs is a special case that needs to remain in tensor form.
         #
-        #print(f"LOG PROBS: {self.log_probs}")#FIXME
-        #print(f"LOG PROBS LEN: {len(self.log_probs)}")#FIXME
-        #sys.exit()
-        #FIXME: is cat the right move here??
         self.log_probs                = [torch.cat(lp) for lp in self.log_probs]
         self.log_probs                = torch.stack(self.log_probs, axis=1)
 
@@ -488,16 +517,6 @@ class AgentSharedEpisode():
             msg += f"Episode lengths: {ep_lens}"
             rank_print(msg)
             comm.Abort()
-
-        self.actions
-        self.raw_actions
-        self.critic_observations
-        self.observations
-        self.next_observations
-        self.rewards_to_go
-        self.log_probs
-        self.advantages
-        self.values
 
 
 class PPODataset(Dataset):
@@ -821,8 +840,6 @@ class PPODataset(Dataset):
 
 
 class PPOSharedEpisodeDataset(PPODataset):
-    """
-    """
 
     def __init__(
         self,
@@ -831,6 +848,14 @@ class PPOSharedEpisodeDataset(PPODataset):
         *args,
         **kw_args):
         """
+        A version of our PPODataset that uses AgentSharedEpisodes.
+
+        Parameters:
+        -----------
+        num_envs: int
+            How many environments are we tracking on this rank?
+        agent_ids: array-like
+            An array of our agent ids.
         """
 
         super(PPOSharedEpisodeDataset, self).__init__(*args, **kw_args)
@@ -850,6 +875,18 @@ class PPOSharedEpisodeDataset(PPODataset):
 
     def add_shared_episode(self, episode, agent_id, env_idx):
         """
+        Add a shared episode from a single agent to our episode queue.
+        Agents that share episodes will put their episodes all into the
+        same AgentSharedEpisode object.
+
+        Parameters:
+        -----------
+        episode: EpisodeInfo object
+            An completed EpisodeInfo object.
+        agent_id: str
+            The associated agent's id.
+        env_idx: int
+            Which environment did this come from?
         """
         self.episode_queue[env_idx].add_episode(agent_id, episode)
 
@@ -866,6 +903,7 @@ class PPOSharedEpisodeDataset(PPODataset):
 
     def shuffle_agents(self):
         """
+        Shuffle the ordering of agents within our datasets.
         """
         if self.is_built:
             num_agents  = len(self.agent_ids)
@@ -901,16 +939,6 @@ class PPOSharedEpisodeDataset(PPODataset):
         tuple
             All data associated with the given index in our dataset.
         """
-        #print("\n")#FIXME
-        #print(self.critic_observations.shape)
-        #print(self.observations.shape)
-        #print(self.next_observations.shape)
-        #print(self.raw_actions.shape)
-        #print(self.actions.shape)
-        #print(self.advantages.shape)
-        #print(self.log_probs.shape)
-        #print(self.rewards_to_go.shape)
-
         return (self.critic_observations[idx],
                 self.observations[idx],
                 self.next_observations[idx],

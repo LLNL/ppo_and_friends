@@ -2,7 +2,6 @@ from ppo_and_friends.environments.ppo_env_wrappers import VectorizedEnv
 from ppo_and_friends.environments.filter_wrappers import ObservationNormalizer, ObservationClipper
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, RewardClipper
 from ppo_and_friends.environments.filter_wrappers import ObservationAugmentingWrapper
-from ppo_and_friends.environments.filter_wrappers import SharedRewardWrapper
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
 
@@ -110,21 +109,5 @@ def wrap_environment(
             env         = env,
             test_mode   = test_mode,
             clip_range  = reward_clip)
-
-    #
-    # Check if any of our policies are requesting shared rewards.
-    #
-    need_shared_rewards = False
-    for policy_id in policies:
-        if type(policies[policy_id].shared_reward_fn) != type(None):
-            need_shared_rewards = True
-            break
-
-    #FIXME:
-    #if need_shared_rewards:
-    #    env = SharedRewardWrapper(
-    #        env               = env,
-    #        policy_mapping_fn = policy_mapping_fn,
-    #        policies          = policies)
 
     return env

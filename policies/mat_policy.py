@@ -32,9 +32,9 @@ class MATPolicy(AgentPolicy):
     """
 
     def __init__(self,
-                 ac_network       = mat.MATActorCritic,
-                 mat_kw_args      = {},
-                 shared_reward_fn = np.sum,
+                 ac_network     = mat.MATActorCritic,
+                 mat_kw_args    = {},
+                 use_huber_loss = True,
                  **kw_args):
         """
         Initialize the policy.
@@ -44,16 +44,13 @@ class MATPolicy(AgentPolicy):
         ac_network: class
             The class to use for our actor/critic. This should be of type/subtype
             PPONetwork.
-        shared_reward_fn: np function 
-            This is a numpy "reduction" function that will be used to
-            create shared rewards in environments that don't already have them.
-            Current options are np.min, np.max, np.mean, np.max. MAT requires
-            that all agents of a policy receive the same reward.
+        use_huber_loss: bool
+            Should we use huber loss during the PPO update?
         """
         super(MATPolicy, self).__init__(
             ac_network       = ac_network,
-            shared_reward_fn = shared_reward_fn,
             mat_kw_args      = mat_kw_args,
+            use_huber_loss   = use_huber_loss,
             **kw_args)
 
         self.agent_grouping = True
@@ -289,17 +286,33 @@ class MATPolicy(AgentPolicy):
 
     def _evaluate_actions(self, obs, batch_actions):
         """
+        Evaluate a batch of actions given their associated observations.
+
+        Parameters:
+        -----------
+        obs: tensor
+            A batch of agent observations having shape
+            (batch_size, num_agents, obs_size).
+        batch_actions: tensor
+            A batch of actions having shape
+            (batch_size, num_agents, action_size).
+
+        Returns:
+        --------
+        tuple:
+            (values, log(action probabilities), entropy)
         """
         batch_size = obs.shape[0]
         num_agents = len(self.agent_ids)
 
         action_block = self._get_tokened_action_block(batch_size)
 
+        #
+        # We again shift the actions to include the start token here. This
+        # will tell the critic to produce the next action probabilities
+        # given the previous actions (the network uses a mask).
+        #
         if self.action_dtype == "discrete":
-            #FIXME: Why are we adding the start token and removing the first
-            # agent's actions?
-            # another way around this might be to shuffle the agents during
-            # training?
             action_block[:, 1:, 1:] = t_func.one_hot(batch_actions,
                 num_classes=self.action_pred_size)[:, :-1, :]
 
@@ -346,6 +359,23 @@ class MATPolicy(AgentPolicy):
 
     def _get_autoregressive_actions_with_exploration(self, encoded_obs):
         """
+        Generate actions with exploration auto-regressively. This method
+        starts by feeding an array containing a start token into the
+        actor. The actor then produces the next action, which we add into
+        the action block and feed it back into the actor to again get the
+        next action, and this process continues untill all agents have been
+        given actions.
+
+        Parameters:
+        -----------
+        encoded_obs: tensor
+            The agent observations that have been embedded/encoded by
+            the critic.
+
+        Returns:
+        --------
+        tuple:
+            (output_action, output_raw_action, output_log_prob)
         """
         batch_size   = encoded_obs.shape[0]
         num_agents   = len(self.agent_ids)

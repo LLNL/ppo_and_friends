@@ -57,7 +57,7 @@ class AgentPolicy():
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
-                 shared_reward_fn    = None,
+                 use_huber_loss      = False,
                  test_mode           = False,
                  verbose             = False,
                  **kw_args):
@@ -151,9 +151,8 @@ class AgentPolicy():
             utils/schedulers.py.
         icm_beta: float
             The beta value used within the ICM.
-        shared_reward_fn: numpy function or None
-            If not None, rewards will be reduced using this function
-            so that all agents receive the same reward.
+        use_huber_loss: bool
+            Should we use huber loss during the PPO update?
         test_mode: bool
             Are we in test mode?
         verbose: bool
@@ -182,10 +181,10 @@ class AgentPolicy():
         self.kl_loss_weight         = kl_loss_weight
         self.envs_per_proc          = envs_per_proc
         self.agent_grouping         = False
-        self.shared_reward_fn       = shared_reward_fn
         self.have_step_constraints  = False
         self.have_reset_constraints = False
         self.verbose                = verbose
+        self.use_huber_loss         = use_huber_loss
 
         if callable(lr):
             self.lr = lr
@@ -789,10 +788,6 @@ class AgentPolicy():
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
-        # FIXME: should we not bet getting the log probs from the new actions?
-        # I guess updating the distribution but keeping the old actions will still
-        # give use new probabilities for the old actions, and I think that's
-        # what we actually want. Make a note on this?
         if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
             log_probs = self.actor.distribution.get_log_probs(
                 dist,

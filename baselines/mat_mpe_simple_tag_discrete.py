@@ -38,7 +38,6 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
         adversary_policy_args = {\
             "mat_kw_args"      : adversary_kw_args,
             "lr"               : lr,
-            "shared_reward_fn" : np.sum,
         }
 
         agent_actor_kw_args  = {}
