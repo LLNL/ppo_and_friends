@@ -110,10 +110,13 @@ class MATPolicy(AgentPolicy):
 
         #
         # Initialize our networks: actor-critic, and possibly ICM.
+        # NOTE: MAT uses the same observation space for both actor
+        # and critic, and we default to the critic space to allow for
+        # different observation views (local, policy, global).
         #
         self.actor_critic = ac_network(
             name         = "actor_critic", 
-            obs_space    = self.actor_obs_space,
+            obs_space    = self.critic_obs_space,
             action_space = self.action_space,
             num_agents   = len(self.agent_ids),
             test_mode    = self.test_mode,

@@ -26,7 +26,7 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
 
-                critic_view       = "local",
+                critic_view       = "policy",
                 policy_mapping_fn = policy_map)
 
         adversary_kw_args  = {}

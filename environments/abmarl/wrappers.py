@@ -36,6 +36,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
                 critic_view        What view should the critic have?
                 policy_mapping_fn  The function mapping agent ids to policy ids.
         """
+        #FIXME: raise error if gym version < 0.23
         super(AbmarlWrapper, self).__init__(
             env               = env,
             test_mode         = test_mode,
