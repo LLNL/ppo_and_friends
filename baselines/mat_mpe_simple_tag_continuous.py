@@ -16,6 +16,7 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
         policy_map = lambda name : 'adversary' if 'adversary' in name \
             else 'agent'
 
+        #FIXME: continuous version isn't working
         env_generator = lambda : \
             ParallelZooWrapper(
                 simple_tag_v3.parallel_env(
@@ -31,18 +32,16 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
 
         actor_kw_args = {}
 
-        adversary_actor_kw_args  = {}
-        adversary_actor_kw_args["distribution_min"] = 0.0
-        adversary_actor_kw_args["distribution_max"] = 1.0
-        adversary_critic_kw_args = adversary_actor_kw_args.copy()
+        adversary_kw_args  = {}
+        adversary_kw_args["distribution_min"] = 0.0
+        adversary_kw_args["distribution_max"] = 1.0
 
         lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         adversary_policy_args = {\
-            "actor_kw_args"    : adversary_actor_kw_args,
-            "critic_kw_args"   : adversary_critic_kw_args,
+            "mat_kw_args"      : adversary_kw_args,
             "lr"               : lr,
             "shared_reward_fn" : np.sum,
         }

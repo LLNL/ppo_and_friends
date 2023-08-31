@@ -1545,6 +1545,8 @@ class PPO(object):
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
                     ep_nat_rewards[policy_id].max())
 
+            # FIXME: this doesn't seem to match up well with the episode average score. Maybe
+            # because of dividing by num agents?? That shouldn't produce this result.
             top_score = top_rollout_score[policy_id]
             top_score = comm.allreduce(top_score, MPI.MAX)
 

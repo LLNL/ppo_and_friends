@@ -29,16 +29,14 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
-        adversary_actor_kw_args  = {}
-        adversary_critic_kw_args = adversary_actor_kw_args.copy()
+        adversary_kw_args  = {}
 
         lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         adversary_policy_args = {\
-            "actor_kw_args"    : adversary_actor_kw_args,
-            "critic_kw_args"   : adversary_critic_kw_args,
+            "mat_kw_args"      : adversary_kw_args,
             "lr"               : lr,
             "shared_reward_fn" : np.sum,
         }

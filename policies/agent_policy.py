@@ -15,6 +15,7 @@ from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
+from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD

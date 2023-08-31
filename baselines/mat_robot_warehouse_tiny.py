@@ -32,8 +32,7 @@ class MATRobotWarehouseTinyRunner(GymRunner):
                 policy_mapping_fn = lambda *args : "rware",
                 add_agent_ids = False)
 
-        actor_kw_args  = {}
-        critic_kw_args = actor_kw_args.copy()
+        mat_kw_args  = {}
 
         lr = LinearScheduler(
             status_key    = "timesteps",
@@ -48,10 +47,9 @@ class MATRobotWarehouseTinyRunner(GymRunner):
             min_value     = 0.01)
 
         policy_args = {\
-            "actor_kw_args"      : actor_kw_args,
-            "critic_kw_args"     : critic_kw_args,
+            "mat_kw_args"        : mat_kw_args,
             "lr"                 : lr,
-            "bootstrap_clip"     : (0., 10.),#FIXME: try a higher lower end?
+            "bootstrap_clip"     : (0., 10.),
             "entropy_weight"     : entropy_weight,
         }
 
