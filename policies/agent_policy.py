@@ -789,6 +789,10 @@ class AgentPolicy():
         action_pred = self.actor(batch_obs).cpu()
         dist        = self.actor.distribution.get_distribution(action_pred)
 
+        # FIXME: should we not bet getting the log probs from the new actions?
+        # I guess updating the distribution but keeping the old actions will still
+        # give use new probabilities for the old actions, and I think that's
+        # what we actually want. Make a note on this?
         if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
             log_probs = self.actor.distribution.get_log_probs(
                 dist,

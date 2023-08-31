@@ -257,6 +257,22 @@ class MATPolicy(AgentPolicy):
 
     def _get_tokened_action_block(self, batch_size):
         """
+        Get a numpy "action block" that can be used for auto-regressive actions.
+        The action block will be a numpy array of shape
+        (batch_size, num_agents, action_pred_size). The first agent position
+        will be a start token, and it is used to predict/evaluate the next
+        (first) actions. All other agents will have empty (zeros) actions.
+
+        Parameters:
+        -----------
+        batch_size: int
+            The batch size for the action block.
+
+        Returns:
+        --------
+        np.ndarray:
+            An array of shape (batch_size, num_agents, action_pred_size) s.t.
+            the first agent's action is a start token.
         """
         num_agents = len(self.agent_ids)
 
@@ -280,6 +296,10 @@ class MATPolicy(AgentPolicy):
         action_block = self._get_tokened_action_block(batch_size)
 
         if self.action_dtype == "discrete":
+            #FIXME: Why are we adding the start token and removing the first
+            # agent's actions?
+            # another way around this might be to shuffle the agents during
+            # training?
             action_block[:, 1:, 1:] = t_func.one_hot(batch_actions,
                 num_classes=self.action_pred_size)[:, :-1, :]
 
@@ -293,6 +313,7 @@ class MATPolicy(AgentPolicy):
                     t_func.one_hot(batch_actions[:, :, a_idx], dim)
 
             action_block[:, 1:, 1:] = one_hot_actions[:, :-1, :]
+
         else:
             action_block[:, 1:, :] = batch_actions[:, :-1, :]
 
@@ -321,7 +342,7 @@ class MATPolicy(AgentPolicy):
             log_probs = log_probs.reshape((batch_size, num_agents, -1))
             entropy   = entropy.reshape((batch_size, num_agents, -1))
 
-        return values, action_pred, log_probs, entropy
+        return values, log_probs, entropy
 
     def _get_autoregressive_actions_with_exploration(self, encoded_obs):
         """
@@ -502,7 +523,7 @@ class MATPolicy(AgentPolicy):
         # torch dataset, and it has already been re-shaped into the expected
         # (batch_size, num_agents, *) format.
         #
-        values, _, log_probs, entropy = self._evaluate_actions(batch_critic_obs, batch_actions)
+        values, log_probs, entropy = self._evaluate_actions(batch_critic_obs, batch_actions)
 
         return values, log_probs.to(self.device), entropy.to(self.device)
 

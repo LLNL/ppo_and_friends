@@ -26,7 +26,7 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
 
-                critic_view       = "policy",
+                critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
         adversary_kw_args  = {}
@@ -71,14 +71,18 @@ class MATMPESimpleTagDiscreteRunner(GymRunner):
                  adversary_policy_args),
         }
 
+        #
+        # I find this environment performs dramatically better in MAT without
+        # normalizations.
+        #
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 64,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 256,
-                     normalize_obs       = True,
+                     normalize_obs       = False,
                      obs_clip            = None,
-                     normalize_rewards   = True,
+                     normalize_rewards   = False,
                      reward_clip         = None,
                      **self.kw_run_args)

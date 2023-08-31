@@ -84,8 +84,8 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
                      max_ts_per_ep       = 64,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 256,
-                     normalize_obs       = True,
+                     normalize_obs       = False,
                      obs_clip            = None,
-                     normalize_rewards   = True,
+                     normalize_rewards   = False,
                      reward_clip         = None,
                      **self.kw_run_args)
