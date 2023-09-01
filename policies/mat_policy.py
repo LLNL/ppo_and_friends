@@ -426,7 +426,8 @@ class MATPolicy(AgentPolicy):
             output_action     = output_action.float()
             output_raw_action = torch.zeros_like(output_action).float()
 
-        output_log_prob = torch.zeros_like(output_action, dtype=torch.float32)
+        output_log_prob = torch.zeros((batch_size, num_agents, 1),
+            dtype=torch.float32)
 
         with torch.no_grad():
             for i in range(num_agents):
@@ -480,8 +481,8 @@ class MATPolicy(AgentPolicy):
 
         Returns:
         --------
-        tuple:
-            (output_action, output_raw_action, output_log_prob)
+        torch tensor:
+            output_action
         """
         batch_size   = encoded_obs.shape[0]
         num_agents   = len(self.agent_ids)
