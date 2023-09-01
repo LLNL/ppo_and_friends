@@ -21,7 +21,6 @@ class PressurePlateRunner(GymRunner):
             msg  = "ERROR: PressurePlate requires gym version 0.21. "
             msg += "It is not currently supported in gymnasium."
             rank_print(msg)
-            comm.barrier()
             comm.Abort()
 
         # NOTE: the compatibility wrapper that gym comes with wasn't

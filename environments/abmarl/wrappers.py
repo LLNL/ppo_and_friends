@@ -45,6 +45,12 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             policy_mapping_fn = policy_mapping_fn,
             *kw_args)
 
+        import gym as old_gym
+        if old_gym.__version__ != '0.23.0':
+            msg  = "ERROR: Abmarl currently requires gym version == 0.23. "
+            rank_print(msg)
+            comm.Abort()
+
         self.fig = None
         self.need_action_wrap = False
 
