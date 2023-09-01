@@ -16,7 +16,6 @@ class MATMPESimpleTagContinuousRunner(GymRunner):
         policy_map = lambda name : 'adversary' if 'adversary' in name \
             else 'agent'
 
-        #FIXME: continuous version isn't working
         env_generator = lambda : \
             ParallelZooWrapper(
                 simple_tag_v3.parallel_env(
