@@ -530,6 +530,7 @@ class MATPolicy(AgentPolicy):
 
     def get_rollout_actions(self, obs):
         """
+        Get actions for an ongoing rollout.
 
         Returns:
         --------
