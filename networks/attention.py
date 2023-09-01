@@ -20,11 +20,24 @@ class SelfAttention(nn.Module):
                  out_init      = 0.01,
                  masked        = False):
         """
+        NOTE: this implemenation is largey taken from the original MAT paper's
+        implementation, which can be found here:
+        https://github.com/PKU-MARL/Multi-Agent-Transformer
+
         Parameters:
         -----------
         embedding_size: int
             The size of our embedding layers.
         num_heads: int
+            The number of self-attention heads to use.
+        num_agents: int
+            The number of agents.
+        internal_init: float
+            The initialization gain to use for internal layers.
+        out_init: float
+            The initialization gain to use for output layers.
+        masked: float
+            Whether or not to apply a mask that blocks out rightmost entries.
         """
         super(SelfAttention, self).__init__()
 
@@ -56,8 +69,6 @@ class SelfAttention(nn.Module):
                 1, 1, num_agents + 1, num_agents + 1))
 
     def forward(self, key, value, query):
-        """
-        """
         batch_size, L, D = query.size()
 
         #
@@ -98,9 +109,6 @@ class SelfAttention(nn.Module):
 
 
 class SelfAttentionEncodingBlock(nn.Module):
-    """
-    Self-attention encoding block.
-    """
 
     def __init__(self,
                  embedding_size,
@@ -113,6 +121,28 @@ class SelfAttentionEncodingBlock(nn.Module):
                  self_atten_out_init      = 0.01,
                  **kw_args):
         """
+        NOTE: this implemenation is largey taken from the original MAT paper's
+        implementation, which can be found here:
+        https://github.com/PKU-MARL/Multi-Agent-Transformer
+
+        Parameters:
+        -----------
+        embedding_size: int
+            The size of our embedding layers.
+        num_heads: int
+            The number of self-attention heads to use.
+        num_agents: int
+            The number of agents.
+        activation: function
+            The activation function to use.
+        internal_init: float
+            The initialization gain to use for internal layers.
+        out_init: float
+            The initialization gain to use for output layers.
+        self_atten_internal_init: float
+            The initialization gain to use for internal self-attention layers.
+        self_atten_out_init: float
+            The initialization gain to use for output self-attention layers.
         """
         super(SelfAttentionEncodingBlock, self).__init__()
 
@@ -143,14 +173,12 @@ class SelfAttentionEncodingBlock(nn.Module):
 
 
 class SelfAttentionDecodingBlock(nn.Module):
-    """
-    Self-attention decoding block.
-    """
 
     def __init__(self,
                  embedding_size,
                  num_heads,
                  num_agents,
+                 mlp_hidden_scale         = 1,
                  activation               = nn.GELU(),
                  internal_init            = nn.init.calculate_gain('relu'),
                  out_init                 = 0.01,
@@ -158,6 +186,31 @@ class SelfAttentionDecodingBlock(nn.Module):
                  self_atten_out_init      = 0.01,
                  **kw_args):
         """
+        NOTE: this implemenation is largey taken from the original MAT paper's
+        implementation, which can be found here:
+        https://github.com/PKU-MARL/Multi-Agent-Transformer
+
+        Parameters:
+        -----------
+        embedding_size: int
+            The size of our embedding layers.
+        num_heads: int
+            The number of self-attention heads to use.
+        num_agents: int
+            The number of agents.
+        mlp_hidden_scale: int
+            Scale the hidden embedding layer by 
+            mlp_hidden_scale * embdedding_size.
+        activation: function
+            The activation function to use.
+        internal_init: float
+            The initialization gain to use for internal layers.
+        out_init: float
+            The initialization gain to use for output layers.
+        self_atten_internal_init: float
+            The initialization gain to use for internal self-attention layers.
+        self_atten_out_init: float
+            The initialization gain to use for output self-attention layers.
         """
 
         super(SelfAttentionDecodingBlock, self).__init__()
@@ -166,13 +219,18 @@ class SelfAttentionDecodingBlock(nn.Module):
         self.ln2   = nn.LayerNorm(embedding_size)
         self.ln3   = nn.LayerNorm(embedding_size)
 
+        #
+        # The decoder is what we use to predict actions given previous actions,
+        # so we need to mask the "future" actions in the action blocks that
+        # are sent in.
+        #
         self.attn1 = SelfAttention(
             embedding_size,
             num_heads,
             num_agents,
             internal_init = self_atten_internal_init,
             out_init      = self_atten_out_init,
-            masked        = False)
+            masked        = True)
 
         self.attn2 = SelfAttention(
             embedding_size,
@@ -180,13 +238,15 @@ class SelfAttentionDecodingBlock(nn.Module):
             num_agents,
             internal_init = self_atten_internal_init,
             out_init      = self_atten_out_init,
-            masked        = False)
+            masked        = True)
 
         self.mlp   = nn.Sequential(
-            init_layer(nn.Linear(embedding_size, 1 * embedding_size),
+            init_layer(
+                nn.Linear(embedding_size, mlp_hidden_scale * embedding_size),
                 gain = internal_init),
             activation,
-            init_layer(nn.Linear(1 * embedding_size, embedding_size),
+            init_layer(
+                nn.Linear(mlp_hidden_scale * embedding_size, embedding_size),
                 gain = out_init)
         )
 
