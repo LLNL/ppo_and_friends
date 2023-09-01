@@ -179,7 +179,7 @@ class MATPolicy(AgentPolicy):
         else:
             self.icm_optim = None
 
-        self.shuffle_agent_ids()#FIXME: needed?
+        self.shuffle_agent_ids()
 
     def to(self, device):
         """
@@ -289,6 +289,38 @@ class MATPolicy(AgentPolicy):
 
         return action_block
 
+    def _multi_discrete_prob_to_one_hot(self, actions):
+        """
+        Convert a batch of multi-discrete action probabilities into a
+        multi-discrete one-hot vector.
+        NOTE: multi-discrete one-hot vectors are not really one-hot vectors
+        since they have multiple 1s, but they can be decomposed into their
+        invidiual parts which are true one-hots.
+
+        Parameters:
+        -----------
+        actions: torch tensor
+            A batch of actions having shape (batch_size, num_agents,
+            action_pred_size).
+
+        Returns:
+        --------
+        torch tensor:
+            A multi-discrete one-hot tensor having the same shape
+            as the input actions.
+        """
+        batch_size = actions.shape[0]
+        num_agents = actions.shape[1]
+    
+        one_hot_actions = torch.zeros((batch_size, num_agents, self.action_pred_size))
+        start = 0
+        for a_idx, dim in enumerate(self.action_space.nvec):
+            stop = start + dim
+            one_hot_actions[:, :, start : stop] = \
+                t_func.one_hot(actions[:, :, a_idx], dim)
+
+        return one_hot_actions
+
     def _evaluate_actions(self, obs, batch_actions):
         """
         Evaluate a batch of actions given their associated observations.
@@ -322,13 +354,8 @@ class MATPolicy(AgentPolicy):
                 num_classes=self.action_pred_size)[:, :-1, :]
 
         elif self.action_dtype == "multi-discrete":
-            #FIXME: move to func
-            one_hot_actions = torch.zeros((batch_size, num_agents, self.action_pred_size))
-            start = 0
-            for a_idx, dim in enumerate(self.action_space.nvec):
-                stop = start + dim
-                one_hot_actions[:, :, start : stop] = \
-                    t_func.one_hot(batch_actions[:, :, a_idx], dim)
+            one_hot_actions = self._multi_discrete_prob_to_one_hot(
+                batch_actions)
 
             action_block[:, 1:, 1:] = one_hot_actions[:, :-1, :]
 
@@ -420,13 +447,9 @@ class MATPolicy(AgentPolicy):
                     output_raw_action[:, i, :] = raw_action
                     output_log_prob[:, i, :]   = log_prob
 
-                    #FIXME: move to function
-                    action = action.flatten()
-                    one_hot_action = torch.zeros(self.action_pred_size)
-                    start = 0
-                    for a_idx, dim in enumerate(self.action_space.nvec):
-                        stop = start + dim
-                        one_hot_action[start : stop] = t_func.one_hot(action[a_idx], dim)
+                    action = action.unsqueeze(0)
+                    one_hot_action = \
+                        self._multi_discrete_prob_to_one_hot(action).flatten()
 
                     action = one_hot_action 
 
@@ -442,6 +465,23 @@ class MATPolicy(AgentPolicy):
 
     def _get_autoregressive_actions_without_exploration(self, encoded_obs):
         """
+        Generate actions without exploration auto-regressively. This method
+        starts by feeding an array containing a start token into the
+        actor. The actor then produces the next action, which we add into
+        the action block and feed it back into the actor to again get the
+        next action, and this process continues untill all agents have been
+        given actions.
+
+        Parameters:
+        -----------
+        encoded_obs: tensor
+            The agent observations that have been embedded/encoded by
+            the critic.
+
+        Returns:
+        --------
+        tuple:
+            (output_action, output_raw_action, output_log_prob)
         """
         batch_size   = encoded_obs.shape[0]
         num_agents   = len(self.agent_ids)
@@ -474,13 +514,9 @@ class MATPolicy(AgentPolicy):
                 elif self.action_dtype == "multi-discrete":
                     output_action[:, i, :] = action
 
-                    # FIXME: create function for this.
-                    action = action.flatten()
-                    one_hot_action = torch.zeros(self.action_pred_size)
-                    start = 0
-                    for a_idx, dim in enumerate(self.action_space.nvec):
-                        stop = start + dim
-                        one_hot_action[start : stop] = t_func.one_hot(action[a_idx], dim)
+                    action = action.unsqueeze(0)
+                    one_hot_action = \
+                        self._multi_discrete_prob_to_one_hot(action).flatten()
 
                     action = one_hot_action 
 
@@ -583,6 +619,14 @@ class MATPolicy(AgentPolicy):
 
     def update_weights(self, actor_loss, critic_loss):
         """
+        Update the weights of our actor/critic class.
+
+        Parameters:
+        -----------
+        actor_loss: torch tensor
+            The total loss for our actor.
+        critic_loss: torch tensor
+            The total loss for our critic.
         """
         actor_critic_loss = actor_loss + critic_loss
 
@@ -711,6 +755,24 @@ class MATPolicy(AgentPolicy):
         truncated,
         info):
         """
+        Apply any constraints needed when stepping through the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
+        reward: dict
+            Dictionary mapping agent ids to rewards.
+        terminated: dict
+            Dictionary mapping agent ids to a termination flag.
+        truncated: dict
+            Dictionary mapping agent ids to a truncated flag.
+        info: dict
+            Dictionary mapping agent ids to info dictionaries.
         """
         if self.have_step_constraints:
             #
@@ -743,6 +805,16 @@ class MATPolicy(AgentPolicy):
         obs,
         critic_obs):
         """
+        Apply any constraints needed when resetting the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
         """
         if self.have_reset_constraints:
             #

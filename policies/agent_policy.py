@@ -852,6 +852,14 @@ class AgentPolicy():
 
     def update_weights(self, actor_loss, critic_loss):
         """
+        Update the weights of our actor/critic class.
+
+        Parameters:
+        -----------
+        actor_loss: torch tensor
+            The total loss for our actor.
+        critic_loss: torch tensor
+            The total loss for our critic.
         """
         #
         # Perform our backwards steps, and average gradients across ranks.
@@ -934,11 +942,39 @@ class AgentPolicy():
 
     def apply_step_constraints(self, *args):
         """
+        Apply any constraints needed when stepping through the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
+        reward: dict
+            Dictionary mapping agent ids to rewards.
+        terminated: dict
+            Dictionary mapping agent ids to a termination flag.
+        truncated: dict
+            Dictionary mapping agent ids to a truncated flag.
+        info: dict
+            Dictionary mapping agent ids to info dictionaries.
         """
         return args
 
     def apply_reset_constraints(self, *args):
         """
+        Apply any constraints needed when resetting the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
         """
         return args
 
