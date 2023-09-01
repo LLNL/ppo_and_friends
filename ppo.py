@@ -360,8 +360,9 @@ class PPO(object):
             self.pickle_safe_test_mode_dependencies.append(
                 self.value_normalizers)
 
-        for policy_id in self.policies:
-            self.policies[policy_id].to(self.device)
+        #FIXME: taken care of during finalize
+        #for policy_id in self.policies:
+        #    self.policies[policy_id].to(self.device)
 
         self.test_mode_dependencies.append(self.policies)
         self.pickle_safe_test_mode_dependencies.append(self.policies)
@@ -383,7 +384,7 @@ class PPO(object):
                 #
                 # Let's ensure backwards compatibility with previous commits.
                 #
-                tmp_status_dict = self.load()
+                tmp_status_dict = self.load_status()
 
                 for key in tmp_status_dict:
                     if key in self.status_dict:
@@ -403,7 +404,13 @@ class PPO(object):
         for policy_id in self.policies:
             policy = self.policies[policy_id]
 
-            self.policies[policy_id].finalize(self.status_dict)
+            #
+            # Finalized needs to be called after the status dictionary
+            # has been loaded so that we can update our learning
+            # rates and various weights (not model weights).
+            #
+            self.policies[policy_id].finalize(self.status_dict, self.device)
+
             self.status_dict[policy_id]["lr"] = policy.lr()
             self.status_dict[policy_id]["entropy weight"] = \
                 policy.entropy_weight()
@@ -413,6 +420,14 @@ class PPO(object):
                     policy.icm_lr()
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
+
+        #
+        # Load the policies after they've been finalized.
+        #
+        if load_state:
+            if os.path.exists(state_path):
+                rank_print("Loading policies from {}".format(state_path))
+                self.load_policies()
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
@@ -440,6 +455,7 @@ class PPO(object):
                 rank_print(f"{sp}action space: {policy.action_space}")
                 rank_print(f"{sp}actor obs space: {policy.actor_obs_space}")
                 rank_print(f"{sp}critic obs space: {policy.critic_obs_space}")
+                rank_print(f"{sp}agent ids: {policy.agent_ids}")
 
         comm.barrier()
 
@@ -801,8 +817,12 @@ class PPO(object):
         detached = OrderedDict({})
 
         for agent_id in attached:
-            detached[agent_id] = \
-                attached[agent_id].detach().cpu().numpy()
+            if torch.is_tensor(attached[agent_id]):
+                detached[agent_id] = \
+                    attached[agent_id].detach().cpu().numpy()
+            else:
+                detached[agent_id] = \
+                    attached[agent_id]
 
         return detached
 
@@ -2038,21 +2058,15 @@ class PPO(object):
 
         comm.barrier()
 
-    def load(self):
+    def load_status(self):
         """
-            Load all information required for a restart.
+        Load our status dictionary from a restart.
+
+        Returns:
+        --------
+        dict:
+            The loaded status dictionary.
         """
-
-        for policy_id in self.policies:
-            self.policies[policy_id].load(self.state_path)
-
-        if self.save_env_info and self.env != None:
-            self.env.load_info(self.state_path)
-
-        if self.normalize_values:
-            for policy_id in self.value_normalizers:
-                self.value_normalizers[policy_id].load_info(self.state_path)
-
         if self.test_mode:
             file_name  = "state_0.pickle"
         else:
@@ -2073,6 +2087,27 @@ class PPO(object):
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
+
+    def load_policies(self):
+        """
+        Load our policies and related state from a checkpoint.
+        """
+        for policy_id in self.policies:
+            self.policies[policy_id].load(self.state_path)
+
+        if self.save_env_info and self.env != None:
+            self.env.load_info(self.state_path)
+
+        if self.normalize_values:
+            for policy_id in self.value_normalizers:
+                self.value_normalizers[policy_id].load_info(self.state_path)
+        
+    def load(self):
+        """
+        Load all information required for a restart.
+        """
+        self.load_policies()
+        return self.load_status()
 
     def _save_extrinsic_score_avg(self):
         """

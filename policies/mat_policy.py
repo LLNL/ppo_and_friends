@@ -66,13 +66,11 @@ class MATPolicy(AgentPolicy):
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
 
-        #FIXME: throw error if using_lstm == True.
-
-        #
-        # Shuffle agents right off the bat so that different processors
-        # have different ordering.
-        #
-        self.shuffle_agent_ids()
+        if self.using_lstm == True:
+            msg  = "ERROR: MAT is not compatible with lstm, but using_lstm "
+            msg += "is set to True. Bailing..."
+            rank_print(msg)
+            comm.Abort()
 
     def _initialize_networks(
         self,
@@ -151,7 +149,7 @@ class MATPolicy(AgentPolicy):
             num_envs        = self.envs_per_proc,
             agent_ids       = self.agent_ids)
 
-    def finalize(self, status_dict):
+    def finalize(self, status_dict, device):
         """
         Perfrom any finalizing tasks before we start using the policy.
 
@@ -159,7 +157,12 @@ class MATPolicy(AgentPolicy):
         -----------
         status_dict: dict
             The status dict for training.
+        device: torch device
+            The device to send our networks to.
         """
+        self._initialize_networks(**self.network_args)
+        self.to(device)
+
         self.lr.finalize(status_dict)
         self.icm_lr.finalize(status_dict)
         self.entropy_weight.finalize(status_dict)
@@ -175,6 +178,8 @@ class MATPolicy(AgentPolicy):
                 lr=self.icm_lr(), eps=1e-5)
         else:
             self.icm_optim = None
+
+        self.shuffle_agent_ids()#FIXME: needed?
 
     def to(self, device):
         """
@@ -444,7 +449,9 @@ class MATPolicy(AgentPolicy):
 
         if self.action_dtype in ["discrete", "multi-discrete"]:
             action_offset = 1
-            output_action = torch.zeros((batch_size, num_agents, 1)).long()
+            output_action = torch.zeros((batch_size,
+                num_agents, self.action_dim)).long()
+
         else:
             action_offset = 0
             output_action = torch.zeros((batch_size, num_agents, self.action_dim))
@@ -465,7 +472,7 @@ class MATPolicy(AgentPolicy):
                     action = t_func.one_hot(action, num_classes=self.action_pred_size)
 
                 elif self.action_dtype == "multi-discrete":
-                    output_action[:, i, :] = action.unsqueeze(0)
+                    output_action[:, i, :] = action
 
                     # FIXME: create function for this.
                     action = action.flatten()

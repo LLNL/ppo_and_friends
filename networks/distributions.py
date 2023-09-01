@@ -320,7 +320,7 @@ class MultiCategoricalDistribution(PPODistribution):
         # array, and we need to break it up into individual
         # arrays associated with the discrete actions.
         #
-        refined_prediction = torch.zeros(self.nvec.size)
+        refined_prediction = torch.zeros(self.nvec.size).long()
 
         start = 0
         for idx, a_dim in enumerate(self.nvec):

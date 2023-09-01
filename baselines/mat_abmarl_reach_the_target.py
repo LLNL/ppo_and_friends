@@ -75,4 +75,8 @@ class MATAbmarlReachTheTargetRunner(EnvironmentRunner):
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 32,
                      ts_per_rollout     = ts_per_rollout,
+                     normalize_obs      = False,
+                     obs_clip           = None,
+                     normalize_rewards  = False,
+                     reward_clip        = None,
                      **self.kw_run_args)

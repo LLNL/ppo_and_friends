@@ -58,7 +58,6 @@ class SelfAttention(nn.Module):
     def forward(self, key, value, query):
         """
         """
-        #print(query.size())#FIXME
         batch_size, L, D = query.size()
 
         #

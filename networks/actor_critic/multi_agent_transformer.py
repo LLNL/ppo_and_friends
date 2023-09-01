@@ -82,11 +82,13 @@ class MATActor(PPONetwork):
 
         self.action_dtype   = get_action_dtype(action_space)
         self.embedding_size = embedding_size
+        self.num_agents     = num_agents
 
         #
         # We're predicting actions but also taking in previous actions.
         #
-        action_dim = self.out_size
+        self.action_pred_size = self.out_size
+        self.action_dim       = get_flattened_space_length(action_space)
 
         # TODO: let's update to support binary and multi-binary as well.
         supported_types = ["continuous", "discrete", "multi-discrete"]
@@ -104,12 +106,12 @@ class MATActor(PPONetwork):
 
         if 'discrete' in self.action_dtype:
             self.action_encoder = nn.Sequential(
-                init_layer(nn.Linear(action_dim + 1, embedding_size, bias=False),
+                init_layer(nn.Linear(self.action_pred_size + 1, embedding_size, bias=False),
                     gain = internal_init),
                 activation)
         else:
             self.action_encoder = nn.Sequential(
-                init_layer(nn.Linear(action_dim, embedding_size),
+                init_layer(nn.Linear(self.action_pred_size, embedding_size),
                     gain = internal_init),
                 activation)
 
@@ -131,7 +133,7 @@ class MATActor(PPONetwork):
                 gain = internal_init),
             activation,
             nn.LayerNorm(embedding_size),
-            init_layer(nn.Linear(embedding_size, action_dim),
+            init_layer(nn.Linear(embedding_size, self.action_pred_size),
                 gain = out_init))
 
     def forward(self, actions, encoded_obs):
@@ -165,18 +167,37 @@ class MATActor(PPONetwork):
     
         Parameters
         ----------
-        obs: gymnasium space
-            The observation to infer from.
-    
+        action: tensor
+            The predicted agent actions.
+        encoded_obs: tensor
+            The agent observations sent through the critic's encoding/embedding 
+            layers.
         Returns
         -------
         float 
             The predicted result sent through the distribution's
             refinement method.
         """
-        res = self.__call__(action, encoded_obs)
-        res = self.distribution.refine_prediction(res)
-        return res
+        action_pred = self.__call__(action, encoded_obs)
+
+        msg  = "ERROR: 'get_refined_prediction' should only be called "
+        msg += "during evaluation using a single environment instance, but "
+        msg += f"predicted actions of shape {action_pred.shape}."
+        assert action_pred.shape[0] == 1, msg
+
+        if self.action_dtype == "multi-discrete":
+            refined_action = torch.zeros(
+                (1, self.num_agents, self.action_dim)).long()
+
+            action_pred = action_pred.squeeze(0)
+
+            for i in range(self.num_agents):
+                refined_action[0, i, :] = \
+                    self.distribution.refine_prediction(action_pred[[i], :])
+        else:
+            refined_action = self.distribution.refine_prediction(action_pred)
+
+        return refined_action
 
 
 class MATCritic(PPONetwork):

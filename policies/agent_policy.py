@@ -256,22 +256,26 @@ class AgentPolicy():
             msg += "and action prediction size {self.action_pred_size}"
             rank_print(msg)
 
-        self._initialize_networks(
-            ac_network     = ac_network,
-            enable_icm     = enable_icm,
-            icm_network    = icm_network,
-            actor_kw_args  = actor_kw_args,
-            critic_kw_args = critic_kw_args,
-            icm_kw_args    = icm_kw_args, 
-            **kw_args)
+        self.network_args = {
+        "ac_network"     : ac_network,
+        "enable_icm"     : enable_icm,
+        "icm_network"    : icm_network,
+        "actor_kw_args"  : actor_kw_args,
+        "critic_kw_args" : critic_kw_args,
+        "icm_kw_args"    : icm_kw_args, 
+        }
+        self.network_args.update(kw_args)
 
-    def finalize(self, status_dict):
+    def finalize(self, status_dict, device):
         """
             Perfrom any finalizing tasks before we start using the policy.
 
             Arguments:
                 status_dict    The status dict for training.
         """
+        self._initialize_networks(**self.network_args)
+        self.to(device)
+
         self.lr.finalize(status_dict)
         self.icm_lr.finalize(status_dict)
         self.entropy_weight.finalize(status_dict)
@@ -289,7 +293,6 @@ class AgentPolicy():
                 lr=self.icm_lr(), eps=1e-5)
         else:
             self.icm_optim = None
-
 
     def register_agent(self, agent_id):
         """
