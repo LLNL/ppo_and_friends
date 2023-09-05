@@ -46,10 +46,14 @@ class MATAbmarlReachTheTargetRunner(EnvironmentRunner):
         env_generator = lambda : \
                 AbmarlWrapper(env               = abmarl_rtt_env,
                               policy_mapping_fn = policy_mapping_fn,
-                              critic_view       = "local")#FIXME: other views created errors.
+                              critic_view       = "local")
 
         #
         # This environment is multi-agent and requires different policies.
+        #
+        # NOTE: Setting the first argument to None will result in using the
+        # standard PPO policy. You can also set this to using MAT, but
+        # there's only one agent for the target.
         #
         policy_settings = { "target" : \
             (None,
@@ -68,6 +72,10 @@ class MATAbmarlReachTheTargetRunner(EnvironmentRunner):
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
+        #
+        # NOTE: I've found that MAT generally performs better without
+        # env normalizations.
+        #
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
