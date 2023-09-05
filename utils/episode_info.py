@@ -4,8 +4,9 @@ from torch.utils.data import Dataset
 import sys
 import torch
 from ppo_and_friends.utils.mpi_utils import rank_print
-from mpi4py import MPI
+from abc import ABC, abstractmethod
 
+from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
@@ -14,6 +15,23 @@ def combine_episodes(episodes,
                      build_hidden_states,
                      list_combine_func = list.extend):
     """
+    Combine a series of episode info objects. This function iterates
+    through an array of episodes and concatenates all of their datasets
+    together.
+
+    Parameters:
+    -----------
+    episodes: array-like
+        An array of PPOEpisode objects.
+    build_hidden_states: bool
+        Whether or not to combine hidden states.
+    list_combine_func: function
+        The function to use for combining lists from each episode.
+
+    Returns:
+    --------
+    tuple:
+        A tuple containing the combined data from all episodes.
     """
     actions              = []
     raw_actions          = []
@@ -81,8 +99,38 @@ def combine_episodes(episodes,
         total_timestates)
 
 
+class PPOEpisode(ABC):
 
-class EpisodeInfo():
+    def __init__(self, *args, **kw_args):
+        """
+        An abstract container for tracking episodes from PPO rollouts.
+        """
+        self.is_finished         = False
+        self.actions             = None
+        self.raw_actions         = None
+        self.critic_observations = None
+        self.observations        = None
+        self.next_observations   = None
+        self.rewards_to_go       = None
+        self.log_probs           = None
+        self.advantages          = None
+        self.values              = None
+        self.actor_hidden        = None
+        self.critic_hidden       = None
+        self.actor_cell          = None
+        self.critic_cell         = None
+        self.total_timestates    = None
+        self.length              = 0
+
+    @abstractmethod
+    def compute_advantages(self, *args, **kw_args):
+        """
+        Compute the advantages of our agents.
+        """
+        raise NotImplementedError
+
+
+class EpisodeInfo(PPOEpisode):
 
     def __init__(self,
                  starting_ts    = 0,
@@ -103,6 +151,7 @@ class EpisodeInfo():
                 labmd          A "smoothing" factor used in GAE.
                 bootstrap_clip A value to clip our bootstrapped rewards to.
         """
+        super().__init__()
 
         self.starting_ts              = starting_ts
         self.ending_ts                = -1
@@ -347,7 +396,7 @@ class EpisodeInfo():
         self.compute_advantages()
 
 
-class AgentSharedEpisode():
+class AgentSharedEpisode(PPOEpisode):
 
     def __init__(self, agent_ids):
         """
@@ -361,28 +410,13 @@ class AgentSharedEpisode():
         agent_ids: array-like
             An array of agent ids on this team.
         """
+        super().__init__()
+
         self.agent_ids      = agent_ids
         self.added_agents   = []
         self.agent_limit    = len(agent_ids)
         self.agent_count    = 0
-        self.is_finished    = False
         self.agent_episodes = np.array([None] * self.agent_limit, dtype=object)
-
-        self.actions             = None
-        self.raw_actions         = None
-        self.critic_observations = None
-        self.observations        = None
-        self.next_observations   = None
-        self.rewards_to_go       = None
-        self.log_probs           = None
-        self.advantages          = None
-        self.values              = None
-        self.actor_hidden        = None
-        self.critic_hidden       = None
-        self.actor_cell          = None
-        self.critic_cell         = None
-        self.total_timestates    = None
-        self.length              = 0
 
     def verify_agent(self, agent_id):
         """
@@ -441,8 +475,6 @@ class AgentSharedEpisode():
         self.verify_agent(agent_id)
         self.verify_episode(episode)
 
-        # FIXME: I don't think we need to maintain this ordering,
-        # but let's double check.
         agent_idx = np.where(self.agent_ids == agent_id)
 
         self.agent_episodes[agent_idx] = episode
