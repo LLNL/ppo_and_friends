@@ -86,7 +86,7 @@ class MATRobotWarehouseTinyRunner(GymRunner):
                 epochs_per_iter    = 15,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
-                normalize_obs      = True,
+                normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
                 reward_clip        = None,

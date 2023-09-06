@@ -167,8 +167,10 @@ class MATPolicy(AgentPolicy):
         self.icm_lr.finalize(status_dict)
         self.entropy_weight.finalize(status_dict)
         self.intr_reward_weight.finalize(status_dict)
-        self.bootstrap_clip[0].finalize(status_dict)
-        self.bootstrap_clip[1].finalize(status_dict)
+
+        if self.have_bootstrap_clip:
+            self.bootstrap_clip[0].finalize(status_dict)
+            self.bootstrap_clip[1].finalize(status_dict)
 
         self.actor_critic_optim = Adam(
             self.actor_critic.parameters(), lr=self.lr(), eps=1e-5)
@@ -241,7 +243,7 @@ class MATPolicy(AgentPolicy):
             # rewards from the episode. Otherwise, rely on the user
             # provided range.
             #
-            bs_min, bs_max = self.get_bs_clip_range(
+            bs_clip_range = self.get_bs_clip_range(
                 self.episodes[agent_id][env_i].rewards)
 
             #
@@ -255,7 +257,7 @@ class MATPolicy(AgentPolicy):
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
                 lambd          = self.lambd,
-                bootstrap_clip = (bs_min, bs_max))
+                bootstrap_clip = bs_clip_range)
 
     def _get_tokened_action_block(self, batch_size):
         """

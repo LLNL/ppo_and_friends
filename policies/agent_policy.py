@@ -227,26 +227,31 @@ class AgentPolicy():
         max_bs_callable  = None
         bs_clip_callable = False
 
-        if callable(bootstrap_clip[0]):
-            min_bs_callable  = bootstrap_clip[0]
-            bs_clip_callable = True
+        self.have_bootstrap_clip = bootstrap_clip is not None
+
+        if self.have_bootstrap_clip:
+            if callable(bootstrap_clip[0]):
+                min_bs_callable  = bootstrap_clip[0]
+                bs_clip_callable = True
+            else:
+                min_bs_callable = CallableValue(bootstrap_clip[0])
+
+            if callable(bootstrap_clip[1]):
+                max_bs_callable  = bootstrap_clip[1]
+                bs_clip_callable = True
+            else:
+                max_bs_callable = CallableValue(bootstrap_clip[1])
+
+            self.bootstrap_clip = (min_bs_callable, max_bs_callable)
+
+            if bs_clip_callable and dynamic_bs_clip:
+                msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
+                msg += "and also set the bootstrap clip to be callables. This is "
+                msg += "redundant, and the dynamic clip will override the given "
+                msg += "functions."
+                rank_print(msg)
         else:
-            min_bs_callable = CallableValue(bootstrap_clip[0])
-
-        if callable(bootstrap_clip[1]):
-            max_bs_callable  = bootstrap_clip[1]
-            bs_clip_callable = True
-        else:
-            max_bs_callable = CallableValue(bootstrap_clip[1])
-
-        self.bootstrap_clip = (min_bs_callable, max_bs_callable)
-
-        if bs_clip_callable and dynamic_bs_clip:
-            msg  = "WARNING: it looks like you've enabled dynamic_bs_clip "
-            msg += "and also set the bootstrap clip to be callables. This is "
-            msg += "redundant, and the dynamic clip will override the given "
-            msg += "functions."
-            rank_print(msg)
+            self.bootstrap_clip = None
 
         self.action_dim       = get_flattened_space_length(self.action_space)
         self.action_pred_size = get_action_prediction_shape(self.action_space)[0]
@@ -280,8 +285,10 @@ class AgentPolicy():
         self.icm_lr.finalize(status_dict)
         self.entropy_weight.finalize(status_dict)
         self.intr_reward_weight.finalize(status_dict)
-        self.bootstrap_clip[0].finalize(status_dict)
-        self.bootstrap_clip[1].finalize(status_dict)
+
+        if self.have_bootstrap_clip:
+            self.bootstrap_clip[0].finalize(status_dict)
+            self.bootstrap_clip[1].finalize(status_dict)
 
         self.actor_optim  = Adam(
             self.actor.parameters(), lr=self.lr(), eps=1e-5)
@@ -612,7 +619,7 @@ class AgentPolicy():
             # rewards from the episode. Otherwise, rely on the user
             # provided range.
             #
-            bs_min, bs_max = self.get_bs_clip_range(
+            bs_clip_range = self.get_bs_clip_range(
                 self.episodes[agent_id][env_i].rewards)
 
             #
@@ -626,7 +633,7 @@ class AgentPolicy():
                 use_gae        = self.use_gae,
                 gamma          = self.gamma,
                 lambd          = self.lambd,
-                bootstrap_clip = (bs_min, bs_max))
+                bootstrap_clip = bs_clip_range)
 
     def finalize_dataset(self):
         """
@@ -920,16 +927,22 @@ class AgentPolicy():
 
     def get_bs_clip_range(self, ep_rewards):
         """
-            Get the current bootstrap clip range.
+        Get the current bootstrap clip range.
 
-            Arguments:
-                ep_rewards    A numpy array containing the rewards for
-                              this episode.
+        Parameters:
+        -----------
+        ep_rewards: numpy array or None.
+            A numpy array containing the rewards for this episode.
 
-            Returns:
-                A tuple containing the min and max values for the bootstrap
-                clip.
+        Returns:
+        --------
+        tuple or None:
+            A tuple containing the min and max values for the bootstrap
+            clip if we're using it. Otherwise, None.
         """
+        if not self.have_bootstrap_clip:
+            return None
+
         if self.dynamic_bs_clip and ep_rewards is not None:
             bs_min = min(ep_rewards)
             bs_max = max(ep_rewards)
@@ -1056,7 +1069,7 @@ class AgentPolicy():
                 The state loaded from a pickled PPO object.
         """
         self.__dict__.update(state)
-        self.bootstrap_clip = (None, None)
+        self.bootstrap_clip = None
 
     def __eq__(self, other):
         """

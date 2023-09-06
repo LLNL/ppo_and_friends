@@ -139,17 +139,24 @@ class EpisodeInfo(PPOEpisode):
                  lambd          = 0.95,
                  bootstrap_clip = (-10., 10.)):
         """
-            A container for storing episode information.
+        A container for storing episode information.
 
-            Arguments:
-                starting_ts    The timestep that this episode starts at.
-                use_gae        Should we use the Generalized Advantage
-                               Estimation algorithm when calculating advantages?
-                gamma          The discount factor to apply when calculating
-                               discounted sums. This is used for advantages and
-                               "rewards-to-go" (expected discounted returns).
-                labmd          A "smoothing" factor used in GAE.
-                bootstrap_clip A value to clip our bootstrapped rewards to.
+        Parameters:
+        -----------
+        starting_ts: int
+            The timestep that this episode starts at.
+        use_gae: bool
+            Should we use the Generalized Advantage
+            Estimation algorithm when calculating advantages?
+        gamma: float
+            The discount factor to apply when calculating
+            discounted sums. This is used for advantages and
+            "rewards-to-go" (expected discounted returns).
+        labmd: float
+            A "smoothing" factor used in GAE.
+        bootstrap_clip: tuple or None
+            A value to clip our bootstrapped rewards to if enabled. Otherwise,
+            None.
         """
         super().__init__()
 
@@ -379,10 +386,11 @@ class EpisodeInfo(PPOEpisode):
         # example of an environment that I've seen struggle quite
         # a bit without a propper bs clip.
         #
-        ending_reward = np.clip(
-            ending_reward,
-            self.bootstrap_clip[0],
-            self.bootstrap_clip[1])
+        if self.bootstrap_clip is not None:
+            ending_reward = np.clip(
+                ending_reward,
+                self.bootstrap_clip[0],
+                self.bootstrap_clip[1])
 
         padded_rewards = np.array(self.rewards + [ending_reward],
             dtype=np.float32)

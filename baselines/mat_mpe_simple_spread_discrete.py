@@ -45,7 +45,6 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
             "mat_kw_args"    : mat_kw_args,
             "lr"               : lr,
             "bootstrap_clip"   : (-1.0, 0.0),
-            #"entropy_weight"   : 0.01,
         }
 
         policy_settings = { 
