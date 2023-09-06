@@ -2003,7 +2003,18 @@ class PPO(object):
 
             torch.cuda.empty_cache()
 
-            if len(actions.shape) != 2:
+            #
+            # If our policies are grouping agents together, the data will come
+            # in shape (batch_size, num_agents, *), but we need
+            # (batch_size * num_agents, *).
+            #
+            if self.policies[policy_id].agent_grouping:
+                batch_size = obs.shape[0] * obs.shape[1]
+                obs        = obs.reshape((batch_size, -1))
+                next_obs   = next_obs.reshape((batch_size, -1))
+                actions    = actions.reshape((batch_size, -1))
+
+            if len(actions.shape) < 2:
                 actions = actions.unsqueeze(1)
 
             _, inv_loss, f_loss = self.policies[policy_id].icm_model(
