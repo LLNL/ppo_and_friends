@@ -360,10 +360,6 @@ class PPO(object):
             self.pickle_safe_test_mode_dependencies.append(
                 self.value_normalizers)
 
-        #FIXME: taken care of during finalize
-        #for policy_id in self.policies:
-        #    self.policies[policy_id].to(self.device)
-
         self.test_mode_dependencies.append(self.policies)
         self.pickle_safe_test_mode_dependencies.append(self.policies)
 
@@ -1057,8 +1053,22 @@ class PPO(object):
                 self.policies[policy_id].entropy_weight()
 
     def verify_truncated(self, terminated, truncated):
-        #FIXME: docs
         """
+        Make sure that our environment terminations and truncations
+        are behaving as expected; only one should be True at any given
+        time.
+
+        Paramters:
+        ----------
+        terminated: dict
+            Dictionary mapping agent ids to bool terminated flags.
+        truncated: dict
+            Dictionary mapping agent ids to bool truncated flags.
+
+        Returns:
+        --------
+        np.ndarray
+            Numpy array marking which environments were truncated.
         """
         first_agent     = next(iter(truncated))
         where_truncated = np.where(truncated[first_agent])
@@ -1087,6 +1097,16 @@ class PPO(object):
         obs,
         critic_obs):
         """
+        Apply any policy constraints needed when resetting the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
         """
         if self.have_policy_reset_constraints:
             for policy_id in self.policies:
@@ -1106,6 +1126,24 @@ class PPO(object):
         truncated,
         info):
         """
+        Apply any policy constraints needed when stepping through the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
+        reward: dict
+            Dictionary mapping agent ids to rewards.
+        terminated: dict
+            Dictionary mapping agent ids to a termination flag.
+        truncated: dict
+            Dictionary mapping agent ids to a truncated flag.
+        info: dict
+            Dictionary mapping agent ids to info dictionaries.
         """
         if self.have_policy_step_constraints:
             for policy_id in self.policies:
@@ -1653,15 +1691,17 @@ class PPO(object):
 
     def learn(self, num_timesteps):
         """
-            Learn!
-                1. Create a rollout dataset.
-                2. Update our networks.
-                3. Repeat until we've reached our max timesteps.
+        Learn!
+            1. Create a rollout dataset.
+            2. Update our networks.
+            3. Repeat until we've reached our max timesteps.
 
-            Arguments:
-                num_timesteps    The maximum number of timesteps to run.
-                                 Note that this is in addtion to however
-                                 many timesteps were run during the last save.
+        Parameters:
+        -----------
+        num_timesteps: int
+            The maximum number of timesteps to run.
+            Note that this is in addtion to however
+            many timesteps were run during the last save.
         """
         start_time = time.time()
         ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
@@ -1777,11 +1817,14 @@ class PPO(object):
 
     def _ppo_batch_train(self, data_loader, policy_id):
         """
-            Train our PPO networks using mini batches.
+        Train our PPO networks using mini batches.
 
-            Arguments:
-                data_loader    A PyTorch data loader for a specific policy.
-                policy_id      The id for the policy that we're training.
+        Parameters:
+        -----------
+        data_loader: PyTorch DataLoader
+            A PyTorch data loader for a specific policy.
+        policy_id: str
+            The id for the policy that we're training.
         """
         total_actor_loss  = 0
         total_critic_loss = 0
@@ -1987,11 +2030,14 @@ class PPO(object):
 
     def _icm_batch_train(self, data_loader, policy_id):
         """
-            Train our ICM networks using mini batches.
+        Train our ICM networks using mini batches.
 
-            Arguments:
-                data_loader    A PyTorch data loader for a specific policy.
-                policy_id      The id for the policy that we're training.
+        Parameters:
+        ----------
+        data_loader: PyTorch DataLoader
+            A PyTorch data loader for a specific policy.
+        policy_id: str
+            The id for the policy that we're training.
         """
         total_icm_loss = 0
         counter = 0
@@ -2039,7 +2085,7 @@ class PPO(object):
 
     def save(self):
         """
-            Save all information required for a restart.
+        Save all information required for a restart.
         """
         if self.verbose:
             rank_print("Saving state")
@@ -2122,8 +2168,8 @@ class PPO(object):
 
     def _save_extrinsic_score_avg(self):
         """
-            Save the extrinsic score averages of each policy to numpy
-            txt files.
+        Save the extrinsic score averages of each policy to numpy
+        txt files.
         """
         for policy_id in self.policies:
             score = self.status_dict[policy_id]["extrinsic score avg"]
@@ -2135,11 +2181,12 @@ class PPO(object):
 
     def set_test_mode(self, test_mode):
         """
-            Enable or disable test mode in all required modules.
+        Enable or disable test mode in all required modules.
 
-            Arguments:
-                test_mode    A bool representing whether or not to enable
-                             test_mode.
+        Parameters:
+        -----------
+        test_mode: bool
+            A bool representing whether or not to enable test mode.
         """
         self.test_mode = test_mode
 
@@ -2148,12 +2195,14 @@ class PPO(object):
 
     def __getstate__(self):
         """
-            Override the getstate method for pickling. We only want to keep
-            things that won't upset pickle. The environment is something
-            that we can't guarantee can be pickled.
+        Override the getstate method for pickling. We only want to keep
+        things that won't upset pickle. The environment is something
+        that we can't guarantee can be pickled.
 
-            Returns:
-                The state dictionary minus the environment.
+        Returns:
+        --------
+        dict:
+            The state dictionary minus the environment.
         """
         state = self.__dict__.copy()
         del state["env"]
@@ -2162,10 +2211,12 @@ class PPO(object):
 
     def __setstate__(self, state):
         """
-            Override the setstate method for pickling.
+        Override the setstate method for pickling.
 
-            Arguments:
-                The state loaded from a pickled PPO object.
+        Parameters:
+        -----------
+        state: dict
+            The state loaded from a pickled PPO object.
         """
         self.__dict__.update(state)
         self.env = None
