@@ -13,6 +13,20 @@ def get_actor_distribution(
     action_space,
     **kw_args):
     """
+    Get the action distribution for an actor network.
+
+    Parameters:
+    -----------
+    action_space: gymnasium space
+        The action space to create a distribution for.
+    kw_args: dict
+        Keyword args to pass to the distribution class.
+
+    Returns:
+    --------
+    tuple:
+        (distribtion, output_func). output_func is the function to
+        apply to the output of the actor network.
     """
     action_dtype    = get_action_dtype(action_space)
     output_func = lambda x : x
