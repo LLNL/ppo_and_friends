@@ -312,6 +312,7 @@ class PPOPolicy():
 
     def shuffle_agent_ids(self):
         """
+        Shuffle our agent ids.
         """
         shuffled_idxs = np.arange(len(self.agent_ids)) 
         np.random.shuffle(shuffled_idxs)
