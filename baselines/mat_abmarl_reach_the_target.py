@@ -72,10 +72,6 @@ class MATAbmarlReachTheTargetRunner(EnvironmentRunner):
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
-        #
-        # NOTE: I've found that MAT generally performs better without
-        # env normalizations.
-        #
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,

@@ -57,7 +57,6 @@ class PressurePlateRunner(GymRunner):
             "bootstrap_clip"   : (-3, 0),
         }
 
-        #FIXME: this env threw an error I think
         #
         # All agents use the same policy, so we can use the basics here.
         #

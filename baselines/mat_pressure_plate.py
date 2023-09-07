@@ -33,7 +33,6 @@ class PressurePlateRunner(GymRunner):
 
                 #critic_view   = "global",#FIXME: I think we can't use policy view for gym envs?
                 critic_view   = "local",
-
                 add_agent_ids = True)
 
         mat_kw_args  = {}
@@ -46,17 +45,9 @@ class PressurePlateRunner(GymRunner):
 
         entropy_weight = LinearScheduler(
             status_key    = "timesteps",
-            status_max    = 2000000,
-            #status_max    = 1000000,
+            status_max    = 1000000,
             max_value     = 0.02,
             min_value     = 0.01)
-
-        #entropy_weight = LinearStepScheduler(
-        #    status_key      = "longest run",
-        #    initial_value   = 0.02,
-        #    compare_fn      = np.less_equal,
-        #    status_triggers = [500, 300],
-        #    step_values     = [0.015, 0.01])
 
         policy_args = {\
             "mat_kw_args"      : mat_kw_args,
@@ -90,10 +81,9 @@ class PressurePlateRunner(GymRunner):
                      epochs_per_iter    = 15,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
-                     normalize_values   = True,
                      normalize_obs      = False,
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     soft_resets        = True,
+                     #soft_resets        = True,
                      **self.kw_run_args)

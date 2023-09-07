@@ -32,7 +32,11 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
         agent_kw_args["distribution_min"] = 0.0
         agent_kw_args["distribution_max"] = 1.0
 
-        lr = 5e-5
+        lr = LinearScheduler(
+            status_key    = "timesteps",
+            status_max    = 20000000,
+            max_value     = 3e-4,
+            min_value     = 1e-5)
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
@@ -64,7 +68,7 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
                      epochs_per_iter     = 15,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 1024,
-                     normalize_obs       = True,
+                     normalize_obs       = False,
                      obs_clip            = None,
                      normalize_rewards   = False,
                      reward_clip         = None,

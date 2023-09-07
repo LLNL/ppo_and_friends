@@ -31,8 +31,6 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
         mat_kw_args = {}
         mat_kw_args["embedding size"] = 64
 
-        #lr = 7e-4
-        #lr = 3e-4
         lr = LinearScheduler(
             status_key    = "timesteps",
             status_max    = 20000000,
