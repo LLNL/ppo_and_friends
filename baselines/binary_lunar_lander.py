@@ -87,7 +87,7 @@ class BinaryLunarLanderRunner(GymRunner):
             policy_args   = policy_args)
 
         save_when = ChangeInStateScheduler(
-            status_key     = "extrinsic score avg",
+            status_key     = "extrinsic reward avg",
             status_preface = "single_agent",
             compare_fn     = np.greater_equal,
             persistent     = True)

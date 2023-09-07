@@ -54,7 +54,6 @@ class PressurePlateRunner(GymRunner):
             "lr"               : lr,
             "entropy_weight"   : entropy_weight,
             "bootstrap_clip"   : (-3, 0),
-            #"bootstrap_clip"   : (-100, 100),
         }
 
         #

@@ -56,7 +56,7 @@ class MPESimpleSpreadRunner(GymRunner):
         }
 
         save_when = ChangeInStateScheduler(
-            status_key     = "extrinsic score avg",
+            status_key     = "extrinsic reward avg",
             status_preface = "agent",
             compare_fn     = np.greater_equal,
             persistent     = True)
