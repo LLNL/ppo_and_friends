@@ -5,7 +5,6 @@ from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
-from collections import OrderedDict
 
 def test_policy(ppo,
                 explore,
@@ -43,19 +42,19 @@ def test_policy(ppo,
     policies   = ppo.policies
     render     = ppo.render
 
-    action_dtype = OrderedDict({})
+    action_dtype = {}
     for agent_id in env.agent_ids:
         action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
 
     max_int      = np.iinfo(np.int32).max
     num_steps    = 0
-    total_policy_scores = OrderedDict({policy_id : 0.0 for policy_id in ppo.policies})
-    min_policy_scores   = OrderedDict({policy_id : max_int for policy_id in ppo.policies})
-    max_policy_scores   = OrderedDict({policy_id : -max_int for policy_id in ppo.policies})
+    total_policy_scores = {policy_id : 0.0 for policy_id in ppo.policies}
+    min_policy_scores   = {policy_id : max_int for policy_id in ppo.policies}
+    max_policy_scores   = {policy_id : -max_int for policy_id in ppo.policies}
 
-    total_agent_scores  = OrderedDict({agent_id : 0.0 for agent_id in env.agent_ids})
-    min_agent_scores    = OrderedDict({agent_id : max_int for agent_id in env.agent_ids})
-    max_agent_scores    = OrderedDict({agent_id : -max_int for agent_id in env.agent_ids})
+    total_agent_scores  = {agent_id : 0.0 for agent_id in env.agent_ids}
+    min_agent_scores    = {agent_id : max_int for agent_id in env.agent_ids}
+    max_agent_scores    = {agent_id : -max_int for agent_id in env.agent_ids}
 
     if render_gif:
         gif_frames = []
@@ -69,10 +68,10 @@ def test_policy(ppo,
         done     = False
 
         episode_agent_scores = \
-            OrderedDict({agent_id : 0.0 for agent_id in env.agent_ids})
+            {agent_id : 0.0 for agent_id in env.agent_ids}
 
         episode_policy_scores = \
-            OrderedDict({policy_id : 0.0 for policy_id in ppo.policies})
+            {policy_id : 0.0 for policy_id in ppo.policies}
 
         while not done:
             num_steps += 1
@@ -119,7 +118,7 @@ def test_policy(ppo,
                 episode_policy_scores[policy_id])
 
     if save_test_scores:
-        score_info = OrderedDict({})
+        score_info = {}
         score_info["num_test_runs"]    = num_test_runs
         score_info["total_time_steps"] = num_steps
 

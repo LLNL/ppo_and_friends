@@ -7,7 +7,6 @@ from gymnasium.spaces import Box, Discrete
 from ppo_and_friends.utils.mpi_utils import rank_print
 from abc import abstractmethod
 from functools import reduce
-from collections import OrderedDict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -256,11 +255,11 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         else:
             self.all_done = False
 
-        obs        = OrderedDict({agent_id : obs})
-        reward     = OrderedDict({agent_id : reward})
-        truncated  = OrderedDict({agent_id : truncated})
-        terminated = OrderedDict({agent_id : terminated})
-        info       = OrderedDict({agent_id : info})
+        obs        = {agent_id : obs}
+        reward     = {agent_id : reward}
+        truncated  = {agent_id : truncated}
+        terminated = {agent_id : terminated}
+        info       = {agent_id : info}
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
@@ -291,9 +290,9 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         # own rules!
         #
         obs = obs.reshape(self.observation_space[agent_id].shape)
-        obs = OrderedDict({agent_id : obs})
+        obs = {agent_id : obs}
 
-        done = OrderedDict({agent_id : False})
+        done = {agent_id : False}
         self._update_done_agents(done)
 
         if self.add_agent_ids:
@@ -349,7 +348,7 @@ class MultiAgentGymWrapper(PPOGymWrapper):
         #
         # Some gym environments are buggy and require a reshape.
         #
-        self.enforced_obs_shape = OrderedDict({})
+        self.enforced_obs_shape = {}
 
         for a_idx, a_id in enumerate(self.agent_ids):
             if self.add_agent_ids:
@@ -403,12 +402,12 @@ class MultiAgentGymWrapper(PPOGymWrapper):
                 A tuple of form (obs, critic_obs, reward,
                 terminated, truncated, info) s.t. each is a dictionary.
         """
-        wrapped_obs        = OrderedDict({})
-        wrapped_reward     = OrderedDict({})
-        wrapped_terminated = OrderedDict({})
-        wrapped_truncated  = OrderedDict({})
-        wrapped_info       = OrderedDict({})
-        done_agents        = OrderedDict({})
+        wrapped_obs        = {}
+        wrapped_reward     = {}
+        wrapped_terminated = {}
+        wrapped_truncated  = {}
+        wrapped_info       = {}
+        done_agents        = {}
         done_array         = np.zeros(len(self.agent_ids)).astype(bool)
 
         if truncated.any() and not truncated.all():
@@ -479,8 +478,8 @@ class MultiAgentGymWrapper(PPOGymWrapper):
                 A tuple of form (obs, critic_obs) s.t.
                 each is a dictionary.
         """
-        wrapped_obs  = OrderedDict({})
-        wrapped_done = OrderedDict({})
+        wrapped_obs  = {}
+        wrapped_done = {}
 
         for a_idx, a_id in enumerate(self.agent_ids):
             agent_obs = obs[a_idx]

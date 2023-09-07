@@ -20,7 +20,6 @@ from ppo_and_friends.utils.misc import format_seconds
 from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
 import time
 from mpi4py import MPI
-from collections import OrderedDict
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
@@ -185,7 +184,7 @@ class PPO(object):
         #
         # Create our policies.
         #
-        self.policies = OrderedDict({})
+        self.policies = {}
         self.have_agent_grouping           = False
         self.have_policy_step_constraints  = False
         self.have_policy_reset_constraints = False
@@ -311,8 +310,8 @@ class PPO(object):
         #
         max_int = np.iinfo(np.int32).max
 
-        self.status_dict = OrderedDict({})
-        self.status_dict["general"] = OrderedDict({})
+        self.status_dict = {}
+        self.status_dict["general"] = {}
         self.status_dict["general"]["iteration"]      = 0
         self.status_dict["general"]["rollout time"]   = 0
         self.status_dict["general"]["train time"]     = 0
@@ -326,7 +325,7 @@ class PPO(object):
         for policy_id in self.policies:
             policy = self.policies[policy_id]
 
-            self.status_dict[policy_id] = OrderedDict({})
+            self.status_dict[policy_id] = {}
             self.status_dict[policy_id]["episode reward avg"]   = 0
             self.status_dict[policy_id]["extrinsic reward avg"] = 0
             self.status_dict[policy_id]["top episode score"]    = -max_int
@@ -348,7 +347,7 @@ class PPO(object):
         #
         # TODO: should we move the value normalizers to the policies?
         if normalize_values:
-            self.value_normalizers = OrderedDict({})
+            self.value_normalizers = {}
 
             for policy_id in policy_settings:
                 self.value_normalizers[policy_id] = RunningStatNormalizer(
@@ -482,9 +481,9 @@ class PPO(object):
         """
         assert component in ["actor", "critic"]
 
-        policy_batches   = OrderedDict({})
-        agent_counts     = OrderedDict({})
-        policy_agent_ids = OrderedDict({})
+        policy_batches   = {}
+        agent_counts     = {}
+        policy_agent_ids = {}
 
         #
         # First, let's populate our "agent_counts" dictionary, which maps
@@ -563,9 +562,9 @@ class PPO(object):
             'actions' have potentially been altered for the environment,
             but 'raw_actions' are guaranteed to be unaltered.
         """
-        raw_actions = OrderedDict({})
-        actions     = OrderedDict({})
-        log_probs   = OrderedDict({})
+        raw_actions = {}
+        actions     = {}
+        log_probs   = {}
 
         #
         # Performing inference on each agent individually is VERY slow.
@@ -619,9 +618,9 @@ class PPO(object):
                 'actions' have potentially been altered for the environment,
                 but 'raw_actions' are guaranteed to be unaltered.
         """
-        raw_actions = OrderedDict({}) 
-        actions     = OrderedDict({})
-        log_probs   = OrderedDict({})
+        raw_actions = {}
+        actions     = {}
+        log_probs   = {}
 
         #TODO: update this to use policy batches.
         for agent_id in obs:
@@ -647,8 +646,8 @@ class PPO(object):
     def _get_policy_grouped_inference_actions(self, obs, explore):
         """
         """
-        actions    = OrderedDict({})
-        policy_obs = OrderedDict({})
+        actions    = {}
+        policy_obs = {}
 
         #
         # First, let's split the agents up into separate obs dictionaries
@@ -658,11 +657,11 @@ class PPO(object):
             policy_id = self.policy_mapping_fn(agent_id)
 
             if policy_id not in policy_obs:
-                policy_obs[policy_id] = OrderedDict({})
+                policy_obs[policy_id] = {}
 
             policy_obs[policy_id][agent_id] = obs[agent_id]
 
-        actions = OrderedDict({})
+        actions = {}
 
         #
         # Next, we handle MAT policies and standard PPO policies
@@ -692,7 +691,7 @@ class PPO(object):
                     self.policies[policy_id].action_space.shape
                 batch_actions = batch_actions.reshape(actions_shape).numpy()
 
-                policy_actions = OrderedDict({})
+                policy_actions = {}
                 for a_idx, a_id in enumerate(agent_ids):
                     policy_actions[a_id] = batch_actions[a_idx]
 
@@ -707,7 +706,7 @@ class PPO(object):
     def _get_mappo_inference_actions(self, obs, explore):
         """
         """
-        actions = OrderedDict({})
+        actions = {}
         for agent_id in obs: 
 
             obs[agent_id] = np.expand_dims(obs[agent_id], 0)
@@ -732,7 +731,7 @@ class PPO(object):
             Returns:
                 A dictionary mapping agent ids to critic values.
         """
-        values = OrderedDict({})
+        values = {}
 
         #
         # Performing inference on each agent individually is VERY slow.
@@ -779,7 +778,7 @@ class PPO(object):
                 mapping agent ids to their natural rewards.
         """
         have_nat_reward = False
-        natural_reward  = OrderedDict({})
+        natural_reward  = {}
         first_agent     = next(iter(info))
         batch_size      = info[first_agent].size
 
@@ -810,7 +809,7 @@ class PPO(object):
             Returns:
                 A replication of "attached" that maps to numpy arrays.
         """
-        detached = OrderedDict({})
+        detached = {}
 
         for agent_id in attached:
             if torch.is_tensor(attached[agent_id]):
@@ -834,7 +833,7 @@ class PPO(object):
             Returns:
                 A replica of "values" mapping to de-normalized values.
         """
-        denorm_values = OrderedDict({})
+        denorm_values = {}
 
         for agent_id in values:
             policy_id = self.policy_mapping_fn(agent_id)
@@ -856,7 +855,7 @@ class PPO(object):
             Returns:
                 A replica of "values" mapping to normalized values.
         """
-        norm_values = OrderedDict({})
+        norm_values = {}
 
         for agent_id in values:
             policy_id = self.policy_mapping_fn(agent_id)
@@ -879,7 +878,7 @@ class PPO(object):
             Returns:
                 A replica of "numpy_dict" that maps to torch tensors.
         """
-        tensor_dict = OrderedDict({})
+        tensor_dict = {}
 
         for agent_id in numpy_dict:
             tensor_dict[agent_id] = torch.tensor(numpy_dict[agent_id],
@@ -908,8 +907,8 @@ class PPO(object):
                 rewards applied, and "intr_rewards" is a dictionary containing
                 the intrinsic rewards alone.
         """
-        intr_rewards = OrderedDict({})
-        rewards = OrderedDict({})
+        intr_rewards = {}
+        rewards = {}
 
         for agent_id in obs:
             policy_id = self.policy_mapping_fn(agent_id)
@@ -1213,20 +1212,20 @@ class PPO(object):
 
         env_batch_size  = self.env.get_batch_size()
 
-        top_rollout_score       = OrderedDict({})
-        rollout_max_ext_reward  = OrderedDict({})
-        rollout_min_ext_reward  = OrderedDict({})
-        rollout_max_intr_reward = OrderedDict({})
-        rollout_min_intr_reward = OrderedDict({})
-        rollout_max_obs         = OrderedDict({})
-        rollout_min_obs         = OrderedDict({})
-        ep_nat_rewards          = OrderedDict({})
-        ep_rewards              = OrderedDict({})
-        ep_intr_rewards         = OrderedDict({})
-        total_ext_rewards       = OrderedDict({})
-        total_intr_rewards      = OrderedDict({})
-        total_rewards           = OrderedDict({})
-        top_reward              = OrderedDict({})
+        top_rollout_score       = {}
+        rollout_max_ext_reward  = {}
+        rollout_min_ext_reward  = {}
+        rollout_max_intr_reward = {}
+        rollout_min_intr_reward = {}
+        rollout_max_obs         = {}
+        rollout_min_obs         = {}
+        ep_nat_rewards          = {}
+        ep_rewards              = {}
+        ep_intr_rewards         = {}
+        total_ext_rewards       = {}
+        total_intr_rewards      = {}
+        total_rewards           = {}
+        top_reward              = {}
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]       = -np.finfo(np.float32).max
@@ -1719,7 +1718,7 @@ class PPO(object):
             if self.save_train_scores:
                 self._save_extrinsic_score_avg()
 
-            data_loaders = OrderedDict({})
+            data_loaders = {}
             for key in self.policies:
                 data_loaders[key] = DataLoader(
                     self.policies[key].dataset,

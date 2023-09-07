@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 import numpy as np
 from gymnasium.spaces import Dict
-from collections import OrderedDict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -194,8 +193,8 @@ class BoxIntActionEnvironment(ABC):
                 A replica of action_space where Box int spaces are converted
                 to MultiDiscrete.
         """
-        self.action_wrappers = OrderedDict({})
-        temp_action_space    = OrderedDict({})
+        self.action_wrappers = {}
+        temp_action_space    = {}
 
         for agent_id in action_space:
             space = action_space[agent_id]
@@ -226,7 +225,7 @@ class BoxIntActionEnvironment(ABC):
             Returns:
                 The results of env.step(...)
         """
-        step_action = OrderedDict({})
+        step_action = {}
 
         for agent_id in action:
             step_action[agent_id] = \

@@ -4,7 +4,6 @@
 """
 import gymnasium as gym
 import numpy as np
-from collections import OrderedDict
 
 def gym_space_to_gymnasium_space(space):
     """
@@ -118,7 +117,7 @@ class Gym21ToGymnasium():
                 The obs and info.
         """
         obs = self.env.reset()
-        return obs, OrderedDict({})
+        return obs, {}
 
     def render(self, *args, **kw_args):
         """

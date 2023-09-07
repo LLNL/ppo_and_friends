@@ -12,7 +12,6 @@ import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import OrderedDict
 
 class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
@@ -170,7 +169,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         critic_obs = self._construct_critic_observation(
             obs, done)
 
-        truncated = OrderedDict({})
+        truncated = {}
         for key in done:
             truncated[key] = False
 
@@ -188,7 +187,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        done = OrderedDict({a_id : False for a_id in obs})
+        done = {a_id : False for a_id in obs}
         self._update_done_agents(done)
 
         critic_obs = self._construct_critic_observation(

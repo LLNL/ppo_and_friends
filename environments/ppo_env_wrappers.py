@@ -14,7 +14,6 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
 from gymnasium.spaces import Dict, Tuple, Box, Discrete
 import gymnasium as gym
-from collections import OrderedDict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -397,7 +396,7 @@ class PPOEnvironmentWrapper(ABC):
 
         self.env               = env
         self.all_done          = False
-        self.null_actions      = OrderedDict({})
+        self.null_actions      = {}
         self.add_agent_ids     = add_agent_ids
         self.critic_view       = critic_view
         self.policy_mapping_fn = policy_mapping_fn
@@ -411,7 +410,7 @@ class PPOEnvironmentWrapper(ABC):
                 assert agent_id in self.death_mask_reward
 
         elif isinstance(death_mask_reward, numbers.Number):
-            self.death_mask_reward = OrderedDict({})
+            self.death_mask_reward = {}
 
             for agent_id in self.agent_ids:
                 self.death_mask_reward[agent_id] = death_mask_reward
@@ -433,15 +432,14 @@ class PPOEnvironmentWrapper(ABC):
         if callable(getattr(self.env, "augment_observation", None)):
             self.can_augment_obs = True
 
-        self.agents_done = OrderedDict(
-            {a_id : False for a_id in self.agent_ids})
+        self.agents_done = {a_id : False for a_id in self.agent_ids}
 
-        self.agent_int_ids = OrderedDict({})
+        self.agent_int_ids = {}
         for a_idx, a_id in enumerate(self.agent_ids):
             self.agent_int_ids[a_id] = a_idx
 
         #FIXME: one hot might work better than ID.
-        #self.agent_one_hot_ids = OrderedDict({})
+        #self.agent_one_hot_ids = {}
         #num_agents = len(self.agent_ids)
         #for a_idx, a_id in enumerate(self.agent_ids):
         #    one_hot = np.zeros(num_agents)#FIXME: debugging MPE simple spread
@@ -523,7 +521,7 @@ class PPOEnvironmentWrapper(ABC):
             Arguments:
                 actions    The action dictionary to filter.
         """
-        filtered_actions = OrderedDict({})
+        filtered_actions = {}
 
         for agent_id in actions:
             if not self.agents_done[agent_id]:
@@ -543,7 +541,7 @@ class PPOEnvironmentWrapper(ABC):
             Returns:
                 A "done" dictionary.
         """
-        done = OrderedDict({})
+        done = {}
         for agent_id in terminal:
             assert agent_id in truncated
             done[agent_id] = terminal[agent_id] or truncated[agent_id]
@@ -589,7 +587,7 @@ class PPOEnvironmentWrapper(ABC):
 
                     reward[agent_id] = self.death_mask_reward[agent_id]
                     done[agent_id]   = self.all_done
-                    info[agent_id]   = OrderedDict({})
+                    info[agent_id]   = {}
 
             elif agent_id not in obs:
                 msg  = "ERROR: encountered an agent_id that is not done, but "
@@ -648,7 +646,7 @@ class PPOEnvironmentWrapper(ABC):
         # share policies.
         #
         elif self.critic_view == "policy":
-            self.policy_spaces = OrderedDict({})
+            self.policy_spaces = {}
 
             #
             # First, map policy ids to shared spaces.
@@ -702,7 +700,7 @@ class PPOEnvironmentWrapper(ABC):
         # Let's be memory sensitive here and only construct
         # one observation that all agents can share.
         #
-        critic_obs = OrderedDict({})
+        critic_obs = {}
 
         agent0 = next(iter(self.agent_ids))
         critic_shape = (1, reduce(lambda a, b: a * b,
@@ -763,8 +761,8 @@ class PPOEnvironmentWrapper(ABC):
             Returns:
                 The critic observations.
         """
-        critic_obs  = OrderedDict({})
-        policy_data = OrderedDict({})
+        critic_obs  = {}
+        policy_data = {}
 
         for policy_id in self.policy_spaces:
             data = np.zeros((1, reduce(lambda a, b : a * b,
@@ -773,7 +771,7 @@ class PPOEnvironmentWrapper(ABC):
             data = data.astype(
                 self.policy_spaces[policy_id].dtype)
 
-            policy_data[policy_id] = OrderedDict({"start" : 0, "data" : data})
+            policy_data[policy_id] = {"start" : 0, "data" : data}
 
         #
         # First pass: construct the shared observations.
@@ -1025,12 +1023,12 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 reward, terminated, truncated, and info tuple,
                 each being a dictionary.
         """
-        batch_obs        = OrderedDict({})
-        batch_critic_obs = OrderedDict({})
-        batch_rewards    = OrderedDict({})
-        batch_terminated = OrderedDict({})
-        batch_truncated  = OrderedDict({})
-        batch_infos      = OrderedDict({})
+        batch_obs        = {}
+        batch_critic_obs = {}
+        batch_rewards    = {}
+        batch_terminated = {}
+        batch_truncated  = {}
+        batch_infos      = {}
 
         #
         # Each agent keeps track of its own batches.
@@ -1050,7 +1048,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             batch_truncated[agent_id]  = np.zeros((self.num_envs, 1)).astype(bool)
             batch_infos[agent_id]      = np.array([None] * self.num_envs)
 
-        env_actions = np.array([OrderedDict({})] * self.num_envs)
+        env_actions = np.array([{}] * self.num_envs)
         for agent_id in actions:
             for b_idx in range(self.num_envs):
                 env_actions[b_idx][agent_id] = actions[agent_id][b_idx]
@@ -1136,8 +1134,8 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 The resulting observation and critic observation
                 dictionaries.
         """
-        batch_obs        = OrderedDict({})
-        batch_critic_obs = OrderedDict({})
+        batch_obs        = {}
+        batch_critic_obs = {}
 
         for env_idx in range(self.num_envs):
             obs, critic_obs = self.envs[env_idx].reset()

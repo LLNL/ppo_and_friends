@@ -13,7 +13,6 @@ import os
 from ppo_and_friends.utils.mpi_utils import rank_print
 from abc import ABC, abstractmethod
 import sys
-from collections import OrderedDict
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -138,13 +137,13 @@ class ObservationNormalizer(ObservationFilter):
             env,
             **kw_args)
 
-        self.actor_running_stats = OrderedDict({})
+        self.actor_running_stats = {}
 
         for agent_id in self.env.observation_space:
             self.actor_running_stats[agent_id] = RunningMeanStd(
                 shape = self.env.observation_space[agent_id].shape)
 
-        self.critic_running_stats = OrderedDict({})
+        self.critic_running_stats = {}
 
         for agent_id in self.env.critic_observation_space:
             self.critic_running_stats[agent_id] = RunningMeanStd(
@@ -374,7 +373,7 @@ class RewardNormalizer(IdentityWrapper):
             env,
             **kw_args)
 
-        self.running_stats = OrderedDict({})
+        self.running_stats = {}
         for agent_id in self.env.agent_ids:
             self.running_stats[agent_id] = RunningMeanStd(shape=())
 
@@ -389,7 +388,7 @@ class RewardNormalizer(IdentityWrapper):
         #
         self.batch_size = self.get_batch_size()
 
-        self.running_reward = OrderedDict({})
+        self.running_reward = {}
         for agent_id in self.env.agent_ids:
             self.running_reward[agent_id] = np.zeros(self.batch_size)
 
@@ -409,7 +408,7 @@ class RewardNormalizer(IdentityWrapper):
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(action)
 
-        agent_dones = OrderedDict({})
+        agent_dones = {}
         for agent_id in self.env.agent_ids:
             agent_dones[agent_id] = np.logical_or(terminated[agent_id],
                 truncated[agent_id])
@@ -608,7 +607,7 @@ class GenericClipper(IdentityWrapper):
             Returns:
                 A new agent dictionary s.t. all values have been clipped.
         """
-        clipped_dict = OrderedDict({})
+        clipped_dict = {}
         for agent_id in agent_dict:
             clipped_dict[agent_id] = self._clip(agent_dict[agent_id])
         return clipped_dict
@@ -814,10 +813,10 @@ class ObservationAugmentingWrapper(IdentityWrapper):
         batch_critic_obs = self.env.augment_critic_observation(critic_obs)
         batch_size       = batch_obs.shape[0]
 
-        batch_rewards    = OrderedDict({})
-        batch_terminated = OrderedDict({})
-        batch_truncated  = OrderedDict({})
-        batch_infos      = OrderedDict({})
+        batch_rewards    = {}
+        batch_terminated = {}
+        batch_truncated  = {}
+        batch_infos      = {}
 
         # TODO: update for terminal critic obs
         for agent_id in obs:
