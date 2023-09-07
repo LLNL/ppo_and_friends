@@ -27,7 +27,7 @@ class MATLevelBasedForagingRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(Gym21ToGymnasium(
                 old_gym.make('Foraging-8x8-3p-2f-v2')),
-                critic_view = "local")#FIXME: setting this to global caused an error. Why??
+                critic_view = "local")
 
         mat_kw_args  = {}
 
