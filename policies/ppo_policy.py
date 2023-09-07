@@ -22,7 +22,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-#FIXME: Rename?
 class PPOPolicy():
     """
         A class representing a policy. A policy can be
@@ -36,7 +35,7 @@ class PPOPolicy():
                  actor_observation_space,
                  critic_observation_space,
                  envs_per_proc,
-                 bootstrap_clip      = (-100., 100.),#FIXME: make sure this doesn't worsen baselines.
+                 bootstrap_clip      = (-100., 100.),
                  ac_network          = FeedForwardNetwork,
                  actor_kw_args       = {},
                  critic_kw_args      = {},
