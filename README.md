@@ -35,7 +35,7 @@ For a full list of policy options and their defaults, see
 `ppo_and_friends/policies/agent_policy.py`.
 
 Note that this implementation of PPO uses separate networks for critics
-and actors.
+and actors (except for the Multi-Agent Transformer).
 
 # MAPPO
 
@@ -61,6 +61,21 @@ Design decisions that may have an impact on learning have largely come
 from the following two papers:
 arXiv:2103.01955v2
 arXiv:2006.07869v4
+
+# Multi-Agent Transformer
+
+The Multi-Agent Transformer (MAT) can be enabled by setting a policie's class
+to MATPolicy. Different policy classses can be used for different policies
+within the same game. For instance, you can have one team use MATPolicy
+and another team use PPOPolicy.
+
+The implemenation of MAT within PPO-AF follows the original publication as
+closely as possible. Some exceptions were made to account for differences
+between the publication and it's associated source code and differences
+in architecture between PPO-AF and the publication's source code.
+
+Full details on MAT can be found at its official site:
+https://sites.google.com/view/multi-agent-transformer
 
 # Terminology
 Terminology varies across implemenations and publications, so here are
@@ -232,7 +247,7 @@ ppoaf --help
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-ppoaf <path_to_runner_file> --num-test-runs <num_test_runs> --render
+ppoaf --test <path_to_runner_file> --num-test-runs <num_test_runs> --render
 ```
 You can optionally omit the `--render` or add the `--render-gif` flag.
 
@@ -240,7 +255,7 @@ By default, exploration is disabled during testing, but you can enable it
 with the `--test-explore` flag. Example:
 
 ```
-ppoaf <path_to_runner_file> --num-test-runs <num_test_runs> --render --test-explore
+ppoaf --test <path_to_runner_file> --num-test-runs <num_test_runs> --render --test-explore
 ```
 
 Note that enabling exploration during testing will have varied results. I've found
@@ -367,6 +382,7 @@ In short, the environment is only reset back to its starting state when it
 reaches a done state. This can be useful when you want to keep your timesteps
 per episode fairly short while allowing your agent(s) to explore the
 environment at further time states.
+**NOTE:** This feature is sometimes referred to as "soft horizons".
 
 ### When to use caution
 While soft resets can be very useful, there are also situations where they
@@ -414,6 +430,8 @@ Installing atari environments:
 pip install gym[atari]
 pip install autorom[accept-rom-license]
 ```
+
+**Mujoco**
 
 Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
 that can help with some of these issues. For testing with the `--render` flag,

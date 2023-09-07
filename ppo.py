@@ -137,7 +137,7 @@ class PPO(object):
             that determines when to save. If None,
             saving will occur every iteration.
         save_train_scores: bool
-            If True, the extrinsic score averages
+            If True, the extrinsic reward averages
             for each policy are saved every iteration.
         pickle_class: bool
             When enabled, the entire PPO class will
@@ -327,13 +327,13 @@ class PPO(object):
             policy = self.policies[policy_id]
 
             self.status_dict[policy_id] = OrderedDict({})
-            self.status_dict[policy_id]["episode reward avg"]  = 0
-            self.status_dict[policy_id]["extrinsic score avg"] = 0
-            self.status_dict[policy_id]["top episode score"]   = -max_int
-            self.status_dict[policy_id]["weighted entropy"]    = 0
-            self.status_dict[policy_id]["actor loss"]          = 0
-            self.status_dict[policy_id]["critic loss"]         = 0
-            self.status_dict[policy_id]["kl avg"]              = 0
+            self.status_dict[policy_id]["episode reward avg"]   = 0
+            self.status_dict[policy_id]["extrinsic reward avg"] = 0
+            self.status_dict[policy_id]["top episode score"]    = -max_int
+            self.status_dict[policy_id]["weighted entropy"]     = 0
+            self.status_dict[policy_id]["actor loss"]           = 0
+            self.status_dict[policy_id]["critic loss"]          = 0
+            self.status_dict[policy_id]["kl avg"]               = 0
             self.status_dict[policy_id]["ext reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top reward"]       = -max_int
             self.status_dict[policy_id]["obs range"]        = (max_int, -max_int)
@@ -1593,8 +1593,6 @@ class PPO(object):
                 top_rollout_score[policy_id] = max(top_rollout_score[policy_id],
                     ep_nat_rewards[policy_id].max())
 
-            # FIXME: this doesn't seem to match up well with the episode average score. Maybe
-            # because of dividing by num agents?? That shouldn't produce this result.
             top_score = top_rollout_score[policy_id]
             top_score = comm.allreduce(top_score, MPI.MAX)
 
@@ -1623,41 +1621,34 @@ class PPO(object):
 
             num_agents = len(self.policies[policy_id].agent_ids)
 
-            #FIXME: do we want to average across agents??
-            total_ext_rewards[policy_id] /= num_agents
             ext_reward_sum  = total_ext_rewards[policy_id].sum()
             ext_reward_sum  = comm.allreduce(ext_reward_sum, MPI.SUM)
 
-            total_rewards[policy_id] /= num_agents
             total_rewards_sum  = total_rewards[policy_id].sum()
             total_rewards_sum  = comm.allreduce(total_rewards_sum, MPI.SUM)
 
-            running_ext_score = ext_reward_sum / total_episodes
-            running_score     = total_rewards_sum / total_episodes
-            rw_range          = (min_reward, max_reward)
-            obs_range         = (min_obs, max_obs)
+            running_ext_reward = ext_reward_sum / total_episodes
+            running_reward     = total_rewards_sum / total_episodes
+            rw_range           = (min_reward, max_reward)
+            obs_range          = (min_obs, max_obs)
 
             global_top_reward = max(self.status_dict[policy_id]["top reward"],
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
-            #FIXME: these names are still confusing. It seems like the difference
-            # between episode reward avg and extrinsic score avg is whether or
-            # not they're using "natural" rewards. let's better name them.
-            self.status_dict[policy_id]["episode reward avg"]  = running_score
-            self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
-            self.status_dict[policy_id]["top episode score"]   = top_score
-            self.status_dict[policy_id]["obs range"]           = obs_range
-            self.status_dict[policy_id]["ext reward range"]    = rw_range
-            self.status_dict[policy_id]["top reward"]          = global_top_reward
+            self.status_dict[policy_id]["episode reward avg"]   = running_reward
+            self.status_dict[policy_id]["extrinsic reward avg"] = running_ext_reward
+            self.status_dict[policy_id]["top episode score"]    = top_score
+            self.status_dict[policy_id]["obs range"]            = obs_range
+            self.status_dict[policy_id]["ext reward range"]     = rw_range
+            self.status_dict[policy_id]["top reward"]           = global_top_reward
 
             if self.policies[policy_id].enable_icm:
-                total_intr_rewards[policy_id] /= num_agents
                 intr_reward = total_intr_rewards[policy_id].sum()
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
                 ism = intr_reward / (total_episodes/ env_batch_size)
-                self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
+                self.status_dict[policy_id]["intrinsic reward avg"] = ism.item()
 
                 max_reward = rollout_max_intr_reward[policy_id]
                 min_reward = rollout_min_intr_reward[policy_id]
@@ -2168,11 +2159,11 @@ class PPO(object):
 
     def _save_extrinsic_score_avg(self):
         """
-        Save the extrinsic score averages of each policy to numpy
+        Save the extrinsic reward averages of each policy to numpy
         txt files.
         """
         for policy_id in self.policies:
-            score = self.status_dict[policy_id]["extrinsic score avg"]
+            score = self.status_dict[policy_id]["extrinsic reward avg"]
             score_f = os.path.join(self.state_path,
                 "scores", f"{policy_id}_scores.npy")
 
