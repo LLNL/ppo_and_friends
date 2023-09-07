@@ -29,6 +29,7 @@ Some of our friends:
 * Intrinsic reward weight annealing
 * Vectorized environments
 * Observational augmentations
+* Multi-Agent Transformer
 
 For a full list of policy options and their defaults, see 
 `ppo_and_friends/policies/agent_policy.py`.

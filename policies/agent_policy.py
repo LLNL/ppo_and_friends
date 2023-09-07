@@ -23,7 +23,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 #FIXME: Rename?
-class AgentPolicy():
+class PPOPolicy():
     """
         A class representing a policy. A policy can be
         used by more than one agent, and more than one policy
@@ -1076,7 +1076,7 @@ class AgentPolicy():
             Compare two policies.
 
             Arguments:
-                other        An instance of AgentPolicy.
+                other        An instance of PPOPolicy.
         """
         #
         # TODO: we currently don't compare optimizers because that
@@ -1088,7 +1088,7 @@ class AgentPolicy():
         # functions that define __eq__, so we're skipping it.
         #
         is_equal = (
-            isinstance(other, AgentPolicy)
+            isinstance(other, PPOPolicy)
             and self.action_space       == other.action_space
             and self.actor_obs_space    == other.actor_obs_space
             and self.critic_obs_space   == other.critic_obs_space
@@ -1107,7 +1107,7 @@ class AgentPolicy():
         """
             A string representation of the policy.
         """
-        str_self  = "AgentPolicy:\n"
+        str_self  = "PPOPolicy:\n"
         str_self += "    action space: {}\n".format(self.action_space)
         str_self += "    actor obs space: {}\n".format(self.actor_obs_space)
         str_self += "    critic obs space: {}\n".format(self.critic_obs_space)

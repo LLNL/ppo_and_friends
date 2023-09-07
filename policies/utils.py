@@ -1,4 +1,4 @@
-from ppo_and_friends.policies.agent_policy import AgentPolicy
+from ppo_and_friends.policies.agent_policy import PPOPolicy
 from ppo_and_friends.policies.mat_policy import MATPolicy
 from ppo_and_friends.utils.mpi_utils import rank_print
 
@@ -43,10 +43,10 @@ def generate_policy(
 
     Returns:
     --------
-    AgentPolicy or derivative
+    PPOPolicy or derivative
         The created policy.
     """
-    supported_types = [MATPolicy, AgentPolicy, None]
+    supported_types = [MATPolicy, PPOPolicy, None]
     if policy_class not in supported_types:
         msg  = "ERROR: policy_class is of unsupported type, "
         msg += "{policy_class}. Supported types are "
@@ -55,7 +55,7 @@ def generate_policy(
         comm.Abort() 
 
     if type(policy_class) == type(None):
-        policy_class = AgentPolicy
+        policy_class = PPOPolicy
 
     policy = policy_class(
         name                      = policy_name,
@@ -74,7 +74,7 @@ def get_single_policy_defaults(
     policy_args,
     policy_name = "single_agent",
     agent_name  = "agent0",
-    policy_type = AgentPolicy):
+    policy_type = PPOPolicy):
     """
     A convenience function for creating a single-agent policy for
     a single agent environment. This function returns the
@@ -91,7 +91,7 @@ def get_single_policy_defaults(
     agent_name: str
         The name of one of the agents of the shared policy.
     policy_type: class
-        A class of type AgentPolicy (or inheriting from).
+        A class of type PPOPolicy (or inheriting from).
 
     Returns:
     --------

@@ -4,20 +4,15 @@ import torch
 from torch.nn import functional as t_func
 from torch import nn
 from copy import deepcopy
-from functools import reduce
 from torch.optim import Adam
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOSharedEpisodeDataset
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_action_dtype
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
-from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
-from ppo_and_friends.utils.misc import get_size_and_shape
-from ppo_and_friends.policies.agent_policy import AgentPolicy
+from ppo_and_friends.policies.agent_policy import PPOPolicy
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -25,7 +20,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
-class MATPolicy(AgentPolicy):
+class MATPolicy(PPOPolicy):
     """
     The Multi-Agent transformer policy. This implementation is based off of
     arXiv:2205.14953
