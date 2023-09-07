@@ -1110,7 +1110,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 batch_rewards[agent_id][env_idx]    = reward[agent_id]
                 batch_terminated[agent_id][env_idx] = terminated[agent_id]
                 batch_truncated[agent_id][env_idx]  = truncated[agent_id]
-                batch_infos[agent_id][env_idx]      = info[agent_id].copy()
+                batch_infos[agent_id][env_idx]      = deepcopy(info[agent_id])
 
         self.obs_cache = deepcopy(batch_obs)
         self.critic_obs_cache = deepcopy(batch_critic_obs)
