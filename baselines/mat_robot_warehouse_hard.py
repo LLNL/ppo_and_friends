@@ -29,7 +29,7 @@ class MATRobotWarehouseTinyRunner(GymRunner):
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('rware-medium-3ag-hard-v1')),
                 critic_view   = "local",
-                add_agent_ids = True)
+                add_agent_ids = False)
 
         mat_kw_args  = {}
 
