@@ -344,8 +344,6 @@ class ObservationNormalizer(ObservationFilter):
         self._check_env_load(path)
 
 
-# FIXME: the reward normalizers won't quite work for MAT unless we use
-# the shared reward wrapper...
 class RewardNormalizer(IdentityWrapper):
     """
         This wrapper uses running statistics to normalize rewards.
