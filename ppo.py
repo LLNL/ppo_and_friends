@@ -638,6 +638,23 @@ class PPO(object):
 
     def get_inference_actions(self, obs, explore):
         """
+        Get actions to be used for evaluation or inference in a
+        deployment.
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
         """
         if self.have_agent_grouping:
             return self._get_policy_grouped_inference_actions(obs, explore)
@@ -645,6 +662,24 @@ class PPO(object):
 
     def _get_policy_grouped_inference_actions(self, obs, explore):
         """
+        Get actions to be used for evaluation or inference in a
+        deployment. This function is specifically for use with
+        policies that group their agents together (like MAT).
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
         """
         actions    = {}
         policy_obs = {}
@@ -705,6 +740,25 @@ class PPO(object):
 
     def _get_mappo_inference_actions(self, obs, explore):
         """
+        Get actions to be used for evaluation or inference in a
+        deployment. This function is specifically for use with
+        standard MAPPO like policies that don't use any agent
+        grouping.
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
         """
         actions = {}
         for agent_id in obs: 
