@@ -9,7 +9,7 @@ num_procs = comm.Get_size()
 
 def to_actor(ac_network):
     """
-        Convert a general PPONetwork to an ActorNetwork.
+    Convert a general PPONetwork to an ActorNetwork.
     """
 
     class ActorNetwork(ac_network):
