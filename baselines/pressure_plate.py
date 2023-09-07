@@ -27,7 +27,9 @@ class PressurePlateRunner(GymRunner):
         # working here...
         env_generator = lambda : \
             MultiAgentGymWrapper(
-                Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')))
+                Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')),
+                critic_view   = "local",
+                add_agent_ids = True)
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()

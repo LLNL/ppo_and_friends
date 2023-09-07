@@ -30,13 +30,14 @@ class PressurePlateRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')),
-
-                #critic_view   = "global",#FIXME: I think we can't use policy view for gym envs?
                 critic_view   = "local",
                 add_agent_ids = True)
 
         mat_kw_args  = {}
 
+        #
+        # TODO: find good setttings for MAT pressure plate.
+        #
         lr = LinearScheduler(
             status_key    = "timesteps",
             status_max    = 2000000,

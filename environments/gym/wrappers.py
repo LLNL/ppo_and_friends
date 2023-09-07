@@ -27,6 +27,16 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
                  *args,
                  **kw_args):
 
+        if "critic_view" in kw_args:
+            supported_views = ["local", "global"]
+
+            if kw_args["critic_view"] not in supported_views:
+                msg  = "ERROR: PPO-AF gym wrappers only support critic views "
+                msg += f"{supported_views}, but received "
+                msg += f"{kw_args['critic_view']}."
+                rank_print(msg)
+                comm.Abort()
+
         super(PPOGymWrapper, self).__init__(
             *args,
             **kw_args)
