@@ -1,4 +1,4 @@
-from ppo_and_friends.policies.agent_policy import PPOPolicy
+from ppo_and_friends.policies.ppo_policy import PPOPolicy
 from ppo_and_friends.policies.mat_policy import MATPolicy
 from ppo_and_friends.utils.mpi_utils import rank_print
 

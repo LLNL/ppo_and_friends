@@ -12,7 +12,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
-from ppo_and_friends.policies.agent_policy import PPOPolicy
+from ppo_and_friends.policies.ppo_policy import PPOPolicy
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
