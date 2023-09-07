@@ -198,19 +198,19 @@ def format_seconds(seconds):
 
 def get_space_shape(space):
     """
-        Return a hand-wavy shape of a given gymnasium space. Not
-        all spaces have a "shape" attribute, but we can infer what
-        it realistically would be.
+    Return a hand-wavy shape of a given gymnasium space. Not
+    all spaces have a "shape" attribute, but we can infer what
+    it realistically would be.
 
-        Parameters
-        ----------
-        space: gymnasium space
-            The space to get the shape of.
+    Parameters
+    ----------
+    space: gymnasium space
+        The space to get the shape of.
 
-        Returns
-        -------
-        int
-            An inferred shape of the space.
+    Returns
+    -------
+    int
+        An inferred shape of the space.
     """
     space_type = type(space)
 
@@ -235,17 +235,17 @@ def get_space_shape(space):
 
 def get_flattened_space_length(space):
     """
-        Get the length of a flattened gymnasium space. Only some spaces
-        are supported here.
+    Get the length of a flattened gymnasium space. Only some spaces
+    are supported here.
 
-        Parameters
-        ----------
-        space: gymnasium space
-            The space to get the flattened length of.
+    Parameters
+    ----------
+    space: gymnasium space
+        The space to get the flattened length of.
 
-        Returns:
-        int
-            The length of the gymnasium space.
+    Returns:
+    int
+        The length of the gymnasium space.
     """
     space_shape = get_space_shape(space)
     return reduce(lambda a, b: a*b, space_shape)
@@ -281,6 +281,18 @@ def get_size_and_shape(descriptor):
 
 def get_action_prediction_shape(space):
     """
+    Assuming the space is an action space that our actor
+    is predicting, get the shape of this prediction.
+
+    Parameters:
+    -----------
+    space: gymnasium space
+        The action space to infer the shape from.
+
+    Returns:
+    --------
+    tuple:
+        The shape of our actor's prediction.
     """
     space_type = type(space)
 
