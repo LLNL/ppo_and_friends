@@ -27,8 +27,7 @@ class RobotWarehouseTinyRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('rware-tiny-3ag-v1')),
-                critic_view = "policy",
-                policy_mapping_fn = lambda *args : "rware",
+                critic_view = "global",
                 add_agent_ids = True)
 
         actor_kw_args = {}

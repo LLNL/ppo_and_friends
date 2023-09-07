@@ -22,6 +22,7 @@ class RobotWarehouseSmallRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('rware-small-4ag-v1')),
+                critic_view = "global",
                 add_agent_ids = True)
 
         actor_kw_args = {}

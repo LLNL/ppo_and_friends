@@ -28,9 +28,8 @@ class MATRobotWarehouseTinyRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('rware-tiny-3ag-v1')),
-                critic_view = "local",
-                policy_mapping_fn = lambda *args : "rware",
-                add_agent_ids = False)
+                critic_view   = "local",
+                add_agent_ids = True)
 
         mat_kw_args  = {}
 
