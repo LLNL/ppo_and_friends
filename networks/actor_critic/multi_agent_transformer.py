@@ -99,11 +99,6 @@ class MATActor(PPONetwork):
             rank_print(msg)
             comm.Abort()
 
-        #
-        # The original paper uses this "relu" gain
-        #
-        internal_gain = nn.init.calculate_gain('relu')
-
         if 'discrete' in self.action_dtype:
             self.action_encoder = nn.Sequential(
                 init_layer(nn.Linear(self.action_pred_size + 1, embedding_size, bias=False),
