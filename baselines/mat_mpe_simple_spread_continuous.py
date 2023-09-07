@@ -9,7 +9,7 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 from ppo_and_friends.policies.mat_policy import MATPolicy
 
 @ppoaf_runner
-class MATMPESimpleSpreadDiscreteRunner(GymRunner):
+class MATMPESimpleSpreadContinuousRunner(GymRunner):
 
     def run(self):
 
