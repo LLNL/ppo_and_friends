@@ -8,10 +8,6 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-# FIXME: if we create a new policy class for MAT, we'll need to support it
-# here. This would also complicate things a bit as the MAT policy would need
-# to be used with the MAT networks, which are currently both user configurable.
-# We could just check that they match up and throw an error if not.
 def generate_policy(
     policy_name,
     policy_class,

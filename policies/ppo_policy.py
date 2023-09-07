@@ -475,9 +475,6 @@ class PPOPolicy():
             rank_print(msg)
             comm.Abort()
 
-    # NOTE: when add episode info, all info is coming from
-    # agents belonging to THIS policy, which means that they
-    # we don't need to distinguish agents for MAT.
     def add_episode_info(
         self, 
         agent_id,
