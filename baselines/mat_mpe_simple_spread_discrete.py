@@ -20,29 +20,24 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
                 simple_spread_v3.parallel_env(
                     N=3,
                     local_ratio=0.5,
-                    max_cycles=128,
+                    max_cycles=64,
                     continuous_actions=False,
                     render_mode=self.get_gym_render_mode()),
 
-                add_agent_ids     = True,
+                add_agent_ids     = False,
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
         mat_kw_args = {}
         mat_kw_args["embedding size"] = 64
 
-        lr = LinearScheduler(
-            status_key    = "timesteps",
-            status_max    = 20000000,
-            max_value     = 3e-4,
-            min_value     = 1e-5)
+        lr = 0.0003
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
             "mat_kw_args"    : mat_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-1.0, 0.0),
         }
 
         policy_settings = { 
@@ -67,7 +62,7 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
                      max_ts_per_ep       = 32,
                      epochs_per_iter     = 10,
                      ts_per_rollout      = ts_per_rollout,
-                     batch_size          = 1024,
+                     batch_size          = 256,
                      normalize_obs       = False,
                      obs_clip            = None,
                      normalize_rewards   = False,
