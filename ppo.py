@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from ppo_and_friends.utils.misc import RunningStatNormalizer
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.policies.utils import generate_policy
+from ppo_and_friends.policies.mat_policy import MATPolicy
 from ppo_and_friends.environments.wrapper_utils import wrap_environment
 from ppo_and_friends.environments.filter_wrappers import RewardNormalizer, ObservationNormalizer
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
@@ -18,7 +19,6 @@ from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
 from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
 import time
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -59,81 +59,107 @@ class PPO(object):
                  verbose             = False,
                  **kw_args):
         """
-            Initialize the PPO trainer.
+        Initialize the PPO trainer.
 
-            Parameters:
-                 env_generator        A function that creates instances of
-                                      the environment to learn from.
-                 policy_settings      A dictionary containing RLLib-like
-                                      policy settings.
-                 policy_mapping_fn    A function mapping agent ids to
-                                      policy ids.
-                 device               A torch device to use for training.
-                 random_seed          A random seed to use.
-                 envs_per_proc        The number of environment instances each
-                                      processor owns.
-                 lr                   The initial learning rate.
-                 max_ts_per_ep        The maximum timesteps to allow per
-                                      episode.
-                 batch_size           The batch size to use when training/
-                                      updating the networks.
-                 ts_per_rollout       A soft limit on the number of timesteps
-                                      to allow per rollout (can span multiple
-                                      episodes). Note that our actual timestep
-                                      count can exceed this limit, but we won't
-                                      start any new episodes once it has.
-                 gamma                The 'gamma' value for calculating
-                                      advantages and discounting rewards
-                                      when normalizing them.
-                 epochs_per_iter      'Epoch' is used loosely and with a variety
-                                      of meanings in RL. In this case, a single
-                                      epoch is a single update of all networks.
-                                      epochs_per_iter is the number of updates
-                                      to perform after a single rollout (which
-                                      may contain multiple episodes).
-                 ext_reward_weight    An optional weight for the extrinsic
-                                      reward.
-                 normalize_adv        Should we normalize the advantages? This
-                                      occurs at the minibatch level.
-                 normalize_obs        Should we normalize the observations?
-                 normalize_rewards    Should we normalize the rewards?
-                 normalize_values     Should we normalize the "values" that our
-                                      critic calculates loss against?
-                 obs_clip             Disabled if None. Otherwise, this should
-                                      be a tuple containing a clip range for
-                                      the observation space as (min, max).
-                 reward_clip          Disabled if None. Otherwise, this should
-                                      be a tuple containing a clip range for
-                                      the reward as (min, max).
-                 render               Should we render the environment while
-                                      training?
-                 frame_pause          If render is True, sleep frame_pause
-                                      seconds between renderings.
-                 load_state           Should we load a saved state?
-                 state_path           The path to save/load our state.
-                 save_when            An instance of ChangeInStateScheduler
-                                      that determines when to save. If None,
-                                      saving will occur every iteration.
-                 save_train_scores    If True, the extrinsic score averages
-                                      for each policy are saved every iteration.
-                 pickle_class         When enabled, the entire PPO class will
-                                      be pickled and saved into the output
-                                      directory after it's been initialized.
-                 soft_resets          Use "soft resets" during rollouts. This
-                                      can be a bool or an instance of
-                                      LinearStepScheduler.
-                 obs_augment          This is a funny option that can only be
-                                      enabled with environments that have a
-                                      "observation_augment" method defined.
-                                      When enabled, this method will be used to
-                                      augment observations into batches of
-                                      observations that all require the same
-                                      treatment (a single action).
-                 test_mode            Most of this class is not used for
-                                      testing, but some of its attributes are.
-                                      Setting this to True will enable test
-                                      mode.
-                 verbose              Enable verbosity?
+        Parameters:
+        -----------
+        env_generator: function
+            A function that creates instances of
+            the environment to learn from.
+        policy_settings: dict
+            A dictionary containing RLLib-like
+            policy settings.
+        policy_mapping_fn: function
+            A function mapping agent ids to
+            policy ids.
+        device: torch.device
+            A torch device to use for training.
+        random_seed: int
+            A random seed to use.
+        envs_per_proc: int
+            The number of environment instances each
+            processor owns.
+        lr: float
+            The initial learning rate.
+        max_ts_per_ep: int
+            The maximum timesteps to allow per episode.
+        batch_size: int
+            The batch size to use when training/updating the networks.
+        ts_per_rollout: int
+            A soft limit on the number of timesteps
+            to allow per rollout (can span multiple
+            episodes). Note that our actual timestep
+            count can exceed this limit, but we won't
+            start any new episodes once it has.
+        gamma: float
+            The 'gamma' value for calculating
+            advantages and discounting rewards
+            when normalizing them.
+        epochs_per_iter: int
+            'Epoch' is used loosely and with a variety
+            of meanings in RL. In this case, a single
+            epoch is a single update of all networks.
+            epochs_per_iter is the number of updates
+            to perform after a single rollout (which
+            may contain multiple episodes).
+        ext_reward_weight: float
+            An optional weight for the extrinsic
+            reward.
+        normalize_adv: bool
+            Should we normalize the advantages? This
+            occurs at the minibatch level.
+        normalize_obs: bool
+            Should we normalize the observations?
+        normalize_rewards: bool
+            Should we normalize the rewards?
+        normalize_values: bool
+            Should we normalize the "values" that our
+            critic calculates loss against?
+        obs_clip: tuple or None
+            Disabled if None. Otherwise, this should
+            be a tuple containing a clip range for
+            the observation space as (min, max).
+        reward_clip: tuple or None
+            Disabled if None. Otherwise, this should
+            be a tuple containing a clip range for
+            the reward as (min, max).
+        render: bool
+            Should we render the environment while training?
+        frame_pause: float
+            If render is True, sleep frame_pause seconds between renderings.
+        load_state: bool
+            Should we load a saved state?
+        state_path: str
+            The path to save/load our state.
+        save_when: subclass of ChangeInStateScheduler
+            An instance of ChangeInStateScheduler
+            that determines when to save. If None,
+            saving will occur every iteration.
+        save_train_scores: bool
+            If True, the extrinsic reward averages
+            for each policy are saved every iteration.
+        pickle_class: bool
+            When enabled, the entire PPO class will
+            be pickled and saved into the output
+            directory after it's been initialized.
+        soft_resets: bool
+            Use "soft resets" during rollouts. This can be a bool or an
+            instance of LinearStepScheduler.
+        obs_augment: bool
+            This is a funny option that can only be
+            enabled with environments that have a
+            "observation_augment" method defined.
+            When enabled, this method will be used to
+            augment observations into batches of
+            observations that all require the same
+            treatment (a single action).
+        test_mode: bool
+            Most of this class is not used for
+            testing, but some of its attributes are.
+            Setting this to True will enable test
+            mode.
+        verbose: bool
+            Enable verbosity?
         """
         set_torch_threads()
 
@@ -155,8 +181,44 @@ class PPO(object):
         if not test_mode:
             rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
 
-        env = wrap_environment(
+        #
+        # Create our policies.
+        #
+        self.policies = {}
+        self.have_agent_grouping           = False
+        self.have_policy_step_constraints  = False
+        self.have_policy_reset_constraints = False
+
+        for policy_id in policy_settings:
+            settings = policy_settings[policy_id]
+
+            self.policies[policy_id] = \
+                generate_policy(
+                    envs_per_proc            = envs_per_proc,
+                    policy_name              = str(policy_id),
+                    policy_class             = settings[0],
+                    actor_observation_space  = settings[1],
+                    critic_observation_space = settings[2],
+                    action_space             = settings[3],
+                    test_mode                = test_mode,
+                    **settings[4])
+
+            if self.policies[policy_id].agent_grouping:
+                self.have_agent_grouping = True
+
+            if self.policies[policy_id].have_step_constraints:
+                self.have_policy_step_constraints = True
+
+            if self.policies[policy_id].have_reset_constraints:
+                self.have_policy_reset_constraints = True
+
+        #
+        # Create our environment instances.
+        #
+        self.env = wrap_environment(
             env_generator     = env_generator,
+            policy_mapping_fn = policy_mapping_fn,
+            policies          = self.policies,
             envs_per_proc     = envs_per_proc,
             random_seed       = random_seed,
             obs_augment       = obs_augment,
@@ -172,21 +234,27 @@ class PPO(object):
         # when in inference.
         #
         self.save_env_info = False
-        if (env.has_wrapper(RewardNormalizer) or
-            env.has_wrapper(ObservationNormalizer)):
+        if (self.env.has_wrapper(RewardNormalizer) or
+            self.env.has_wrapper(ObservationNormalizer)):
             self.save_env_info = True
+
+        #
+        # Register our agents with our policies.
+        #
+        for agent_id in self.env.agent_ids:
+            policy_id = policy_mapping_fn(agent_id)
+            self.policies[policy_id].register_agent(agent_id)
 
         #
         # When we toggle test mode on/off, we need to make sure to also
         # toggle this flag for any modules that depend on it.
         #
-        self.test_mode_dependencies = [env]
+        self.test_mode_dependencies = [self.env]
         self.pickle_safe_test_mode_dependencies = []
 
         #
         # Establish some class variables.
         #
-        self.env                 = env
         self.device              = device
         self.state_path          = state_path
         self.render              = render
@@ -235,24 +303,6 @@ class PPO(object):
         else:
             self.soft_resets = CallableValue(soft_resets)
 
-        self.policies = {}
-        for policy_id in policy_settings:
-            settings = policy_settings[policy_id]
-
-            self.policies[policy_id] = \
-                generate_policy(
-                    policy_name              = str(policy_id),
-                    policy_class             = settings[0],
-                    actor_observation_space  = settings[1],
-                    critic_observation_space = settings[2],
-                    action_space             = settings[3],
-                    test_mode                = test_mode,
-                    **settings[4])
-
-        for agent_id in self.env.agent_ids:
-            policy_id = self.policy_mapping_fn(agent_id)
-            self.policies[policy_id].register_agent(agent_id)
-
         #
         # Create a dictionary to track the status of training.
         # These entries can be general, agent specific, or
@@ -276,13 +326,13 @@ class PPO(object):
             policy = self.policies[policy_id]
 
             self.status_dict[policy_id] = {}
-            self.status_dict[policy_id]["episode reward avg"]  = 0
-            self.status_dict[policy_id]["extrinsic score avg"] = 0
-            self.status_dict[policy_id]["top score"]           = -max_int
-            self.status_dict[policy_id]["weighted entropy"]    = 0
-            self.status_dict[policy_id]["actor loss"]          = 0
-            self.status_dict[policy_id]["critic loss"]         = 0
-            self.status_dict[policy_id]["kl avg"]              = 0
+            self.status_dict[policy_id]["episode reward avg"]   = 0
+            self.status_dict[policy_id]["extrinsic reward avg"] = 0
+            self.status_dict[policy_id]["top episode score"]    = -max_int
+            self.status_dict[policy_id]["weighted entropy"]     = 0
+            self.status_dict[policy_id]["actor loss"]           = 0
+            self.status_dict[policy_id]["critic loss"]          = 0
+            self.status_dict[policy_id]["kl avg"]               = 0
             self.status_dict[policy_id]["ext reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top reward"]       = -max_int
             self.status_dict[policy_id]["obs range"]        = (max_int, -max_int)
@@ -295,6 +345,7 @@ class PPO(object):
         # for calcultaing advantages. We track separate normalizers for
         # each policy.
         #
+        # TODO: should we move the value normalizers to the policies?
         if normalize_values:
             self.value_normalizers = {}
 
@@ -307,9 +358,6 @@ class PPO(object):
             self.test_mode_dependencies.append(self.value_normalizers)
             self.pickle_safe_test_mode_dependencies.append(
                 self.value_normalizers)
-
-        for policy_id in self.policies:
-            self.policies[policy_id].to(self.device)
 
         self.test_mode_dependencies.append(self.policies)
         self.pickle_safe_test_mode_dependencies.append(self.policies)
@@ -331,7 +379,7 @@ class PPO(object):
                 #
                 # Let's ensure backwards compatibility with previous commits.
                 #
-                tmp_status_dict = self.load()
+                tmp_status_dict = self.load_status()
 
                 for key in tmp_status_dict:
                     if key in self.status_dict:
@@ -351,7 +399,13 @@ class PPO(object):
         for policy_id in self.policies:
             policy = self.policies[policy_id]
 
-            self.policies[policy_id].finalize(self.status_dict)
+            #
+            # Finalized needs to be called after the status dictionary
+            # has been loaded so that we can update our learning
+            # rates and various weights (not model weights).
+            #
+            self.policies[policy_id].finalize(self.status_dict, self.device)
+
             self.status_dict[policy_id]["lr"] = policy.lr()
             self.status_dict[policy_id]["entropy weight"] = \
                 policy.entropy_weight()
@@ -361,6 +415,14 @@ class PPO(object):
                     policy.icm_lr()
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
+
+        #
+        # Load the policies after they've been finalized.
+        #
+        if load_state:
+            if os.path.exists(state_path):
+                rank_print("Loading policies from {}".format(state_path))
+                self.load_policies()
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
@@ -388,54 +450,69 @@ class PPO(object):
                 rank_print(f"{sp}action space: {policy.action_space}")
                 rank_print(f"{sp}actor obs space: {policy.actor_obs_space}")
                 rank_print(f"{sp}critic obs space: {policy.critic_obs_space}")
+                rank_print(f"{sp}agent ids: {policy.agent_ids}")
 
         comm.barrier()
 
     def get_policy_batches(self, obs, component):
         """
-            This method will take all of the observations from a step
-            and compress them into numpy array batches. This allows for
-            much faster inference during rollouts.
+        This method will take all of the observations from a step
+        and compress them into numpy array batches. This allows for
+        much faster inference during rollouts.
 
-            Arguments:
-                obs        The observations to create batches from. This
-                           should be a dictionary mapping agent ids to
-                           their observations.
-                component  The network component these observations are
-                           associated with. This can be set to "actor"
-                           or "critic".
+        Parameters:
+        -----------
+        obs: array-like
+            The observations to create batches from. This
+            should be a dictionary mapping agent ids to
+            their observations.
+        component: str
+            The network component these observations are
+            associated with. This can be set to "actor"
+            or "critic".
 
-            Returns:
-                A tuple containing two dictionaries. The first maps
-                policy ids to agent ids, and the second maps policy
-                ids to batches of observations (which can span
-                multiple agents).
+        Returns:
+        --------
+        tuple:
+            The first element is dictionary mapping policy ids to arrays of
+            agent ids in the order they appear in the batches. Next is
+            a dictionary mapping policy ids to batches of agent observations.
+            These batches have shape (num_agents, envs_per_proc, obs_shape).
         """
         assert component in ["actor", "critic"]
 
-        policy_batches = {}
-        policy_agents  = {}
-        agent_counts   = {p_id : 0 for p_id in self.policies}
+        policy_batches   = {}
+        agent_counts     = {}
+        policy_agent_ids = {}
 
         #
-        # First, create our dictionary  mapping policy ids to
-        # to agent ids. This can be used to later reconstruct
-        # "non-batched" data.
+        # First, let's populate our "agent_counts" dictionary, which maps
+        # policy ids to number of agents from these observations that
+        # correspond to the policy.
         #
         for a_id in obs:
             policy_id = self.policy_mapping_fn(a_id)
+
+            if policy_id not in agent_counts:
+                agent_counts[policy_id] = 0
+
             agent_counts[policy_id] += 1
-
-            if policy_id not in policy_agents:
-                policy_agents[policy_id] = []
-
-            policy_agents[policy_id].append(a_id)
 
         #
         # Next, combine observations from all agents that share policies.
         # We'll add these to our dictionary mapping policy ids to batches.
         #
         for policy_id in agent_counts:
+
+            if (agent_counts[policy_id] !=
+                len(self.policies[policy_id].agent_ids)):
+
+                msg  = f"ERROR: expected obs of policy {policy_id} to have "
+                msg += f"{len(self.policies[policy_id].agent_ids)} agents "
+                msg += f"but recieved {agent_counts[policy_id]}!"
+                rank_print(msg)
+                comm.Abort()
+
             if component == "actor":
                 policy_shape = self.policies[policy_id].actor_obs_space.shape
             elif component == "critic":
@@ -451,33 +528,39 @@ class PPO(object):
                 policy_batches[policy_id] = np.zeros(batch_shape).astype(
                     self.policies[policy_id].critic_obs_space.dtype)
 
-            policy_agents[policy_id] = tuple(policy_agents[policy_id])
+            agent_ids = self.policies[policy_id].agent_ids.copy()
 
-        policy_idxs = {p_id : 0 for p_id in policy_batches}
+            policy_agent_ids[policy_id] = agent_ids
 
-        for a_id in obs:
-            policy_id = self.policy_mapping_fn(a_id)
-            b_idx     = policy_idxs[policy_id]
+            #
+            # NOTE: this enforces agent ordering which is needed for
+            # order-sensitive algorithms like MAT.
+            #
+            for a_idx, a_id in enumerate(policy_agent_ids[policy_id]):
+                policy_batches[policy_id][a_idx] = obs[a_id]
 
-            policy_batches[policy_id][b_idx] = \
-                obs[a_id]
+        return policy_agent_ids, policy_batches
 
-            policy_idxs[policy_id] += 1
-
-        return policy_agents, policy_batches
-
-    def get_policy_actions(self, obs):
+    def get_rollout_actions(self, obs):
         """
-            Given a dictionary mapping agent ids to observations,
-            generate an dictionary of actions from our policy.
+        Given a dictionary mapping agent ids to observations,
+        generate an dictionary of actions from our policy.
 
-            Arguments:
-                obs    A dictionary mapping agent ids to observations.
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        ac_component: string
+            Either 'actor' or 'critic'. This should match which component the
+            observations are associated with. In most cases, this is
+            the actor, but cases like MAT only use the critic observations.
 
-            Returns:
-                A tuple of the form (raw_actions, actions, log_probs).
-                'actions' have potentially been altered for the environment,
-                but 'raw_actions' are guaranteed to be unaltered.
+        Returns:
+        --------
+        tuple:
+            A tuple of the form (raw_actions, actions, log_probs).
+            'actions' have potentially been altered for the environment,
+            but 'raw_actions' are guaranteed to be unaltered.
         """
         raw_actions = {}
         actions     = {}
@@ -486,17 +569,21 @@ class PPO(object):
         #
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
+        # Also, some algorithms (like MAT) need agent's to be batched
+        # together.
         #
-        policy_agents, policy_batches = self.get_policy_batches(obs, "actor")
+        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "actor")
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
             num_agents = batch_obs.shape[0]
-            batch_obs  = batch_obs.reshape((-1,) + \
-                self.policies[policy_id].actor_obs_space.shape)
+
+            if not self.policies[policy_id].agent_grouping:
+                batch_obs  = batch_obs.reshape((-1,) + \
+                    self.policies[policy_id].actor_obs_space.shape)
 
             batch_raw_actions, batch_actions, batch_log_probs = \
-                self.policies[policy_id].get_training_actions(batch_obs)
+                self.policies[policy_id].get_rollout_actions(batch_obs)
 
             #
             # We now need to reverse our batching to get actions of
@@ -510,28 +597,32 @@ class PPO(object):
             batch_log_probs   = batch_log_probs.reshape(num_agents,
                 self.envs_per_proc, -1)
 
-            for p_idx, a_id in enumerate(policy_agents[policy_id]):
-                raw_actions[a_id] = batch_raw_actions[p_idx]
-                actions[a_id]     = batch_actions[p_idx]
-                log_probs[a_id]   = batch_log_probs[p_idx]
+            for a_idx, a_id in enumerate(policy_agent_ids[policy_id]):
+                raw_actions[a_id] = batch_raw_actions[a_idx]
+                actions[a_id]     = batch_actions[a_idx]
+                log_probs[a_id]   = batch_log_probs[a_idx]
 
         return raw_actions, actions, log_probs
 
-    def get_policy_actions_from_aug_obs(self, obs):
+    def get_rollout_actions_from_aug_obs(self, obs):
         """
-            Given a dictionary mapping agent ids to augmented
-            batches of observations,
-            generate an dictionary of actions from our policy.
+        Given a dictionary mapping agent ids to augmented
+        batches of observations,
+        generate an dictionary of actions from our policy.
 
-            Arguments:
-                obs    A dictionary mapping agent ids to observations.
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
 
-            Returns:
-                A tuple of the form (raw_actions, actions, log_probs).
-                'actions' have potentially been altered for the environment,
-                but 'raw_actions' are guaranteed to be unaltered.
+        Returns:
+        --------
+        tuple:
+            A tuple of the form (raw_actions, actions, log_probs).
+            'actions' have potentially been altered for the environment,
+            but 'raw_actions' are guaranteed to be unaltered.
         """
-        raw_actions = {} 
+        raw_actions = {}
         actions     = {}
         log_probs   = {}
 
@@ -541,7 +632,7 @@ class PPO(object):
 
             obs_slice = obs[agent_id][0:1]
             raw_action, action, log_prob = \
-                self.policies[policy_id].get_training_actions(obs_slice)
+                self.policies[policy_id].get_rollout_actions(obs_slice)
 
             raw_actions[agent_id] = raw_action
             actions[agent_id]     = action
@@ -549,17 +640,158 @@ class PPO(object):
 
         return raw_actions, actions, log_probs
 
+    def get_inference_actions(self, obs, explore):
+        """
+        Get actions to be used for evaluation or inference in a
+        deployment.
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
+        """
+        if self.have_agent_grouping:
+            return self._get_policy_grouped_inference_actions(obs, explore)
+        return self._get_mappo_inference_actions(obs, explore)
+
+    def _get_policy_grouped_inference_actions(self, obs, explore):
+        """
+        Get actions to be used for evaluation or inference in a
+        deployment. This function is specifically for use with
+        policies that group their agents together (like MAT).
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
+        """
+        actions    = {}
+        policy_obs = {}
+
+        #
+        # First, let's split the agents up into separate obs dictionaries
+        # for each policy. The MAT policies
+        #
+        for agent_id in obs:
+            policy_id = self.policy_mapping_fn(agent_id)
+
+            if policy_id not in policy_obs:
+                policy_obs[policy_id] = {}
+
+            policy_obs[policy_id][agent_id] = obs[agent_id]
+
+        actions = {}
+
+        #
+        # Next, we handle MAT policies and standard PPO policies
+        # distinctly. Standard PPO policies take in a single agent's
+        # observation, while MAT policies take in all of the agent's
+        # observations.
+        #
+        for policy_id in policy_obs:
+            if self.policies[policy_id].agent_grouping:
+                policy_agent_ids, batch_obs = self.get_policy_batches(
+                    obs            = policy_obs[policy_id],
+                    component      = "actor")
+
+                agent_ids = policy_agent_ids[policy_id]
+                batch_obs = batch_obs[policy_id]
+
+                batch_actions = \
+                    self.policies[policy_id].get_inference_actions(
+                        batch_obs, explore)
+
+                #
+                # We now need to reverse our batching and put the agents
+                # back into dictionary form.
+                #
+                num_agents    = len(agent_ids)
+                actions_shape = (num_agents,) +\
+                    self.policies[policy_id].action_space.shape
+                batch_actions = batch_actions.reshape(actions_shape).numpy()
+
+                policy_actions = {}
+                for a_idx, a_id in enumerate(agent_ids):
+                    policy_actions[a_id] = batch_actions[a_idx]
+
+            else:
+                policy_actions = self._get_mappo_inference_actions(
+                    policy_obs[policy_id], explore)
+
+            actions.update(policy_actions)
+
+        return actions
+
+    def _get_mappo_inference_actions(self, obs, explore):
+        """
+        Get actions to be used for evaluation or inference in a
+        deployment. This function is specifically for use with
+        standard MAPPO like policies that don't use any agent
+        grouping.
+
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
+        explore: bool
+            Should the agents actions include exploration? If so,
+            the prediction from the network will be used (possibly after
+            some transformations). If not, we sample the predicted
+            distribution.
+
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to actions.
+        """
+        actions = {}
+        for agent_id in obs: 
+
+            obs[agent_id] = np.expand_dims(obs[agent_id], 0)
+            policy_id     = self.policy_mapping_fn(agent_id)
+
+            agent_action = self.policies[policy_id].get_inference_actions(
+                obs[agent_id], explore)
+
+            actions[agent_id] = agent_action.numpy()
+
+        return actions
+
     def get_policy_values(self, obs):
         """
-            Given a dictionary mapping agent ids to observations,
-            construct a dictionary mapping agent ids to values
-            predicted by the policy critics.
+        Given a dictionary mapping agent ids to observations,
+        construct a dictionary mapping agent ids to values
+        predicted by the policy critics.
 
-            Arguments:
-                obs    A dictionary mapping agent ids to observations.
+        Parameters:
+        -----------
+        obs: dict
+            A dictionary mapping agent ids to observations.
 
-            Returns:
-                A dictionary mapping agent ids to critic values.
+        Returns:
+        --------
+        dict:
+            A dictionary mapping agent ids to critic values.
         """
         values = {}
 
@@ -567,38 +799,49 @@ class PPO(object):
         # Performing inference on each agent individually is VERY slow.
         # Instead, we can batch all shared policy observations.
         #
-        policy_agents, policy_batches = self.get_policy_batches(obs, "critic")
+        policy_agent_ids, policy_batches = self.get_policy_batches(obs, "critic")
         policy_batches = self.np_dict_to_tensor_dict(policy_batches)
 
         for policy_id in policy_batches:
             batch_obs  = policy_batches[policy_id]
             num_agents = batch_obs.shape[0]
-            batch_obs  = batch_obs.reshape((-1,) + \
-                self.policies[policy_id].critic_obs_space.shape)
 
-            batch_values = self.policies[policy_id].critic(batch_obs)
+            if self.policies[policy_id].agent_grouping:
+                batch_obs = batch_obs.swapaxes(0, 1)
+            else:
+                batch_obs  = batch_obs.reshape((-1,) + \
+                    self.policies[policy_id].critic_obs_space.shape)
+
+            batch_values = self.policies[policy_id].get_critic_values(batch_obs)
+
+            if self.policies[policy_id].agent_grouping:
+                batch_obs = batch_obs.swapaxes(0, 1)
 
             batch_values = batch_values.reshape((num_agents, -1))
 
-            for b_idx, a_id in enumerate(policy_agents[policy_id]):
+            for b_idx, a_id in enumerate(policy_agent_ids[policy_id]):
                 values[a_id] = batch_values[b_idx]
 
         return values
 
     def get_natural_reward(self, info):
         """
-            Given an info dictionary, construct a dictionary mapping
-            agent ids to their natural rewards.
+        Given an info dictionary, construct a dictionary mapping
+        agent ids to their natural rewards.
 
-            Arguments:
-                info    The info dictionary. Each element is a sub-dictionary
-                        mapping agent ids to their info.
+        Parameters:
+        -----------
+        info: dict
+            The info dictionary. Each element is a sub-dictionary
+            mapping agent ids to their info.
 
-            Returns:
-                A tuple of form (have_natural_rewards, natural_rewards) s.t.
-                the first index is a boolean signifying whether or not natural
-                rewards were found, and the second index contains a dictionary
-                mapping agent ids to their natural rewards.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (have_natural_rewards, natural_rewards) s.t.
+            the first index is a boolean signifying whether or not natural
+            rewards were found, and the second index contains a dictionary
+            mapping agent ids to their natural rewards.
         """
         have_nat_reward = False
         natural_reward  = {}
@@ -621,36 +864,47 @@ class PPO(object):
 
     def get_detached_dict(self, attached):
         """
-            Given a dictionary mapping agent ids to torch
-            tensors, create a replica of this dictionary
-            containing detached numpy arrays.
+        Given a dictionary mapping agent ids to torch
+        tensors, create a replica of this dictionary
+        containing detached numpy arrays.
 
-            Arguments:
-                attached    A dictionary mapping agent ids to
-                            torch tensors.
+        Parameters:
+        -----------
+        attached: dict
+            A dictionary mapping agent ids to torch tensors.
 
-            Returns:
-                A replication of "attached" that maps to numpy arrays.
+        Returns:
+        --------
+        dict:
+            A replication of "attached" that maps to numpy arrays.
         """
         detached = {}
 
         for agent_id in attached:
-            detached[agent_id] = \
-                attached[agent_id].detach().cpu().numpy()
+            if torch.is_tensor(attached[agent_id]):
+                detached[agent_id] = \
+                    attached[agent_id].detach().cpu().numpy()
+            else:
+                detached[agent_id] = \
+                    attached[agent_id]
 
         return detached
 
     def get_denormalized_values(self, values):
         """
-            Given a dictionary mapping agent ids to critic values,
-            return a replica of this dictionary containing de-normalized
-            values.
+        Given a dictionary mapping agent ids to critic values,
+        return a replica of this dictionary containing de-normalized
+        values.
 
-            Arguments:
-                values    A dictionary mapping agnet ids to values.
+        Parameters:
+        -----------
+        values: dict
+            A dictionary mapping agnet ids to values.
 
-            Returns:
-                A replica of "values" mapping to de-normalized values.
+        Returns:
+        --------
+        dict:
+            A replica of "values" mapping to de-normalized values.
         """
         denorm_values = {}
 
@@ -664,15 +918,19 @@ class PPO(object):
 
     def get_normalized_values(self, values):
         """
-            Given a dictionary mapping agent ids to critic values,
-            return a replica of this dictionary containing normalized
-            values.
+        Given a dictionary mapping agent ids to critic values,
+        return a replica of this dictionary containing normalized
+        values.
 
-            Arguments:
-                values    A dictionary mapping agnet ids to values.
+        Parameters:
+        -----------
+        values: dict
+            A dictionary mapping agnet ids to values.
 
-            Returns:
-                A replica of "values" mapping to normalized values.
+        Returns:
+        --------
+        dict:
+            A replica of "values" mapping to normalized values.
         """
         norm_values = {}
 
@@ -686,16 +944,19 @@ class PPO(object):
 
     def np_dict_to_tensor_dict(self, numpy_dict):
         """
-            Given a dictionary mapping agent ids to numpy arrays,
-            return a replicat of this dictionary mapping to torch
-            tensors.
+        Given a dictionary mapping agent ids to numpy arrays,
+        return a replicat of this dictionary mapping to torch
+        tensors.
 
-            Arguments:
-                 numpy_dict    A dictionary mapping agent ids to numpy
-                               arrays.
+        Parameters:
+        -----------
+        numpy_dict: dict
+            A dictionary mapping agent ids to numpy arrays.
 
-            Returns:
-                A replica of "numpy_dict" that maps to torch tensors.
+        Returns:
+        --------
+        dict:
+            A replica of "numpy_dict" that maps to torch tensors.
         """
         tensor_dict = {}
 
@@ -711,20 +972,27 @@ class PPO(object):
                                 obs,
                                 actions):
         """
-            Apply intrinsic rewards to our extrinsic rewards when using
-            ICM.
+        Apply intrinsic rewards to our extrinsic rewards when using
+        ICM.
 
-            Arguments:
-                ex_rewards    The extrinsic rewards dictionary.
-                prev_obs      The previous observation dictionary.
-                obs           The current observation dictionary.
-                actions       The actions dictionary.
+        Parameters:
+        -----------
+        ext_rewards: dict
+            The extrinsic rewards dictionary.
+        prev_obs: dict
+            The previous observation dictionary.
+        obs: dict
+            The current observation dictionary.
+        actions: dict
+            The actions dictionary.
 
-            Returns:
-                A tuple of form (rewards, intr_rewards) s.t. "rewards" is
-                an updated version of the input rewards that have the intrinsic
-                rewards applied, and "intr_rewards" is a dictionary containing
-                the intrinsic rewards alone.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (rewards, intr_rewards) s.t. "rewards" is
+            an updated version of the input rewards that have the intrinsic
+            rewards applied, and "intr_rewards" is a dictionary containing
+            the intrinsic rewards alone.
         """
         intr_rewards = {}
         rewards = {}
@@ -750,14 +1018,19 @@ class PPO(object):
                             rewards,
                             weight):
         """
-            Apply a wieght to a reward dictionary.
+        Apply a wieght to a reward dictionary.
 
-            Arguments:
-                rewards    The rewards dictionary.
-                weight     A weight to apply to all rewards.
+        Parameters:
+        -----------
+        rewards: dict
+            The rewards dictionary.
+        weight: float
+            A weight to apply to all rewards.
 
-            Returns:
-                The input rewards dictionary after applying the weight.
+        Returns:
+        --------
+        dict:
+            The input rewards dictionary after applying the weight.
         """
         for agent_id in rewards:
             rewards[agent_id] *= weight
@@ -767,17 +1040,21 @@ class PPO(object):
     def get_terminated_envs(self,
                             terminated):
         """
-            Determine which environments are terminated. Because we death mask,
-            we will never be in a situation where an agent is termintaed before
-            its associated environment is terminated.
+        Determine which environments are terminated. Because we death mask,
+        we will never be in a situation where an agent is termintaed before
+        its associated environment is terminated.
 
-            Arguments:
-                terminated    The terminated dictionary.
+        Parameters:
+        -----------
+        terminated: dict
+            The terminated dictionary.
 
-            Returns:
-                A tuple of form (where_term, where_not_term), which contains
-                numpy arrays determining which environments are terminated/
-                not terminated.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (where_term, where_not_term), which contains
+            numpy arrays determining which environments are terminated/
+            not terminated.
         """
         first_id   = next(iter(terminated))
         batch_size = terminated[first_id].size
@@ -795,15 +1072,20 @@ class PPO(object):
 
     def _tile_aug_results(self, action, raw_action, obs, log_prob):
         """
-            When in-line augmentation is enabled, we need to tile
-            some of our results from taking a step. The observations
-            are augmented, and the actions remain the same.
+        When in-line augmentation is enabled, we need to tile
+        some of our results from taking a step. The observations
+        are augmented, and the actions remain the same.
 
-            Arguments:
-                action       The action dictionary.
-                raw_action   The raw action dictionary.
-                obs          The observation dictionary.
-                log_prob     The log prob dictionary.
+        Parameters:
+        -----------
+        action: dict
+            The action dictionary.
+        raw_actio: dict
+            The raw action dictionary.
+        obs: dict
+            The observation dictionary.
+        log_prrob: dict
+            The log prob dictionary.
         """
         for agent_id in obs:
             batch_size   = obs[agent_id].shape[0]
@@ -827,7 +1109,7 @@ class PPO(object):
 
     def print_status(self):
         """
-            Print out statistics from our status_dict.
+        Print out statistics from our status_dict.
         """
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
@@ -850,7 +1132,7 @@ class PPO(object):
 
     def update_learning_rate(self):
         """
-            Update the learning rate.
+        Update the learning rate.
         """
         for policy_id in self.policies:
             self.policies[policy_id].update_learning_rate()
@@ -864,7 +1146,7 @@ class PPO(object):
 
     def update_entropy_weight(self):
         """
-            Update the entropy weight.
+        Update the entropy weight.
         """
         for policy_id in self.policies:
             self.status_dict[policy_id]["entropy weight"] = \
@@ -872,6 +1154,21 @@ class PPO(object):
 
     def verify_truncated(self, terminated, truncated):
         """
+        Make sure that our environment terminations and truncations
+        are behaving as expected; only one should be True at any given
+        time.
+
+        Paramters:
+        ----------
+        terminated: dict
+            Dictionary mapping agent ids to bool terminated flags.
+        truncated: dict
+            Dictionary mapping agent ids to bool truncated flags.
+
+        Returns:
+        --------
+        np.ndarray
+            Numpy array marking which environments were truncated.
         """
         first_agent     = next(iter(truncated))
         where_truncated = np.where(truncated[first_agent])
@@ -895,23 +1192,90 @@ class PPO(object):
 
         return where_truncated
 
+    def apply_policy_reset_constraints(
+        self,
+        obs,
+        critic_obs):
+        """
+        Apply any policy constraints needed when resetting the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
+        """
+        if self.have_policy_reset_constraints:
+            for policy_id in self.policies:
+                obs, critic_obs  = \
+                    self.policies[policy_id].apply_reset_constraints(
+                        obs,
+                        critic_obs)
+
+        return obs, critic_obs
+
+    def apply_policy_step_constraints(
+        self,
+        obs,
+        critic_obs,
+        reward,
+        terminated,
+        truncated,
+        info):
+        """
+        Apply any policy constraints needed when stepping through the environment.
+
+        NOTE: This may alter the values returned by the environment.
+
+        Parameters:
+        -----------
+        obs: dict
+            Dictionary mapping agent ids to actor observations.
+        critic_obs: dict
+            Dictionary mapping agent ids to critic observations.
+        reward: dict
+            Dictionary mapping agent ids to rewards.
+        terminated: dict
+            Dictionary mapping agent ids to a termination flag.
+        truncated: dict
+            Dictionary mapping agent ids to a truncated flag.
+        info: dict
+            Dictionary mapping agent ids to info dictionaries.
+        """
+        if self.have_policy_step_constraints:
+            for policy_id in self.policies:
+                obs, critic_obs, reward, terminated, truncated, info = \
+                    self.policies[policy_id].apply_step_constraints(
+                        obs,
+                        critic_obs,
+                        reward,
+                        terminated,
+                        truncated,
+                        info)
+
+        return obs, critic_obs, reward, terminated, truncated, info
+
     def rollout(self):
         """
-            Create a "rollout" of episodes. This system uses "fixed-length
-            trajectories", which are sometimes referred to as "vectorized"
-            episodes. In short, we step through our environment for a fixed
-            number of iterations, and only allow a fixed number of steps
-            per episode. This fixed number of steps per episode becomes a
-            trajectory. In most cases, our trajectory length < max steps
-            in the environment, which results in trajectories ending before
-            the episode ends. In those cases, we bootstrap the ending value
-            by using our critic to approximate the next value. A key peice
-            of this logic is that the enviorment's state is saved after a
-            trajectory ends, meaning that a new trajectory can start in the
-            middle of an episode.
+        Create a "rollout" of episodes. This system uses "fixed-length
+        trajectories", which are sometimes referred to as "vectorized"
+        episodes. In short, we step through our environment for a fixed
+        number of iterations, and only allow a fixed number of steps
+        per episode. This fixed number of steps per episode becomes a
+        trajectory. In most cases, our trajectory length < max steps
+        in the environment, which results in trajectories ending before
+        the episode ends. In those cases, we bootstrap the ending value
+        by using our critic to approximate the next value. A key peice
+        of this logic is that the enviorment's state is saved after a
+        trajectory ends, meaning that a new trajectory can start in the
+        middle of an episode.
 
-            Returns:
-                A PyTorch dataset containing our rollout.
+        Returns:
+        --------
+            A PyTorch dataset containing our rollout.
         """
         start_time = time.time()
 
@@ -944,8 +1308,10 @@ class PPO(object):
         else:
             initial_reset_func = self.env.reset
 
-        obs, critic_obs    = initial_reset_func()
-        env_batch_size     = self.env.get_batch_size()
+        obs, critic_obs = self.apply_policy_reset_constraints(
+            *initial_reset_func())
+
+        env_batch_size  = self.env.get_batch_size()
 
         top_rollout_score       = {}
         rollout_max_ext_reward  = {}
@@ -960,7 +1326,6 @@ class PPO(object):
         total_ext_rewards       = {}
         total_intr_rewards      = {}
         total_rewards           = {}
-        agents_per_policy       = {}
         top_reward              = {}
 
         for policy_id in self.policies:
@@ -977,20 +1342,24 @@ class PPO(object):
             total_ext_rewards[policy_id]       = np.zeros((env_batch_size, 1))
             total_intr_rewards[policy_id]      = np.zeros((env_batch_size, 1))
             total_rewards[policy_id]           = np.zeros((env_batch_size, 1))
-            agents_per_policy[policy_id]       = 0
             top_reward[policy_id]              = -np.finfo(np.float32).max
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
 
-        for key in self.policies:
-            self.policies[key].initialize_episodes(
+        for policy_id in self.policies:
+            self.policies[policy_id].initialize_episodes(
                 env_batch_size, self.status_dict)
 
-        while total_rollout_ts < self.ts_per_rollout:
+            #
+            # NOTE: The MAT paper proposes shuffling agents once per iteration.
+            # I didn't actually see this happening in their code, but I find
+            # that it does improve training quality a bit.
+            #
+            if self.policies[policy_id].agent_grouping:
+                self.policies[policy_id].shuffle_agent_ids()
 
-            for policy_id in agents_per_policy:
-                agents_per_policy[policy_id] = 0
+        while total_rollout_ts < self.ts_per_rollout:
 
             ep_ts += 1
 
@@ -1002,10 +1371,10 @@ class PPO(object):
 
             if self.obs_augment:
                 raw_action, action, log_prob = \
-                    self.get_policy_actions_from_aug_obs(obs)
+                    self.get_rollout_actions_from_aug_obs(obs)
             else:
                 raw_action, action, log_prob = \
-                    self.get_policy_actions(obs)
+                    self.get_rollout_actions(obs)
 
             value = self.get_policy_values(critic_obs)
 
@@ -1028,7 +1397,7 @@ class PPO(object):
             # the results from a single environment.
             #
             obs, critic_obs, ext_reward, terminated, truncated, info = \
-                self.env.step(action)
+                self.apply_policy_step_constraints(*self.env.step(action))
 
             #
             # Because we always death mask, any environment that's done for
@@ -1076,6 +1445,10 @@ class PPO(object):
 
             for agent_id in action:
                 if term_count > 0:
+                    #
+                    # If an environment is terminal, all agents that are
+                    # in that environment are in a terminal state.
+                    #
                     for term_idx in where_term:
                         ep_obs[agent_id][term_idx] = \
                             info[agent_id][term_idx]["terminal observation"]
@@ -1119,19 +1492,9 @@ class PPO(object):
                 ep_rewards[policy_id]        += reward[agent_id]
                 ep_nat_rewards[policy_id]    += natural_reward[agent_id]
                 ep_intr_rewards[policy_id]   += intr_reward[agent_id]
-                agents_per_policy[policy_id] += 1
 
                 top_reward[policy_id] = max(top_reward[policy_id],
                     natural_reward[agent_id].max())
-
-            #
-            # Since each policy can have multiple agents, we average
-            # the scores to get a more interpretable value.
-            #
-            for policy_id in agents_per_policy:
-                ep_rewards[policy_id]      /= agents_per_policy[policy_id]
-                ep_nat_rewards[policy_id]  /= agents_per_policy[policy_id]
-                ep_intr_rewards[policy_id] /= agents_per_policy[policy_id]
 
             #
             # Episode end cases.
@@ -1145,7 +1508,9 @@ class PPO(object):
             #
             if term_count > 0:
                 #
-                # Every agent has at least one terminated environment.
+                # Every agent has at least one terminated environment, which
+                # means that every policy has at least one terminated
+                # enviornment.
                 #
                 for agent_id in terminated:
                     policy_id = self.policy_mapping_fn(agent_id)
@@ -1156,8 +1521,7 @@ class PPO(object):
                         episode_lengths = episode_lengths,
                         terminal        = np.ones(term_count).astype(bool),
                         ending_values   = np.zeros(term_count),
-                        ending_rewards  = np.zeros(term_count),
-                        status_dict     = self.status_dict)
+                        ending_rewards  = np.zeros(term_count))
 
                     top_rollout_score[policy_id] = \
                         max(top_rollout_score[policy_id],
@@ -1170,7 +1534,7 @@ class PPO(object):
                         total_intr_rewards[policy_id][where_term] += \
                             ep_intr_rewards[policy_id][where_term]
 
-                    total_rewards[policy_id] += \
+                    total_rewards[policy_id][where_term] += \
                         ep_rewards[policy_id][where_term]
 
                     ep_rewards[policy_id][where_term]      = 0
@@ -1249,6 +1613,7 @@ class PPO(object):
                 maxed_count = where_maxed.size
 
                 if maxed_count > 0:
+
                     for agent_id in next_reward:
                         policy_id = self.policy_mapping_fn(agent_id)
 
@@ -1264,8 +1629,7 @@ class PPO(object):
                             episode_lengths = episode_lengths,
                             terminal        = np.zeros(maxed_count).astype(bool),
                             ending_values   = next_value[agent_id],
-                            ending_rewards  = next_reward[agent_id],
-                            status_dict     = self.status_dict)
+                            ending_rewards  = next_reward[agent_id])
 
                 if total_rollout_ts >= self.ts_per_rollout:
 
@@ -1294,6 +1658,7 @@ class PPO(object):
 
 
                     for policy_id in self.policies:
+
                         total_ext_rewards[policy_id] += \
                             ep_nat_rewards[policy_id]
 
@@ -1354,34 +1719,36 @@ class PPO(object):
             max_obs = comm.allreduce(max_obs, MPI.MAX)
             min_obs = comm.allreduce(min_obs, MPI.MIN)
 
-            ext_reward_sum = total_ext_rewards[policy_id].sum()
-            ext_reward_sum = comm.allreduce(ext_reward_sum, MPI.SUM)
+            num_agents = len(self.policies[policy_id].agent_ids)
 
-            agent_rewards  = total_rewards[policy_id].sum()
-            agent_rewards  = comm.allreduce(agent_rewards, MPI.SUM)
+            ext_reward_sum  = total_ext_rewards[policy_id].sum()
+            ext_reward_sum  = comm.allreduce(ext_reward_sum, MPI.SUM)
 
-            running_ext_score = ext_reward_sum / total_episodes
-            running_score     = agent_rewards / total_episodes
-            rw_range          = (min_reward, max_reward)
-            obs_range         = (min_obs, max_obs)
+            total_rewards_sum  = total_rewards[policy_id].sum()
+            total_rewards_sum  = comm.allreduce(total_rewards_sum, MPI.SUM)
+
+            running_ext_reward = ext_reward_sum / total_episodes
+            running_reward     = total_rewards_sum / total_episodes
+            rw_range           = (min_reward, max_reward)
+            obs_range          = (min_obs, max_obs)
 
             global_top_reward = max(self.status_dict[policy_id]["top reward"],
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
-            self.status_dict[policy_id]["episode reward avg"]  = running_score
-            self.status_dict[policy_id]["extrinsic score avg"] = running_ext_score
-            self.status_dict[policy_id]["top score"]           = top_score
-            self.status_dict[policy_id]["obs range"]           = obs_range
-            self.status_dict[policy_id]["ext reward range"]    = rw_range
-            self.status_dict[policy_id]["top reward"]          = global_top_reward
+            self.status_dict[policy_id]["episode reward avg"]   = running_reward
+            self.status_dict[policy_id]["extrinsic reward avg"] = running_ext_reward
+            self.status_dict[policy_id]["top episode score"]    = top_score
+            self.status_dict[policy_id]["obs range"]            = obs_range
+            self.status_dict[policy_id]["ext reward range"]     = rw_range
+            self.status_dict[policy_id]["top reward"]           = global_top_reward
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_rewards[policy_id].sum()
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
                 ism = intr_reward / (total_episodes/ env_batch_size)
-                self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
+                self.status_dict[policy_id]["intrinsic reward avg"] = ism.item()
 
                 max_reward = rollout_max_intr_reward[policy_id]
                 min_reward = rollout_min_intr_reward[policy_id]
@@ -1406,8 +1773,8 @@ class PPO(object):
         #
         # Finalize our datasets.
         #
-        for key in self.policies:
-            self.policies[key].finalize_dataset()
+        for policy_id in self.policies:
+            self.policies[policy_id].finalize_dataset()
 
         comm.barrier()
         stop_time = time.time()
@@ -1415,15 +1782,17 @@ class PPO(object):
 
     def learn(self, num_timesteps):
         """
-            Learn!
-                1. Create a rollout dataset.
-                2. Update our networks.
-                3. Repeat until we've reached our max timesteps.
+        Learn!
+            1. Create a rollout dataset.
+            2. Update our networks.
+            3. Repeat until we've reached our max timesteps.
 
-            Arguments:
-                num_timesteps    The maximum number of timesteps to run.
-                                 Note that this is in addtion to however
-                                 many timesteps were run during the last save.
+        Parameters:
+        -----------
+        num_timesteps: int
+            The maximum number of timesteps to run.
+            Note that this is in addtion to however
+            many timesteps were run during the last save.
         """
         start_time = time.time()
         ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
@@ -1483,7 +1852,7 @@ class PPO(object):
                     # Early ending using KL.
                     # NOTE: OpenAI's implementation multiplies the kl target
                     # by a magic number (1.5). I got sick of magic numbers and
-                    # scapped that approach.
+                    # scrapped that approach.
                     #
                     comm.barrier()
                     if (self.status_dict[policy_id]["kl avg"] >
@@ -1539,11 +1908,14 @@ class PPO(object):
 
     def _ppo_batch_train(self, data_loader, policy_id):
         """
-            Train our PPO networks using mini batches.
+        Train our PPO networks using mini batches.
 
-            Arguments:
-                data_loader    A PyTorch data loader for a specific policy.
-                policy_id      The id for the policy that we're training.
+        Parameters:
+        -----------
+        data_loader: PyTorch DataLoader
+            A PyTorch data loader for a specific policy.
+        policy_id: str
+            The id for the policy that we're training.
         """
         total_actor_loss  = 0
         total_critic_loss = 0
@@ -1555,13 +1927,15 @@ class PPO(object):
         for batch_data in data_loader:
             critic_obs, obs, _, raw_actions, _, advantages, log_probs, \
                 rewards_tg, actor_hidden, critic_hidden, \
-                actor_cell, critic_cell, batch_idxs = batch_data
+               actor_cell, critic_cell, batch_idxs = batch_data
 
             torch.cuda.empty_cache()
 
             if self.normalize_values:
+                orig_shape = rewards_tg.shape
                 rewards_tg = \
-                    self.value_normalizers[policy_id].normalize(rewards_tg)
+                    self.value_normalizers[policy_id].normalize(
+                        rewards_tg.flatten()).reshape(orig_shape)
 
             if obs.shape[0] == 1:
                 continue
@@ -1598,7 +1972,14 @@ class PPO(object):
                 obs,
                 raw_actions)
 
-            data_loader.dataset.values[batch_idxs] = values
+            data_loader.dataset.values[batch_idxs] = values.squeeze(-1).detach()
+
+            curr_log_probs = curr_log_probs.flatten()
+            log_probs      = log_probs.flatten()
+            advantages     = advantages.flatten()
+            entropy        = entropy.flatten()
+            values         = values.flatten()
+            rewards_tg     = rewards_tg.flatten()
 
             #
             # The heart of PPO: arXiv:1707.06347v2
@@ -1660,12 +2041,17 @@ class PPO(object):
 
             if values.size() == torch.Size([]):
                 values = values.unsqueeze(0)
+            else:
+                values = values.squeeze()
 
             #
             # Calculate the critic loss. Optionally, we can use the clipped
             # version.
             #
-            critic_loss = nn.MSELoss()(values, rewards_tg)
+            if self.policies[policy_id].use_huber_loss:
+                critic_loss = nn.HuberLoss(delta=10.0)(values, rewards_tg)
+            else:
+                critic_loss = nn.MSELoss()(values, rewards_tg)
 
             #
             # This clipping strategy comes from arXiv:2005.12729v1, which
@@ -1678,40 +2064,19 @@ class PPO(object):
                     -self.policies[policy_id].vf_clip,
                     self.policies[policy_id].vf_clip)
 
-                clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
+                if self.user_huber_loss:
+                    clipped_loss = nn.HuberLoss(delta=10.0)(clipped_values, rewards_tg)
+                else:
+                    clipped_loss = nn.MSELoss()(clipped_values, rewards_tg)
                 critic_loss  = torch.max(critic_loss, clipped_loss)
 
             total_critic_loss += critic_loss.item()
 
             #
-            # Perform our backwards steps, and average gradients across ranks.
+            # Let the policies update their weights given the actor
+            # and critic losses.
             #
-            # arXiv:2005.12729v1 suggests that gradient clipping can
-            # have a positive effect on training.
-            #
-            self.policies[policy_id].actor_optim.zero_grad()
-            actor_loss.backward(
-                retain_graph = self.policies[policy_id].using_lstm)
-            mpi_avg_gradients(self.policies[policy_id].actor)
-
-            if self.policies[policy_id].gradient_clip is not None:
-                nn.utils.clip_grad_norm_(
-                    self.policies[policy_id].actor.parameters(),
-                    self.policies[policy_id].gradient_clip)
-
-            self.policies[policy_id].actor_optim.step()
-
-            self.policies[policy_id].critic_optim.zero_grad()
-            critic_loss.backward(
-                retain_graph = self.policies[policy_id].using_lstm)
-            mpi_avg_gradients(self.policies[policy_id].critic)
-
-            if self.policies[policy_id].gradient_clip is not None:
-                nn.utils.clip_grad_norm_(
-                    self.policies[policy_id].critic.parameters(),
-                    self.policies[policy_id].gradient_clip)
-
-            self.policies[policy_id].critic_optim.step()
+            self.policies[policy_id].update_weights(actor_loss, critic_loss)
 
             #
             # The idea here is similar to re-computing advantages, but now
@@ -1756,11 +2121,14 @@ class PPO(object):
 
     def _icm_batch_train(self, data_loader, policy_id):
         """
-            Train our ICM networks using mini batches.
+        Train our ICM networks using mini batches.
 
-            Arguments:
-                data_loader    A PyTorch data loader for a specific policy.
-                policy_id      The id for the policy that we're training.
+        Parameters:
+        ----------
+        data_loader: PyTorch DataLoader
+            A PyTorch data loader for a specific policy.
+        policy_id: str
+            The id for the policy that we're training.
         """
         total_icm_loss = 0
         counter = 0
@@ -1772,7 +2140,18 @@ class PPO(object):
 
             torch.cuda.empty_cache()
 
-            if len(actions.shape) != 2:
+            #
+            # If our policies are grouping agents together, the data will come
+            # in shape (batch_size, num_agents, *), but we need
+            # (batch_size * num_agents, *).
+            #
+            if self.policies[policy_id].agent_grouping:
+                batch_size = obs.shape[0] * obs.shape[1]
+                obs        = obs.reshape((batch_size, -1))
+                next_obs   = next_obs.reshape((batch_size, -1))
+                actions    = actions.reshape((batch_size, -1))
+
+            if len(actions.shape) < 2:
                 actions = actions.unsqueeze(1)
 
             _, inv_loss, f_loss = self.policies[policy_id].icm_model(
@@ -1797,7 +2176,7 @@ class PPO(object):
 
     def save(self):
         """
-            Save all information required for a restart.
+        Save all information required for a restart.
         """
         if self.verbose:
             rank_print("Saving state")
@@ -1827,21 +2206,15 @@ class PPO(object):
 
         comm.barrier()
 
-    def load(self):
+    def load_status(self):
         """
-            Load all information required for a restart.
+        Load our status dictionary from a restart.
+
+        Returns:
+        --------
+        dict:
+            The loaded status dictionary.
         """
-
-        for policy_id in self.policies:
-            self.policies[policy_id].load(self.state_path)
-
-        if self.save_env_info and self.env != None:
-            self.env.load_info(self.state_path)
-
-        if self.normalize_values:
-            for policy_id in self.value_normalizers:
-                self.value_normalizers[policy_id].load_info(self.state_path)
-
         if self.test_mode:
             file_name  = "state_0.pickle"
         else:
@@ -1863,13 +2236,34 @@ class PPO(object):
 
         return tmp_status_dict
 
-    def _save_extrinsic_score_avg(self):
+    def load_policies(self):
         """
-            Save the extrinsic score averages of each policy to numpy
-            txt files.
+        Load our policies and related state from a checkpoint.
         """
         for policy_id in self.policies:
-            score = self.status_dict[policy_id]["extrinsic score avg"]
+            self.policies[policy_id].load(self.state_path)
+
+        if self.save_env_info and self.env != None:
+            self.env.load_info(self.state_path)
+
+        if self.normalize_values:
+            for policy_id in self.value_normalizers:
+                self.value_normalizers[policy_id].load_info(self.state_path)
+        
+    def load(self):
+        """
+        Load all information required for a restart.
+        """
+        self.load_policies()
+        return self.load_status()
+
+    def _save_extrinsic_score_avg(self):
+        """
+        Save the extrinsic reward averages of each policy to numpy
+        txt files.
+        """
+        for policy_id in self.policies:
+            score = self.status_dict[policy_id]["extrinsic reward avg"]
             score_f = os.path.join(self.state_path,
                 "scores", f"{policy_id}_scores.npy")
 
@@ -1878,11 +2272,12 @@ class PPO(object):
 
     def set_test_mode(self, test_mode):
         """
-            Enable or disable test mode in all required modules.
+        Enable or disable test mode in all required modules.
 
-            Arguments:
-                test_mode    A bool representing whether or not to enable
-                             test_mode.
+        Parameters:
+        -----------
+        test_mode: bool
+            A bool representing whether or not to enable test mode.
         """
         self.test_mode = test_mode
 
@@ -1891,12 +2286,14 @@ class PPO(object):
 
     def __getstate__(self):
         """
-            Override the getstate method for pickling. We only want to keep
-            things that won't upset pickle. The environment is something
-            that we can't guarantee can be pickled.
+        Override the getstate method for pickling. We only want to keep
+        things that won't upset pickle. The environment is something
+        that we can't guarantee can be pickled.
 
-            Returns:
-                The state dictionary minus the environment.
+        Returns:
+        --------
+        dict:
+            The state dictionary minus the environment.
         """
         state = self.__dict__.copy()
         del state["env"]
@@ -1905,10 +2302,12 @@ class PPO(object):
 
     def __setstate__(self, state):
         """
-            Override the setstate method for pickling.
+        Override the setstate method for pickling.
 
-            Arguments:
-                The state loaded from a pickled PPO object.
+        Parameters:
+        -----------
+        state: dict
+            The state loaded from a pickled PPO object.
         """
         self.__dict__.update(state)
         self.env = None

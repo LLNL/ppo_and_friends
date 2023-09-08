@@ -11,7 +11,7 @@ class AlternateMazeNavigationSim(GridWorldSimulation):
 
     def __init__(self, observe="position", max_steps = 512, **kwargs):
 
-        self.agents    = kwargs['agents']
+        super().__init__(**kwargs)
         self.navigator = kwargs['agents']['navigator']
         self.target    = kwargs['agents']['target']
         self.max_steps = max_steps

@@ -2,7 +2,7 @@ import gym as old_gym
 from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.gym.version_wrappers import Gym21ToGymnasium
 import torch.nn as nn
@@ -21,14 +21,15 @@ class PressurePlateRunner(GymRunner):
             msg  = "ERROR: PressurePlate requires gym version 0.21. "
             msg += "It is not currently supported in gymnasium."
             rank_print(msg)
-            comm.barrier()
             comm.Abort()
 
         # NOTE: the compatibility wrapper that gym comes with wasn't
         # working here...
         env_generator = lambda : \
             MultiAgentGymWrapper(
-                Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')))
+                Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')),
+                critic_view   = "local",
+                add_agent_ids = True)
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()

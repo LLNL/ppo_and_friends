@@ -2,7 +2,7 @@ from pettingzoo.mpe import simple_adversary_v3
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.environments.petting_zoo.wrappers import ParallelZooWrapper
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
@@ -33,8 +33,6 @@ class MPESimpleAdversaryRunner(GymRunner):
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 512
-
-        critic_kw_args = actor_kw_args.copy()
 
         lr = 0.0003
 

@@ -9,14 +9,16 @@ num_procs = comm.Get_size()
 
 class EnvironmentRunner(ABC):
     """
-        A base class for running RL environments.
+    A base class for running RL environments.
     """
 
     def __init__(self,
                  **kw_run_args):
         """
-            Arguments:
-                kw_run_args    Keywoard arguments for training.
+        Parameters:
+        -----------
+        kw_run_args: dict
+            Keywoard arguments for training.
         """
         self.kw_run_args = kw_run_args
 
@@ -45,7 +47,7 @@ class EnvironmentRunner(ABC):
                 **kw_args):
 
         """
-            Run the PPO algorithm.
+        Run the PPO algorithm.
         """
 
         ppo = PPO(policy_settings   = policy_settings,
@@ -64,7 +66,6 @@ class EnvironmentRunner(ABC):
         if test:
             test_policy(ppo           = ppo,
                         explore       = explore_while_testing,
-                        device        = device,
                         render_gif    = render_gif,
                         gif_fps       = gif_fps,
                         num_test_runs = num_test_runs,
@@ -76,11 +77,11 @@ class EnvironmentRunner(ABC):
 
 class GymRunner(EnvironmentRunner):
     """
-        A base class for running gym environments.
+    A base class for running gym environments.
     """
     def get_gym_render_mode(self):
         """
-            Get the render mode for a gym environment.
+        Get the render mode for a gym environment.
         """
         if self.kw_run_args["render"]:
             return "human"
@@ -88,5 +89,3 @@ class GymRunner(EnvironmentRunner):
             return "rgb_array"
         else:
             return None
-
-

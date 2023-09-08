@@ -8,12 +8,12 @@ def test_cart_pole_serial():
     run_training('cart_pole.py', num_timesteps)
     high_score_test('serial cart pole', 'cart_pole.py', 10, passing_scores)
 
-def test_cart_pole_mpi():
+def test_cart_pole_mpi(num_ranks):
 
     num_timesteps = 70000
     passing_scores = {"agent0" : 200.}
 
-    run_training('cart_pole.py', num_timesteps, 2)
+    run_training('cart_pole.py', num_timesteps, num_ranks)
     high_score_test('mpi cart pole', 'cart_pole.py', 10, passing_scores)
 
 def test_cart_pole_multi_envs():
@@ -25,11 +25,11 @@ def test_cart_pole_multi_envs():
         baseline_runner = 'cart_pole.py',
         num_timesteps   = num_timesteps,
         num_ranks       = 0,
-        options         = '--env-per-proc 2')
+        options         = '--envs-per-proc 2')
 
     high_score_test('multi-env cart pole', 'cart_pole.py', 10, passing_scores)
 
-def test_cart_pole_multi_envs_mpi():
+def test_cart_pole_multi_envs_mpi(num_ranks):
 
     num_timesteps = 70000
     passing_scores = {"agent0" : 200.}
@@ -37,8 +37,8 @@ def test_cart_pole_multi_envs_mpi():
     run_training(
         baseline_runner = 'cart_pole.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
-        options         = '--env-per-proc 2')
+        num_ranks       = num_ranks,
+        options         = '--envs-per-proc 2')
 
     high_score_test('multi-env mpi cart pole', 'cart_pole.py', 10, passing_scores)
 
@@ -59,27 +59,27 @@ def test_binary_cart_pole_serial():
 #
 # LunarLander tests
 #
-def test_lunar_lander_mpi():
+def test_lunar_lander_mpi(num_ranks):
     num_timesteps = 500000
     passing_scores = {"agent0" : 200.}
 
     run_training(
         baseline_runner = 'lunar_lander.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
+        num_ranks       = num_ranks,
         options         = '')
 
     high_score_test('mpi lunar lander',
         'lunar_lander.py', 10, passing_scores)
 
-def test_binary_lunar_lander_mpi():
+def test_binary_lunar_lander_mpi(num_ranks):
     num_timesteps = 300000
     passing_scores = {"agent0" : 100.}
 
     run_training(
         baseline_runner = 'binary_lunar_lander.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
+        num_ranks       = num_ranks,
         options         = '')
 
     high_score_test('binary lunar lander',
@@ -88,43 +88,41 @@ def test_binary_lunar_lander_mpi():
 #
 # MountainCar tests
 #
-def test_mountain_car_mpi():
+def test_mountain_car_mpi(num_ranks):
     num_timesteps = 300000
     passing_scores = {"agent0" :-199.}
 
     run_training(
         baseline_runner = 'mountain_car.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
+        num_ranks       = num_ranks,
         options         = '')
 
     high_score_test('mountain car',
         'mountain_car.py', 10, passing_scores)
 
-def test_mountain_car_continous_mpi():
+def test_mountain_car_continous_mpi(num_ranks):
     num_timesteps = 300000
     passing_scores = {"agent0" :50.}
 
     run_training(
         baseline_runner = 'mountain_car_continuous.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
+        num_ranks       = num_ranks,
         options         = '')
 
     high_score_test('mountain car continuous',
         'mountain_car_continuous.py', 10, passing_scores)
 
+def test_mat_robot_warehouse_tiny(num_ranks):
+    num_timesteps = 10000000
+    passing_scores = {"single_agent" : 3.0}
 
-if __name__ == "__main__":
+    run_training(
+        baseline_runner = 'mat_robot_warehouse_tiny.py',
+        num_timesteps   = num_timesteps,
+        num_ranks       = num_ranks,
+        options         = '')
 
-    test_cart_pole_serial()
-    test_cart_pole_mpi()
-    test_cart_pole_multi_envs()
-    test_cart_pole_multi_envs_mpi()
-    test_binary_cart_pole_serial()
-
-    test_lunar_lander_mpi()
-    test_binary_lunar_lander_mpi()
-
-    test_mountain_car_mpi()
-    test_mountain_car_continous_mpi()
+    high_score_test('mat robot warehouse tiny',
+        'mat_robot_warehouse_tiny.py', 10, passing_scores)

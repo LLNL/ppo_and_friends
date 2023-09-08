@@ -1,7 +1,7 @@
 from ppo_and_friends.environments.abmarl.wrappers import AbmarlWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import EnvironmentRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
 import torch.nn as nn
@@ -37,12 +37,14 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
 
         env_generator = lambda : \
                 AbmarlWrapper(env               = abmarl_rtt_env,
-                              policy_mapping_fn = policy_mapping_fn)
+                              policy_mapping_fn = policy_mapping_fn,
+                              critic_view       = "policy")
 
         #
         # This environment is multi-agent and requires different policies.
         #
-        policy_settings = { "target" : \
+        policy_settings = {
+            "target" :
             (None,
              env_generator().observation_space["target"],
              env_generator().critic_observation_space["target"],

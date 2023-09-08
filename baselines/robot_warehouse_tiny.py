@@ -3,7 +3,7 @@ import rware
 from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.gym.version_wrappers import Gym21ToGymnasium
 import torch.nn as nn
@@ -27,8 +27,7 @@ class RobotWarehouseTinyRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('rware-tiny-3ag-v1')),
-                critic_view = "policy",
-                policy_mapping_fn = lambda *args : "rware",
+                critic_view = "global",
                 add_agent_ids = True)
 
         actor_kw_args = {}

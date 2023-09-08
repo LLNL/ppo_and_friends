@@ -3,6 +3,7 @@
 """
 import torch.nn as nn
 import numpy as np
+from functools import reduce
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -50,45 +51,60 @@ def get_maxpool2d_out_size(in_size,
 
 
 def init_layer(layer,
-               weight_std = np.sqrt(2),
+               gain       = np.sqrt(2),
                bias_const = 0.0):
     """
-        Orthogonally initialize a neural network layer using an std weight and
-        a bias constant.
+    Orthogonally initialize a neural network layer using an std weight and
+    a bias constant.
 
-        Arguments:
-            layer         The network layer.
-            weight_std    The std weight.
-            bias_const    The bias constants.
+    Parameters:
+    -----------
+    layer: PyTorch layer
+        The network.
+    gain: float
+        The std weight used as a scaling factor.
+    bias_const: float
+        The bias constants.
 
-        Returns:
-            The initialized layer.
+    Returns:
+    --------
+    PyTorch layer
+        The initialized layer.
     """
 
-    nn.init.orthogonal_(layer.weight, weight_std)
-    nn.init.constant_(layer.bias, bias_const)
+    nn.init.orthogonal_(layer.weight, gain)
+
+    if layer.bias is not None:
+        nn.init.constant_(layer.bias, bias_const)
 
     return layer
 
+
 def init_net_parameters(net,
-                        weight_std = np.sqrt(2),
+                        gain = np.sqrt(2),
                         bias_const = 0.0):
     """
-        Orthogonally initialize a neural network using an std weight and
-        a bias constant.
+    Orthogonally initialize a neural network using an std weight and
+    a bias constant.
 
-        Arguments:
-            net           The network.
-            weight_std    The std weight.
-            bias_const    The bias constants.
+    Parameters:
+    -----------
+    net: PyTorch nn.Module
+        The network.
+    gain: float
+        The std weight used as a scaling factor.
+    bias_const: float
+        The bias constants.
 
-        Returns:
-            The initialized network.
+    Returns:
+    --------
+    PyTorch nn.Module
+        The initialized network.
     """
 
     for name, param in net.named_parameters():
         if 'weight' in name:
-            nn.init.orthogonal_(param, weight_std)
+            nn.init.orthogonal_(param, gain)
         elif 'bias' in name:
             nn.init.constant_(param, bias_const)
 
@@ -96,7 +112,7 @@ def init_net_parameters(net,
 
 
 def create_sequential_network(
-    in_dim,
+    in_size,
     out_size,
     hidden_size,
     hidden_depth,
@@ -106,12 +122,8 @@ def create_sequential_network(
         Create a Sequential torch network.
 
         Arguments:
-            in_dim          The dimensions of the input data. For
-                            instance, if the expected input shape is
-                            (batch_size, 16, 4), in_dim would be (16, 4).
-            out_dim         The expected dimensions for the output. For
-                            instance, if the expected output shape is
-                            (batch_size, 16, 4), out_dim would be (16, 4).
+            in_size         The size of the input field (int).
+            out_size        The size of the output field (int).
             activation      The activation function to use on the output
                             of hidden layers.
             hidden_size     Can either be an int or list of ints. If an int,
@@ -147,7 +159,7 @@ def create_sequential_network(
 
     if len(hidden_size) != 0:
 
-        layers.append(init_layer(nn.Linear(in_dim, hidden_size[0])))
+        layers.append(init_layer(nn.Linear(in_size, hidden_size[0])))
         layers.append(activation)
 
         inner_layer_list = []
@@ -165,15 +177,15 @@ def create_sequential_network(
         if out_init != None:
             layers.append(init_layer(
                 nn.Linear(hidden_size[-1], out_size),
-                    weight_std=out_init))
+                    gain=out_init))
         else:
             layers.append(init_layer(
                 nn.Linear(hidden_size[-1], out_size)))
     else:
         if out_init != None:
-            layers.append(init_layer(nn.Linear(in_dim, out_size),
-                weight_std=out_init))
+            layers.append(init_layer(nn.Linear(in_size, out_size),
+                gain=out_init))
         else:
-            layers.append(init_layer(nn.Linear(in_dim, out_size)))
+            layers.append(init_layer(nn.Linear(in_size, out_size)))
 
     return nn.Sequential(*layers)

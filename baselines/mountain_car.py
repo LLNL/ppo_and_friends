@@ -2,7 +2,7 @@ import gymnasium as gym
 from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
@@ -38,12 +38,6 @@ class MountainCarRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-
-            #
-            # NOTE: I find that that the chosen bootstrap clip
-            # is VERY important in this environment. Too much
-            # optimism appears to lead to less exploration.
-            #
             "bootstrap_clip"   : (-.01, 0.0),
             "enable_icm"       : True,
             "icm_kw_args"      : icm_kw_args,
@@ -55,7 +49,7 @@ class MountainCarRunner(GymRunner):
             policy_args   = policy_args)
 
         save_when = ChangeInStateScheduler(
-            status_key     = "extrinsic score avg",
+            status_key     = "extrinsic reward avg",
             status_preface = "single_agent",
             compare_fn     = np.greater_equal,
             persistent     = True)

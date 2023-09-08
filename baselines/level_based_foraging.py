@@ -3,7 +3,7 @@ import lbforaging
 from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.gym.version_wrappers import Gym21ToGymnasium
 import torch.nn as nn
@@ -12,6 +12,7 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
+
 
 @ppoaf_runner
 class LevelBasedForagingRunner(GymRunner):
@@ -26,7 +27,8 @@ class LevelBasedForagingRunner(GymRunner):
 
         env_generator = lambda : \
             MultiAgentGymWrapper(Gym21ToGymnasium(
-                old_gym.make('Foraging-8x8-3p-2f-v2')))
+                old_gym.make('Foraging-8x8-3p-2f-v2')),
+                critic_view="global")
 
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()

@@ -7,6 +7,8 @@ from collections.abc import Iterable
 
 def wrap_environment(
     env_generator,
+    policy_mapping_fn,
+    policies,
     envs_per_proc         = 1,
     random_seed           = 2,
     obs_augment           = False,
@@ -17,22 +19,39 @@ def wrap_environment(
     gamma                 = 0.99,
     test_mode             = False):
     """
-        Apply standard wrappers to an environment.
+    Apply wrappers to an environment.
 
-        Arguments:
-            env_generator        A function outputing instances of our env.
-            envs_per_proc        How many env instances per processor?
-            random_seed          The random seed.
-            obs_augment          Apply the obs augment wrapper?
-            normalize_obs        Apply the normalize obs wrapper?
-            normalize_rewards    Apply the normalize rewards wrapper?
-            obs_clip             Apply the obs clip wrapper?
-            reward_clip          Apply the reward clip wrapper?
-            gamma                The gamma/discount for the reward normalizer.
-            test_mode            Are we testing?
+    Parameters:
+    -----------
+    env_generator: function
+        A function outputing instances of our env.
+    policy_mapping_fn: dict
+        A dictionary mapping agent ids to policy ids.
+    policies: dict
+        A dictionary mapping policy ids to references to policy classes.
+    envs_per_proc: int
+        How many env instances per processor?
+    random_seed: int
+        The random seed.
+    obs_augment: bool
+        Apply the obs augment wrapper?
+    normalize_obs: bool
+        Apply the normalize obs wrapper?
+    normalize_rewards: bool
+        Apply the normalize rewards wrapper?
+    obs_clip: tuple or None
+        Tuple containing the obs clip bounds or None.
+    reward_clip: tuple or None
+        Tuple containing the reward clip bounds or None.
+    gamma: float
+        The gamma/discount for the reward normalizer.
+    test_mode: bool
+        Are we testing?
 
-        Returns:
-            The wrapped environment.
+    Returns:
+    --------
+    PPO environment wrapper class
+        The wrapped environment.
     """
     #
     # Begin adding wrappers. Order matters!

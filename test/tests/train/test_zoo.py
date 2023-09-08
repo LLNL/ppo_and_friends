@@ -3,21 +3,41 @@ from utils import run_training, high_score_test
 #
 # MPE tests
 #
-def test_mpe_simple_tag_mpi():
-    num_timesteps = 100000
+def test_mpe_simple_tag_mpi(num_ranks):
+    num_timesteps = 200000
     passing_scores = {"adversary_1" : 100.0}
 
     run_training(
         baseline_runner = 'mpe_simple_tag.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = 2,
+        num_ranks       = num_ranks,
         options         = '--test-explore')
 
     high_score_test('mpi mpe simple tag',
         'mpe_simple_tag.py', 10, passing_scores)
 
+def test_mat_mpe_simple_tag_discrete_mpi(num_ranks):
+    num_timesteps = 200000
+    passing_scores = {"adversary" : 300.0}
 
-if __name__ == "__main__":
+    run_training(
+        baseline_runner = 'mat_mpe_simple_tag_discrete.py',
+        num_timesteps   = num_timesteps,
+        num_ranks       = num_ranks,
+        options         = '--test-explore')
 
-    test_mpe_simple_tag_mpi()
+    high_score_test('mat mpi mpe simple tag discrete',
+        'mat_mpe_simple_tag_discrete.py', 10, passing_scores)
 
+def test_mat_mpe_simple_tag_continuous_mpi(num_ranks):
+    num_timesteps = 200000
+    passing_scores = {"adversary" : 300.0}
+
+    run_training(
+        baseline_runner = 'mat_mpe_simple_tag_continuous.py',
+        num_timesteps   = num_timesteps,
+        num_ranks       = num_ranks,
+        options         = '--test-explore')
+
+    high_score_test('mat mpi mpe simple tag continuous',
+        'mat_mpe_simple_tag_continuous.py', 10, passing_scores)
