@@ -12,7 +12,7 @@ class HopperRunner(GymRunner):
 
     def run(self):
         env_generator = lambda : \
-            SingleAgentGymWrapper(gym.make('Hopper-v3',
+            SingleAgentGymWrapper(gym.make('Hopper-v4',
                 render_mode = self.get_gym_render_mode()))
 
         actor_kw_args = {}
