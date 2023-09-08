@@ -9,32 +9,38 @@ import os
 def test_policy(ppo,
                 explore,
                 num_test_runs,
-                device,
                 render_gif       = False,
                 gif_fps          = 15,
                 frame_pause      = 0.0,
                 save_test_scores = False,
+                verbose          = False,
                 **kw_args):
     """
-        Test a trained policy.
+    Test a trained policy.
 
-        Arguments:
-            ppo              An instance of PPO from ppo.py.
-            explore          Bool determining whether or not exploration should
-                             be enabled while testing.
-            render_gif       Create a gif from the renderings.
-            gif_fps          The frames per second for rendering a gif.
-            num_test_runs    How many times should we run in the environment?
-            device           The device to infer on.
-            frame_pause      If rendering, sleep frame_pause seconds between
-                             renderings.
-            save_test_scores If True, save the agent scores to a pickled
-                             dictionary.
+    Paramters:
+    ----------
+    ppo: object
+        An instance of PPO from ppo.py.
+    explore: bool
+        Bool determining whether or not exploration should
+        be enabled while testing.
+    render_gif: bool
+        Create a gif from the renderings.
+    gif_fps: int
+        The frames per second for rendering a gif.
+    num_test_runs: int
+        How many times should we run in the environment?
+    frame_pause: float
+        If rendering, sleep frame_pause seconds between renderings.
+    save_test_scores: bool
+        If True, save the agent scores to a pickled dictionary.
+    verbose: bool
+        Enable verbosity?
     """
     env        = ppo.env
     policies   = ppo.policies
     render     = ppo.render
-    policy_map = ppo.policy_mapping_fn
 
     action_dtype = {}
     for agent_id in env.agent_ids:
@@ -42,9 +48,13 @@ def test_policy(ppo,
 
     max_int      = np.iinfo(np.int32).max
     num_steps    = 0
-    total_scores = {agent_id : 0.0 for agent_id in env.agent_ids}
-    min_scores   = {agent_id : max_int for agent_id in env.agent_ids}
-    max_scores   = {agent_id : -max_int for agent_id in env.agent_ids}
+    total_policy_scores = {policy_id : 0.0 for policy_id in ppo.policies}
+    min_policy_scores   = {policy_id : max_int for policy_id in ppo.policies}
+    max_policy_scores   = {policy_id : -max_int for policy_id in ppo.policies}
+
+    total_agent_scores  = {agent_id : 0.0 for agent_id in env.agent_ids}
+    min_agent_scores    = {agent_id : max_int for agent_id in env.agent_ids}
+    max_agent_scores    = {agent_id : -max_int for agent_id in env.agent_ids}
 
     if render_gif:
         gif_frames = []
@@ -54,10 +64,14 @@ def test_policy(ppo,
 
     for _ in range(num_test_runs):
 
-        obs, _   = env.reset()
+        obs, _   = ppo.apply_policy_reset_constraints(*env.reset())
         done     = False
 
-        episode_score = {agent_id : 0.0 for agent_id in env.agent_ids}
+        episode_agent_scores = \
+            {agent_id : 0.0 for agent_id in env.agent_ids}
+
+        episode_policy_scores = \
+            {policy_id : 0.0 for policy_id in ppo.policies}
 
         while not done:
             num_steps += 1
@@ -68,21 +82,9 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render())
 
-            actions = {}
-            for agent_id in obs:
-
-                obs[agent_id] = torch.tensor(obs[agent_id],
-                    dtype=torch.float).to(device)
-
-                obs[agent_id] = obs[agent_id].unsqueeze(0)
-                policy_id     = policy_map(agent_id)
-
-                agent_action = policies[policy_id].get_inference_actions(
-                    obs[agent_id], explore)
-
-                actions[agent_id] = agent_action.numpy()
-
-            obs, _, reward, terminated, truncated, info = env.step(actions)
+            actions = ppo.get_inference_actions(obs, explore)
+            obs, _, reward, terminated, truncated, info = \
+                ppo.apply_policy_step_constraints(*env.step(actions))
 
             done = env.get_all_done()
 
@@ -94,37 +96,73 @@ def test_policy(ppo,
                 else:
                     score = reward[agent_id]
 
-                total_scores[agent_id]  += score
-                episode_score[agent_id] += score
+                policy_id = ppo.policy_mapping_fn(agent_id)
+                total_policy_scores[policy_id]   += score
+                episode_policy_scores[policy_id] += score
 
-        for agent_id in total_scores:
-            min_scores[agent_id] = min(min_scores[agent_id],
-                episode_score[agent_id])
-            max_scores[agent_id] = max(max_scores[agent_id],
-                episode_score[agent_id])
+                total_agent_scores[agent_id]   += score
+                episode_agent_scores[agent_id] += score
+
+        for agent_id in total_agent_scores:
+            min_agent_scores[agent_id] = min(min_agent_scores[agent_id],
+                episode_agent_scores[agent_id])
+
+            max_agent_scores[agent_id] = max(max_agent_scores[agent_id],
+                episode_agent_scores[agent_id])
+
+        for policy_id in total_policy_scores:
+            min_policy_scores[policy_id] = min(min_policy_scores[policy_id],
+                episode_policy_scores[policy_id])
+
+            max_policy_scores[policy_id] = max(max_policy_scores[policy_id],
+                episode_policy_scores[policy_id])
 
     if save_test_scores:
         score_info = {}
         score_info["num_test_runs"]    = num_test_runs
         score_info["total_time_steps"] = num_steps
 
-    for agent_id in env.agent_ids:
-        print("\nAgent {}:".format(agent_id))
-        print("    Ran env {} times.".format(num_test_runs))
-        print("    Ran {} total time steps.".format(num_steps))
-        print("    Ran {} time steps on average.".format(num_steps / num_test_runs))
-        print("    Lowest score: {}".format(min_scores[agent_id]))
-        print("    Highest score: {}".format(max_scores[agent_id]))
-        print("    Average score: {}".format(total_scores[agent_id] / num_test_runs))
-
-        if save_test_scores:
-            score_info[agent_id] = {\
-                "low_score"  : min_scores[agent_id],
-                "high_score" : max_scores[agent_id],
-                "avg_score"  : total_scores[agent_id] / num_test_runs,
-            }
+    #
+    # If verbose, print out scores for each agent. Otherwise, print out scores
+    # for policies only.
+    #
+    if verbose:
+        for agent_id in env.agent_ids:
+            print("\nAgent {}:".format(agent_id))
+            print("    Policy: {}".format(ppo.policy_mapping_fn(agent_id)))
+            print("    Ran env {} times.".format(num_test_runs))
+            print("    Ran {} total time steps.".format(num_steps))
+            print("    Ran {} time steps on average.".format(num_steps / num_test_runs))
+            print("    Lowest score: {}".format(min_agent_scores[agent_id]))
+            print("    Highest score: {}".format(max_agent_scores[agent_id]))
+            print("    Average score: {}".format(total_agent_scores[agent_id] / num_test_runs))
+    else:
+        for policy_id in ppo.policies:
+            print("\nPolicy {}:".format(policy_id))
+            print("    Ran env {} times.".format(num_test_runs))
+            print("    Ran {} total time steps.".format(num_steps))
+            print("    Ran {} time steps on average.".format(num_steps / num_test_runs))
+            print("    Lowest score: {}".format(min_policy_scores[policy_id]))
+            print("    Highest score: {}".format(max_policy_scores[policy_id]))
+            print("    Average score: {}".format(total_policy_scores[policy_id] / num_test_runs))
 
     if save_test_scores:
+        for agent_id in env.agent_ids:
+            score_info[agent_id] = {\
+                "low_score"  : min_agent_scores[agent_id],
+                "high_score" : max_agent_scores[agent_id],
+                "avg_score"  : total_agent_scores[agent_id] / num_test_runs,
+                "policy"     : ppo.policy_mapping_fn(agent_id),
+            }
+
+        for policy_id in ppo.policies:
+            score_info[policy_id] = {\
+                "low_score"  : min_policy_scores[policy_id],
+                "high_score" : max_policy_scores[policy_id],
+                "avg_score"  : total_policy_scores[policy_id] / num_test_runs,
+            }
+
+
         score_file = os.path.join(ppo.state_path, "test-scores.pickle")
 
         with open(score_file, "wb") as out_f:

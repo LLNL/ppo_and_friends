@@ -358,30 +358,40 @@ class IdentityWrapper(ABC):
 
 class PPOEnvironmentWrapper(ABC):
     """
-        The primary environment wrapper. ALL environments need to be
-        wrapped in this.
+    The primary environment wrapper. ALL environments need to be
+    wrapped in this.
     """
 
     def __init__(self,
                  env,
                  test_mode         = False,
                  add_agent_ids     = False,
-                 critic_view       = "global",
+                 agent_ids_as      = "one-hot",
+                 critic_view       = "policy",
                  policy_mapping_fn = None,
                  death_mask_reward = 0.0,
                  **kw_args):
         """
-            Initialize the wrapper.
+        Initialize the wrapper.
 
-            Arguments:
-                env                The environment to wrap.
-                test_mode          Are we in test mode?
-                add_agent_ids      Should we add agent ids to the
-                                   observations?
-                critic_view        The view the critic should take.
-                policy_mapping_fn  A function mapping agent ids to policy
-                                   ids.
-                death_mask_reward  The reward to return for death-masked agents.
+        Parameters:
+        -----------
+        env: environment object
+            The environment to wrap.
+        test_mode: bool
+            Are we in test mode?
+        add_agent_ids: bool
+            Should we add agent ids to the observations?
+        agent_ids_as: str
+            How to add the agent ids if add_agent_ids is True. Options
+            are "float" and "one-hot".
+        critic_view: str
+            The view the critic should take. Options are "local",
+            "policy", "global".
+        policy_mapping_fn: function
+            A function mapping agent ids to policy ids.
+        death_mask_reward: float
+            The reward to return for death-masked agents.
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
@@ -398,10 +408,12 @@ class PPOEnvironmentWrapper(ABC):
         self.all_done          = False
         self.null_actions      = {}
         self.add_agent_ids     = add_agent_ids
+        self.agent_ids_as      = agent_ids_as
         self.critic_view       = critic_view
         self.policy_mapping_fn = policy_mapping_fn
 
         self._define_agent_ids()
+        self.num_agents = len(self.agent_ids)
 
         if type(death_mask_reward) == dict:
             self.death_mask_reward = death_mask_reward
@@ -434,9 +446,25 @@ class PPOEnvironmentWrapper(ABC):
 
         self.agents_done = {a_id : False for a_id in self.agent_ids}
 
+        id_options = ["float", "one-hot"]
+        if self.agent_ids_as not in id_options:
+            msg  = f"ERROR: agent_ids_as must be one of {id_options}, "
+            msg += f"but recieved {self.agent_ids_as}."
+            rank_print(msg)
+            comm.Abort()
+
         self.agent_int_ids = {}
         for a_idx, a_id in enumerate(self.agent_ids):
             self.agent_int_ids[a_id] = a_idx
+
+        self.agent_one_hot_ids = {}
+        for a_idx, a_id in enumerate(self.agent_ids):
+            one_hot = np.zeros(self.num_agents - 1)
+
+            if a_idx > 0:
+                one_hot[a_idx - 1] = 1
+
+            self.agent_one_hot_ids[a_id] = one_hot.copy()
 
     def _expand_space_for_ids(self, space):
         """
@@ -457,15 +485,22 @@ class PPOEnvironmentWrapper(ABC):
 
             low   = low.flatten()
             high  = high.flatten()
-            shape = (reduce(lambda a, b: a * b, shape) + 1,)
 
-            low   = np.concatenate((low, (0,)))
+            if self.agent_ids_as == "float":
+                shape = (reduce(lambda a, b: a * b, shape) + 1,)
+                low   = np.concatenate((low, (0,)))
 
-            #
-            # NOTE: because we normalize ids, we set the cap
-            # to 1.
-            #
-            high  = np.concatenate((high, (1,)))
+                #
+                # NOTE: because we normalize ids, we set the cap
+                # to 1.
+                #
+                high  = np.concatenate((high, (1,)))
+
+            elif self.agent_ids_as == "one-hot":
+                one_hot_size = self.num_agents - 1
+                shape = (reduce(lambda a, b: a * b, shape) + one_hot_size,)
+                low   = np.concatenate((low, np.zeros(one_hot_size)))
+                high  = np.concatenate((high, np.ones(one_hot_size)))
 
             return Box(
                 low   = low,
@@ -598,9 +633,20 @@ class PPOEnvironmentWrapper(ABC):
                 The updated observation dictionary.
         """
         for a_id in obs:
-            obs[a_id] = np.concatenate((obs[a_id],
-                (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
-                self.num_agents
+            if self.agent_ids_as == "float":
+                obs[a_id] = np.concatenate((obs[a_id],
+                    (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
+                    self.num_agents
+
+            elif self.agent_ids_as == "one-hot":
+                obs[a_id] = np.concatenate((obs[a_id],
+                    self.agent_one_hot_ids[a_id])).astype(obs[a_id].dtype)
+
+            else:
+                msg  = "ERROR: encountered unknown value for "
+                msg += f"agent_ids_as: {self.agent_ids_as}"
+                rank_print(msg)
+                comm.Abort()
 
         return obs
 
@@ -984,6 +1030,9 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             for agent_id in info:
                 info[agent_id]["terminal observation"] = deepcopy(obs[agent_id])
 
+                info[agent_id]["terminal critic observation"] = \
+                    deepcopy(critic_obs[agent_id])
+
             obs, critic_obs = self.env.reset()
 
         return obs, critic_obs, reward, terminated, truncated, info
@@ -1048,6 +1097,9 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                     info[agent_id]["terminal observation"] = \
                         deepcopy(obs[agent_id])
 
+                    info[agent_id]["terminal critic observation"] = \
+                        deepcopy(critic_obs[agent_id])
+
                 obs, critic_obs = self.envs[env_idx].reset()
 
                 self.steps[env_idx] = 0
@@ -1058,7 +1110,7 @@ class VectorizedEnv(IdentityWrapper, Iterable):
                 batch_rewards[agent_id][env_idx]    = reward[agent_id]
                 batch_terminated[agent_id][env_idx] = terminated[agent_id]
                 batch_truncated[agent_id][env_idx]  = truncated[agent_id]
-                batch_infos[agent_id][env_idx]      = info[agent_id]
+                batch_infos[agent_id][env_idx]      = deepcopy(info[agent_id])
 
         self.obs_cache = deepcopy(batch_obs)
         self.critic_obs_cache = deepcopy(batch_critic_obs)

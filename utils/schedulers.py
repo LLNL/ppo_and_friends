@@ -45,7 +45,7 @@ class StatusScheduler(object):
             return
 
         if self.status_key not in self.status_dict[self.status_preface]:
-            msg  = f"ERROR: status_key {self.status_key} does not exists in "
+            msg  = f"ERROR: status_key {self.status_key} does not exist in "
             msg += "status_dict[status_preface]. "
             msg += f"Available keys in self.status_dict['{self.status_preface}']:"
             msg += f"{self.status_dict[self.status_preface].keys()}."

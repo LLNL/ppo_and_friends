@@ -2,7 +2,7 @@ from pettingzoo.mpe import simple_spread_v3
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.environments.petting_zoo.wrappers import ParallelZooWrapper
 from ppo_and_friends.runners.env_runner import GymRunner
-from ppo_and_friends.networks.actor_critic_networks import FeedForwardNetwork
+from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
@@ -12,8 +12,7 @@ class MPESimpleSpreadRunner(GymRunner):
 
     def run(self):
 
-        policy_map = lambda name : 'adversary' if 'adversary' in name \
-            else 'agent'
+        policy_map = lambda x: 'agent'
 
         env_generator = lambda : \
             ParallelZooWrapper(
@@ -36,8 +35,6 @@ class MPESimpleSpreadRunner(GymRunner):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        critic_kw_args = actor_kw_args.copy()
-
         lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
@@ -59,7 +56,7 @@ class MPESimpleSpreadRunner(GymRunner):
         }
 
         save_when = ChangeInStateScheduler(
-            status_key     = "extrinsic score avg",
+            status_key     = "extrinsic reward avg",
             status_preface = "agent",
             compare_fn     = np.greater_equal,
             persistent     = True)
@@ -73,6 +70,6 @@ class MPESimpleSpreadRunner(GymRunner):
                      batch_size          = 128,
                      normalize_obs       = False,
                      obs_clip            = None,
-                     normalize_rewards   = True,
+                     normalize_rewards   = False,
                      reward_clip         = None,
                      **self.kw_run_args)

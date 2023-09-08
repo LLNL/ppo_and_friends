@@ -403,7 +403,6 @@ class RewardNormalizer(IdentityWrapper):
                 The resulting observation, reward, terminated, truncated,
                 and info tuple.
         """
-
         obs, critic_obs, reward, terminated, truncated, info = \
             self._cache_step(action)
 
@@ -817,6 +816,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
         batch_truncated  = {}
         batch_infos      = {}
 
+        # TODO: update for terminal critic obs
         for agent_id in obs:
             if "terminal observation" in info[0]:
                 batch_infos[agent_id] = np.array([None] * batch_size,
@@ -881,6 +881,7 @@ class ObservationAugmentingWrapper(IdentityWrapper):
             batch_critic_obs[agent_id] = \
                 batch_critic_obs[agent_id][self.test_idx]
 
+        # TODO: update for terminal critic obs
         for agent_id in info:
             if "terminal observation" in info[agent_id]:
                 terminal_obs = info[agent_id]["terminal observation"]

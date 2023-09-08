@@ -4,11 +4,12 @@
 import torch
 import torch.nn as nn
 from .utils import *
+from ppo_and_friends.utils.misc import get_size_and_shape
 
 class LinearObservationEncoder(nn.Module):
 
     def __init__(self,
-                 obs_dim,
+                 obs_shape,
                  encoded_dim,
                  out_init,
                  hidden_size,
@@ -29,11 +30,13 @@ class LinearObservationEncoder(nn.Module):
 
         self.activation = activation
 
-        self.enc_1 = init_layer(nn.Linear(obs_dim, hidden_size))
+        obs_size, _ = get_size_and_shape(obs_shape)
+
+        self.enc_1 = init_layer(nn.Linear(obs_size, hidden_size))
         self.enc_2 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_3 = init_layer(nn.Linear(hidden_size, hidden_size))
         self.enc_4 = init_layer(nn.Linear(hidden_size, encoded_dim),
-            weight_std=out_init)
+            gain=out_init)
 
     def forward(self,
                 obs):
@@ -56,7 +59,7 @@ class LinearObservationEncoder(nn.Module):
 class Conv2dObservationEncoder(nn.Module):
 
     def __init__(self,
-                 in_shape,
+                 obs_shape,
                  encoded_dim,
                  out_init,
                  activation = nn.ReLU(),
@@ -77,9 +80,9 @@ class Conv2dObservationEncoder(nn.Module):
 
         self.activation = activation
 
-        channels   = in_shape[0]
-        height     = in_shape[1]
-        width      = in_shape[2]
+        channels = obs_shape[0]
+        height   = obs_shape[1]
+        width    = obs_shape[2]
 
         k_s  = 3
         pad  = 0
