@@ -98,8 +98,6 @@ class PPONetwork(ABC, nn.Module):
         self.load_state_dict(torch.load(in_f))
 
 
-#FIXME: should we add a PPOMATNetwork?
-
 class PPOConv2dNetwork(PPONetwork):
 
     def __init__(self, **kw_args):
