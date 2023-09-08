@@ -431,13 +431,6 @@ pip install gym[atari]
 pip install autorom[accept-rom-license]
 ```
 
-**Mujoco**
-
-Mujoco sometimes requires some extra tweaks. There is a `mujoco_export.sh` file
-that can help with some of these issues. For testing with the `--render` flag,
-you'll need to set the `LD_PRELOAD` path (see the above bash file). For running,
-with the `--render-gif` flag, you'll need to unset the `LD_PRELOAD` path.
-
 **Performance**
 
 Unless otherwise stated, all provided environments should be capable of
