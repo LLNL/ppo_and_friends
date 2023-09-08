@@ -12,6 +12,7 @@ for pkg in packages:
 package_dirs["ppo_and_friends"] = "."
 
 dependencies = [
+    'gymnasium',
     'gymnasium[mujoco]',
     'pillow',
     'rware',
