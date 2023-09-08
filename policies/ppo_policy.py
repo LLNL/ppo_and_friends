@@ -24,9 +24,9 @@ num_procs = comm.Get_size()
 
 class PPOPolicy():
     """
-        A class representing a policy. A policy can be
-        used by more than one agent, and more than one policy
-        can exist in a given learning environment.
+    A class representing a policy. A policy can be
+    used by more than one agent, and more than one policy
+    can exist in a given learning environment.
     """
 
     def __init__(self,
@@ -302,10 +302,12 @@ class PPOPolicy():
 
     def register_agent(self, agent_id):
         """
-            Register an agent with this policy.
+        Register an agent with this policy.
 
-            Arguments:
-                agent_id    The id of the agent to register.
+        Parameters:
+        -----------
+        agent_id: str
+            The id of the agent to register.
         """
         self.agent_ids = np.array(list(set(self.agent_ids).union({agent_id})))
         self.agent_ids = self.agent_ids
@@ -320,10 +322,12 @@ class PPOPolicy():
 
     def to(self, device):
         """
-            Send this policy to a specified device.
+        Send this policy to a specified device.
 
-            Arguments:
-                device    The device to send this policy to.
+        Parameters:
+        -----------
+        device: torch.device
+            The device to send this policy to.
         """
         self.device    = device
         self.actor     = self.actor.to(self.device)
@@ -411,12 +415,15 @@ class PPOPolicy():
 
     def initialize_episodes(self, env_batch_size, status_dict):
         """
-            Initialize episodes for rollout collection. This should be called
-            at the start of a rollout.
+        Initialize episodes for rollout collection. This should be called
+        at the start of a rollout.
 
-            Arguments:
-                env_batch_size    The number of environments per processor.
-                status_dict       The status dictionary.
+        Parameters:
+        -----------
+        env_batch_size: int
+            The number of environments per processor.
+        status_dict: dict
+            The status dictionary.
         """
         #
         # NOTE that different agents will map to different polices, meaning
@@ -440,8 +447,8 @@ class PPOPolicy():
 
     def initialize_dataset(self):
         """
-            Initialize a rollout dataset. This should be called at the
-            onset of a rollout.
+        Initialize a rollout dataset. This should be called at the
+        onset of a rollout.
         """
         sequence_length = 1
         if self.using_lstm:
@@ -462,11 +469,13 @@ class PPOPolicy():
 
     def validate_agent_id(self, agent_id):
         """
-            Assert that a given agent id is associated with this policy.
-            This will Abort if the id is invalid.
+        Assert that a given agent id is associated with this policy.
+        This will Abort if the id is invalid.
 
-            Arguments:
-                agent_id    The agent id in question.
+        Parameters:
+        -----------
+        agent_id: str
+            The agent id in question.
         """
         if agent_id not in self.agent_ids:
             msg  = f"ERROR: agent {agent_id} has not been registered with "
@@ -488,23 +497,32 @@ class PPOPolicy():
         rewards, 
         where_done):
         """
-            Log information about a single step in an episode during a rollout.
-            Note that our observaionts, etc, will be batched across environment
-            instances, so we can have multiple observations for a single step.
+        Log information about a single step in an episode during a rollout.
+        Note that our observaionts, etc, will be batched across environment
+        instances, so we can have multiple observations for a single step.
 
-            Arguments:
-                agent_id             The agent id that this episode info is
-                                     associated with.
-                critic_observations  The critic observation(s).
-                observations         The actor observation(s).
-                next_observations    The actor observation(s.
-                raw_actions          The raw action(s).
-                actions              The actions(s) taken in the environment.
-                values               The value(s) from our critic.
-                log_probs            The log_prob(s) of our action distribution.
-                rewards              The reward(s) received.
-                where_done           Indicies mapping to which environments are
-                                     done.
+        Parameters:
+        -----------
+        agent_id: str
+            The agent id that this episode info is associated with.
+        critic_observations: np.ndarray
+            The critic observation(s).
+        observations: np.ndarray
+            The actor observation(s).
+        next_observations: np.ndarray
+            The actor observation(s.
+        raw_actions: np.ndarray
+            The raw action(s).
+        actions: np.ndarray
+            The actions(s) taken in the environment(s).
+        values: np.darray
+            The value(s) from our critic.
+        log_probs: np.ndarray
+            The log_prob(s) of our action distribution.
+        rewards: np.ndarray
+            The reward(s) received.
+        where_done: np.ndarray
+            Indicies mapping to which environments are done.
         """
         self.validate_agent_id(agent_id)
 
@@ -634,36 +652,40 @@ class PPOPolicy():
 
     def finalize_dataset(self):
         """
-            Build our rollout dataset. This should be called after
-            the rollout has taken place and before training begins.
+        Build our rollout dataset. This should be called after
+        the rollout has taken place and before training begins.
         """
         self.dataset.build()
 
     def clear_dataset(self):
         """
-            Clear existing datasets. This should be called before
-            a new rollout.
+        Clear existing datasets. This should be called before
+        a new rollout.
         """
         self.dataset  = None
         self.episodes = {}
 
     def get_rollout_actions(self, obs):
         """
-            Given observations from our environment, determine what the
-            next actions should be taken while allowing natural exploration.
+        Given observations from our environment, determine what the
+        next actions should be taken while allowing natural exploration.
 
-            This method is explicitly meant to be used in training and will
-            return more than just the environment actions.
+        This method is explicitly meant to be used in training and will
+        return more than just the environment actions.
 
-            Arguments:
-                obs    The environment observations.
+        Parameters:
+        -----------
+        obs: dict
+            The environment observations.
 
-            Returns:
-                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-                is the distribution sample before any "squashing" takes place,
-                "action" is the the action value that should be fed to the
-                environment, and log_prob is the log probabilities from our
-                probability distribution.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+            is the distribution sample before any "squashing" takes place,
+            "action" is the the action value that should be fed to the
+            environment, and log_prob is the log probabilities from our
+            probability distribution.
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: get_rollout_actions expects a "
@@ -695,18 +717,23 @@ class PPOPolicy():
 
     def get_inference_actions(self, obs, explore):
         """
-            Given observations from our environment, determine what the
-            actions should be.
+        Given observations from our environment, determine what the
+        actions should be.
 
-            This method is meant to be used for inference only, and it
-            will return the environment actions alone.
+        This method is meant to be used for inference only, and it
+        will return the environment actions alone.
 
-            Arguments:
-                obs       The environment observation.
-                explore   Should we allow exploration?
+        Parameters:
+        -----------
+        obs: dict
+            The environment observation.
+        explore: bool
+            Should we allow exploration?
 
-            Returns:
-                Predicted actions to perform in the environment.
+        Returns:
+        --------
+        np.ndarray
+            Predicted actions to perform in the environment.
         """
         if explore:
             return self._get_actions_with_exploration(obs)
@@ -714,18 +741,22 @@ class PPOPolicy():
 
     def _get_actions_with_exploration(self, obs):
         """
-            Given observations from our environment, determine what the
-            next actions should be taken while allowing natural exploration.
+        Given observations from our environment, determine what the
+        next actions should be taken while allowing natural exploration.
 
-            Arguments:
-                obs    The environment observations.
+        Parameters:
+        -----------
+        obs: dict
+            The environment observations.
 
-            Returns:
-                A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
-                is the distribution sample before any "squashing" takes place,
-                "action" is the the action value that should be fed to the
-                environment, and log_prob is the log probabilities from our
-                probability distribution.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (raw_action, action, log_prob) s.t. "raw_action"
+            is the distribution sample before any "squashing" takes place,
+            "action" is the the action value that should be fed to the
+            environment, and log_prob is the log probabilities from our
+            probability distribution.
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: _get_actions_with_exploration expects a "
@@ -752,14 +783,18 @@ class PPOPolicy():
 
     def _get_actions_without_exploration(self, obs):
         """
-            Given observations from our environment, determine what the
-            next actions should be while not allowing any exploration.
+        Given observations from our environment, determine what the
+        next actions should be while not allowing any exploration.
 
-            Arguments:
-                obs    The environment observations.
+        Parameters:
+        -----------
+        obs: dict
+            The environment observations.
 
-            Returns:
-                The next actions to perform.
+        Returns:
+        --------
+        np.ndarray
+            The next actions to perform.
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: _get_actions_without_exploration expects a "
@@ -775,21 +810,26 @@ class PPOPolicy():
 
     def evaluate(self, batch_critic_obs, batch_obs, batch_actions):
         """
-            Given a batch of observations, use our critic to approximate
-            the expected return values. Also use a batch of corresponding
-            actions to retrieve some other useful information.
+        Given a batch of observations, use our critic to approximate
+        the expected return values. Also use a batch of corresponding
+        actions to retrieve some other useful information.
 
-            Arguments:
-                batch_critic_obs   A batch of observations for the critic.
-                batch_obs          A batch of standard observations.
-                batch_actions      A batch of actions corresponding to the batch of
-                                   observations.
+        Parameters:
+        -----------
+        batch_critic_obs: torch.tensor
+            A batch of observations for the critic.
+        batch_obs: torch.tensor
+            A batch of standard observations.
+        batch_actions: torch.tensor
+            A batch of actions corresponding to the batch of observations.
 
-            Returns:
-                A tuple of form (values, log_probs, entropies) s.t. values are
-                the critic predicted value, log_probs are the log probabilities
-                from our probability distribution, and entropies are the
-                entropies from our distribution.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (values, log_probs, entropies) s.t. values are
+            the critic predicted value, log_probs are the log probabilities
+            from our probability distribution, and entropies are the
+            entropies from our distribution.
         """
         values      = self.critic(batch_critic_obs).squeeze()
         action_pred = self.actor(batch_obs).cpu()
@@ -813,13 +853,16 @@ class PPOPolicy():
                              obs,
                              action):
         """
-            Query the ICM for an intrinsic reward.
+        Query the ICM for an intrinsic reward.
 
-            Arguments:
-                prev_obs    The previous observation (before the latest
-                            action).
-                obs         The current observation.
-                action      The action taken.
+        Parameters:
+        -----------
+        prev_obs: np.ndarray
+            The previous observation (before the latest action).
+        obs: np.ndarray
+            The current observation.
+        action: np.ndarray
+            The action taken.
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: get_intrinsic_reward expects a batch of "
@@ -914,7 +957,7 @@ class PPOPolicy():
 
     def update_learning_rate(self):
         """
-            Update the learning rate.
+        Update the learning rate.
         """
         update_optimizer_lr(self.actor_optim, self.lr())
         update_optimizer_lr(self.critic_optim, self.lr())
@@ -990,10 +1033,12 @@ class PPOPolicy():
 
     def save(self, save_path):
         """
-            Save our policy.
+        Save our policy.
 
-            Arguments:
-                save_path    The path to save the policy to.
+        Parameters:
+        -----------
+        save_path: str
+            The path to save the policy to.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_save_path = os.path.join(save_path, policy_dir)
@@ -1011,10 +1056,12 @@ class PPOPolicy():
 
     def load(self, load_path):
         """
-            Load our policy.
+        Load our policy.
 
-            Arguments:
-                load_path    The path to load the policy from.
+        Parameters:
+        -----------
+        load_path: str
+            The path to load the policy from.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_load_path = os.path.join(load_path, policy_dir)
@@ -1027,7 +1074,7 @@ class PPOPolicy():
 
     def eval(self):
         """
-            Set the policy to evaluation mode.
+        Set the policy to evaluation mode.
         """
         self.actor.eval()
         self.critic.eval()
@@ -1037,7 +1084,7 @@ class PPOPolicy():
 
     def train(self):
         """
-            Set the policy to train mode.
+        Set the policy to train mode.
         """
         self.actor.train()
         self.critic.train()
@@ -1047,12 +1094,14 @@ class PPOPolicy():
 
     def __getstate__(self):
         """
-            Override the getstate method for pickling. We only want to keep
-            things that won't upset pickle. The environment is something
-            that we can't guarantee can be pickled.
+        Override the getstate method for pickling. We only want to keep
+        things that won't upset pickle. The environment is something
+        that we can't guarantee can be pickled.
 
-            Returns:
-                The state dictionary minus the environment.
+        Returns:
+        --------
+        dict:
+            The state dictionary minus the environment.
         """
         state = self.__dict__.copy()
         del state["bootstrap_clip"]
@@ -1060,20 +1109,24 @@ class PPOPolicy():
 
     def __setstate__(self, state):
         """
-            Override the setstate method for pickling.
+        Override the setstate method for pickling.
 
-            Arguments:
-                The state loaded from a pickled PPO object.
+        Parameters:
+        -----------
+        state: dict
+            The state loaded from a pickled PPO object.
         """
         self.__dict__.update(state)
         self.bootstrap_clip = None
 
     def __eq__(self, other):
         """
-            Compare two policies.
+        Compare two policies.
 
-            Arguments:
-                other        An instance of PPOPolicy.
+        Parameters:
+        -----------
+        other: PPOPolicy object
+            An instance of PPOPolicy.
         """
         #
         # TODO: we currently don't compare optimizers because that
@@ -1102,7 +1155,7 @@ class PPOPolicy():
 
     def __str__(self):
         """
-            A string representation of the policy.
+        A string representation of the policy.
         """
         str_self  = "PPOPolicy:\n"
         str_self += "    action space: {}\n".format(self.action_space)
