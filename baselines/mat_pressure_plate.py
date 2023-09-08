@@ -31,18 +31,14 @@ class PressurePlateRunner(GymRunner):
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')),
                 critic_view   = "local",
-                add_agent_ids = True)
+                add_agent_ids = False)
 
         mat_kw_args  = {}
 
         #
         # TODO: find good setttings for MAT pressure plate.
         #
-        lr = LinearScheduler(
-            status_key    = "timesteps",
-            status_max    = 2000000,
-            max_value     = 0.001,
-            min_value     = 0.0001)
+        lr = 0.0003
 
         entropy_weight = LinearScheduler(
             status_key    = "timesteps",
@@ -54,7 +50,6 @@ class PressurePlateRunner(GymRunner):
             "mat_kw_args"      : mat_kw_args,
             "lr"               : lr,
             "entropy_weight"   : entropy_weight,
-            "bootstrap_clip"   : (-3, 0),
         }
 
         #
@@ -66,18 +61,12 @@ class PressurePlateRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        save_when = ChangeInStateScheduler(
-            status_key  = "longest run",
-            compare_fn  = np.less_equal,
-            persistent  = True)
-
         ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
 
         self.run_ppo(env_generator      = env_generator,
-                     save_when          = save_when,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 10000,
+                     batch_size         = 512,
                      epochs_per_iter    = 15,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = ts_per_rollout,
@@ -85,5 +74,4 @@ class PressurePlateRunner(GymRunner):
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     #soft_resets        = True,
                      **self.kw_run_args)
