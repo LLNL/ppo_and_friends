@@ -10,6 +10,26 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class CartPoleRunner(GymRunner):
 
+    #
+    # NOTE: this is just an example of how to extend the ppoaf CLI args.
+    #
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--learning_rate", type=float, default=0.0002)
+        return parser
+
     def run(self):
 
         env_generator = lambda : \
@@ -27,7 +47,7 @@ class CartPoleRunner(GymRunner):
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
+            "lr"               : self.cli_args.learning_rate,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(

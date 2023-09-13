@@ -90,7 +90,14 @@ def cli():
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    args               = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+
+    if len(unknown_args) > 0:
+        msg  = f"WARNING: the following args are unrecognized by the "
+        msg += f"primary PPOAF parser. Ignore this message if they are "
+        msg += f"used by the runner: {unknown_args}"
+        rank_print(msg)
+
     train              = args.train != ''
     test               = args.test != ''
     test_explore       = args.test_explore
@@ -209,6 +216,12 @@ def cli():
         save_train_scores     = save_train_scores,
         pickle_class          = pickle_class,
         num_test_runs         = num_test_runs)
+
+    #
+    # Allow the runner to add more args to the parser if needed and
+    # store them internally.
+    #
+    parser = runner.parse_extended_cli_args(parser)
 
     runner.run()
 
