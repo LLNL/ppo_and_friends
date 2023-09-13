@@ -37,7 +37,7 @@ class MATMPESimpleSpreadDiscreteRunner(GymRunner):
 
         policy_args = {\
             "mat_kw_args"    : mat_kw_args,
-            "lr"               : lr,
+            "lr"             : lr,
         }
 
         policy_settings = { 
