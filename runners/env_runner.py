@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from abc import ABC, abstractmethod
 from ppo_and_friends.ppo import PPO
 from ppo_and_friends.testing import test_policy
+import argparse
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -21,6 +22,44 @@ class EnvironmentRunner(ABC):
             Keywoard arguments for training.
         """
         self.kw_run_args = kw_run_args
+        self.cli_args    = None
+
+    def parse_extended_cli_args(self, parser):
+        """
+        Parse an extended arg parser from the CLI. Users can define the
+        'add_cli_args' method, which can be used to extend the CLI arg parser.
+        Those args will then be added to the self.cli_args variable and
+        accessible when defining the 'run' method.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser = self.add_cli_args(parser)
+        self.cli_args = parser.parse_known_args()[0]
+        return parser
+
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        return parser
 
     @abstractmethod
     def run(self):
