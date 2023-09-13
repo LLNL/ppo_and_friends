@@ -9,6 +9,7 @@ import torch.nn as nn
 from ppo_and_friends.utils.mpi_utils import rank_print
 import pressureplate
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
+from packaging import version
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -22,6 +23,15 @@ class PressurePlateRunner(GymRunner):
             msg += "It is not currently supported in gymnasium."
             rank_print(msg)
             comm.Abort()
+
+        import pyglet
+        try:
+            if version.parse(pyglet.version) > version.parse('1.5.0'):
+                msg  = "WARNING: PressurePlate requires pyget version <= 1.5.0 "
+                msg += "for rendering. Rendering will fail with later versions."
+                rank_print(msg)
+        except:
+            pass
 
         # NOTE: the compatibility wrapper that gym comes with wasn't
         # working here...

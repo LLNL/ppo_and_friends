@@ -25,6 +25,15 @@ class PressurePlateRunner(GymRunner):
             comm.barrier()
             comm.Abort()
 
+        import pyglet
+        try:
+            if version.parse(pyglet.version) > version.parse('1.5.0'):
+                msg  = "WARNING: PressurePlate requires pyget version <= 1.5.0 "
+                msg += "for rendering. Rendering will fail with later versions."
+                rank_print(msg)
+        except:
+            pass
+
         # NOTE: the compatibility wrapper that gym comes with wasn't
         # working here...
         env_generator = lambda : \
