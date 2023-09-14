@@ -90,6 +90,10 @@ def cli():
     parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
+    parser.add_argument("--force-gc", action="store_true",
+        help="Force manually garbage collection. This will slow down "
+        "computations, but it can alleviate memory bottlenecks.")
+
     args, unknown_args = parser.parse_known_args()
 
     if len(unknown_args) > 0:
@@ -116,6 +120,7 @@ def cli():
     pickle_class       = args.pickle_class
     device             = torch.device(args.device)
     save_train_scores  = args.save_train_scores
+    force_gc           = args.force_gc
     runner_file        = args.train if args.train != '' else args.test
 
     if (not train) and (not test):
@@ -215,7 +220,8 @@ def cli():
         save_test_scores      = save_test_scores,
         save_train_scores     = save_train_scores,
         pickle_class          = pickle_class,
-        num_test_runs         = num_test_runs)
+        num_test_runs         = num_test_runs,
+        force_gc              = force_gc)
 
     #
     # Allow the runner to add more args to the parser if needed and
