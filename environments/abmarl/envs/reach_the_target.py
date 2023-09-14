@@ -38,12 +38,12 @@ agents = {
 }
 
 overlapping = {
-    2: set([3]),
-    3: set([1, 2, 3])
+    2: {3},
+    3: {1, 2, 3},
 }
 
 attack_mapping = {
-    2: [3]
+    2: {3},
 }
 
 sim = MultiAgentWrapper(
