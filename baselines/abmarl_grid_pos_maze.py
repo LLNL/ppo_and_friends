@@ -18,20 +18,7 @@ class AbmarlGridPosMazeRunner(EnvironmentRunner):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 9
-
         lr = 0.0005
-        #
-        # Once we start consistently reaching the goal, we can stop
-        # exploring so much.
-        #
-        intr_reward_weight = LinearStepScheduler(
-            status_key      = "longest run",
-            initial_value   = 1e-2,
-            compare_fn      = np.less_equal,
-            status_triggers = [200, 100, 20,],
-            step_values     = [1e-3, 1e-4, 0.0,])
 
         entropy_weight = LinearStepScheduler(
             status_key      = "longest run",
@@ -46,9 +33,6 @@ class AbmarlGridPosMazeRunner(EnvironmentRunner):
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
             "bootstrap_clip"     : (-10., 10.),
-            "enable_icm"         : True,
-            "icm_kw_args"        : icm_kw_args,
-            "intr_reward_weight" : intr_reward_weight,
             "entropy_weight"     : entropy_weight,
         }
 
