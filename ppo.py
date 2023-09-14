@@ -56,6 +56,7 @@ class PPO(object):
                  soft_resets         = False,
                  obs_augment         = False,
                  test_mode           = False,
+                 force_gc            = False,
                  verbose             = False,
                  **kw_args):
         """
@@ -158,6 +159,9 @@ class PPO(object):
             testing, but some of its attributes are.
             Setting this to True will enable test
             mode.
+        force_gc: bool
+            Force garbage collection? This will slow down computations,
+            but it can help alleviate memory issues.
         verbose: bool
             Enable verbosity?
         """
@@ -276,6 +280,7 @@ class PPO(object):
         self.policy_mapping_fn   = policy_mapping_fn
         self.envs_per_proc       = envs_per_proc
         self.verbose             = verbose
+        self.force_gc            = force_gc
         self.save_when           = save_when
         self.save_train_scores   = save_train_scores
 
@@ -1860,7 +1865,7 @@ class PPO(object):
 
                         if self.verbose:
                             kl = self.policies[policy_id].target_kl
-                            msg  = "\nTarget KL of {} ".format(kl)
+                            msg  = "Target KL of {} ".format(kl)
                             msg += "has been reached. "
                             msg += "Ending early (after "
                             msg += "{} epochs)".format(epoch_idx + 1)
@@ -1876,8 +1881,12 @@ class PPO(object):
             for policy_id in self.policies:
                 self.policies[policy_id].clear_dataset()
 
-            del data_loaders
-            gc.collect()
+            #
+            # Only use manual garbage collection if it's been requested.
+            #
+            if self.force_gc:
+                del data_loaders
+                gc.collect()
 
             now_time      = time.time()
             training_time = (now_time - train_start_time)
