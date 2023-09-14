@@ -1860,7 +1860,7 @@ class PPO(object):
 
                         if self.verbose:
                             kl = self.policies[policy_id].target_kl
-                            msg  = "\nTarget KL of {} ".format(kl)
+                            msg  = "Target KL of {} ".format(kl)
                             msg += "has been reached. "
                             msg += "Ending early (after "
                             msg += "{} epochs)".format(epoch_idx + 1)
