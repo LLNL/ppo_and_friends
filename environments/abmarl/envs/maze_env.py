@@ -1,7 +1,6 @@
 import os
 import numpy as np
-from ppo_and_friends.environments.abmarl.envs.maze_sim import AlternateMazeNavigationSim
-from abmarl.examples import MazeNavigationAgent
+from abmarl.examples import MazeNavigationAgent, MazeNavigationSim
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
 from abmarl.external import MultiAgentWrapper
@@ -36,11 +35,12 @@ large_maze = os.path.join(os.path.realpath(
 sm_abmarl_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
-                AlternateMazeNavigationSim.build_sim_from_file(
+                MazeNavigationSim.build_sim_from_file(
                     small_maze,
                     object_registry.copy(),
                     overlapping={1: set([3]), 3: set([1])},
-                    observe="grid",
+                    states={'PositionState'},
+                    observers={'PositionCenteredEncodingObserver'},
                 )
             )
         )
@@ -49,11 +49,27 @@ sm_abmarl_maze = MultiAgentWrapper(
 sm_abmarl_blind_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
-                AlternateMazeNavigationSim.build_sim_from_file(
+                MazeNavigationSim.build_sim_from_file(
                     small_maze,
                     object_registry.copy(),
                     overlapping={1: set([3]), 3: set([1])},
-                    observe="position",
+                    states={'PositionState'},
+                    observers={'AbsolutePositionObserver'},
+                )
+            )
+        )
+    )
+
+sm_abmarl_grid_pos_maze = MultiAgentWrapper(
+        AllStepManager(
+            FlattenWrapper(
+                MazeNavigationSim.build_sim_from_file(
+                    small_maze,
+                    object_registry.copy(),
+                    overlapping={1: set([3]), 3: set([1])},
+                    states={'PositionState'},
+                    observers={'AbsolutePositionObserver',
+                        'PositionCenteredEncodingObserver'},
                 )
             )
         )
@@ -62,12 +78,12 @@ sm_abmarl_blind_maze = MultiAgentWrapper(
 lg_abmarl_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
-                AlternateMazeNavigationSim.build_sim_from_file(
+                MazeNavigationSim.build_sim_from_file(
                     large_maze,
                     object_registry.copy(),
                     overlapping={1: set([3]), 3: set([1])},
-                    observe="grid",
-                    max_steps=2048,
+                    states={'PositionState'},
+                    observers={'PositionCenteredEncodingObserver'},
                 )
             )
         )
@@ -76,12 +92,12 @@ lg_abmarl_maze = MultiAgentWrapper(
 lg_abmarl_blind_maze = MultiAgentWrapper(
         AllStepManager(
             FlattenWrapper(
-                AlternateMazeNavigationSim.build_sim_from_file(
+                MazeNavigationSim.build_sim_from_file(
                     large_maze,
                     object_registry.copy(),
                     overlapping={1: set([3]), 3: set([1])},
-                    observe="position",
-                    max_steps=4096,
+                    states={'PositionState'},
+                    observers={'AbsolutePositionObserver'},
                 )
             )
         )

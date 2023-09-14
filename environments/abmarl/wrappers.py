@@ -117,11 +117,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         # FIXME: Temporary hack! We need all spaces to be from the
         # gymnasium module, but Abmarl currently is using gym.
         #
-        for agent_id in self.action_space:
-            self.action_space = gym_space_to_gymnasium_space(self.action_space)
-
-        for agent_id in self.observation_space:
-            self.observation_space = gym_space_to_gymnasium_space(self.observation_space)
+        self.action_space = gym_space_to_gymnasium_space(self.action_space)
+        self.observation_space = gym_space_to_gymnasium_space(self.observation_space)
 
     def _get_all_done(self, done):
         """
