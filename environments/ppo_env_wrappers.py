@@ -479,7 +479,9 @@ class PPOEnvironmentWrapper(ABC):
             Returns:
                 The space expanded for agent ids.
         """
-        if issubclass(type(space), Box) or issubclass(type(space), old_gym_spaces.Box):
+        if (issubclass(type(space), Box) or
+            issubclass(type(space), old_gym_spaces.Box)):
+
             low   = space.low
             high  = space.high
             shape = space.shape
