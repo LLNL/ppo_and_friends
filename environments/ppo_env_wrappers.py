@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 from collections.abc import Iterable
 from gymnasium.spaces import Dict, Tuple, Box, Discrete
+import gym.spaces as old_gym_spaces
 import gymnasium as gym
 
 from mpi4py import MPI
@@ -478,7 +479,7 @@ class PPOEnvironmentWrapper(ABC):
             Returns:
                 The space expanded for agent ids.
         """
-        if issubclass(type(space), Box):
+        if issubclass(type(space), Box) or issubclass(type(space), old_gym_spaces.Box):
             low   = space.low
             high  = space.high
             shape = space.shape
@@ -514,8 +515,8 @@ class PPOEnvironmentWrapper(ABC):
             rank_print(msg)
             comm.Abort()
         else:
-            msg  = f"ERROR: spaces of type {type(space)} are not "
-            msg += "currently supported."
+            msg  = "ERROR: we do not support adding agent ids to "
+            msg += f"{type(space)} type space observations."
             rank_print(msg)
             comm.Abort()
 
