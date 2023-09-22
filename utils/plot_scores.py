@@ -7,6 +7,7 @@ import os
 import pandas
 import plotly.graph_objects as go
 import argparse
+import sys
 
 def find_score_files(score_dir_name, root):
     score_files = []
@@ -35,9 +36,14 @@ if __name__ == '__main__':
 
     score_files = []
     for sp in search_paths:
-        score_files.extend(find_score_files("scores", sp))
+        if sp.endswith(".npy"):
+            score_files.append(sp) 
+        else:
+            score_files.extend(find_score_files("scores", sp))
 
     print(f"Found the following score files: \n{score_files}")
+    if len(score_files) == 0:
+        sys.exit()
 
     score_arrays = []
     score_names  = []
