@@ -17,6 +17,7 @@ dependencies = [
     'pillow',
     'rware',
     'matplotlib',
+    'plotly',
     'opencv-python',
     'pygame',
     'box2d-py',
