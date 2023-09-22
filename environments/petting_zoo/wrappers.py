@@ -111,11 +111,11 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        obs, reward, terminal, info = self._apply_death_mask(
-            obs, reward, terminal, info)
+        obs, reward, terminal, truncated, info = self._apply_death_mask(
+            obs, reward, terminal, truncated, info)
 
         critic_obs = self._construct_critic_observation(
-            obs, terminal)
+            obs, self.agents_done)
 
         return obs, critic_obs, reward, terminal, truncated, info
 

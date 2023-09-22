@@ -150,27 +150,28 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         actions = self._filter_done_agent_actions(actions)
 
         if self.need_action_wrap:
-            obs, reward, done, info = self._action_wrapped_step(actions)
+            obs, reward, terminated, info = self._action_wrapped_step(actions)
         else:
-            obs, reward, done, info = self.env.step(actions)
+            obs, reward, terminated, info = self.env.step(actions)
 
-        self.all_done = self._get_all_done(done)
-        self._update_done_agents(done)
+        truncated = {}
+        for key in terminated:
+            truncated[key] = False
+
+
+        self.all_done = self._get_all_done(terminated)
+        self._update_done_agents(terminated)
 
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        obs, reward, done, info = self._apply_death_mask(
-            obs, reward, done, info)
+        obs, reward, terminated, truncated, info = self._apply_death_mask(
+            obs, reward, terminated, truncated, info)
 
         critic_obs = self._construct_critic_observation(
-            obs, done)
+            obs, terminated)
 
-        truncated = {}
-        for key in done:
-            truncated[key] = False
-
-        return obs, critic_obs, reward, done, truncated, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def reset(self):
         """
