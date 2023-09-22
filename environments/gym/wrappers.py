@@ -462,12 +462,16 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
         self._update_done_agents(done_agents)
 
-        wrapped_obs, wrapped_reward, wrapped_terminated, wrapped_info = \
+        wrapped_obs, wrapped_reward, wrapped_terminated, wrapped_truncated, wrapped_info = \
             self._apply_death_mask(
-                wrapped_obs, wrapped_reward, wrapped_terminated, wrapped_info)
+                wrapped_obs,
+                wrapped_reward,
+                wrapped_terminated,
+                wrapped_truncated,
+                wrapped_info)
 
         critic_obs  = self._construct_critic_observation(
-            wrapped_obs, wrapped_terminated)
+            wrapped_obs, done_agents)
 
         return (wrapped_obs, critic_obs,
             wrapped_reward, wrapped_terminated,
