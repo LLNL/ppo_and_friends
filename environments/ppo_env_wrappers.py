@@ -575,20 +575,29 @@ class PPOEnvironmentWrapper(ABC):
 
         return done
 
-    def _apply_death_mask(self, obs, reward, done, info):
+    def _apply_death_mask(self, obs, reward, terminated, truncated, info):
         """
-            Apply death masking. Note that this will alter the done
-            agents to be not done.
+        Apply death masking. Note that this will alter the done
+        agents to be not done.
 
-            Arguments:
-                obs        The observation dictionary.
-                reward     The reward dictionary.
-                done       The done diciontary.
-                info       The info dictionary.
+        Parameters:
+        -----------
+        obs: dict
+            The observation dictionary.
+        reward: dict
+            The reward dictionary.
+        terminated: dict
+            The terminated diciontary.
+        truncated: dict
+            The truncated diciontary.
+        info: dict
+            The info dictionary.
 
-            Returns:
-                A death masked tuple containing observations, rewards,
-                dones, and infos.
+        Returns:
+        --------
+        tuple:
+            A death masked tuple containing observations, rewards,
+            terminations, truncations, and infos.
         """
         for agent_id in self.agent_ids:
             if self.agents_done[agent_id]:
@@ -600,7 +609,8 @@ class PPOEnvironmentWrapper(ABC):
                 #
                 if agent_id in obs:
                     if not self.all_done:
-                        done[agent_id] = False
+                        terminated[agent_id] = False
+                        truncated[agent_id]  = False
 
                 #
                 # Case 2: the agent died in a previous step. We now need to zero
@@ -613,8 +623,17 @@ class PPOEnvironmentWrapper(ABC):
                         self.observation_space[agent_id].dtype)
 
                     reward[agent_id] = self.death_mask_reward[agent_id]
-                    done[agent_id]   = self.all_done
-                    info[agent_id]   = {}
+
+                    #
+                    # NOTE: all_done does not distinguish between terminated
+                    # and truncated, but that doesn't matter here; if all
+                    # agents are done (either way), we can offically say
+                    # dead agents are terminated.
+                    #
+                    terminated[agent_id] = self.all_done
+                    truncated[agent_id]  = False
+
+                    info[agent_id] = {}
 
             elif agent_id not in obs:
                 msg  = "ERROR: encountered an agent_id that is not done, but "
@@ -623,7 +642,7 @@ class PPOEnvironmentWrapper(ABC):
                 rank_print(msg)
                 comm.Abort()
 
-        return obs, reward, done, info
+        return obs, reward, terminated, truncated, info
 
     def _add_agent_ids_to_obs(self, obs):
         """
@@ -762,6 +781,11 @@ class PPOEnvironmentWrapper(ABC):
             #     also keep around previous turn observations in these cases,
             #     but it's unclear if that would be useful. TODO: investigate.
             #
+            # NOTE: death masking is often handled by the "apply_death_mask"
+            # method before this method is even called, so this logic here
+            # is usually skipped. Dead agents will still have zero
+            # observations.
+            #
             if a_id not in obs or (done[a_id] and not self.all_done):
                 mask = np.zeros(obs_size)
                 mask = mask.astype(critic_obs_data.dtype)
@@ -825,6 +849,11 @@ class PPOEnvironmentWrapper(ABC):
             #  2. An agent hasn't acted in this turn ("turn masking"). We could
             #     also keep around previous turn observations in these cases,
             #     but it's unclear if that would be useful. TODO: investigate.
+            #
+            # NOTE: death masking is often handled by the "apply_death_mask"
+            # method before this method is even called, so this logic here
+            # is usually skipped. Dead agents will still have zero
+            # observations.
             #
             if a_id not in obs or (done[a_id] and not self.all_done):
                 mask      = np.zeros(obs_size)
