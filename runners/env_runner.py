@@ -78,7 +78,7 @@ class EnvironmentRunner(ABC):
                 env_generator,
                 device,
                 test                  = False,
-                explore_while_testing = False,
+                test_explore          = False,
                 num_timesteps         = 1_000_000,
                 render_gif            = False,
                 gif_fps               = 15,
@@ -104,7 +104,7 @@ class EnvironmentRunner(ABC):
 
         if test:
             test_policy(ppo           = ppo,
-                        explore       = explore_while_testing,
+                        explore       = test_explore,
                         render_gif    = render_gif,
                         gif_fps       = gif_fps,
                         num_test_runs = num_test_runs,
@@ -122,9 +122,9 @@ class GymRunner(EnvironmentRunner):
         """
         Get the render mode for a gym environment.
         """
-        if self.kw_run_args["render"]:
+        if "render" in self.kw_run_args and self.kw_run_args["render"]:
             return "human"
-        elif self.kw_run_args["render_gif"]:
+        elif "render_gif" in self.kw_run_args and self.kw_run_args["render_gif"]:
             return "rgb_array"
         else:
             return None

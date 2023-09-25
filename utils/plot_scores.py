@@ -4,9 +4,7 @@
 import numpy as np
 import glob
 import os
-import pandas
 import plotly.graph_objects as go
-import argparse
 import sys
 
 def find_score_files(score_dir_name, root):
@@ -22,17 +20,18 @@ def find_score_files(score_dir_name, root):
     return score_files
 
 
-if __name__ == '__main__':
+def plot_score_files(search_paths):
+    """
+    Plot any number of score files using plotly.
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("scores", type=str, nargs="+", help="Paths to the "
-        "policy score files that you wish to plot. This can be paths "
-        "to the actual score files, directories containing the score files, "
-        "or directories containing sub-directories (at any depth) containing "
-        "score files.")
-
-    args         = parser.parse_args()
-    search_paths = args.scores
+    Parameters:
+    -----------
+    search_paths: str
+        Paths to the policy score files that you wish to plot. This can be paths
+        to the actual score files, directories containing the score files,
+        or directories containing sub-directories (at any depth) containing
+        score files.
+    """
 
     score_files = []
     for sp in search_paths:
