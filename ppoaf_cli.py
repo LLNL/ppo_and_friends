@@ -8,6 +8,7 @@ import inspect
 import os
 import re
 from ppo_and_friends.utils.mpi_utils import rank_print
+from ppo_and_friends.utils.plot_scores import plot_score_files
 import shutil
 from mpi4py import MPI
 
@@ -18,83 +19,118 @@ num_procs = comm.Get_size()
 
 def cli():
 
-    parser = argparse.ArgumentParser()
+    parent_parser = argparse.ArgumentParser(add_help=False)
 
-    parser.add_argument("--train", type=str, default='',
-        help="A path to a file containing the environment runner to train.")
-
-    parser.add_argument("--test", type=str, default='',
-        help="A path to a file containing the environment runner to test.")
-
-    parser.add_argument("--test-explore", action="store_true",
-        help="Enable exploration while testing. Note that this flag"
-        "only has an effect while in test mode. Exploration is always"
-        "enabled during training.")
-
-    parser.add_argument("--num-test-runs", type=int, default=1,
-        help="If used with --test, this will define the number of test "
-        "iterations that are run. The min, max, and average scores will "
-        "be reported.")
-
-    parser.add_argument("--save-test-scores", action="store_true",
-        help="If used with --test, the test scores for each agent will be "
-        "saved as a pickle file in the output directory.")
-
-    parser.add_argument("--save-train-scores", action="store_true",
-        help="If True, each policy's extrinsic score average will be saved "
-        "in a text file every iteration. Each agent will have an individual "
-        "file in the state directory.")
-
-    parser.add_argument("--device", type=str, default="cpu",
+    parent_parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
 
-    parser.add_argument("--state-path", default="./",
+    parent_parser.add_argument("--state-path", default="./",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
 
-    parser.add_argument("--clobber", action="store_true",
-        help="Clobber any existing saves associated with this environment.")
-
-    parser.add_argument("--render", action="store_true",
+    parent_parser.add_argument("--render", action="store_true",
         help="Render the environment at each step.")
 
-    parser.add_argument("--render-gif", action="store_true",
-        help="Render a gif when testing.")
-
-    parser.add_argument("--gif-fps", type=int, default=15,
-        help="The frames per second for rendering a gif.")
-
-    parser.add_argument("--frame-pause", default=0.0, type=float,
+    parent_parser.add_argument("--frame-pause", default=0.0, type=float,
         help="When rendering, pause between frames for frame-pause seconds."
         "Note that this flag only works when used in conjunction with the "
         "--render flag.")
 
-    parser.add_argument("--verbose", action="store_true",
+    parent_parser.add_argument("--verbose", action="store_true",
         help="Enable verbosity.")
 
-    parser.add_argument("--pickle-class", action="store_true",
+    parent_parser.add_argument("--pickle-class", action="store_true",
         help="Pickle the entire PPO class. If True, the pickled class will be "
         "saved in the state-path. This is useful for loading a trained model "
         "for inference outside of this workflow.")
 
-    #TODO: let's also let users stop at an iteration rather than timestep.
-    parser.add_argument("--num-timesteps", default=1000000, type=int,
-        help="The number of timesteps to train for.")
-
-    parser.add_argument("--random-seed", default=0, type=int,
+    parent_parser.add_argument("--random-seed", default=0, type=int,
         help="The random seed to use.")
 
-    parser.add_argument("--envs-per-proc", default=1, type=int,
-        help="The number of environment instances each processor should have.")
-
-    parser.add_argument("--force-deterministic", action="store_true",
+    parent_parser.add_argument("--force-deterministic", action="store_true",
         help="Tell PyTorch to only use deterministic algorithms.")
 
-    parser.add_argument("--force-gc", action="store_true",
+    parent_parser.add_argument("--force-gc", action="store_true",
         help="Force manually garbage collection. This will slow down "
         "computations, but it can alleviate memory bottlenecks.")
 
-    args, unknown_args = parser.parse_known_args()
+    main_parser = argparse.ArgumentParser()
+
+    #
+    # Create a subparser for the different commands.
+    #
+    subparser = main_parser.add_subparsers(dest='command', required=True)
+
+    #
+    # 'train' command subparser
+    #
+    train_parser = subparser.add_parser("train",
+        help="Train using a PPO-AF runner.", parents=[parent_parser])
+
+    train_parser.add_argument("runner", type=str,
+        help="Path to the runner to train.")
+
+    train_parser.add_argument("--save-train-scores", action="store_true",
+        help="If True, each policy's extrinsic score average will be saved "
+        "in a text file every iteration. Each agent will have an individual "
+        "file in the state directory.")
+
+    train_parser.add_argument("--clobber", action="store_true",
+        help="Clobber any existing saves associated with this environment.")
+
+    #TODO: let's also let users stop at an iteration rather than timestep.
+    train_parser.add_argument("--num-timesteps", default=1000000, type=int,
+        help="The number of timesteps to train for.")
+
+    train_parser.add_argument("--envs-per-proc", default=1, type=int,
+        help="The number of environment instances each processor should have.")
+
+    #
+    # 'test' command subparser
+    #
+    test_parser = subparser.add_parser("test",
+        help="Evaluate a trained PPO-AF runner.", parents=[parent_parser])
+
+    test_parser.add_argument("runner", type=str,
+        help="Path to the runner to evaluate.")
+
+    test_parser.add_argument("--test-explore", action="store_true",
+        help="Enable exploration while testing. Note that this flag"
+        "only has an effect while in test mode. Exploration is always"
+        "enabled during training.")
+
+    test_parser.add_argument("--num-test-runs", type=int, default=1,
+        help="If used with --test, this will define the number of test "
+        "iterations that are run. The min, max, and average scores will "
+        "be reported.")
+
+    test_parser.add_argument("--save-test-scores", action="store_true",
+        help="If used with --test, the test scores for each agent will be "
+        "saved as a pickle file in the output directory.")
+
+    test_parser.add_argument("--render-gif", action="store_true",
+        help="Render a gif when testing.")
+
+    test_parser.add_argument("--gif-fps", type=int, default=15,
+        help="The frames per second for rendering a gif.")
+
+    #
+    # 'plot' command subparser
+    #
+    plot_parser = subparser.add_parser("plot",
+        help="Plot reward curves from trained policies.", parents=[parent_parser])
+
+    plot_parser.add_argument("scores", type=str, nargs="+", help="Paths to the "
+        "policy score files that you wish to plot. This can be paths "
+        "to the actual score files, directories containing the score files, "
+        "or directories containing sub-directories (at any depth) containing "
+        "score files.")
+
+    args, unknown_args = main_parser.parse_known_args()
+
+    if args.command == "plot":
+        plot_score_files(args.scores)
+        return
 
     if len(unknown_args) > 0:
         msg  = f"WARNING: the following args are unrecognized by the "
@@ -102,52 +138,20 @@ def cli():
         msg += f"used by the runner: {unknown_args}"
         rank_print(msg)
 
-    train              = args.train != ''
-    test               = args.test != ''
-    test_explore       = args.test_explore
-    random_seed        = args.random_seed + rank
-    num_test_runs      = args.num_test_runs
-    save_test_scores   = args.save_test_scores
-    clobber            = args.clobber
-    render             = args.render
-    render_gif         = args.render_gif
-    gif_fps            = args.gif_fps
-    frame_pause        = args.frame_pause
-    verbose            = args.verbose
-    num_timesteps      = args.num_timesteps
-    force_determinism  = args.force_deterministic
-    envs_per_proc      = args.envs_per_proc
-    pickle_class       = args.pickle_class
-    device             = torch.device(args.device)
-    save_train_scores  = args.save_train_scores
-    force_gc           = args.force_gc
-    runner_file        = args.train if args.train != '' else args.test
+    arg_dict = vars(args)
+    arg_dict["device"]      = torch.device(args.device)
+    arg_dict["random_seed"] = arg_dict["random_seed"] + rank
 
-    if (not train) and (not test):
-        msg = "ERROR: args train or test must be specified."
-        rank_print(msg)
-        comm.Abort()
+    random_seed             = arg_dict["random_seed"]
+    runner_file             = arg_dict["runner"]
+    force_deterministic     = arg_dict["force_deterministic"]
 
-    if train and test:
-        msg = "ERROR: training and testing cannot be done simultaneously."
-        rank_print(msg)
-        comm.Abort()
-
-    if render and render_gif:
-        msg  = "ERROR: render and render_gif are both enabled, "
-        msg += "but they cannot be used simultaneously."
-        rank_print(msg)
-        comm.Abort()
-
-    if render_gif and not test:
-        msg = "ERROR: render_gif is only allowed when testing."
-        rank_print(msg)
-        comm.Abort()
-
-    if num_test_runs > 1 and not test:
-        msg = "ERROR: --num_test_runs can only be used with --test."
-        rank_print(msg)
-        comm.Abort()
+    if args.command == 'test':
+        if args.render and args.render_gif:
+            msg  = "ERROR: render and render_gif are both enabled, "
+            msg += "but they cannot be used simultaneously."
+            rank_print(msg)
+            comm.Abort()
 
     #
     # Set random seeds (this doesn't guarantee reproducibility, but it should
@@ -158,7 +162,7 @@ def cli():
         random.seed(random_seed)
         np.random.seed(random_seed)
 
-    if force_determinism:
+    if force_deterministic:
         torch.use_deterministic_algorithms(True)
 
     spec = importlib.util.spec_from_file_location("EnvRunner", runner_file)
@@ -189,45 +193,39 @@ def cli():
         comm.Abort()
 
     file_preface = os.path.basename(runner_file).split('.')[:-1][0]
-    state_path   = os.path.join(args.state_path, "saved_states", file_preface)
+    arg_dict["state_path"] = os.path.join(
+        args.state_path, "saved_states", file_preface)
+
     runner_class = valid_runners[0]
 
-    load_state = not clobber or test
-
-    if clobber and rank == 0:
-        if os.path.exists(state_path):
-            shutil.rmtree(state_path)
-    comm.barrier()
-
-    rank_print("Using device: {}".format(device))
+    rank_print("Using device: {}".format(args.device))
     rank_print("Number of processors: {}".format(num_procs))
-    rank_print("Number of environments per processor: {}".format(envs_per_proc))
+
+    if args.command == "train":
+        clobber    = arg_dict["clobber"]
+        load_state = not clobber
+
+        if clobber and rank == 0:
+            if os.path.exists(arg_dict["state_path"]):
+                shutil.rmtree(arg_dict["state_path"])
+        comm.barrier()
+
+        envs_per_proc = arg_dict["envs_per_proc"]
+        rank_print("Number of environments per processor: {}".format(envs_per_proc))
+
+    elif args.command == "test":
+        load_state = True
 
     runner = runner_class(
-        random_seed           = random_seed,
-        state_path            = state_path,
-        load_state            = load_state,
-        render                = render,
-        render_gif            = render_gif,
-        gif_fps               = gif_fps,
-        frame_pause           = frame_pause,
-        verbose               = verbose,
-        num_timesteps         = num_timesteps,
-        device                = device,
-        envs_per_proc         = envs_per_proc,
-        test                  = test,
-        explore_while_testing = test_explore,
-        save_test_scores      = save_test_scores,
-        save_train_scores     = save_train_scores,
-        pickle_class          = pickle_class,
-        num_test_runs         = num_test_runs,
-        force_gc              = force_gc)
+        **arg_dict,
+        test       = args.command == "test",
+        load_state = load_state)
 
     #
     # Allow the runner to add more args to the parser if needed and
     # store them internally.
     #
-    parser = runner.parse_extended_cli_args(parser)
+    parent_parser = runner.parse_extended_cli_args(parent_parser)
 
     runner.run()
 

@@ -27,7 +27,7 @@ class CartPoleRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser.add_argument("--learning_rate", type=float, default=0.0002)
+        parser.add_argument("--learning-rate", type=float, default=0.0002)
         return parser
 
     def run(self):
