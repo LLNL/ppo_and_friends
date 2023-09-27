@@ -371,6 +371,7 @@ class PPOEnvironmentWrapper(ABC):
                  critic_view       = "policy",
                  policy_mapping_fn = None,
                  death_mask_reward = 0.0,
+                 max_steps         = np.inf,
                  **kw_args):
         """
         Initialize the wrapper.
@@ -393,6 +394,9 @@ class PPOEnvironmentWrapper(ABC):
             A function mapping agent ids to policy ids.
         death_mask_reward: float
             The reward to return for death-masked agents.
+        max_steps: float
+            An optional maximum steps to enforce in the environment.
+            If max_steps is exceeded, the environment will be terminated.
         """
         super(PPOEnvironmentWrapper, self).__init__(**kw_args)
 
@@ -412,6 +416,7 @@ class PPOEnvironmentWrapper(ABC):
         self.agent_ids_as      = agent_ids_as
         self.critic_view       = critic_view
         self.policy_mapping_fn = policy_mapping_fn
+        self.max_steps         = max_steps
 
         self._define_agent_ids()
         self.num_agents = len(self.agent_ids)
