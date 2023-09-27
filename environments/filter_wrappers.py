@@ -304,10 +304,10 @@ class ObservationNormalizer(ObservationFilter):
         if self.test_mode:
             return
 
-        file_name = "ActorRunningObsStats_{}.pkl".format(rank)
+        file_name = "ActorRunningObsStats_{}.pickle".format(rank)
         self._save_stats(path, file_name, self.actor_running_stats)
 
-        file_name = "CriticRunningObsStats_{}.pkl".format(rank)
+        file_name = "CriticRunningObsStats_{}.pickle".format(rank)
         self._save_stats(path, file_name, self.critic_running_stats)
 
         self._check_env_save(path)
@@ -321,19 +321,19 @@ class ObservationNormalizer(ObservationFilter):
                 path    The path to load from.
         """
         if self.test_mode:
-            actor_file_name  = "ActorRunningObsStats_0.pkl"
-            critic_file_name = "CriticRunningObsStats_0.pkl"
+            actor_file_name  = "ActorRunningObsStats_0.pickle"
+            critic_file_name = "CriticRunningObsStats_0.pickle"
         else:
-            actor_file_name  = "ActorRunningObsStats_{}.pkl".format(rank)
-            critic_file_name = "CriticRunningObsStats_{}.pkl".format(rank)
+            actor_file_name  = "ActorRunningObsStats_{}.pickle".format(rank)
+            critic_file_name = "CriticRunningObsStats_{}.pickle".format(rank)
 
         #
         # There are cases where we initially train using X ranks, and we
         # later want to continue training using (X+k) ranks. In these cases,
         # let's copy rank 0's info to all ranks > X.
         #
-        backup_actor_file_name  = "ActorRunningObsStats_0.pkl"
-        backup_critic_file_name = "CriticRunningObsStats_0.pkl"
+        backup_actor_file_name  = "ActorRunningObsStats_0.pickle"
+        backup_critic_file_name = "CriticRunningObsStats_0.pickle"
 
         self._load_stats(path, actor_file_name,
             backup_actor_file_name, self.actor_running_stats)
@@ -491,7 +491,7 @@ class RewardNormalizer(IdentityWrapper):
         if self.test_mode:
             return
 
-        file_name = "RunningRewardsStats_{}.pkl".format(rank)
+        file_name = "RunningRewardsStats_{}.pickle".format(rank)
         out_file  = os.path.join(path, file_name)
 
         with open(out_file, "wb") as fh:
@@ -508,9 +508,9 @@ class RewardNormalizer(IdentityWrapper):
                 path    The path to load from.
         """
         if self.test_mode:
-            file_name = "RunningRewardsStats_0.pkl"
+            file_name = "RunningRewardsStats_0.pickle"
         else:
-            file_name = "RunningRewardsStats_{}.pkl".format(rank)
+            file_name = "RunningRewardsStats_{}.pickle".format(rank)
 
         in_file = os.path.join(path, file_name)
 
@@ -520,7 +520,7 @@ class RewardNormalizer(IdentityWrapper):
         # let's copy rank 0's info to all ranks > X.
         #
         if not os.path.exists(in_file):
-            file_name = "RunningRewardsStats_0.pkl"
+            file_name = "RunningRewardsStats_0.pickle"
             in_file   = os.path.join(path, file_name)
 
         with open(in_file, "rb") as fh:

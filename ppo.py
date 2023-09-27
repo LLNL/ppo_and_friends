@@ -374,10 +374,10 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward range"] = (max_int, -max_int)
 
         if load_state:
-            if not os.path.exists(state_path):
-                msg  = "WARNING: state_path does not exist. Unable "
-                msg += "to load state."
+            if not os.path.exists(os.path.join(state_path, "state_0.pickle")):
+                msg  = "WARNING: state_path does not contained saved state. "
                 rank_print(msg)
+                comm.Abort()
             else:
                 rank_print("Loading state from {}".format(state_path))
 
