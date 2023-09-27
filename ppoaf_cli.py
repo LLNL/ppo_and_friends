@@ -24,7 +24,7 @@ def cli():
     parent_parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
 
-    parent_parser.add_argument("--state-path", default="./",
+    parent_parser.add_argument("--state-path", default="./saved_states",
         help="Where to save states and policy info. The data will be "
         "saved in a sub-directory named 'saved_states'.")
 
@@ -194,7 +194,7 @@ def cli():
 
     file_preface = os.path.basename(runner_file).split('.')[:-1][0]
     arg_dict["state_path"] = os.path.join(
-        args.state_path, "saved_states", file_preface)
+        args.state_path , file_preface)
 
     runner_class = valid_runners[0]
 
@@ -203,17 +203,26 @@ def cli():
 
     if args.command == "train":
         clobber    = arg_dict["clobber"]
-        load_state = not clobber
+        load_state = False
 
-        if clobber and rank == 0:
-            if os.path.exists(arg_dict["state_path"]):
-                shutil.rmtree(arg_dict["state_path"])
+        if clobber:
+            if rank == 0:
+                if os.path.exists(arg_dict["state_path"]):
+                    shutil.rmtree(arg_dict["state_path"])
+
+        elif os.path.exists(os.path.join(arg_dict["state_path"], "state_0.pickle")):
+            load_state = True
+
         comm.barrier()
 
         envs_per_proc = arg_dict["envs_per_proc"]
         rank_print("Number of environments per processor: {}".format(envs_per_proc))
 
     elif args.command == "test":
+        if not  os.path.exists(os.path.join(arg_dict["state_path"], "state_0.pickle")):
+            rank_print("ERROR: unable to find saved state for testing!")
+            comm.Abort()
+
         load_state = True
 
     runner = runner_class(
