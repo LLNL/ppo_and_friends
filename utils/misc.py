@@ -137,7 +137,7 @@ class RunningStatNormalizer(object):
         if self.test_mode:
             return
 
-        f_name   = "{}_stats_{}.pkl".format(self.name, rank)
+        f_name   = "{}_stats_{}.pickle".format(self.name, rank)
         out_file = os.path.join(path, f_name)
 
         with open(out_file, "wb") as fh:
@@ -152,9 +152,9 @@ class RunningStatNormalizer(object):
                 path    The path to load from.
         """
         if self.test_mode:
-            f_name  = "{}_stats_0.pkl".format(self.name)
+            f_name  = "{}_stats_0.pickle".format(self.name)
         else:
-            f_name  = "{}_stats_{}.pkl".format(self.name, rank)
+            f_name  = "{}_stats_{}.pickle".format(self.name, rank)
 
         in_file = os.path.join(path, f_name)
 
@@ -164,7 +164,7 @@ class RunningStatNormalizer(object):
         # let's copy rank 0's info to all ranks > X.
         #
         if not os.path.exists(in_file):
-            f_name  = "{}_stats_0.pkl".format(self.name)
+            f_name  = "{}_stats_0.pickle".format(self.name)
             in_file = os.path.join(path, f_name)
 
         with open(in_file, "rb") as fh:
