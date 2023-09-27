@@ -54,6 +54,14 @@ def cli():
         help="Force manually garbage collection. This will slow down "
         "computations, but it can alleviate memory bottlenecks.")
 
+    parent_parser.add_argument("--state-tag", type=str, default="",
+        help="An optional string representing a unique 'tag' for a given "
+        "run. This tag will be appended to the output directory so that "
+        "the saved state is located in <state-path>/<runner-name>-<tag>. "
+        "This allows for multiple runs of the same runner with different "
+        "parameters to be saved to the same state path while remaining "
+        "distinct.")
+
     main_parser = argparse.ArgumentParser()
 
     #
@@ -195,6 +203,9 @@ def cli():
     file_preface = os.path.basename(runner_file).split('.')[:-1][0]
     arg_dict["state_path"] = os.path.join(
         args.state_path , file_preface)
+
+    if args.state_tag != "":
+        arg_dict["state_path"] = f"{arg_dict['state_path']}-{args.state_tag}"
 
     runner_class = valid_runners[0]
 
