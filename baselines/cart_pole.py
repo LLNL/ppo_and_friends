@@ -68,7 +68,7 @@ class CartPoleRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 256,
                      ts_per_rollout     = ts_per_rollout,
-                     max_ts_per_ep      = 256,
+                     max_ts_per_ep      = 32,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
                      normalize_obs      = True,

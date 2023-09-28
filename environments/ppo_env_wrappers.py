@@ -496,11 +496,10 @@ class PPOEnvironmentWrapper(ABC):
         self.step_count += 1
 
         if self.step_count >= self.max_steps:
+            print("EARLY TERM")
             for agent_id in terminated:
                 terminated[agent_id] = True
                 truncated[agent_id]  = False
-
-            self.step_count = 0
 
         return terminated, truncated
 

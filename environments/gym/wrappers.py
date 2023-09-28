@@ -72,7 +72,7 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
         obs, critic_obs = self._wrap_gym_reset(
             *self.env.reset(seed = self.random_seed))
 
-        self._reset_step_restrictions()
+        #self._reset_step_restrictions()
 
         #
         # Gym versions >= 0.26 require the random seed to be set
@@ -263,8 +263,8 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         terminated = {agent_id : terminated}
         truncated  = {agent_id : truncated}
 
-        terminated, truncated = self._apply_step_restrictions(
-            terminated, truncated)
+        #terminated, truncated = self._apply_step_restrictions(
+        #    terminated, truncated)
 
         if terminated or truncated:
             self.all_done = True
@@ -419,8 +419,6 @@ class MultiAgentGymWrapper(PPOGymWrapper):
                 terminated[agent_idx] = True
                 truncated[agent_idx]  = False
 
-            self.step_count = 0
-
         return terminated, truncated
 
     def _wrap_gym_step(self,
@@ -458,8 +456,8 @@ class MultiAgentGymWrapper(PPOGymWrapper):
             rank_print(msg)
             comm.Abort()
 
-        terminated, truncated = self._apply_step_restrictions(
-            terminated, truncated)
+        #terminated, truncated = self._apply_step_restrictions(
+        #    terminated, truncated)
 
         for a_idx, a_id in enumerate(self.agent_ids):
             agent_obs         = obs[a_idx]
