@@ -35,6 +35,7 @@ class CartPoleRunner(GymRunner):
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('CartPole-v0',
                 render_mode = self.get_gym_render_mode()))
+                 #max_steps=10)
 
         actor_kw_args = {}
         actor_kw_args["activation"] = nn.LeakyReLU()
@@ -67,7 +68,7 @@ class CartPoleRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 256,
                      ts_per_rollout     = ts_per_rollout,
-                     max_ts_per_ep      = 32,
+                     max_ts_per_ep      = 256,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
                      normalize_obs      = True,
