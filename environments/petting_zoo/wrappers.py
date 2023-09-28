@@ -131,6 +131,8 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
         """
         obs , info = self.env.reset(seed = self.random_seed)
 
+        self._reset_step_restrictions()
+
         #
         # Zoo requires the random seed to be set
         # when calling reset. Since we don't want the same exact

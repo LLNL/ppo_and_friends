@@ -184,6 +184,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         """
         obs = self.env.reset()
 
+        self._reset_step_restrictions()
+
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 

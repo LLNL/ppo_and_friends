@@ -72,6 +72,8 @@ class PPOGymWrapper(PPOEnvironmentWrapper):
         obs, critic_obs = self._wrap_gym_reset(
             *self.env.reset(seed = self.random_seed))
 
+        self._reset_step_restrictions()
+
         #
         # Gym versions >= 0.26 require the random seed to be set
         # when calling reset. Since we don't want the same exact

@@ -478,6 +478,9 @@ class PPOEnvironmentWrapper(ABC):
         Apply any desired restrictions to the allowable environment
         steps. This can alter the terminated and truncated dictionaries.
 
+        This should be called by child class wrappers in the step
+        method before the "all_done" flag is updated.
+
         Parameters:
         -----------
         terminated: dict
@@ -500,6 +503,13 @@ class PPOEnvironmentWrapper(ABC):
             self.step_count = 0
 
         return terminated, truncated
+
+    def _reset_step_restrictions(self):
+        """
+        Reset step restrictions. This should be called by child class
+        wrappers in the reset method.
+        """
+        self.step_count = 0
 
     def _expand_space_for_ids(self, space):
         """
