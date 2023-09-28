@@ -96,14 +96,17 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
 
             Returns:
                 A tuple of form (actor_observation, critic_observation,
-                reward, terminal, truncated, info)
+                reward, terminated, truncated, info)
         """
         actions = self._filter_done_agent_actions(actions)
 
-        obs, reward, terminal, truncated, info = \
+        obs, reward, terminated, truncated, info = \
             self.env.step(self._conform_actions(actions))
 
-        done = self._get_done_dict(terminal, truncated)
+        terminated, truncated = self._apply_step_restrictions(
+            terminated, truncated)
+
+        done = self._get_done_dict(terminated, truncated)
 
         self.all_done = self._get_all_done(done)
         self._update_done_agents(done)
@@ -111,13 +114,13 @@ class ParallelZooWrapper(PPOEnvironmentWrapper):
         if self.add_agent_ids:
             obs = self._add_agent_ids_to_obs(obs)
 
-        obs, reward, terminal, truncated, info = self._apply_death_mask(
-            obs, reward, terminal, truncated, info)
+        obs, reward, terminated, truncated, info = self._apply_death_mask(
+            obs, reward, terminated, truncated, info)
 
         critic_obs = self._construct_critic_observation(
             obs, self.agents_done)
 
-        return obs, critic_obs, reward, terminal, truncated, info
+        return obs, critic_obs, reward, terminated, truncated, info
 
     def reset(self):
         """

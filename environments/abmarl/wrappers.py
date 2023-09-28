@@ -41,7 +41,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             add_agent_ids     = add_agent_ids,
             critic_view       = critic_view,
             policy_mapping_fn = policy_mapping_fn,
-            *kw_args)
+            **kw_args)
 
         self.fig = None
         self.need_action_wrap = False
@@ -158,6 +158,8 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         for key in terminated:
             truncated[key] = False
 
+        terminated, truncated = self._apply_step_restrictions(
+            terminated, truncated)
 
         self.all_done = self._get_all_done(terminated)
         self._update_done_agents(terminated)

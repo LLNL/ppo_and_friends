@@ -60,6 +60,7 @@ class AbmarlLargeMazeRunner(EnvironmentRunner):
 
         env_generator = lambda : \
                 AbmarlWrapper(env               = lg_abmarl_grid_pos_maze,
+                              max_steps         = 4096,
                               policy_mapping_fn = policy_mapping_fn)
 
         policy_settings = { policy_name : \

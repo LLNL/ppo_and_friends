@@ -258,7 +258,11 @@ class SingleAgentGymWrapper(PPOGymWrapper):
         if type(reward) == np.ndarray:
             reward = reward[0]
 
-        reward = np.float32(reward)
+        terminated = {agent_id : terminated}
+        truncated  = {agent_id : truncated}
+
+        terminated, truncated = self._apply_step_restrictions(
+            terminated, truncated)
 
         if terminated or truncated:
             self.all_done = True
@@ -266,9 +270,7 @@ class SingleAgentGymWrapper(PPOGymWrapper):
             self.all_done = False
 
         obs        = {agent_id : obs}
-        reward     = {agent_id : reward}
-        truncated  = {agent_id : truncated}
-        terminated = {agent_id : terminated}
+        reward     = {agent_id : np.float32(reward)}
         info       = {agent_id : info}
 
         if self.add_agent_ids:
@@ -391,6 +393,34 @@ class MultiAgentGymWrapper(PPOGymWrapper):
 
         return tuple(gym_actions)
 
+    def _apply_step_restrictions(self, terminated, truncated):
+        """
+        Apply any desired restrictions to the allowable environment
+        steps. This can alter the terminated and truncated dictionaries.
+
+        Parameters:
+        -----------
+        terminated: dict
+            A dictionary mapping agent ids to termination status.
+        truncated: dict
+            A dictionary mapping agent ids to truncation status.
+
+        Returns:
+        --------
+        tuple:
+            terminated and truncated dictionaries.
+        """
+        self.step_count += 1
+
+        if self.step_count >= self.max_steps:
+            for agent_idx in range(len(terminated)):
+                terminated[agent_idx] = True
+                truncated[agent_idx]  = False
+
+            self.step_count = 0
+
+        return terminated, truncated
+
     def _wrap_gym_step(self,
                        obs,
                        reward,
@@ -425,6 +455,9 @@ class MultiAgentGymWrapper(PPOGymWrapper):
             msg += "environment is not currently supported."
             rank_print(msg)
             comm.Abort()
+
+        terminated, truncated = self._apply_step_restrictions(
+            terminated, truncated)
 
         for a_idx, a_id in enumerate(self.agent_ids):
             agent_obs         = obs[a_idx]

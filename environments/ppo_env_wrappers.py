@@ -417,6 +417,7 @@ class PPOEnvironmentWrapper(ABC):
         self.critic_view       = critic_view
         self.policy_mapping_fn = policy_mapping_fn
         self.max_steps         = max_steps
+        self.step_count        = 0
 
         self._define_agent_ids()
         self.num_agents = len(self.agent_ids)
@@ -471,6 +472,34 @@ class PPOEnvironmentWrapper(ABC):
                 one_hot[a_idx - 1] = 1
 
             self.agent_one_hot_ids[a_id] = one_hot.copy()
+
+    def _apply_step_restrictions(self, terminated, truncated):
+        """
+        Apply any desired restrictions to the allowable environment
+        steps. This can alter the terminated and truncated dictionaries.
+
+        Parameters:
+        -----------
+        terminated: dict
+            A dictionary mapping agent ids to termination status.
+        truncated: dict
+            A dictionary mapping agent ids to truncation status.
+
+        Returns:
+        --------
+        tuple:
+            terminated and truncated dictionaries.
+        """
+        self.step_count += 1
+
+        if self.step_count >= self.max_steps:
+            for agent_id in terminated:
+                terminated[agent_id] = True
+                truncated[agent_id]  = False
+
+            self.step_count = 0
+
+        return terminated, truncated
 
     def _expand_space_for_ids(self, space):
         """
