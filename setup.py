@@ -31,6 +31,7 @@ dependencies = [
     'pymunk',
     'packaging',
     'abmarl',
+    'flatland-rl',
 ]
 
 setup(name             = "ppo_and_friends",
