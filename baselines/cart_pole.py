@@ -34,8 +34,7 @@ class CartPoleRunner(GymRunner):
 
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('CartPole-v0',
-                render_mode = self.get_gym_render_mode()))
-                 #max_steps=10)
+                render_mode = self.get_gym_render_mode())))
 
         actor_kw_args = {}
         actor_kw_args["activation"] = nn.LeakyReLU()
