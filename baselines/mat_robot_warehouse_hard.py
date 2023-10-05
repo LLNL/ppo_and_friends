@@ -4,6 +4,7 @@ from ppo_and_friends.environments.gym.wrappers import MultiAgentGymWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
+import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.gym.version_wrappers import Gym21ToGymnasium
 import torch.nn as nn
@@ -41,6 +42,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
         parser.add_argument("--grid_size", type=str, default='medium')
         parser.add_argument("--use_icm", action="store_true")
         parser.add_argument("--ts_per_rollout", default=1000, type=int)
+        parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
         return parser
 
     def run(self):
@@ -54,13 +56,37 @@ class MATRobotWarehouseHardRunner(GymRunner):
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(
-                    old_gym.make(f'rware-{self.cli_args.grid_size}-3ag-hard-v1'),
-                    max_steps = self.cli_args.ts_per_rollout),
+                    old_gym.make(f'rware-{self.cli_args.grid_size}-3ag-hard-v1')),
 
                 critic_view   = "local",
                 add_agent_ids = False)
 
+        #
+        # MAT kwargs
+        #
         mat_kw_args  = {}
+
+
+        #
+        # MAPPO kwargs
+        #
+        actor_kw_args = {}
+        actor_kw_args["activation"]  = nn.LeakyReLU()
+        actor_kw_args["hidden_size"] = 256
+        critic_kw_args = actor_kw_args.copy()
+        critic_kw_args["hidden_size"] = 512
+
+        if self.cli_args.policy == "mappo":
+            ac_network  = FeedForwardNetwork
+            policy_type = None
+
+        elif self.cli_args.policy == "mat":
+            ac_network  = mat.MATActorCritic
+            policy_type = MATPolicy
+
+        else:
+            print(f"ERROR: unknown policy type {self.cli_args.policy}")
+            comm.Abort()
 
         # TODO: find good settings for this environment.
         lr = LinearScheduler(
@@ -83,15 +109,25 @@ class MATRobotWarehouseHardRunner(GymRunner):
         icm_kw_args["forward_hidden_size"]  = 64
 
         policy_args = {\
-            "mat_kw_args"        : mat_kw_args,
+            "ac_network"         : ac_network,
             "lr"                 : lr,
             "entropy_weight"     : entropy_weight,
             "bootstrap_clip"     : None,
-
             "intr_reward_weight" : 1./100.,
             "enable_icm"         : self.cli_args.use_icm,
             "icm_kw_args"        : icm_kw_args,
             "icm_lr"             : 0.0003,
+
+            #
+            # MAT only.
+            #
+            "mat_kw_args"        : mat_kw_args,
+            
+            #
+            # MAPPO only.
+            #
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
         }
 
         #
@@ -101,7 +137,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
             policy_name   = "rware",
             env_generator = env_generator,
             policy_args   = policy_args,
-            policy_type   = MATPolicy)
+            policy_type   = policy_type)
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
@@ -126,7 +162,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
                 batch_size         = self.cli_args.ts_per_rollout,
                 epochs_per_iter    = 15,
                 max_ts_per_ep      = 32,
-                ts_per_rollout     = ts_per_rollout,
+                ts_per_rollout     = self.cli_args.ts_per_rollout,
                 normalize_obs      = False,
                 obs_clip           = None,
                 normalize_rewards  = False,
