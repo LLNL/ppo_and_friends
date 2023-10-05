@@ -38,9 +38,9 @@ class MATRobotWarehouseHardRunner(GymRunner):
         #   ts-per-rollout: 1000, 20000
         #   policy: MAT, MAPPO
         #
-        parser.add_argument("--grid-size", type=str, default='medium')
-        parser.add_argument("--use-icm", action="store_true")
-        parser.add_argument("--ts-per-rollout", default=1000, type=int)
+        parser.add_argument("--grid_size", type=str, default='medium')
+        parser.add_argument("--use_icm", action="store_true")
+        parser.add_argument("--ts_per_rollout", default=1000, type=int)
         return parser
 
     def run(self):

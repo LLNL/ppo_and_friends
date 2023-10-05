@@ -27,7 +27,7 @@ class CartPoleRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser.add_argument("--learning-rate", type=float, default=0.0002)
+        parser.add_argument("--learning_rate", type=float, default=0.0002)
         return parser
 
     def run(self):
@@ -40,7 +40,6 @@ class CartPoleRunner(GymRunner):
         actor_kw_args["activation"] = nn.LeakyReLU()
         critic_kw_args = actor_kw_args.copy()
 
-        lr = 0.0002
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
