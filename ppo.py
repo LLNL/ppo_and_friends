@@ -73,8 +73,9 @@ class PPO(object):
         policy_mapping_fn: function
             A function mapping agent ids to
             policy ids.
-        device: torch.device
-            A torch device to use for training.
+        device: str
+            A string representing the torch device to use for
+            training and inference.
         random_seed: int
             A random seed to use.
         envs_per_proc: int
@@ -182,9 +183,6 @@ class PPO(object):
             msg += "{}.".format(ts_per_rollout * num_procs)
             rank_print(msg)
 
-        if not test_mode:
-            rank_print("ts_per_rollout per rank: ~{}".format(ts_per_rollout))
-
         #
         # Create our policies.
         #
@@ -259,7 +257,7 @@ class PPO(object):
         #
         # Establish some class variables.
         #
-        self.device              = device
+        self.device              = torch.device(device)
         self.state_path          = state_path
         self.render              = render
         self.frame_pause         = frame_pause
@@ -283,6 +281,13 @@ class PPO(object):
         self.force_gc            = force_gc
         self.save_when           = save_when
         self.save_train_scores   = save_train_scores
+
+        rank_print("Using device: {}".format(self.device))
+        rank_print("Number of processors: {}".format(num_procs))
+        rank_print("Number of environments per processor: {}".format(envs_per_proc))
+
+        if not test_mode:
+            rank_print("ts_per_rollout per rank: ~{}".format(self.ts_per_rollout))
 
         if self.save_when is None:
             self.save_when = ChangeInStateScheduler(
