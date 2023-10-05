@@ -15,7 +15,7 @@ from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 
 @ppoaf_runner
-class MATRobotWarehouseTinyRunner(GymRunner):
+class MATRobotWarehouseHardRunner(GymRunner):
 
     def run(self):
         if old_gym.__version__ != '0.21.0':
