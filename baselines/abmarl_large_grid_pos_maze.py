@@ -48,7 +48,7 @@ class AbmarlLargeMazeRunner(EnvironmentRunner):
             "critic_kw_args"     : critic_kw_args,
             "icm_lr"             : 0.0005,
             "lr"                 : lr,
-            "bootstrap_clip"     : (0.8, 10.),
+            "bootstrap_clip"     : (0.1, 10.),
             "enable_icm"         : False,
             "icm_kw_args"        : icm_kw_args,
             "intr_reward_weight" : intr_reward_weight,
@@ -60,7 +60,6 @@ class AbmarlLargeMazeRunner(EnvironmentRunner):
 
         env_generator = lambda : \
                 AbmarlWrapper(env               = lg_abmarl_grid_pos_maze,
-                              max_steps         = 4096,
                               policy_mapping_fn = policy_mapping_fn)
 
         policy_settings = { policy_name : \
