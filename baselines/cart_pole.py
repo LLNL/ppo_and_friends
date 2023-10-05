@@ -40,7 +40,6 @@ class CartPoleRunner(GymRunner):
         actor_kw_args["activation"] = nn.LeakyReLU()
         critic_kw_args = actor_kw_args.copy()
 
-        lr = 0.0002
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
