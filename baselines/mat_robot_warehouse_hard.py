@@ -15,7 +15,33 @@ from mpi4py import MPI
 comm      = MPI.COMM_WORLD
 
 @ppoaf_runner
-class MATRobotWarehouseTinyRunner(GymRunner):
+class MATRobotWarehouseHardRunner(GymRunner):
+
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        #
+        # For study:
+        #   grid-size: medium, large
+        #   use-icm: True, False
+        #   ts-per-rollout: 1000, 20000
+        #   policy: MAT, MAPPO
+        #
+        parser.add_argument("--grid-size", type=str, default='medium')
+        parser.add_argument("--use-icm", action="store_true")
+        parser.add_argument("--ts-per-rollout", default=1000, type=int)
+        return parser
 
     def run(self):
         if old_gym.__version__ != '0.21.0':
@@ -27,7 +53,10 @@ class MATRobotWarehouseTinyRunner(GymRunner):
 
         env_generator = lambda : \
             MultiAgentGymWrapper(
-                Gym21ToGymnasium(old_gym.make('rware-medium-3ag-hard-v1')),
+                Gym21ToGymnasium(
+                    old_gym.make(f'rware-{self.cli_args.grid_size}-3ag-hard-v1'),
+                    max_steps = self.cli_args.ts_per_rollout),
+
                 critic_view   = "local",
                 add_agent_ids = False)
 
@@ -57,12 +86,12 @@ class MATRobotWarehouseTinyRunner(GymRunner):
             "mat_kw_args"        : mat_kw_args,
             "lr"                 : lr,
             "entropy_weight"     : entropy_weight,
+            "bootstrap_clip"     : None,
 
-            #"intr_reward_weight" : 1./100.,
-            #"bootstrap_clip"     : (1e-2, 100.),
-            #"enable_icm"         : True,
-            #"icm_kw_args"        : icm_kw_args,
-            #"icm_lr"             : 0.0003,
+            "intr_reward_weight" : 1./100.,
+            "enable_icm"         : self.cli_args.use_icm,
+            "icm_kw_args"        : icm_kw_args,
+            "icm_lr"             : 0.0003,
         }
 
         #
@@ -74,7 +103,7 @@ class MATRobotWarehouseTinyRunner(GymRunner):
             policy_args   = policy_args,
             policy_type   = MATPolicy)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(500)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
         #
         # This environment comes from arXiv:2006.07869v4.
@@ -94,7 +123,7 @@ class MATRobotWarehouseTinyRunner(GymRunner):
                 env_generator      = env_generator,
                 policy_settings    = policy_settings,
                 policy_mapping_fn  = policy_mapping_fn,
-                batch_size         = 10000,
+                batch_size         = self.cli_args.ts_per_rollout,
                 epochs_per_iter    = 15,
                 max_ts_per_ep      = 32,
                 ts_per_rollout     = ts_per_rollout,
