@@ -3,7 +3,7 @@ import shutil
 import random
 import numpy as np
 import argparse
-import json
+import yaml
 import sys
 import dill as pickle
 import importlib.util
@@ -180,7 +180,7 @@ def cli():
         "or directories containing sub-directories (at any depth) containing "
         "score files.")
 
-    args, unknown_args = main_parser.parse_known_args()
+    args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
     #
@@ -191,10 +191,10 @@ def cli():
         return
 
     elif args.command == "train":
-        if len(unknown_args) > 0:
-            msg  = f"WARNING: the following args are unrecognized by the "
-            msg += f"primary PPOAF parser. Ignore this message if they are "
-            msg += f"used by the runner: {unknown_args}"
+        if len(runner_args) > 0:
+            msg  = f"The following args are unrecognized by the "
+            msg += f"primary PPOAF parser and will be sent to the runner: "
+            msg += f"{runner_args}"
             rank_print(msg)
 
         arg_dict["random_seed"] = arg_dict["random_seed"] + rank
@@ -280,8 +280,8 @@ def cli():
         load_state = load_state)
 
     #
-    # If we're training, we need to extend our arg parser and save out parameter
-    # files for testing.
+    # If we're training, we need to send any unknown args to the runner's
+    # arg parser and then save out our args to yaml files.
     #
     if args.command == "train":
 
@@ -289,41 +289,40 @@ def cli():
         # Allow the runner to add more args to the parser if needed and
         # store them internally.
         #
-        parent_parser = runner.parse_extended_cli_args(parent_parser)
+        _, runner_args = runner.parse_extended_cli_args(runner_args)
+        runner_arg_dict = vars(runner_args)
 
         #
         # Save our runner parameters argparse args so that we can easily test
         # from a state directory alone.
         #
         if rank == 0:
-            argparse_file = os.path.join(arg_dict["state_path"], "parser.pickle")
-            with open(argparse_file, "wb") as out_f:
-                pickle.dump(parent_parser, out_f,
-                    protocol=pickle.HIGHEST_PROTOCOL)
+            args_file = os.path.join(arg_dict["state_path"], "args.yaml")
+            with open(args_file, "w") as out_f:
+                yaml.dump(arg_dict, out_f, default_flow_style=False)
+
+            runner_args_file = os.path.join(arg_dict["state_path"], "runner_args.yaml")
+            with open(runner_args_file, "w") as out_f:
+                yaml.dump(runner_arg_dict, out_f, default_flow_style=False)
 
         comm.barrier()
 
     #
-    # If we're testing, we need to load in the previous extended args that were
-    # used during training.
+    # If we're testing, we need to load in the previous runner args that were
+    # used during training. This will allow us to utilize those same args.
     #
     elif args.command == "test":
-        argparse_file = os.path.join(args.state_path, "parser.pickle")
-        if rank == 0 and not os.path.exists(argparse_file):
-            rank_print(f"ERROR: missing argparse file {argparse_file}")
-            comm.Abort()
 
-        comm.barrier()
-
-        with open(argparse_file, "rb") as in_f:
-            old_parser = pickle.load(in_f)
+        runner_args_file = os.path.join(arg_dict["state_path"], "runner_args.yaml")
+        with open(runner_args_file, "r") as in_f:
+            runner_args = yaml.safe_load(in_f)
 
         #
         # If we're testing, assign the old parser args to the runner's
         # cli args so that we reuse any extra variables that were
         # added when training.
         #
-        runner.cli_args = old_parser.parse_known_args()[0]
+        runner.cli_args = argparse.Namespace(**runner_args)
 
     #
     # Run!
