@@ -33,13 +33,13 @@ class EnvironmentRunner(ABC):
 
         Parameters:
         -----------
-        parser: argparse.ArgumentParser
-            The parser from ppoaf.
+        args: list
+            A list of args to be passed to the runner's arg parser.
 
         Returns:
         --------
-        argparse.ArgumentParser:
-            The same parser as the input with potentially new arguments added.
+        tuple:
+            The parser and the parsed args.
         """
         parser        = argparse.ArgumentParser()
         parser        = self.add_cli_args(parser)
