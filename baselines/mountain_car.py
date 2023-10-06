@@ -10,6 +10,26 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class MountainCarRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--enable_icm", type=int, default=0)
+        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
+        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
+        parser.add_argument("--learning_rate", default=0.0003, type=float)
+        return parser
+
     def run(self):
 
         env_generator = lambda : \
@@ -31,17 +51,15 @@ class MountainCarRunner(GymRunner):
         icm_kw_args["forward_hidden_depth"] = 2
         icm_kw_args["forward_hidden_size"]  = 32
 
-        lr = 0.0003
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "bootstrap_clip"   : (-.01, 0.0),
-            "enable_icm"       : True,
+            "lr"               : self.cli_args.learning_rate,
+            "enable_icm"       : self.cli_args.enable_icm,
             "icm_kw_args"      : icm_kw_args,
             "icm_lr"           : 0.0003,
+            "bootstrap_clip"   : (self.cli_args.bs_clip_min, self.cli_args.bs_clip_max),
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(

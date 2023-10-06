@@ -1,0 +1,42 @@
+description:
+    name: mountain_car_icm
+    description: Train mountain car with and without ICM
+
+batch:
+    type: slurm
+    host: pascal
+    bank: aiwargm
+    queue: pbatch
+
+env:
+    variables:
+        OUTPUT_PATH: /p/lustre1/maguire7/ppoaf-study
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/mountain_car.py
+
+generator.parameters:
+    ENABLE_ICM:
+      values: [0, 1]
+      label: ICM.%%
+    SEED:
+      values: [0, 1, 2, 3, 4, 5]
+      label: SEED.%%
+
+study:
+    - name: MountainCarICM
+      description: Run an experiment with PPO-AF
+      run:
+          cmd: |
+            source $(ENV_PATH)
+
+            $(LAUNCHER) ppoaf train $(RUNNER) \
+                --save_train_scores \
+                --num_timesteps 20000000 \
+                --random_seed $(SEED) \
+                --enable_icm $(ENABLE_ICM) \
+                --state-tag icm_$(ENABLE_ICM)-seed_$(SEED)
+
+          nodes: 1
+          procs: 36
+          exclusive: True
+          walltime: "24:00:00"

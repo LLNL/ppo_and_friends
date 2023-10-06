@@ -29,7 +29,7 @@ generator.parameters:
       label: TS_PER_ROLLOUT.%%
     POLICY:
       values: ["mappo", "mat"]
-      label: TS_PER_ROLLOUT.%%
+      label: POLICY.%%
 
 study:
     - name: MAT_Robot_Warehouse
