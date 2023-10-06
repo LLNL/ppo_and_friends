@@ -24,7 +24,7 @@ class EnvironmentRunner(ABC):
         self.kw_run_args = kw_run_args
         self.cli_args    = None
 
-    def parse_extended_cli_args(self, parser):
+    def parse_extended_cli_args(self, args):
         """
         Parse an extended arg parser from the CLI. Users can define the
         'add_cli_args' method, which can be used to extend the CLI arg parser.
@@ -41,9 +41,10 @@ class EnvironmentRunner(ABC):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser = self.add_cli_args(parser)
-        self.cli_args = parser.parse_known_args()[0]
-        return parser
+        parser        = argparse.ArgumentParser()
+        parser        = self.add_cli_args(parser)
+        self.cli_args = parser.parse_args(args)
+        return parser, self.cli_args
 
     def add_cli_args(self, parser):
         """

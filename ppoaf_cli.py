@@ -3,7 +3,7 @@ import shutil
 import random
 import numpy as np
 import argparse
-import json
+import yaml
 import sys
 import dill as pickle
 import importlib.util
@@ -180,7 +180,7 @@ def cli():
         "or directories containing sub-directories (at any depth) containing "
         "score files.")
 
-    args, unknown_args = main_parser.parse_known_args()
+    args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
     #
@@ -191,10 +191,10 @@ def cli():
         return
 
     elif args.command == "train":
-        if len(unknown_args) > 0:
-            msg  = f"WARNING: the following args are unrecognized by the "
-            msg += f"primary PPOAF parser. Ignore this message if they are "
-            msg += f"used by the runner: {unknown_args}"
+        if len(runner_args) > 0:
+            msg  = f"The following args are unrecognized by the "
+            msg += f"primary PPOAF parser and will be sent to the runner: "
+            msg += f"{runner_args}"
             rank_print(msg)
 
         arg_dict["random_seed"] = arg_dict["random_seed"] + rank
@@ -289,7 +289,8 @@ def cli():
         # Allow the runner to add more args to the parser if needed and
         # store them internally.
         #
-        parent_parser = runner.parse_extended_cli_args(parent_parser)
+        runner_parser, runner_args = runner.parse_extended_cli_args(runner_args)
+        runner_arg_dict = vars(runner_args)
 
         #
         # Save our runner parameters argparse args so that we can easily test
@@ -300,6 +301,14 @@ def cli():
             with open(argparse_file, "wb") as out_f:
                 pickle.dump(parent_parser, out_f,
                     protocol=pickle.HIGHEST_PROTOCOL)
+
+            args_file = os.path.join(arg_dict["state_path"], "args.yaml")
+            with open(args_file, "w") as out_f:
+                yaml.dump(arg_dict, out_f, default_flow_style=False)
+
+            runner_args_file = os.path.join(arg_dict["state_path"], "runner_args.yaml")
+            with open(runner_args_file, "w") as out_f:
+                yaml.dump(runner_arg_dict, out_f, default_flow_style=False)
 
         comm.barrier()
 

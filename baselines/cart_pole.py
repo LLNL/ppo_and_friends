@@ -31,6 +31,7 @@ class CartPoleRunner(GymRunner):
         return parser
 
     def run(self):
+        print(f"LEARNING RATE: {self.cli_args.learning_rate}")#FIXME
 
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('CartPole-v0',
