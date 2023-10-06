@@ -280,8 +280,8 @@ def cli():
         load_state = load_state)
 
     #
-    # If we're training, we need to extend our arg parser and save out parameter
-    # files for testing.
+    # If we're training, we need to send any unknown args to the runner's
+    # arg parser and then save out our args to yaml files.
     #
     if args.command == "train":
 
@@ -308,8 +308,8 @@ def cli():
         comm.barrier()
 
     #
-    # If we're testing, we need to load in the previous extended args that were
-    # used during training.
+    # If we're testing, we need to load in the previous runner args that were
+    # used during training. This will allow us to utilize those same args.
     #
     elif args.command == "test":
 
