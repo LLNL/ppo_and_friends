@@ -10,6 +10,8 @@ from ppo_and_friends.utils.mpi_utils import rank_print
 import pressureplate
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 from packaging import version
+import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
+from ppo_and_friends.policies.mat_policy import MATPolicy
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -71,6 +73,26 @@ class PressurePlateRunner(GymRunner):
                 critic_view   = "local",
                 add_agent_ids = True)
 
+        if self.cli_args.policy == "mappo":
+            ac_network  = FeedForwardNetwork
+            policy_type = None
+
+        elif self.cli_args.policy == "mat":
+            ac_network  = mat.MATActorCritic
+            policy_type = MATPolicy
+
+        else:
+            print(f"ERROR: unknown policy type {self.cli_args.policy}")
+            comm.Abort()
+
+        #
+        # MAT kwargs.
+        #
+        mat_kw_args = {}
+
+        #
+        # MAPPO kwargs.
+        #
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
         actor_kw_args["hidden_size"] = 128
@@ -91,12 +113,30 @@ class PressurePlateRunner(GymRunner):
             min_value     = 0.01)
 
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
+            "ac_network"       : ac_network,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
             "entropy_weight"   : entropy_weight,
             "bootstrap_clip"   : (self.cli_args.bs_clip_min, self.cli_args.bs_clip_max),
+
+            #
+            # ICM only.
+            #
+            "intr_reward_weight" : 1./1000.,
+            "enable_icm"         : self.cli_args.use_icm,
+            "icm_lr"             : 0.0003,
+
+            #
+            # MAT only.
+            #
+            "mat_kw_args"      : mat_kw_args,
+
+            #
+            # MAPPO only
+            #
+            "actor_kw_args"    : actor_kw_args,
+            "critic_kw_args"   : critic_kw_args,
         }
 
         #
@@ -105,7 +145,8 @@ class PressurePlateRunner(GymRunner):
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
             policy_name   = "pressure-plate",
             env_generator = env_generator,
-            policy_args   = policy_args)
+            policy_args   = policy_args,
+            policy_type   = policy_type)
 
         save_when = ChangeInStateScheduler(
             status_key  = "longest run",
@@ -119,7 +160,7 @@ class PressurePlateRunner(GymRunner):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.ts_per_rollout,
-                     epochs_per_iter    = 5,
+                     epochs_per_iter    = 15,
                      max_ts_per_ep      = 128,
                      ts_per_rollout     = self.cli_args.ts_per_rollout,
                      normalize_obs      = False,

@@ -112,7 +112,7 @@ class LevelBasedForagingRunner(GymRunner):
             min_value     = 0.0001)
 
         policy_args = {\
-            "ac_network"       : ac_network,
+            "ac_network"         : ac_network,
             "intr_reward_weight" : 1./1000.,
             "enable_icm"         : self.cli_args.use_icm,
             "icm_lr"             : 0.0003,
