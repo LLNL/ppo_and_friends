@@ -12,10 +12,40 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 from packaging import version
 
 from mpi4py import MPI
-comm      = MPI.COMM_WORLD
+comm = MPI.COMM_WORLD
 
 @ppoaf_runner
 class PressurePlateRunner(GymRunner):
+
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        #
+        # For study:
+        #   num_agents: 4, 5, 6
+        #   use_icm: True, False
+        #   ts_per_rollout: 256
+        #   policy: MAT, MAPPO
+        #
+        parser.add_argument("--num_agents", type=int, default=4)
+        parser.add_argument("--use_icm", type=int, default=0)
+        parser.add_argument("--ts_per_rollout", default=256, type=int)
+        parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
+        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
+        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
+        parser.add_argument("--soft_resets", type=int, default=0)
+        return parser
 
     def run(self):
         if old_gym.__version__ != '0.21.0':
@@ -26,8 +56,8 @@ class PressurePlateRunner(GymRunner):
 
         import pyglet
         try:
-            if version.parse(pyglet.version) > version.parse('1.5.0'):
-                msg  = "WARNING: PressurePlate requires pyget version <= 1.5.0 "
+            if version.parse(pyglet.version) == version.parse('1.3.2'):
+                msg  = "WARNING: PressurePlate requires pyget version == 1.3.2 "
                 msg += "for rendering. Rendering will fail with later versions."
                 rank_print(msg)
         except:
@@ -37,7 +67,7 @@ class PressurePlateRunner(GymRunner):
         # working here...
         env_generator = lambda : \
             MultiAgentGymWrapper(
-                Gym21ToGymnasium(old_gym.make('pressureplate-linear-4p-v0')),
+                Gym21ToGymnasium(old_gym.make(f"pressureplate-linear-{self.cli_args.num_agents}p-v0")),
                 critic_view   = "local",
                 add_agent_ids = True)
 
@@ -50,15 +80,15 @@ class PressurePlateRunner(GymRunner):
 
         lr = LinearScheduler(
             status_key    = "timesteps",
-            status_max    = 400000,
+            status_max    = 5_000_000,
             max_value     = 0.001,
             min_value     = 0.0001)
 
         entropy_weight = LinearScheduler(
             status_key    = "timesteps",
-            status_max    = 400000,
+            status_max    = 5_000_000,
             max_value     = 0.02,
-            min_value     = 0.0)
+            min_value     = 0.01)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -66,7 +96,7 @@ class PressurePlateRunner(GymRunner):
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
             "entropy_weight"   : entropy_weight,
-            "bootstrap_clip"   : (-3, 0),
+            "bootstrap_clip"   : (self.cli_args.bs_clip_min, self.cli_args.bs_clip_max),
         }
 
         #
@@ -82,20 +112,19 @@ class PressurePlateRunner(GymRunner):
             compare_fn  = np.less_equal,
             persistent  = True)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
 
         self.run_ppo(env_generator      = env_generator,
                      save_when          = save_when,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 10000,
+                     batch_size         = self.cli_args.ts_per_rollout,
                      epochs_per_iter    = 5,
                      max_ts_per_ep      = 128,
-                     ts_per_rollout     = ts_per_rollout,
-                     normalize_values   = True,
+                     ts_per_rollout     = self.cli_args.ts_per_rollout,
                      normalize_obs      = False,
                      obs_clip           = None,
                      normalize_rewards  = False,
                      reward_clip        = None,
-                     soft_resets        = True,
+                     soft_resets        = self.cli_args.soft_resets,
                      **self.kw_run_args)
