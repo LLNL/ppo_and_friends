@@ -180,9 +180,13 @@ def cli():
         "or directories containing sub-directories (at any depth) containing "
         "score files.")
 
-    plot_parser.add_argument("--search_pattern", type=str, default="",
-        help="Only grab plot files that contain this string within "
+    plot_parser.add_argument("--search_patterns", type=str, nargs="+",
+        help="Only grab plot files that contain these strings within "
         "their path.")
+
+    plot_parser.add_argument("--exclude_patterns", type=str, nargs="+",
+        help="Exclude any plot files that contain these strings in their "
+        "path.")
 
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
@@ -191,7 +195,16 @@ def cli():
     # If we're plotting, that's all we need to do.
     #
     if args.command == "plot":
-        plot_score_files(args.scores, args.search_pattern)
+        #
+        # We parse again here because all args should be known. This is just
+        # a safety measure.
+        #
+        args = main_parser.parse_args()
+
+        search_patterns  = [""] if args.search_patterns is None else args.search_patterns
+        exclude_patterns = [""] if args.exclude_patterns is None else args.exclude_patterns
+
+        plot_score_files(args.scores, search_patterns, exclude_patterns)
         return
 
     elif args.command == "train":
