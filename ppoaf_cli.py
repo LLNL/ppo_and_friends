@@ -201,8 +201,12 @@ def cli():
         #
         args = main_parser.parse_args()
 
+        #
+        # Our default search pattern list includes "" because we want
+        # everything.
+        #
         search_patterns  = [""] if args.search_patterns is None else args.search_patterns
-        exclude_patterns = [""] if args.exclude_patterns is None else args.exclude_patterns
+        exclude_patterns = [] if args.exclude_patterns is None else args.exclude_patterns
 
         plot_score_files(args.scores, search_patterns, exclude_patterns)
         return
