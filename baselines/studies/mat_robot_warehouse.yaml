@@ -46,7 +46,7 @@ study:
                 --ts_per_rollout $(TS_PER_ROLLOUT) \
                 --policy $(POLICY) \
                 --use_icm $(USE_ICM) \
-                --state-tag grid_$(GRID_SIZE)-($TS_PER_ROLLOUT)_ts_per_rollout-$(POLICY)-$(USE_ICM)_icm-seed_$(TRIAL)
+                --state_tag grid_$(GRID_SIZE)-($TS_PER_ROLLOUT)_ts_per_rollout-$(POLICY)-$(USE_ICM)_icm-seed_$(TRIAL)
 
           nodes: 1
           procs: 36

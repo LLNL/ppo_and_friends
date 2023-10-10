@@ -34,7 +34,7 @@ study:
                 --num_timesteps 20000000 \
                 --random_seed $(SEED) \
                 --enable_icm $(ENABLE_ICM) \
-                --state-tag icm_$(ENABLE_ICM)-seed_$(SEED)
+                --state_tag icm_$(ENABLE_ICM)-seed_$(SEED)
 
           nodes: 1
           procs: 36

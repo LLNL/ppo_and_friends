@@ -58,7 +58,7 @@ study:
                 --coop $(COOP) \
                 --num_agents $(NUM_AGENTS) \
                 --food_count $(FOOD_COUNT) \
-                --state-tag grid_$(GRID_SIZE)-($TS_PER_ROLLOUT)_ts_per_rollout-$(POLICY)-$(COOP)_coop-$(NUM_AGENTS)_agents-$(FOOD_COUNT)_food-$(USE_ICM)_icm-seed_$(TRIAL)
+                --state_tag grid_$(GRID_SIZE)-($TS_PER_ROLLOUT)_ts_per_rollout-$(POLICY)-$(COOP)_coop-$(NUM_AGENTS)_agents-$(FOOD_COUNT)_food-$(USE_ICM)_icm-seed_$(TRIAL)
 
           nodes: 1
           procs: 36

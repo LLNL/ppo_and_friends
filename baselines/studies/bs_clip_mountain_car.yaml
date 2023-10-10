@@ -34,7 +34,7 @@ study:
                 --num_timesteps 20000000 \
                 --random_seed $(SEED) \
                 --bs_clip_min $(BS_CLIP_MIN) \
-                --state-tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)
+                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)
 
           nodes: 1
           procs: 36
