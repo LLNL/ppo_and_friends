@@ -7,20 +7,21 @@ import os
 import plotly.graph_objects as go
 import sys
 
-def find_score_files(score_dir_name, root):
+def find_score_files(score_dir_name, root, search_pattern):
     score_files = []
     for path, dirs, files in os.walk(root):
         if score_dir_name in dirs:
             score_dir = os.path.join(path, score_dir_name)
 
-            search_pattern = os.path.join(score_dir, "*.npy")
-            for dir_file in glob.glob(search_pattern):
-                score_files.append(dir_file)
+            np_files = os.path.join(score_dir, "*.npy")
+            for dir_file in glob.glob(np_files):
+                if search_pattern in dir_file:
+                    score_files.append(dir_file)
 
     return score_files
 
 
-def plot_score_files(search_paths):
+def plot_score_files(search_paths, search_pattern):
     """
     Plot any number of score files using plotly.
 
@@ -31,14 +32,16 @@ def plot_score_files(search_paths):
         to the actual score files, directories containing the score files,
         or directories containing sub-directories (at any depth) containing
         score files.
+    search_pattern: str
+        Only plot files that contain this string within their paths.
     """
-
     score_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
-            score_files.append(sp) 
+            if search_pattern in sp:
+                score_files.append(sp) 
         else:
-            score_files.extend(find_score_files("scores", sp))
+            score_files.extend(find_score_files("scores", sp, search_pattern))
 
     print(f"Found the following score files: \n{score_files}")
     if len(score_files) == 0:
