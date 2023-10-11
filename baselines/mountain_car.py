@@ -28,6 +28,7 @@ class MountainCarRunner(GymRunner):
         parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
         parser.add_argument("--bs_clip_max", default=np.inf, type=float)
         parser.add_argument("--learning_rate", default=0.0003, type=float)
+        parser.add_argument("--cut_off_bs_clip", default=0, type=int)
         return parser
 
     def run(self):
@@ -51,6 +52,26 @@ class MountainCarRunner(GymRunner):
         icm_kw_args["forward_hidden_depth"] = 2
         icm_kw_args["forward_hidden_size"]  = 32
 
+        if self.cli_args.cut_off_bs_clip > 0:
+            bs_clip_min = intr_reward_weight = LinearStepScheduler(
+                status_key      = "extrinsic reward avg",
+                status_preface  = "single_agent",
+                initial_value   = self.cli_args.bs_clip_min,
+                compare_fn      = np.greater_equal,
+                status_triggers = [-140,],
+                step_values     = [-np.inf,])
+
+            bs_clip_max = intr_reward_weight = LinearStepScheduler(
+                status_key      = "extrinsic reward avg",
+                status_preface  = "single_agent",
+                initial_value   = self.cli_args.bs_clip_max,
+                compare_fn      = np.greater_equal,
+                status_triggers = [-140,],
+                step_values     = [np.inf,])
+        else:
+            bs_clip_min = self.cli_args.bs_clip_min
+            bs_clip_max = self.cli_args.bs_clip_max
+
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -59,8 +80,13 @@ class MountainCarRunner(GymRunner):
             "enable_icm"       : self.cli_args.enable_icm,
             "icm_kw_args"      : icm_kw_args,
             "icm_lr"           : 0.0003,
-            "bootstrap_clip"   : (self.cli_args.bs_clip_min, self.cli_args.bs_clip_max),
+            "bootstrap_clip"   : (bs_clip_min, bs_clip_max),
         }
+
+        ext_reward_weight = 1.0
+
+        if self.cli_args.enable_icm:
+            ext_reward_weight = 1.0 / 100.
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
             env_generator = env_generator,
@@ -91,7 +117,7 @@ class MountainCarRunner(GymRunner):
                      ts_per_rollout     = ts_per_rollout,
                      epochs_per_iter    = 32,
                      max_ts_per_ep      = 200,
-                     ext_reward_weight  = 1./100.,
+                     ext_reward_weight  = ext_reward_weight,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,

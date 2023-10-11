@@ -1,5 +1,5 @@
 description:
-    name: mountain_car_bs_clip
+    name: mountain_car_bs_clip_with_cutoff
     description: Train mountain car with and without bootstrap clip
 
 batch:
@@ -14,13 +14,27 @@ env:
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/mountain_car.py
 
+#generator.parameters:
+#    BS_CLIP_MIN:
+#      values: [-10000000000000.0, -5.0, -1.0, -0.01, 0.0, 0.01]
+#      label: BS_CLIP_MIN.%%
+#    SEED:
+#      values: [0, 1, 2, 3, 4]
+#      label: SEED.%%
+#    CUT_OFF:
+#      values: [0]
+#      label: CUT_OFF.%%
+
 generator.parameters:
     BS_CLIP_MIN:
-      values: [-10000000000000.0, -5.0, -1.0, -0.01, 0.0, 0.01]
+      values: [-0.01, 0.0, 0.01]
       label: BS_CLIP_MIN.%%
     SEED:
       values: [0, 1, 2, 3, 4]
       label: SEED.%%
+    CUT_OFF:
+      values: [0, 1]
+      label: CUT_OFF.%%
 
 study:
     - name: MountainCarBSClip
@@ -34,7 +48,8 @@ study:
                 --num_timesteps 20000000 \
                 --random_seed $(SEED) \
                 --bs_clip_min $(BS_CLIP_MIN) \
-                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)
+                --cut_off_bs_clip $(CUT_OFF) \
+                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)-cut_off_$(CUT_OFF)
 
           nodes: 1
           procs: 36
