@@ -10,7 +10,7 @@ batch:
 
 env:
     variables:
-        OUTPUT_PATH: /p/lustre1/maguire7/ppoaf-study
+        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/mountain_car.py
 
@@ -19,7 +19,7 @@ generator.parameters:
       values: [0, 1]
       label: ICM.%%
     SEED:
-      values: [0, 1, 2, 3, 4, 5]
+      values: [0, 1, 2, 3, 4]
       label: SEED.%%
 
 study:
