@@ -9,7 +9,7 @@ from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOShare
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+import gymnasium.spaces as spaces
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
@@ -53,6 +53,7 @@ class PPOPolicy():
                  lambd               = 0.95,
                  dynamic_bs_clip     = False,
                  enable_icm          = False,
+                 agent_grouped_icm   = False,
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
@@ -141,6 +142,8 @@ class PPOPolicy():
             seen so far.
         enable_icm: bool
             Enable ICM?
+        agent_grouped_icm: bool
+            Enable agent grouping when using ICM?
         icm_network: PPONetwork
             The network to use for ICM applications.
         intr_reward_weight: float
@@ -162,6 +165,7 @@ class PPOPolicy():
         self.actor_obs_space        = actor_observation_space
         self.critic_obs_space       = critic_observation_space
         self.enable_icm             = enable_icm
+        self.agent_grouped_icm      = agent_grouped_icm
         self.test_mode              = test_mode
         self.use_gae                = use_gae
         self.gamma                  = gamma
@@ -272,10 +276,12 @@ class PPOPolicy():
 
     def finalize(self, status_dict, device):
         """
-            Perfrom any finalizing tasks before we start using the policy.
+        Perfrom any finalizing tasks before we start using the policy.
 
-            Arguments:
-                status_dict    The status dict for training.
+        Parameters:
+        -----------
+        status_dict: dict
+            The status dict for training.
         """
         self._initialize_networks(**self.network_args)
         self.to(device)
@@ -412,6 +418,60 @@ class PPOPolicy():
             self.icm_model = self.icm_model.to(self.device)
             broadcast_model_parameters(self.icm_model)
             comm.barrier()
+
+    def get_agent_shared_space(self, space):
+        """
+        Get a version of the given space that spans all agents.
+        NOTE: it is assumed that all agents share the same space.
+
+        Parameters:
+        -----------
+        space: gymnasium space
+            The space to expand for all agents.
+
+        Returns:
+        --------
+        gymnasium space:
+            The given space expanded to include all agents.
+        """
+        num_agents = len(self.agent_ids)
+
+        if type(space) == spaces.Box:
+            box_spaces = spaces.Tuple([space for _ in range(num_agents)])
+            return spaces.utils.flatten_space(box_spaces)
+
+        elif type(space) == spaces.Discrete:
+            if type(space.n) != int:
+                msg  = f"ERROR: expected space.n to be of type int for Discrete "
+                msg += f"but received {space.n} of type {type(space.n)}."
+                rank_print(msg)
+                comm.Abort()
+
+            return spaces.MultiDiscrete([space.n] * num_agents, dtype=space.dtype)
+
+        elif type(space) == spaces.MultiDiscrete:
+            if type(space.n) != int:
+                msg  = f"ERROR: expected space.n to be of type int for MultiDiscrete "
+                msg += f"but received {space.n} of type {type(space.n)}."
+                rank_print(msg)
+                comm.Abort()
+
+            return spaces.MultiDiscrete(np.tile(space.nvec, num_agents), start=space.start)
+
+        elif type(space) == spaces.MultiBinary:
+            if type(space.n) != int:
+                msg  = f"ERROR: expected space.n to be of type int for MultiBinary "
+                msg += f"but received {space.n} of type {type(space.n)}."
+                rank_print(msg)
+                comm.Abort()
+
+            return spaces.MultiBinary(space.n * num_agents)
+
+        else:
+            msg  = f"ERROR: unsupported space of type {type(space)} sent "
+            msg += "to policy.get_agent_shared_space."
+            rank_print(msg)
+            comm.Abort()
 
     def initialize_episodes(self, env_batch_size, status_dict):
         """
