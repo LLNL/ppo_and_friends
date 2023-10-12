@@ -2178,6 +2178,7 @@ class PPO(object):
             torch.cuda.empty_cache()
 
             #
+            # FIXME: update to reflect changes
             # We have some cases to consider:
             #  1. Normal case. Data comes in with shape (batch_size, *), where
             #     batch size includes agents.
@@ -2190,12 +2191,14 @@ class PPO(object):
             #    into (batch_size * num_agents, *).
             #
             if self.policies[policy_id].agent_shared_icm:
-                if not self.policies[policy_id].agent_grouping:
-                    num_agents = self.policies[policy_id].num_agents
-                    batch_size = obs.shape[0] / num_agents
-                    obs        = obs.reshape((batch_size, num_agents, -1))
-                    next_obs   = next_obs.reshape((batch_size, num_agents, -1))
-                    actions    = actions.reshape((batch_size, num_agents, -1))
+                #if not self.policies[policy_id].agent_grouping:
+                #    num_agents = self.policies[policy_id].num_agents
+                #    batch_size = obs.shape[0] / num_agents
+                #    print(f"OBS SHAPE: {obs.shape}")#FIXME
+                #    print(f"{(batch_size, num_agents, -1)}")#FIXME
+                #    obs        = obs.reshape((batch_size, num_agents, -1))
+                #    next_obs   = next_obs.reshape((batch_size, num_agents, -1))
+                #    actions    = actions.reshape((batch_size, num_agents, -1))
 
                 obs      = obs[:, self.policies[policy_id].agent_idxs, :]
                 next_obs = next_obs[:, self.policies[policy_id].agent_idxs, :]
