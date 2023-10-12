@@ -307,6 +307,13 @@ class PPOPolicy():
         else:
             self.icm_optim = None
 
+        #
+        # Keep the original ordering around in case we need it after
+        # shuffling.
+        #
+        self.agent_idxs = np.arange(len(self.agent_ids))
+        self.num_agents = self.agent_idxs.size
+
     def register_agent(self, agent_id):
         """
         Register an agent with this policy.
@@ -323,9 +330,8 @@ class PPOPolicy():
         """
         Shuffle our agent ids.
         """
-        shuffled_idxs = np.arange(len(self.agent_ids)) 
-        np.random.shuffle(shuffled_idxs)
-        self.agent_ids = self.agent_ids[shuffled_idxs]
+        np.random.shuffle(self.self.agent_idxs)
+        self.agent_ids = self.agent_ids[self.agent_idxs]
 
     def to(self, device):
         """
