@@ -375,6 +375,7 @@ class ICM(PPONetwork):
                 msg += "{}.".format(action_pred.shape)
                 rank_print(msg)
                 comm.Abort()
+
             elif shape_len == 3:
                 #
                 # Our action space is (batch_size, dims, num_classes), but

@@ -56,7 +56,9 @@ class MATPolicy(PPOPolicy):
         # to put in some extra work to transfer the critic observations
         # to the actor observations.
         #
-        if self.actor_obs_space != self.critic_obs_space:
+        self.orig_actor_obs_space = self.actor_obs_space
+
+        if self.orig_actor_obs_space != self.critic_obs_space:
             self.have_step_constraints  = True
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
@@ -121,10 +123,38 @@ class MATPolicy(PPOPolicy):
         self.critic = self.actor_critic.critic
 
         if enable_icm:
+
+            icm_obs_space    = self.actor_obs_space
+            icm_action_space = self.action_space
+
+            #
+            # Tricky business:
+            # MAT always uses the critic obsevations for both critic and actor.
+            # if the observations are local, we need to expand the space for
+            # agent-grouped ICM. If the observations are global or policy, we
+            # can just rely on the already expanded spaces.
+            #
+            if self.agent_grouped_icm:
+                if self.orig_actor_obs_space != self.critic_obs_space:
+                    #
+                    # In this case, our actor obs space will be either global
+                    # or policy. We can just rely on that view.
+                    #
+                    icm_obs_space = self.critic_obs_space
+
+                else:
+                    #
+                    # Our actor and critic are both using local
+                    # obsevations. We need to expand them in this case.
+                    #
+                    icm_obs_space = self.get_agent_shared_space(self.actor_obs_space)
+
+                icm_action_space = self.get_agent_shared_space(self.action_space)
+
             self.icm_model = icm_network(
                 name         = "icm",
-                obs_space    = self.actor_obs_space,
-                action_space = self.action_space,
+                obs_space    = icm_obs_space,
+                action_space = icm_action_space,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 

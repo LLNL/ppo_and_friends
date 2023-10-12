@@ -16,6 +16,7 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
+from ppo_and_friends.utils.misc import get_agent_shared_space
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -408,70 +409,23 @@ class PPOPolicy():
         comm.barrier()
 
         if enable_icm:
+
+            icm_obs_space    = self.actor_obs_space
+            icm_action_space = self.action_space
+            if self.agent_grouped_icm:
+                icm_obs_space    = self.get_agent_shared_space(self.actor_obs_space)
+                icm_action_space = self.get_agent_shared_space(self.action_space)
+
             self.icm_model = icm_network(
                 name         = "icm",
-                obs_space    = self.actor_obs_space,
-                action_space = self.action_space,
+                obs_space    = icm_obs_space,
+                action_space = icm_action_space,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 
             self.icm_model = self.icm_model.to(self.device)
             broadcast_model_parameters(self.icm_model)
             comm.barrier()
-
-    def get_agent_shared_space(self, space):
-        """
-        Get a version of the given space that spans all agents.
-        NOTE: it is assumed that all agents share the same space.
-
-        Parameters:
-        -----------
-        space: gymnasium space
-            The space to expand for all agents.
-
-        Returns:
-        --------
-        gymnasium space:
-            The given space expanded to include all agents.
-        """
-        num_agents = len(self.agent_ids)
-
-        if type(space) == spaces.Box:
-            box_spaces = spaces.Tuple([space for _ in range(num_agents)])
-            return spaces.utils.flatten_space(box_spaces)
-
-        elif type(space) == spaces.Discrete:
-            if type(space.n) != int:
-                msg  = f"ERROR: expected space.n to be of type int for Discrete "
-                msg += f"but received {space.n} of type {type(space.n)}."
-                rank_print(msg)
-                comm.Abort()
-
-            return spaces.MultiDiscrete([space.n] * num_agents, dtype=space.dtype)
-
-        elif type(space) == spaces.MultiDiscrete:
-            if type(space.n) != int:
-                msg  = f"ERROR: expected space.n to be of type int for MultiDiscrete "
-                msg += f"but received {space.n} of type {type(space.n)}."
-                rank_print(msg)
-                comm.Abort()
-
-            return spaces.MultiDiscrete(np.tile(space.nvec, num_agents), start=space.start)
-
-        elif type(space) == spaces.MultiBinary:
-            if type(space.n) != int:
-                msg  = f"ERROR: expected space.n to be of type int for MultiBinary "
-                msg += f"but received {space.n} of type {type(space.n)}."
-                rank_print(msg)
-                comm.Abort()
-
-            return spaces.MultiBinary(space.n * num_agents)
-
-        else:
-            msg  = f"ERROR: unsupported space of type {type(space)} sent "
-            msg += "to policy.get_agent_shared_space."
-            rank_print(msg)
-            comm.Abort()
 
     def initialize_episodes(self, env_batch_size, status_dict):
         """
