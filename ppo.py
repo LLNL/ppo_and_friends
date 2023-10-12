@@ -1005,12 +1005,27 @@ class PPO(object):
             the intrinsic rewards alone.
         """
         intr_rewards = {}
-        rewards = {}
+        rewards      = {}
 
+        for policy_id in self.policies:
+        
+            if (self.policies[policy_id].enable_icm and
+                self.policies[policy_id].agent_shared_icm):
+
+                intr_reward = self.policies[policy_id].get_agent_shared_intrinsic_rewards(
+                    prev_obs,
+                    obs,
+                    actions)
+
+        #
+        #
+        #
         for agent_id in obs:
             policy_id = self.policy_mapping_fn(agent_id)
 
-            if self.policies[policy_id].enable_icm:
+            if (self.policies[policy_id].enable_icm and not
+                self.policies[policy_id].agent_shared_icm):
+
                 intr_rewards[agent_id] = \
                     self.policies[policy_id].get_intrinsic_reward(
                         prev_obs[agent_id],

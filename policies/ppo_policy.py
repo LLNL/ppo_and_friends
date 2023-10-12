@@ -54,7 +54,7 @@ class PPOPolicy():
                  lambd               = 0.95,
                  dynamic_bs_clip     = False,
                  enable_icm          = False,
-                 agent_grouped_icm   = False,
+                 agent_shared_icm    = False,
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
@@ -143,8 +143,8 @@ class PPOPolicy():
             seen so far.
         enable_icm: bool
             Enable ICM?
-        agent_grouped_icm: bool
-            Enable agent grouping when using ICM?
+        agent_shared_icm: bool
+            Enable agent sharing of observations and actions when using ICM?
         icm_network: PPONetwork
             The network to use for ICM applications.
         intr_reward_weight: float
@@ -166,7 +166,7 @@ class PPOPolicy():
         self.actor_obs_space        = actor_observation_space
         self.critic_obs_space       = critic_observation_space
         self.enable_icm             = enable_icm
-        self.agent_grouped_icm      = agent_grouped_icm
+        self.agent_shared_icm       = agent_shared_icm
         self.test_mode              = test_mode
         self.use_gae                = use_gae
         self.gamma                  = gamma
@@ -409,12 +409,19 @@ class PPOPolicy():
         comm.barrier()
 
         if enable_icm:
+            self.icm_agent_ids = None
+            icm_obs_space      = self.actor_obs_space
+            icm_action_space   = self.action_space
 
-            icm_obs_space    = self.actor_obs_space
-            icm_action_space = self.action_space
-            if self.agent_grouped_icm:
-                icm_obs_space    = self.get_agent_shared_space(self.actor_obs_space)
-                icm_action_space = self.get_agent_shared_space(self.action_space)
+            if self.agent_shared_icm:
+                #
+                # We need to pass agents to ICM in a consistent order.
+                # Since policies are allowed to shuffle their ids, we
+                # make a copy of the original order and use this for ICM.
+                #
+                self.icm_agent_ids = self.agent_ids.copy()
+                icm_obs_space      = self.get_agent_shared_space(self.actor_obs_space)
+                icm_action_space   = self.get_agent_shared_space(self.action_space)
 
             self.icm_model = icm_network(
                 name         = "icm",
@@ -905,6 +912,73 @@ class PPOPolicy():
             intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
 
         batch_size   = obs.shape[0]
+        intr_reward  = intr_reward.detach().cpu().numpy()
+        intr_reward  = intr_reward.reshape((batch_size, -1))
+        intr_reward *= self.intr_reward_weight()
+
+        return intr_reward
+
+    def get_agent_shared_intrinsic_rewards(self,
+                                           prev_obs,
+                                           obs,
+                                           actions):
+        """
+        Query the ICM for an agent-grouped intrinsic reward.
+
+        Parameters:
+        -----------
+        prev_obs: dict
+            A dictionary mapping agent ids to previous observations.
+        obs: dict
+            A dictionary mapping agent ids to current observations.
+        actions: dict
+            A dictionary mapping agent ids to actions taken.
+        """
+        batch_size           = obs[tuple(obs.keys())[0]].shape[0]
+        shared_obs_shape     = (batch_size,) + self.icm_model.obs_space.shape
+        shared_actions_shape = (batch_size,) + self.icm_model.action_space.shape
+
+        shared_prev_obs = np.zeros(shared_obs_shape, dtype=np.float32)
+        shared_obs      = np.zeros(shared_obs_shape, dtype=np.float32)
+        shared_actions  = np.zeros(shared_actions_shape,
+            dtype=self.icm_model.action_space.dtype)
+
+        for agent_idx, agent_id in enumerate(self.icm_agent_ids):
+
+            agent_prev_obs = prev_obs[agent_id]
+            agent_obs      = obs[agent_id]
+            agent_action   = actions[agent_id]
+
+            if len(agent_obs.shape) < 2:
+                msg  = "ERROR: get_intrinsic_reward expects a batch of "
+                msg += "observations but "
+                msg += "instead received shape {}.".format(agent_obs.shape)
+                rank_print(msg)
+                comm.Abort()
+
+            shared_prev_obs[agent_idx] = agent_prev_obs
+            shared_obs[agent_idx]      = agent_obs
+            shared_actions[agent_idx]  = agent_action
+
+        obs_1 = torch.tensor(shared_prev_obs,
+            dtype=torch.float).to(self.device)
+        obs_2 = torch.tensor(shared_obs,
+            dtype=torch.float).to(self.device)
+
+        if self.action_dtype in ["discrete", "multi-discrete"]:
+            action = torch.tensor(action,
+                dtype=torch.long).to(self.device)
+
+        elif self.action_dtype in ["continuous", "multi-binary"]:
+            action = torch.tensor(action,
+                dtype=torch.float).to(self.device)
+
+        if len(action.shape) != 2:
+            action = action.unsqueeze(1)
+
+        with torch.no_grad():
+            intr_reward, _, _ = self.icm_model(obs_1, obs_2, action)
+
         intr_reward  = intr_reward.detach().cpu().numpy()
         intr_reward  = intr_reward.reshape((batch_size, -1))
         intr_reward *= self.intr_reward_weight()

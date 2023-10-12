@@ -56,9 +56,9 @@ class MATPolicy(PPOPolicy):
         # to put in some extra work to transfer the critic observations
         # to the actor observations.
         #
-        self.orig_actor_obs_space = self.actor_obs_space
-
-        if self.orig_actor_obs_space != self.critic_obs_space:
+        self.expanded_actor_space = False
+        if self.actor_obs_space != self.critic_obs_space:
+            self.expanded_actor_space   = True
             self.have_step_constraints  = True
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
@@ -123,33 +123,40 @@ class MATPolicy(PPOPolicy):
         self.critic = self.actor_critic.critic
 
         if enable_icm:
-
-            icm_obs_space    = self.actor_obs_space
-            icm_action_space = self.action_space
+            self.icm_agent_ids = None
+            icm_obs_space      = self.actor_obs_space
+            icm_action_space   = self.action_space
 
             #
-            # Tricky business:
             # MAT always uses the critic obsevations for both critic and actor.
-            # if the observations are local, we need to expand the space for
-            # agent-grouped ICM. If the observations are global or policy, we
-            # can just rely on the already expanded spaces.
+            # We don't currently support agent_shared_icm when using global or
+            # policy critic views because the original local actor observations
+            # are not saved. It's tempting to just use the critic view, since it
+            # already contains concatenated/shared observations in the local
+            # and global case, but the agent ids are shuffled, which is not
+            # what we want when using the agent_shared_icm feature.
             #
-            if self.agent_grouped_icm:
-                if self.orig_actor_obs_space != self.critic_obs_space:
-                    #
-                    # In this case, our actor obs space will be either global
-                    # or policy. We can just rely on that view.
-                    #
-                    icm_obs_space = self.critic_obs_space
+            if self.agent_shared_icm:
+                if self.expanded_actor_space:
+                    msg  = "ERROR: agent_shared_icm can only be enabled with "
+                    msg += "the multi-agent transformer if critic view is set "
+                    msg += f"to local."
+                    rank_print(msg)
+                    comm.Abort()
 
-                else:
-                    #
-                    # Our actor and critic are both using local
-                    # obsevations. We need to expand them in this case.
-                    #
-                    icm_obs_space = self.get_agent_shared_space(self.actor_obs_space)
-
+                #
+                # Our actor and critic are both using local
+                # obsevations. We need to expand them in this case.
+                #
+                icm_obs_space = self.get_agent_shared_space(self.actor_obs_space)
                 icm_action_space = self.get_agent_shared_space(self.action_space)
+
+                #
+                # We need to pass agents to ICM in a consistent order.
+                # Since policies are allowed to shuffle their ids, we
+                # make a copy of the original order and use this for ICM.
+                #
+                self.icm_agent_ids = self.agent_ids.copy()
 
             self.icm_model = icm_network(
                 name         = "icm",
