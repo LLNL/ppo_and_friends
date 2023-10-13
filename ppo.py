@@ -2175,8 +2175,7 @@ class PPO(object):
             _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
                 batch_data
 
-            if self.force_gc:
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
             #
             # We have some cases to consider:
