@@ -2175,7 +2175,8 @@ class PPO(object):
             _, obs, next_obs, _, actions, _, _, _, _, _, _, _, _ =\
                 batch_data
 
-            torch.cuda.empty_cache()
+            if self.force_gc:
+                torch.cuda.empty_cache()
 
             #
             # We have some cases to consider:
@@ -2194,9 +2195,12 @@ class PPO(object):
                 next_obs = next_obs[:, self.policies[policy_id].agent_idxs, :]
                 actions  = actions[:, self.policies[policy_id].agent_idxs, :]
 
-            if (self.policies[policy_id].agent_grouping or
-                self.policies[policy_id].agent_shared_icm):
+                batch_size = obs.shape[0]
+                obs        = obs.reshape((batch_size, -1))
+                next_obs   = next_obs.reshape((batch_size, -1))
+                actions    = actions.reshape((batch_size, -1))
 
+            elif self.policies[policy_id].agent_grouping:
                 batch_size = obs.shape[0] * obs.shape[1]
                 obs        = obs.reshape((batch_size, -1))
                 next_obs   = next_obs.reshape((batch_size, -1))
