@@ -13,6 +13,7 @@ from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
 from ppo_and_friends.policies.ppo_policy import PPOPolicy
+from ppo_and_friends.utils.misc import get_agent_shared_space
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -27,9 +28,9 @@ class MATPolicy(PPOPolicy):
     """
 
     def __init__(self,
-                 ac_network     = mat.MATActorCritic,
-                 mat_kw_args    = {},
-                 use_huber_loss = True,
+                 ac_network       = mat.MATActorCritic,
+                 mat_kw_args      = {},
+                 use_huber_loss   = True,
                  **kw_args):
         """
         Initialize the policy.
@@ -56,7 +57,9 @@ class MATPolicy(PPOPolicy):
         # to put in some extra work to transfer the critic observations
         # to the actor observations.
         #
+        self.expanded_actor_space = False
         if self.actor_obs_space != self.critic_obs_space:
+            self.expanded_actor_space   = True
             self.have_step_constraints  = True
             self.have_reset_constraints = True
             self.actor_obs_space        = self.critic_obs_space
@@ -121,10 +124,45 @@ class MATPolicy(PPOPolicy):
         self.critic = self.actor_critic.critic
 
         if enable_icm:
+            self.icm_agent_ids = None
+            icm_obs_space      = self.actor_obs_space
+            icm_action_space   = self.action_space
+
+            #
+            # MAT always uses the critic obsevations for both critic and actor.
+            # We don't currently support agent_shared_icm when using global or
+            # policy critic views because the original local actor observations
+            # are not saved. It's tempting to just use the critic view, since it
+            # already contains concatenated/shared observations in the local
+            # and global case, but the agent ids are shuffled, which is not
+            # what we want when using the agent_shared_icm feature.
+            #
+            if self.agent_shared_icm:
+                if self.expanded_actor_space:
+                    msg  = "ERROR: agent_shared_icm can only be enabled with "
+                    msg += "the multi-agent transformer if critic view is set "
+                    msg += f"to local."
+                    rank_print(msg)
+                    comm.Abort()
+
+                #
+                # Our actor and critic are both using local
+                # obsevations. We need to expand them in this case.
+                #
+                icm_obs_space    = get_agent_shared_space(self.actor_obs_space, self.num_agents)
+                icm_action_space = get_agent_shared_space(self.action_space, self.num_agents)
+
+                #
+                # We need to pass agents to ICM in a consistent order.
+                # Since policies are allowed to shuffle their ids, we
+                # make a copy of the original order and use this for ICM.
+                #
+                self.icm_agent_ids = self.agent_ids.copy()
+
             self.icm_model = icm_network(
                 name         = "icm",
-                obs_space    = self.actor_obs_space,
-                action_space = self.action_space,
+                obs_space    = icm_obs_space,
+                action_space = icm_action_space,
                 test_mode    = self.test_mode,
                 **icm_kw_args)
 
@@ -155,6 +193,13 @@ class MATPolicy(PPOPolicy):
         device: torch device
             The device to send our networks to.
         """
+        #
+        # Keep the original ordering around in case we need it after
+        # shuffling.
+        #
+        self.agent_idxs = np.arange(len(self.agent_ids))
+        self.num_agents = self.agent_idxs.size
+
         self._initialize_networks(**self.network_args)
         self.to(device)
 
@@ -435,23 +480,28 @@ class MATPolicy(PPOPolicy):
                 log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
                 if self.action_dtype == "discrete":
-                    output_action[:, i, :]     = action.unsqueeze(0)
-                    output_raw_action[:, i, :] = raw_action.unsqueeze(0)
-                    output_log_prob[:, i, :]   = log_prob.unsqueeze(0)
+                    output_action[:, i, :]     = action.unsqueeze(-1)
+                    output_raw_action[:, i, :] = raw_action.unsqueeze(-1)
+                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
                     action = t_func.one_hot(action, num_classes=self.action_pred_size)
 
                 elif self.action_dtype == "multi-discrete":
-                    output_action[:, i, :]     = action
-                    output_raw_action[:, i, :] = raw_action
-                    output_log_prob[:, i, :]   = log_prob
+                    action     = action.flatten()
+                    raw_action = raw_action.flatten()
+                    action     = action.reshape((self.envs_per_proc, 1, -1))
+                    raw_action = raw_action.reshape((self.envs_per_proc, 1, -1))
 
-                    action = action.unsqueeze(0)
+                    output_action[:, i, :]     = action[:, 0, :]
+                    output_raw_action[:, i, :] = raw_action[:, 0, :]
+                    output_log_prob[:, i, :]   = log_prob.unsqueeze(-1)
+
                     one_hot_action = \
-                        self._multi_discrete_prob_to_one_hot(action).flatten()
+                        self._multi_discrete_prob_to_one_hot(action)
 
-                    action = one_hot_action 
+                    action = one_hot_action[:, 0, :]
 
                 else:
+                    log_prob                   = log_prob.unsqueeze(-1)
                     output_action[:, i, :]     = action
                     output_raw_action[:, i, :] = raw_action
                     output_log_prob[:, i, :]   = log_prob
@@ -510,13 +560,14 @@ class MATPolicy(PPOPolicy):
                     action = t_func.one_hot(action, num_classes=self.action_pred_size)
 
                 elif self.action_dtype == "multi-discrete":
+                    action = action.reshape((self.envs_per_proc, 1, -1))
+
                     output_action[:, i, :] = action
 
-                    action = action.unsqueeze(0)
                     one_hot_action = \
-                        self._multi_discrete_prob_to_one_hot(action).flatten()
+                        self._multi_discrete_prob_to_one_hot(action)
 
-                    action = one_hot_action 
+                    action = one_hot_action[:, 0, :]
 
                 else:
                     output_action[:, i, :] = action
@@ -892,3 +943,78 @@ class MATPolicy(PPOPolicy):
         if self.enable_icm:
             self.icm_model.train()
 
+    def get_agent_shared_intrinsic_rewards(self,
+                                           prev_obs,
+                                           obs,
+                                           actions):
+        """
+        Query the ICM for an agent-grouped intrinsic reward.
+
+        Parameters:
+        -----------
+        prev_obs: dict
+            A dictionary mapping agent ids to previous observations.
+        obs: dict
+            A dictionary mapping agent ids to current observations.
+        actions: dict
+            A dictionary mapping agent ids to actions taken.
+        """
+        batch_size           = obs[tuple(obs.keys())[0]].shape[0]
+        shared_obs_shape     = (batch_size,) + (self.num_agents,) + self.actor_obs_space.shape
+        shared_actions_shape = (batch_size,) + (self.num_agents,) + self.action_space.shape
+
+        shared_prev_obs = np.zeros(shared_obs_shape, dtype=np.float32)
+        shared_obs      = np.zeros(shared_obs_shape, dtype=np.float32)
+        shared_actions  = np.zeros(shared_actions_shape, dtype=self.action_space.dtype)
+
+        for agent_idx, agent_id in enumerate(self.icm_agent_ids):
+
+            agent_prev_obs = prev_obs[agent_id]
+            agent_obs      = obs[agent_id]
+            agent_action   = actions[agent_id]
+
+            if len(agent_obs.shape) < 2:
+                msg  = "ERROR: get_intrinsic_reward expects a batch of "
+                msg += "observations but "
+                msg += "instead received shape {}.".format(agent_obs.shape)
+                rank_print(msg)
+                comm.Abort()
+
+            shared_prev_obs[:, agent_idx] = agent_prev_obs
+            shared_obs[:, agent_idx]      = agent_obs
+            shared_actions[:, agent_idx]  = agent_action
+
+        #
+        # Now we reshape into the format that ICM expects.
+        #
+        shared_obs_shape     = (batch_size,) + self.icm_model.obs_space.shape
+        shared_actions_shape = (batch_size,) + self.icm_model.action_space.shape
+
+        shared_prev_obs = shared_prev_obs.reshape(shared_obs_shape)
+        shared_obs      = shared_obs.reshape(shared_obs_shape)
+        shared_actions  = shared_actions.reshape(shared_actions_shape)
+
+        obs_1 = torch.tensor(shared_prev_obs,
+            dtype=torch.float).to(self.device)
+        obs_2 = torch.tensor(shared_obs,
+            dtype=torch.float).to(self.device)
+
+        if self.action_dtype in ["discrete", "multi-discrete"]:
+            shared_actions = torch.tensor(shared_actions,
+                dtype=torch.long).to(self.device)
+
+        elif self.action_dtype in ["continuous", "multi-binary"]:
+            shared_actions = torch.tensor(shared_actions,
+                dtype=torch.float).to(self.device)
+
+        if len(shared_actions.shape) != 2:
+            shared_actions = shared_actions.unsqueeze(1)
+
+        with torch.no_grad():
+            intr_reward, _, _ = self.icm_model(obs_1, obs_2, shared_actions)
+
+        intr_reward  = intr_reward.detach().cpu().numpy()
+        intr_reward  = intr_reward.reshape((batch_size, -1))
+        intr_reward *= self.intr_reward_weight()
+
+        return intr_reward
