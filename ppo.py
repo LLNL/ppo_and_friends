@@ -1005,22 +1005,45 @@ class PPO(object):
             the intrinsic rewards alone.
         """
         intr_rewards = {}
-        rewards = {}
+        rewards      = {}
+        remaining_policies = len(self.policies)
 
-        for agent_id in obs:
-            policy_id = self.policy_mapping_fn(agent_id)
+        for policy_id in self.policies:
+        
+            if (self.policies[policy_id].enable_icm and
+                self.policies[policy_id].agent_shared_icm):
 
-            if self.policies[policy_id].enable_icm:
-                intr_rewards[agent_id] = \
-                    self.policies[policy_id].get_intrinsic_reward(
-                        prev_obs[agent_id],
-                        obs[agent_id],
-                        actions[agent_id])
+                shared_intr_reward = self.policies[policy_id].get_agent_shared_intrinsic_rewards(
+                    prev_obs,
+                    obs,
+                    actions)
 
-                rewards[agent_id] = ext_rewards[agent_id] + intr_rewards[agent_id]
-            else:
-                rewards[agent_id] = ext_rewards[agent_id]
-                intr_rewards[agent_id] = np.zeros(1)
+                for agent_id in self.policies[policy_id].agent_ids:
+                    intr_rewards[agent_id] = shared_intr_reward
+                    rewards[agent_id]      = ext_rewards[agent_id] + shared_intr_reward
+
+                remaining_policies -= 1
+
+        #
+        #
+        #
+        if remaining_policies > 0:
+            for agent_id in obs:
+                policy_id = self.policy_mapping_fn(agent_id)
+
+                if (self.policies[policy_id].enable_icm and not
+                    self.policies[policy_id].agent_shared_icm):
+
+                    intr_rewards[agent_id] = \
+                        self.policies[policy_id].get_intrinsic_reward(
+                            prev_obs[agent_id],
+                            obs[agent_id],
+                            actions[agent_id])
+
+                    rewards[agent_id] = ext_rewards[agent_id] + intr_rewards[agent_id]
+                else:
+                    rewards[agent_id] = ext_rewards[agent_id]
+                    intr_rewards[agent_id] = np.zeros(1)
 
         return rewards, intr_rewards
 
@@ -2155,11 +2178,28 @@ class PPO(object):
             torch.cuda.empty_cache()
 
             #
-            # If our policies are grouping agents together, the data will come
-            # in shape (batch_size, num_agents, *), but we need
-            # (batch_size * num_agents, *).
+            # We have some cases to consider:
+            #  1. Normal case. Data comes in with shape (batch_size, *), where
+            #     batch size includes agents.
+            #  2. We're using agent shared ICM. In this case, we need our
+            #     data to have shape (batch_size, num_agents * data_size), BUT
+            #     the agent's need to be in a specific order.
+            #  3. We're using standard ICM, but our policy has agent_grouping
+            #     enabled. In this case, our data comes in with shape
+            #     (batch_size, num_agents, *), and we need to reshape it
+            #    into (batch_size * num_agents, *).
             #
-            if self.policies[policy_id].agent_grouping:
+            if self.policies[policy_id].agent_shared_icm:
+                obs      = obs[:, self.policies[policy_id].agent_idxs, :]
+                next_obs = next_obs[:, self.policies[policy_id].agent_idxs, :]
+                actions  = actions[:, self.policies[policy_id].agent_idxs, :]
+
+                batch_size = obs.shape[0]
+                obs        = obs.reshape((batch_size, -1))
+                next_obs   = next_obs.reshape((batch_size, -1))
+                actions    = actions.reshape((batch_size, -1))
+
+            elif self.policies[policy_id].agent_grouping:
                 batch_size = obs.shape[0] * obs.shape[1]
                 obs        = obs.reshape((batch_size, -1))
                 next_obs   = next_obs.reshape((batch_size, -1))

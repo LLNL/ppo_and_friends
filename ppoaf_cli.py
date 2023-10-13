@@ -199,7 +199,7 @@ def cli():
         # We parse again here because all args should be known. This is just
         # a safety measure.
         #
-        args = main_parser.parse_args()
+        main_parser.parse_args()
 
         #
         # Our default search pattern list includes "" because we want
@@ -275,6 +275,11 @@ def cli():
         comm.barrier()
 
     elif args.command == "test":
+        #
+        # We parse again here because all args should be known. This is just
+        # a safety measure.
+        #
+        main_parser.parse_args()
 
         if args.render and args.render_gif:
             msg  = "ERROR: render and render_gif are both enabled, "

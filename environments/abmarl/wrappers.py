@@ -158,7 +158,6 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
         for key in terminated:
             truncated[key] = False
 
-
         self.all_done = self._get_all_done(terminated)
         self._update_done_agents(terminated)
 
