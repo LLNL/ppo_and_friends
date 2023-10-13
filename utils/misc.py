@@ -345,7 +345,8 @@ def get_agent_shared_space(space, num_agents):
         return MultiDiscrete([space.n] * num_agents, dtype=space.dtype)
 
     elif type(space) == MultiDiscrete:
-        return MultiDiscrete(np.tile(space.nvec, num_agents), start=space.start)
+        return MultiDiscrete(np.tile(space.nvec, num_agents),
+            start=np.tile(space.start, num_agents))
 
     elif type(space) == MultiBinary:
         if not np.issubdtype(type(space.n), np.integer):
