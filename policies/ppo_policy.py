@@ -9,13 +9,14 @@ from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOShare
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_action_dtype
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+import gymnasium.spaces as spaces
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
+from ppo_and_friends.utils.misc import get_agent_shared_space
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -53,6 +54,7 @@ class PPOPolicy():
                  lambd               = 0.95,
                  dynamic_bs_clip     = False,
                  enable_icm          = False,
+                 agent_shared_icm    = False,
                  icm_network         = ICM,
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
@@ -141,6 +143,8 @@ class PPOPolicy():
             seen so far.
         enable_icm: bool
             Enable ICM?
+        agent_shared_icm: bool
+            Enable agent sharing of observations and actions when using ICM?
         icm_network: PPONetwork
             The network to use for ICM applications.
         intr_reward_weight: float
@@ -162,6 +166,7 @@ class PPOPolicy():
         self.actor_obs_space        = actor_observation_space
         self.critic_obs_space       = critic_observation_space
         self.enable_icm             = enable_icm
+        self.agent_shared_icm       = agent_shared_icm
         self.test_mode              = test_mode
         self.use_gae                = use_gae
         self.gamma                  = gamma
@@ -272,11 +277,26 @@ class PPOPolicy():
 
     def finalize(self, status_dict, device):
         """
-            Perfrom any finalizing tasks before we start using the policy.
+        Perfrom any finalizing tasks before we start using the policy.
 
-            Arguments:
-                status_dict    The status dict for training.
+        Parameters:
+        -----------
+        status_dict: dict
+            The status dict for training.
         """
+        #
+        # Keep the original ordering around in case we need it after
+        # shuffling.
+        #
+        self.agent_idxs = np.arange(len(self.agent_ids))
+        self.num_agents = self.agent_idxs.size
+
+        if self.agent_shared_icm and not self.agent_grouping:
+            msg  = "ERROR: agent_shared_icm is only applicable to policies that "
+            msg += "use agent grouping."
+            rank_print(msg)
+            comm.Abort()
+
         self._initialize_networks(**self.network_args)
         self.to(device)
 
@@ -316,9 +336,8 @@ class PPOPolicy():
         """
         Shuffle our agent ids.
         """
-        shuffled_idxs = np.arange(len(self.agent_ids)) 
-        np.random.shuffle(shuffled_idxs)
-        self.agent_ids = self.agent_ids[shuffled_idxs]
+        np.random.shuffle(self.agent_idxs)
+        self.agent_ids = self.agent_ids[self.agent_idxs]
 
     def to(self, device):
         """
@@ -402,6 +421,7 @@ class PPOPolicy():
         comm.barrier()
 
         if enable_icm:
+
             self.icm_model = icm_network(
                 name         = "icm",
                 obs_space    = self.actor_obs_space,
@@ -896,6 +916,9 @@ class PPOPolicy():
         intr_reward *= self.intr_reward_weight()
 
         return intr_reward
+
+    def get_agent_shared_intrinsic_rewards(*args):
+        raise NotImplementedError
 
     def update_weights(self, actor_loss, critic_loss):
         """

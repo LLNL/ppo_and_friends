@@ -4,6 +4,7 @@ from functools import reduce
 import torch
 from .stats import RunningMeanStd
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
+import gymnasium.spaces as spaces
 import os
 import sys
 import pickle
@@ -310,4 +311,54 @@ def get_action_prediction_shape(space):
         msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
         msg += "get_space_shape."
         rank_print(msg) 
+        comm.Abort()
+
+
+def get_agent_shared_space(space, num_agents):
+    """
+    Get a version of the given space that spans all agents.
+    NOTE: it is assumed that all agents share the same space.
+
+    Parameters:
+    -----------
+    space: gymnasium space
+        The space to expand for all agents.
+    num_agents: int
+        The number of agents to expand the space for.
+
+    Returns:
+    --------
+    gymnasium space:
+        The given space expanded to include all agents.
+    """
+    if type(space) == Box:
+        box_spaces = Tuple([space for _ in range(num_agents)])
+        return spaces.utils.flatten_space(box_spaces)
+
+    elif type(space) == Discrete:
+        if not np.issubdtype(type(space.n), np.integer):
+            msg  = f"ERROR: expected space.n to be of type int for Discrete "
+            msg += f"but received {space.n} of type {type(space.n)}."
+            rank_print(msg)
+            comm.Abort()
+
+        return MultiDiscrete([space.n] * num_agents, dtype=space.dtype)
+
+    elif type(space) == MultiDiscrete:
+        return MultiDiscrete(np.tile(space.nvec, num_agents),
+            start=np.tile(space.start, num_agents))
+
+    elif type(space) == MultiBinary:
+        if not np.issubdtype(type(space.n), np.integer):
+            msg  = f"ERROR: expected space.n to be of type int for MultiBinary "
+            msg += f"but received {space.n} of type {type(space.n)}."
+            rank_print(msg)
+            comm.Abort()
+
+        return MultiBinary(space.n * num_agents)
+
+    else:
+        msg  = f"ERROR: unsupported space of type {type(space)} sent "
+        msg += "to policy.get_agent_shared_space."
+        rank_print(msg)
         comm.Abort()

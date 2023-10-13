@@ -1004,7 +1004,10 @@ class VectorizedEnv(IdentityWrapper, Iterable):
             self.envs[0] = self.env
         else:
             for i in range(self.num_envs):
-                self.envs[i] = env_generator()
+                #
+                # Use a deepcopy in case users are passing in a reference.
+                #
+                self.envs[i] = deepcopy(env_generator())
 
     def set_random_seed(self, seed):
         """

@@ -292,6 +292,9 @@ class ICM(PPONetwork):
             out_shape = None,
             **kw_args)
 
+        self.obs_space    = obs_space
+        self.action_space = action_space
+
         act_shape = get_action_prediction_shape(action_space)
 
         act_size, act_shape = get_size_and_shape(act_shape)
@@ -375,6 +378,7 @@ class ICM(PPONetwork):
                 msg += "{}.".format(action_pred.shape)
                 rank_print(msg)
                 comm.Abort()
+
             elif shape_len == 3:
                 #
                 # Our action space is (batch_size, dims, num_classes), but
