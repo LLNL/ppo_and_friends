@@ -1,13 +1,91 @@
 """
-    Plot save extrinsice score average files for policies.
+Plot save extrinsice score average files for policies.
 """
+import pickle
 import numpy as np
 import glob
 import os
 import plotly.graph_objects as go
 import sys
+from pathlib import Path
 
-def include_plot_file(plot_file, search_patterns, exclude_patterns):
+comp_str_map = {
+    "<"  : np.less,
+    ">"  : np.greater,
+    "<=" : np.less_equal,
+    ">=" : np.greater_equal,
+    "="  : np.equal,
+}
+
+def get_status_dict(state_path):
+    """
+    Load that status dictionary from the state path.
+
+    Parameters:
+    -----------
+    state_path: str
+        The full path to saved state from a training.
+
+    Returns:
+    --------
+    dict:
+        The status dictionary from training.
+    """
+
+    file_name  = "state_0.pickle"
+    state_file = os.path.join(state_path, file_name)
+
+    with open(state_file, "rb") as in_f:
+        status_dict = pickle.load(in_f)
+
+    return status_dict
+
+def status_conditions_are_met(status_conditions, status_dict):
+    """
+    Determine whether or not status conditions are met within
+    a particular status diciontary.
+
+    Parameters:
+    -----------
+    status_conditions: dict
+        A diciontary of status conditions. The should map status keys
+        to other status keys or tuples. Example:
+        {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
+        : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
+        one of <, >, <=, >=, =.
+    status_dict: dict
+        A status dictionary from a saved training.
+
+    Returns:
+    --------
+    bool:
+        Whether or not all conditions are met.
+    """
+
+    for key in status_conditions:
+
+        val = status_conditions[key]
+
+        if type(val) == tuple:
+            comp_str, comp_val = val
+            comp_func = comp_str_map[comp_str.strip()]
+
+            if not comp_func(status_dict[key.strip()], float(comp_val)):
+                return False
+
+        else:
+            if key not in status_dict:
+                msg  = f"ERROR: key, {key}, is not in the status dictionary"
+                print(msg)
+                return False
+
+            return status_conditions_are_met(
+                status_conditions[key],
+                status_dict[key.strip()])
+
+    return True
+
+def include_plot_file(plot_file, search_patterns, exclude_patterns, status_conditions):
     """
     Given search and exclude patterns, should the plot file be included?
 
@@ -21,6 +99,12 @@ def include_plot_file(plot_file, search_patterns, exclude_patterns):
     exclude_patterns: array-like
         Array of strings representing patterns that should not be plotted
         (while including all others).
+    status_conditions: dict
+        A diciontary of status conditions. The should map status keys
+        to other status keys or tuples. Example:
+        {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
+        : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
+        one of <, >, <=, >=, =.
 
     Returns:
     --------
@@ -35,12 +119,17 @@ def include_plot_file(plot_file, search_patterns, exclude_patterns):
             for e_p in exclude_patterns:
                 if e_p in plot_file:
                     return False
-            return True
+
+            #
+            # Get status file
+            #
+            state_path  = Path(plot_file).parent.parent.absolute()
+            status_dict = get_status_dict(state_path)
+            return status_conditions_are_met(status_conditions, status_dict)
 
     return False
 
-
-def find_score_files(score_dir_name, root, search_patterns, exclude_patterns):
+def find_score_files(score_dir_name, root, search_patterns, exclude_patterns, status_conditions):
     score_files = []
     for path, dirs, files in os.walk(root):
         if score_dir_name in dirs:
@@ -48,13 +137,16 @@ def find_score_files(score_dir_name, root, search_patterns, exclude_patterns):
 
             np_files = os.path.join(score_dir, "*.npy")
             for dir_file in glob.glob(np_files):
-                if include_plot_file(dir_file, search_patterns, exclude_patterns):
+                if include_plot_file(dir_file, search_patterns, exclude_patterns, status_conditions):
                     score_files.append(dir_file)
 
     return score_files
 
-
-def plot_score_files(search_paths, search_patterns, exclude_patterns):
+def plot_score_files(
+    search_paths,
+    search_patterns,
+    exclude_patterns,
+    status_conditions):
     """
     Plot any number of score files using plotly.
 
@@ -69,14 +161,20 @@ def plot_score_files(search_paths, search_patterns, exclude_patterns):
         Only plot files that contain these strings within their paths.
     exclude_patterns: array-like
         Only plot files that don't contain these strings within their paths.
+    status_conditions: dict
+        A diciontary of status conditions. The should map status keys
+        to other status keys or tuples. Example:
+        {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
+        : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
+        one of <, >, <=, >=, =.
     """
     score_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
-            if include_plot_file(sp, search_patterns, exclude_patterns):
+            if include_plot_file(sp, search_patterns, exclude_patterns, status_conditions):
                 score_files.append(sp) 
         else:
-            score_files.extend(find_score_files("scores", sp, search_patterns, exclude_patterns))
+            score_files.extend(find_score_files("scores", sp, search_patterns, exclude_patterns, status_conditions))
 
     print(f"Found the following score files: \n{score_files}")
     if len(score_files) == 0:
