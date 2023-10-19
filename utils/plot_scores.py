@@ -79,9 +79,8 @@ def status_conditions_are_met(status_conditions, status_dict):
                 print(msg)
                 return False
 
-            return status_conditions_are_met(
-                status_conditions[key],
-                status_dict[key.strip()])
+            if not status_conditions_are_met(status_conditions[key], status_dict[key.strip()]):
+                return False
 
     return True
 
