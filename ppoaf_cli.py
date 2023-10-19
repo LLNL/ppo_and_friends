@@ -10,6 +10,7 @@ import importlib.util
 import inspect
 import os
 import re
+import ast
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.plot_scores import plot_score_files
 import shutil
@@ -188,6 +189,14 @@ def cli():
         help="Exclude any plot files that contain these strings in their "
         "path.")
 
+    plot_parser.add_argument("--status_constraints", type=ast.literal_eval,
+        default="{}",
+        help="A dictionary of status constraints passed as a string. The "
+        "format is {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface' "
+        ": {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is "
+        "one of <, >, <=, >=, =.")
+       
+
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
@@ -205,10 +214,15 @@ def cli():
         # Our default search pattern list includes "" because we want
         # everything.
         #
-        search_patterns  = [""] if args.search_patterns is None else args.search_patterns
-        exclude_patterns = [] if args.exclude_patterns is None else args.exclude_patterns
+        search_patterns    = [""] if args.search_patterns is None else args.search_patterns
+        exclude_patterns   = [] if args.exclude_patterns is None else args.exclude_patterns
+        status_constraints = args.status_constraints
 
-        plot_score_files(args.scores, search_patterns, exclude_patterns)
+        msg  = f"ERROR: expected status_constraints to be of type dict but "
+        msg += f"received type {type(status_constraints)}."
+        assert type(status_constraints) == dict, msg
+
+        plot_score_files(args.scores, search_patterns, exclude_patterns, status_constraints)
         return
 
     elif args.command == "train":
