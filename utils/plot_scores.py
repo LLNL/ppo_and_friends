@@ -84,7 +84,11 @@ def status_conditions_are_met(status_conditions, status_dict):
 
     return True
 
-def include_plot_file(plot_file, search_patterns, exclude_patterns, status_conditions):
+def include_plot_file(
+    plot_file,
+    search_patterns,
+    exclude_patterns,
+    status_conditions):
     """
     Given search and exclude patterns, should the plot file be included?
 
@@ -128,7 +132,39 @@ def include_plot_file(plot_file, search_patterns, exclude_patterns, status_condi
 
     return False
 
-def find_score_files(score_dir_name, root, search_patterns, exclude_patterns, status_conditions):
+def find_score_files(
+    score_dir_name,
+    root,
+    search_patterns,
+    exclude_patterns,
+    status_conditions):
+    """
+    Recursively find all desired score files from a given path.
+
+    Parameters:
+    -----------
+    score_dir_name: str
+        The name of the directory containing score files.
+    root: str
+        The root directory to recursively search.
+    search_patterns: array-like
+        Array of strings representing patterns that should be plotted
+        (while excluding all others).
+    exclude_patterns: array-like
+        Array of strings representing patterns that should not be plotted
+        (while including all others).
+    status_conditions: dict
+        A diciontary of status conditions. The should map status keys
+        to other status keys or tuples. Example:
+        {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
+        : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
+        one of <, >, <=, >=, =.
+
+    Returns:
+    --------
+    list:
+        Full paths to all score files that meet the given contraints.
+    """
     score_files = []
     for path, dirs, files in os.walk(root):
         if score_dir_name in dirs:
