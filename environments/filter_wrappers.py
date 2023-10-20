@@ -327,11 +327,6 @@ class ObservationNormalizer(ObservationFilter):
             actor_file_name  = "ActorRunningObsStats_{}.pickle".format(rank)
             critic_file_name = "CriticRunningObsStats_{}.pickle".format(rank)
 
-        #
-        # There are cases where we initially train using X ranks, and we
-        # later want to continue training using (X+k) ranks. In these cases,
-        # let's copy rank 0's info to all ranks > X.
-        #
         backup_actor_file_name  = "ActorRunningObsStats_0.pickle"
         backup_critic_file_name = "CriticRunningObsStats_0.pickle"
 
@@ -514,11 +509,6 @@ class RewardNormalizer(IdentityWrapper):
 
         in_file = os.path.join(path, file_name)
 
-        #
-        # There are cases where we initially train using X ranks, and we
-        # later want to continue training using (X+k) ranks. In these cases,
-        # let's copy rank 0's info to all ranks > X.
-        #
         if not os.path.exists(in_file):
             file_name = "RunningRewardsStats_0.pickle"
             in_file   = os.path.join(path, file_name)
