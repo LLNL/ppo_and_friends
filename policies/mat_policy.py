@@ -901,8 +901,6 @@ class MATPolicy(PPOPolicy):
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
 
-        comm.barrier()
-
         self.actor_critic.save(policy_save_path)
 
         if self.enable_icm:

@@ -2240,23 +2240,29 @@ class PPO(object):
             rank_print(msg)
             return
 
-        comm.barrier()
+        if rank == 0:
+            #
+            # NOTE: these save methods will save and load from whatever
+            # ranks they're called from, and they will go into <name>_<rank>.ext
+            # files. We only want to save on rank 0 in this case, only call
+            # from rank 0.
+            #
+            if self.save_env_info and self.env != None:
+                self.env.save_info(self.state_path)
 
-        for policy_id in self.policies:
-            self.policies[policy_id].save(self.state_path)
+            for policy_id in self.policies:
+                self.policies[policy_id].save(self.state_path)
 
-        if self.save_env_info and self.env != None:
-            self.env.save_info(self.state_path)
+            if self.normalize_values:
+                for policy_id in self.value_normalizers:
+                    self.value_normalizers[policy_id].save_info(self.state_path)
 
-        if self.normalize_values:
-            for policy_id in self.value_normalizers:
-                self.value_normalizers[policy_id].save_info(self.state_path)
 
-        file_name  = "state_{}.pickle".format(rank)
-        state_file = os.path.join(self.state_path, file_name)
-        with open(state_file, "wb") as out_f:
-            pickle.dump(self.status_dict, out_f,
-                protocol=pickle.HIGHEST_PROTOCOL)
+            file_name  = "state_0.pickle"
+            state_file = os.path.join(self.state_path, file_name)
+            with open(state_file, "wb") as out_f:
+                pickle.dump(self.status_dict, out_f,
+                    protocol=pickle.HIGHEST_PROTOCOL)
 
         comm.barrier()
 
@@ -2269,21 +2275,8 @@ class PPO(object):
         dict:
             The loaded status dictionary.
         """
-        if self.test_mode:
-            file_name  = "state_0.pickle"
-        else:
-            file_name  = "state_{}.pickle".format(rank)
-
+        file_name  = "state_0.pickle"
         state_file = os.path.join(self.state_path, file_name)
-
-        #
-        # There are cases where we initially train using X ranks, and we
-        # later want to continue training using (X+k) ranks. In these cases,
-        # let's copy rank 0's info to all ranks > X.
-        #
-        if not os.path.exists(state_file):
-            file_name  = "state_0.pickle"
-            state_file = os.path.join(self.state_path, file_name)
 
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
