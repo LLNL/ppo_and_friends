@@ -13,9 +13,7 @@ package_dirs["ppo_and_friends"] = "."
 
 dependencies = [
     'gymnasium',
-    'gymnasium[mujoco]',
     'pillow',
-    'rware',
     'matplotlib',
     'plotly',
     'opencv-python',
@@ -30,12 +28,11 @@ dependencies = [
     'pettingzoo==1.23',
     'pymunk',
     'packaging',
-    'abmarl',
 ]
 
 setup(name             = "ppo_and_friends",
       version          = version,
-      description      = "Proximal Policy Optimization and friends",
+      description      = "Proximal Policy Optimization And Friends",
       author           = "Alister Maguire",
       license          = "MIT",
       package_dir      = package_dirs,
@@ -43,7 +40,15 @@ setup(name             = "ppo_and_friends",
       package_data     = {"" : ["environments/abmarl/envs/maze.txt",
                                 "environments/abmarl/envs/large_maze.txt"]},
       install_requires = dependencies,
+
       entry_points     = {
           'console_scripts' : ['ppoaf=ppo_and_friends.ppoaf_cli:cli']
       },
+
+      extras_require = {
+          'gym_baselines': ['gym==0.21.0', 'rware', 'pressureplate'],
+          'gymnasium_baselines': ['gymnasium[mujoco]', 'gymnasium[atari]', 'autorom[accept-rom-license]'],
+          'abmarl': ['abmarl', 'gym==0.23.0'],
+      },
+
       zip_safe         = False)

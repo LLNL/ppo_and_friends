@@ -29,5 +29,16 @@ jobs:
         pip install .
     - name: Test with pytest
       run: |
+        pip install .[gym_baselines]
         cd test
-        pytest tests
+        pytest tests/train/test_gym.py
+
+        cd ../
+        pip install .[gymnasium_baselines]
+        cd test
+        pytest tests/train/ -k "gymnasium or zoo"
+
+        cd ../
+        pip install .[abmarl]
+        cd test
+        pytest tests/train/test_abmarl.py

@@ -11,14 +11,22 @@ def get_baseline_path():
     ppo_path = Path(ppo_and_friends.__file__).parent.absolute()
     return ppo_path / 'baselines'
 
+def get_state_path(baseline_runner):
+    cur_dir       = Path(os.getcwd())
+    runner_name   = os.path.basename(baseline_runner).split('.')[:-1][0]
+    state_path    = os.path.join(cur_dir, "saved_states", runner_name)
+    return state_path
+
 def get_parallel_command():
     """
-        Determine which command (if any) is available for
-        distributed learning.
+    Determine which command (if any) is available for
+    distributed learning.
 
-        Returns:
-            A string containing the available command. None if there is
-            no available command.
+    Returns:
+    --------
+    str:
+        A string containing the available command. None if there is
+        no available command.
     """
     options = ['srun', 'mpirun']
 
@@ -47,13 +55,17 @@ def run_command(command, verbose=False):
 
 def get_final_status(stdout):
     """
-        Get the final status report from a string of training stdout.
+    Get the final status report from a string of training stdout.
 
-        Arguments:
-            stdout    A string capturing the stdout of a training.
+    Parameters:
+    -----------
+    stdout: str
+        A string capturing the stdout of a training.
 
-        Returns:
-            The final status report from the stdout.
+    Returns:
+    --------
+    str:
+        The final status report from the stdout.
     """
     try:
         final_status = stdout.split("Status Report:")[-1]
@@ -61,25 +73,34 @@ def get_final_status(stdout):
         final_status = None
     return final_status
 
-def run_training(baseline_runner,
+def run_training(baseline_type,
+                 baseline_runner,
                  num_timesteps,
                  num_ranks     = 0,
                  options       = '',
                  verbose       = False):
     """
-        Run training on a sub-process.
+    Run training on a sub-process.
 
-        Arguments:
-            baseline_runner  The name of the baseline script to run.
-                             This should be located in the baselines directory.
-            num_timesteps    The number of timesteps to train for.
-            num_ranks        The number of parallel ranks to train with.
-            options (str)    Any other training options.
-            verbose          Enable verbosity.
+    Parameters:
+    -----------
+    baseline_type: str
+        What type of baseline is this?
+    baseline_runner: str
+        The name of the baseline script to run.
+        This should be located in the baselines directory.
+    num_timesteps: int
+        The number of timesteps to train for.
+    num_ranks: int
+        The number of parallel ranks to train with.
+    options: str
+        Any other training options.
+    verbose: bool
+        Enable verbosity.
     """
-    baseline_file  = os.path.join(get_baseline_path(), baseline_runner)
-    train_command  = f"ppoaf --train {baseline_file} "
-    train_command += f"--clobber --num-timesteps {num_timesteps} {options} "
+    baseline_file  = os.path.join(get_baseline_path(), baseline_type, baseline_runner)
+    train_command  = f"ppoaf train {baseline_file} "
+    train_command += f"--clobber --num_timesteps {num_timesteps} {options} "
     train_command += "--verbose "
 
     if num_ranks > 0:
@@ -93,26 +114,35 @@ def run_training(baseline_runner,
         train_command = f"{par_cmd} -n {num_ranks} {train_command} "
 
     cur_dir        = Path(os.getcwd())
-    train_command += f"--state-path {cur_dir} "
+    train_command += f"--state_path {cur_dir}/saved_states "
     run_command(train_command, verbose)
 
 def run_test(baseline_runner,
              num_test_runs,
+             explore = True,
              verbose = False):
     """
-        Run a testing phase using a trained model.
+    Run a testing phase using a trained model.
 
-        Arguments:
-            baseline_runner  The name of the baseline script to run.
-                             This should be located in the baselines directory.
-            num_test_runs    The number of test runs to perform.
-            verbose          Enable verbosity?
+    Parameters:
+    -----------
+    baseline_runner: str
+        The name of the baseline script to run.
+        This should be located in the baselines directory.
+    num_test_runs: int
+        The number of test runs to perform.
+    explore: bool
+        Enable exploration while testing?
+    verbose: bool
+        Enable verbosity?
     """
-    cur_dir       = Path(os.getcwd())
-    baseline_file = os.path.join(get_baseline_path(), baseline_runner)
-    test_command  = f"ppoaf --test {baseline_file} "
-    test_command += f"--state-path {cur_dir} --save-test-scores "
-    test_command += f"--num-test-runs {num_test_runs} --verbose "
+    output_dir    = get_state_path(baseline_runner)
+    test_command  = f"ppoaf test {output_dir} "
+    test_command += f"--save_test_scores "
+    test_command += f"--num_test_runs {num_test_runs} --verbose "
+
+    if explore:
+        test_command += f"--test_explore"
 
     run_command(test_command, verbose)
 
@@ -120,25 +150,32 @@ def average_score_test(name,
                        baseline_runner,
                        num_test_runs,
                        passing_scores,
+                       explore = True,
                        verbose = False):
     """
-        Run a testing phase using a trained model and determine if
-        the model reaches passing average scores.
+    Run a testing phase using a trained model and determine if
+    the model reaches passing average scores.
 
-        Arguments:
-            name             The name of the test.
-            baseline_runner  The name of the baseline script to run.
-                             This should be located in the baselines directory.
-            num_test_runs    The number of test runs to perform.
-            passing_scores   A dict containing passing scores for each
-                             agent.
-            verbose          Enable verbosity?
+    Parameters:
+    -----------
+    name: str
+        The name of the test.
+    baseline_runner: str
+        The name of the baseline script to run.
+        This should be located in the baselines directory.
+    num_test_runs: int
+        The number of test runs to perform.
+    passing_scores: dict
+        A dict containing passing scores for each agent.
+    explore: bool
+        Enable exploration while testing?
+    verbose: bool
+        Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs)
+    run_test(baseline_runner, num_test_runs, explore)
 
-    cur_dir    = Path(os.getcwd())
-    state_dir  = os.path.basename(baseline_runner).split('.')[:-1][0]
-    score_file = os.path.join(cur_dir, "saved_states", state_dir,
+    state_path = get_state_path(baseline_runner)
+    score_file = os.path.join(state_path,
         "test-scores.pickle")
 
     with open(score_file, "rb") as in_f:
@@ -160,25 +197,32 @@ def high_score_test(name,
                     baseline_runner,
                     num_test_runs,
                     passing_scores,
+                    explore = True,
                     verbose = False):
     """
-        Run a testing phase using a trained model and determine if
-        the model reaches passing high scores.
+    Run a testing phase using a trained model and determine if
+    the model reaches passing high scores.
 
-        Arguments:
-            name             The name of the test.
-            baseline_runner  The name of the baseline script to run.
-                             This should be located in the baselines directory.
-            num_test_runs    The number of test runs to perform.
-            passing_scores   A dict containing passing scores for each
-                             agent.
-            verbose          Enable verbosity?
+    Parameters:
+    -----------
+    name: str
+        The name of the test.
+    baseline_runner: str
+        The name of the baseline script to run.
+        This should be located in the baselines directory.
+    num_test_runs: str
+        The number of test runs to perform.
+    passing_scores: dict
+        A dict containing passing scores for each agent.
+    explore: bool
+        Enable exploration while testing?
+    verbose: bool
+        Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs)
+    run_test(baseline_runner, num_test_runs, explore)
 
-    cur_dir    = Path(os.getcwd())
-    state_dir  = os.path.basename(baseline_runner).split('.')[:-1][0]
-    score_file = os.path.join(cur_dir, "saved_states", state_dir,
+    state_path = get_state_path(baseline_runner)
+    score_file = os.path.join(state_path,
         "test-scores.pickle")
 
     with open(score_file, "rb") as in_f:

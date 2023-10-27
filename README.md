@@ -103,12 +103,25 @@ some commonly overloaded terms and how we define them.
 # Installation
 
 After activating a virtual environment, issue the following command from the
-top directory.
+top directory to install the standard PPO-And-Friends library.
 ```
 pip install .
 ```
 
-NOTE: required packages are not yet listed.
+Optionally, you can install the following extensions as well. Note that these extensions
+are not always cross-compatible. For instance, `abmarl` support is not currently compatible
+with `gym_baselines` support.
+
+```
+# Install support for Abmarl
+pip install .[abmarl]
+
+# Install support running the (old) gym environments in baselines/gym
+pip install .[gym_baselines]
+
+# Install support for running the gymnasium environments in baselines/gymnasium
+pip install .[gymnasium_baselines]
+```
 
 # Environments
 
@@ -116,18 +129,14 @@ NOTE: required packages are not yet listed.
 
 Both single agent and multi-agent gymnasium games are supported through
 the `SingleAgentGymWrapper` and `MultiAgentGymWrapper`, respectively.
-For examples on how to train a gymnasium environment, see the following
-scripts:
-* `baselines/lunar_lander.py` for single agent training.
-* `baselines/pressure_plate.py` for multi agent training. NOTE: this
-   environment is also wrapped with `Gym21ToGymnasium`, which is only
-   needed for environments that only exist in gym versions <=21.
+For examples on how to train a gymnasium environment, check out the runners
+in `baselines/gymnasium/`.
 
 ## Gym <= 0.21
 
 For environments that only exist in versions <= 0.21 of Gym, you
-can use the `Gym21ToGymnasium` wrapper. See `baselines/pressure_plate.py`
-for an example.
+can use the `Gym21ToGymnasium` wrapper. See `baselines/gym/`
+for examples.
 
 ## Gym To Gymnasium
 
@@ -138,13 +147,13 @@ that can be used to (attempt to) convert spaces from Gym to Gymnasium.
 
 ## Abmarl
 
-The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
-for an example.
+The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl` for
+examples.
 
 ## Petting Zoo
 
-The `ParallelZooWrapper` can be used for Abmarl environments. See `baselines/abmarl_maze.py`
-for an example.
+The `ParallelZooWrapper` can be used for PettingZoo environments. See `baselines/pettingzoo`
+for examples.
 
 ## Custom
 
@@ -233,7 +242,7 @@ See the `baselines` directory for more examples.
 
 To train an environment, use the following command:
 ```
-ppoaf --train <path_to_runner_file>
+ppoaf train <path_to_runner_file>
 ```
 
 Running the same command again will result in loading the previously
@@ -247,21 +256,30 @@ ppoaf --help
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
-ppoaf --test <path_to_runner_file> --num-test-runs <num_test_runs> --render
+ppoaf test <path_to_output_directory> --num_test_runs <num_test_runs> --render
 ```
-You can optionally omit the `--render` or add the `--render-gif` flag.
 
 By default, exploration is disabled during testing, but you can enable it
-with the `--test-explore` flag. Example:
+with the `--test_explore` flag. Example:
 
 ```
-ppoaf --test <path_to_runner_file> --num-test-runs <num_test_runs> --render --test-explore
+ppoaf test <path_to_output_directory> --num_test_runs <num_test_runs> --render --test_explore
 ```
+The output directory will be given the same name as your runner file, and
+it will appear in the path specified by `--state_path` when training, which
+defaults to `./saved_states`.
 
 Note that enabling exploration during testing will have varied results. I've found
 that most of the environments I've tested perform better without exploration, but
 there are some environments that will not perform at all without it.
 
+# Plotting Results
+If `--save_train_scores` is used while training, the results can be plotted using
+PPO-And-Friend's ploting utility.
+
+```
+ppoaf plot path1 path2 path3 ... <options>
+```
 
 # Documentation
 
@@ -281,7 +299,7 @@ setting suggestions.
 
 Currently, the default is to use GPUs when training on a single processor
 and CPUs when training on multiple processors. This can be overridden with
-the `--alow-mpi-gpu` flag, which is helpful for environments that require
+the `--alow_mpi_gpu` flag, which is helpful for environments that require
 networks that can benefit from GPUs (convolutions, for example).
 
 NOTE: the current implementation of multiple environment instances per
@@ -289,18 +307,18 @@ processor assumes that the rollout bottleneck will come from inference rather
 than stepping through the environment. Because of this, the multiple environment
 instances are run in succession rather than in parallel, and the speed up
 comes from batched inference during the rollout. Very slow environments may
-not see a performance gain from increasing `envs-per-proc`.
+not see a performance gain from increasing `envs_per_proc`.
 
 **Usage:**
 
 mpirun:
 ```
-mpirun -n {num_procs} ppoaf --envs-per-proc {envs_per_proc} ...
+mpirun -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
 ```
 
 srun:
 ```
-srun -N1 -n {num_procs} ppoaf --envs-per-proc {envs_per_proc} ...
+srun -N1 -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
 ```
 
 Some things to note:
@@ -309,7 +327,7 @@ Some things to note:
    processor will collect 1024/N of those timesteps, where N is the total
    number of processors (remainders go to processor 0). Note that there
    are various side effects of this, some of which are outlined below.
-   Also, `envs-per-proc` can have a similar effect on reducing the total
+   Also, `envs_per_proc` can have a similar effect on reducing the total
    timesteps that each environment instance experiences, especially if
    each instance can reach its max timesteps before being "done".
 2. Increasing the processor count doesn't always increase training speed.
@@ -318,7 +336,7 @@ Some things to note:
    timesteps per rollout is set to 1024, and we run with > 2 processors,
    we will never collect states from `U` and thus might not ever learn
    how to handle those unique situations. A similar logic applies for
-   `envs-per-proc`. **Note**: this particular issue is now partially
+   `envs_per_proc`. **Note**: this particular issue is now partially
    mitigated by the recent addition of "soft resets", but this feature
    has its own complications.
 3. When running with multiple processors or environment instances,
@@ -422,14 +440,6 @@ policy_settings = { "actor_0" : \
 ```
 
 See `baselines/humanoid.py` for a more concrete example.
-
-**OpenAI Gym**
-
-Installing atari environments:
-```
-pip install gym[atari]
-pip install autorom[accept-rom-license]
-```
 
 **Performance**
 
