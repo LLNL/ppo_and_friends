@@ -12,7 +12,7 @@ env:
     variables:
         OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
-        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/mountain_car.py
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/mountain_car.py
 
 generator.parameters:
     ENABLE_ICM:

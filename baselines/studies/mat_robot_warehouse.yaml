@@ -12,7 +12,7 @@ env:
     variables:
         OUTPUT_PATH: /p/lustre1/maguire7/ppoaf-study
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
-        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/robot_warehouse_hard.py
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/robot_warehouse_hard.py
 
 generator.parameters:
     USE_ICM:
