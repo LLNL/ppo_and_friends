@@ -336,9 +336,9 @@ class PPO(object):
             policy = self.policies[policy_id]
 
             self.status_dict[policy_id] = {}
-            self.status_dict[policy_id]["episode reward avg"]   = 0
-            self.status_dict[policy_id]["natural reward avg"]   = 0
-            self.status_dict[policy_id]["top episode score"]    = -max_int
+            self.status_dict[policy_id]["score avg"]            = 0
+            self.status_dict[policy_id]["natural score avg"]    = 0
+            self.status_dict[policy_id]["top score"]            = -max_int
             self.status_dict[policy_id]["weighted entropy"]     = 0
             self.status_dict[policy_id]["actor loss"]           = 0
             self.status_dict[policy_id]["critic loss"]          = 0
@@ -1773,9 +1773,9 @@ class PPO(object):
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
-            self.status_dict[policy_id]["episode reward avg"]   = running_reward
-            self.status_dict[policy_id]["natural reward avg"]   = running_nat_reward
-            self.status_dict[policy_id]["top episode score"]    = top_score
+            self.status_dict[policy_id]["score avg"]            = running_reward
+            self.status_dict[policy_id]["natural score avg"]    = running_nat_reward
+            self.status_dict[policy_id]["top score"]            = top_score
             self.status_dict[policy_id]["obs range"]            = obs_range
             self.status_dict[policy_id]["natural reward range"] = rw_range
             self.status_dict[policy_id]["top reward"]           = global_top_reward
@@ -1785,7 +1785,7 @@ class PPO(object):
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
 
                 ism = intr_reward / (total_episodes/ env_batch_size)
-                self.status_dict[policy_id]["intrinsic reward avg"] = ism.item()
+                self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
                 max_reward = rollout_max_intr_reward[policy_id]
                 min_reward = rollout_min_intr_reward[policy_id]
@@ -2314,7 +2314,7 @@ class PPO(object):
         txt files.
         """
         for policy_id in self.policies:
-            score = self.status_dict[policy_id]["natural reward avg"]
+            score = self.status_dict[policy_id]["natural score avg"]
             score_f = os.path.join(self.state_path,
                 "scores", f"{policy_id}_scores.npy")
 
