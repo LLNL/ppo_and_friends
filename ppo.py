@@ -344,7 +344,7 @@ class PPO(object):
             self.status_dict[policy_id]["critic loss"]          = 0
             self.status_dict[policy_id]["kl avg"]               = 0
             self.status_dict[policy_id]["natural reward range"] = (max_int, -max_int)
-            self.status_dict[policy_id]["top reward"]           = -max_int
+            self.status_dict[policy_id]["top natural reward"]   = -max_int
             self.status_dict[policy_id]["obs range"]            = (max_int, -max_int)
 
         #
@@ -1765,7 +1765,7 @@ class PPO(object):
             rw_range           = (min_reward, max_reward)
             obs_range          = (min_obs, max_obs)
 
-            global_top_reward = max(self.status_dict[policy_id]["top reward"],
+            global_top_reward = max(self.status_dict[policy_id]["top natural reward"],
                 top_reward[policy_id])
             global_top_reward = comm.allreduce(global_top_reward, MPI.MAX)
 
@@ -1774,7 +1774,7 @@ class PPO(object):
             self.status_dict[policy_id]["top score"]            = top_score
             self.status_dict[policy_id]["obs range"]            = obs_range
             self.status_dict[policy_id]["natural reward range"] = rw_range
-            self.status_dict[policy_id]["top reward"]           = global_top_reward
+            self.status_dict[policy_id]["top natural reward"]   = global_top_reward
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_rewards[policy_id].sum()
