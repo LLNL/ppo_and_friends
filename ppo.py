@@ -1560,10 +1560,6 @@ class PPO(object):
                         max(top_rollout_score[policy_id],
                         ep_nat_rewards[policy_id][where_term].max())
 
-                    #FIXME: THIS IS WHERE WE DEVIATE. We treat extrinsic
-                    # rewards as un-normalized here and normalized when getting
-                    # the range. We should replace these extr rewards in the
-                    # status dict with "natural" rewards and ranges.
                     total_nat_rewards[policy_id][where_term] += \
                         ep_nat_rewards[policy_id][where_term]
 
