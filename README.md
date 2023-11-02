@@ -117,6 +117,7 @@ with `gym_baselines` support.
 pip install .[abmarl]
 
 # Install support running the (old) gym environments in baselines/gym
+pip install --upgrade pip wheel==0.38.4
 pip install .[gym_baselines]
 
 # Install support for running the gymnasium environments in baselines/gymnasium
