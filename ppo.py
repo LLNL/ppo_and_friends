@@ -2348,6 +2348,11 @@ class PPO(object):
         """
         Load our status dictionary from a restart.
 
+        Parameters:
+        -----------
+        state_path: str
+            The path to our saved state.
+
         Returns:
         --------
         dict:
@@ -2361,21 +2366,33 @@ class PPO(object):
 
         return tmp_status_dict
 
-    def load_policy(self, policy_id, policy_path):
+    def load_policy(self, policy_id, state_path):
         """
         Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        policy_id: str
+            The id of the policy to load.
+        state_path: str
+            The state path to load the policy from.
         """
-        self.policies[policy_id].load(policy_path)
+        self.policies[policy_id].load(state_path)
 
         if self.normalize_values and policy_id in self.value_normalizers:
-            self.value_normalizers[policy_id].load_info(policy_path)
+            self.value_normalizers[policy_id].load_info(state_path)
 
-    def load_policies(self, policy_path):
+    def load_policies(self, state_path):
         """
         Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        state_path: str
+            The state path to load the policies from.
         """
         for policy_id in self.policies:
-            self.load_policy(policy_id, policy_path)
+            self.load_policy(policy_id, state_path)
 
     def load_env_info(self, env_info_path):
         """
@@ -2386,6 +2403,11 @@ class PPO(object):
     def load(self, state_path):
         """
         Load all information required for a restart.
+
+        Parameters:
+        -----------
+        state_path: str
+            The state path to load from.
         """
         self.load_policies(state_path)
         self.load_env_info(state_path)
