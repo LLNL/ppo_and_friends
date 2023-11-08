@@ -1758,7 +1758,7 @@ class PPO(object):
             nat_reward_sum  = comm.allreduce(nat_reward_sum, MPI.SUM)
 
             total_scores_sum  = total_scores[policy_id].sum()
-            total_scores_sum  = comm.allreduce(total_scores, MPI.SUM)
+            total_scores_sum  = comm.allreduce(total_scores_sum, MPI.SUM)
 
             running_nat_reward = nat_reward_sum / total_episodes
             running_reward     = total_scores_sum / total_episodes
