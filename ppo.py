@@ -51,6 +51,7 @@ class PPO(object):
                  load_state          = False,
                  state_path          = "./saved_state",
                  pretrained_policies = {},
+                 env_state           = None,
                  save_when           = None,
                  save_train_scores   = False,
                  pickle_class        = False,
@@ -140,6 +141,9 @@ class PPO(object):
             policies from.
             The saved policies must have the same structure as the policies
             defined for this training.
+        env_state: str or None
+            An optional path to load environment state from. This is useful
+            when loading pre-trained policies.
         save_when: subclass of ChangeInStateScheduler
             An instance of ChangeInStateScheduler
             that determines when to save. If None,
@@ -402,7 +406,13 @@ class PPO(object):
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
 
-                self.load_env_info(state_path)#FIXME: should we allow loading env info from a specified path?
+                if env_state is None:
+                    rank_print("Loading environment state from {env_state}")
+                    self.load_env_info(state_path)
+
+        if env_state is not None:
+            rank_print("Loading environment state from {env_state}")
+            self.load_env_info(env_state)
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)

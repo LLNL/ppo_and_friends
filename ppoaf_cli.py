@@ -146,6 +146,11 @@ def cli():
         "from or a dictionary mapping policy ids to the state paths that the "
         "individual policies should be loaded from.")
 
+    train_parser.add_argument("--env_state", default=None, type=str,
+        help="An optional path to load pre-trained environment state from. "
+        "This will include normalizations like observation normalizers and "
+        "useful when loading pre-trained policies.")
+
     #
     # 'test' command subparser
     #
