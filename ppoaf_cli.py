@@ -140,6 +140,12 @@ def cli():
     train_parser.add_argument("--envs_per_proc", default=1, type=int,
         help="The number of environment instances each processor should have.")
 
+    train_parser.add_argument("--pretrained_policies", default="{}", type=str,
+        help="Where to load pre-trained policies from. This can either be a "
+        "string to a single state path where all policies should be loaded "
+        "from or a dictionary mapping policy ids to the state paths that the "
+        "individual policies should be loaded from.")
+
     #
     # 'test' command subparser
     #
@@ -236,6 +242,26 @@ def cli():
         random_seed             = arg_dict["random_seed"]
         runner_file             = arg_dict["runner"]
         force_deterministic     = arg_dict["force_deterministic"]
+
+
+        pretrained_policies = arg_dict["pretrained_policies"]
+
+        if len(pretrained_policies) == 0:
+            msg  = "ERROR: invalid pretrained policies given, "
+            msg += "{pretrained_policies}"
+            rank_print(msg)
+            comm.Abort()
+
+        if pretrained_policies[0] == "{":
+            pretrained_policies = ast.literal_eval(pretrained_policies)
+
+        elif not os.path.exists(pretrained_policies):
+            msg  = "ERROR: pretrained_policies path {pretrained_policies} "
+            msg += "does not exist."
+            rank_print(msg)
+            comm.Abort()
+
+        arg_dict["pretrained_policies"] = pretrained_policies
 
         #
         # Set random seeds (this doesn't guarantee reproducibility, but it should

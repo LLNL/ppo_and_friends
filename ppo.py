@@ -50,6 +50,7 @@ class PPO(object):
                  frame_pause         = 0.0,
                  load_state          = False,
                  state_path          = "./saved_state",
+                 pretrained_policies = {},
                  save_when           = None,
                  save_train_scores   = False,
                  pickle_class        = False,
@@ -133,6 +134,12 @@ class PPO(object):
             Should we load a saved state?
         state_path: str
             The path to save/load our state.
+        pretrained_policies: dict or str
+            Either a dictionary mapping policy ids to state paths to load those
+            policies from or a string indicating the state path to load all
+            policies from.
+            The saved policies must have the same structure as the policies
+            defined for this training.
         save_when: subclass of ChangeInStateScheduler
             An instance of ChangeInStateScheduler
             that determines when to save. If None,
@@ -380,20 +387,22 @@ class PPO(object):
 
         if load_state:
             if not os.path.exists(os.path.join(state_path, "state_0.pickle")):
-                msg  = "WARNING: state_path does not contained saved state. "
+                msg  = "WARNING: {state_path} does not contained saved state. "
                 rank_print(msg)
                 comm.Abort()
             else:
-                rank_print("Loading state from {}".format(state_path))
+                rank_print("Loading status and environment state from {}".format(state_path))
 
                 #
                 # Let's ensure backwards compatibility with previous commits.
                 #
-                tmp_status_dict = self.load_status()
+                tmp_status_dict = self.load_status(state_path)
 
                 for key in tmp_status_dict:
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
+
+                self.load_env_info(state_path)#FIXME: should we allow loading env info from a specified path?
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -426,13 +435,47 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
 
+        if type(pretrained_policies) == str:
+            pretrained_path = pretrained_policies
+            pretrained_policies = {}
+
+            for policy_id in self.policies:
+                pretrained_policies[policy_id] = pretrained_path
+
+        elif type(pretrained_policies) != dict:
+            msg  = "ERROR: pretrained_policies must be of type str or "
+            msg += "dict but received {type(pretrained_policies)}"
+            rank_print(msg)
+            comm.Abort()
+
         #
         # Load the policies after they've been finalized.
         #
-        if load_state:
-            if os.path.exists(state_path):
-                rank_print("Loading policies from {}".format(state_path))
-                self.load_policies()
+        if load_state or len(pretrained_policies) > 0:
+
+            #
+            # First, load any policies that are local/not pretrained.
+            #
+            if load_state and os.path.exists(state_path):
+                for policy_id in self.policies:
+                    if policy_id not in pretrained_policies:
+                        rank_print(f"Loading policiy {policy_id} from {state_path}")
+                        self.load_policy(policy_id, state_path)
+
+            #
+            # Second, load our pretrained policies.
+            #
+            for policy_id in pretrained_policies:
+                pretrained_path = pretrained_policies[policy_id]
+
+                if not os.path.exists(os.path.join(pretrained_path, "state_0.pickle")):
+                    msg  = "ERROR: {pretrained_path} does not contained "
+                    msg += "pretrained policies to load."
+                    rank_print(msg)
+                    comm.Abort()
+
+                rank_print(f"Loading pre-trained policy {policy_id} from {pretrained_path}")
+                self.load_policy(policy_id, pretrained_path)
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
@@ -1758,7 +1801,7 @@ class PPO(object):
             nat_reward_sum  = comm.allreduce(nat_reward_sum, MPI.SUM)
 
             total_scores_sum  = total_scores[policy_id].sum()
-            total_scores_sum  = comm.allreduce(total_scores, MPI.SUM)
+            total_scores_sum  = comm.allreduce(total_scores_sum, MPI.SUM)
 
             running_nat_reward = nat_reward_sum / total_episodes
             running_reward     = total_scores_sum / total_episodes
@@ -2266,7 +2309,7 @@ class PPO(object):
 
         comm.barrier()
 
-    def load_status(self):
+    def load_status(self, state_path):
         """
         Load our status dictionary from a restart.
 
@@ -2276,33 +2319,42 @@ class PPO(object):
             The loaded status dictionary.
         """
         file_name  = "state_0.pickle"
-        state_file = os.path.join(self.state_path, file_name)
+        state_file = os.path.join(state_path, file_name)
 
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
 
-    def load_policies(self):
+    def load_policy(self, policy_id, policy_path):
+        """
+        Load our policies and related state from a checkpoint.
+        """
+        self.policies[policy_id].load(policy_path)
+
+        if self.normalize_values and policy_id in self.value_normalizers:
+            self.value_normalizers[policy_id].load_info(policy_path)
+
+    def load_policies(self, policy_path):
         """
         Load our policies and related state from a checkpoint.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].load(self.state_path)
+            self.load_policy(policy_id, policy_path)
 
+    def load_env_info(self, env_info_path):
+        """
+        """
         if self.save_env_info and self.env != None:
-            self.env.load_info(self.state_path)
-
-        if self.normalize_values:
-            for policy_id in self.value_normalizers:
-                self.value_normalizers[policy_id].load_info(self.state_path)
+            self.env.load_info(env_info_path)
         
-    def load(self):
+    def load(self, state_path):
         """
         Load all information required for a restart.
         """
-        self.load_policies()
-        return self.load_status()
+        self.load_policies(state_path)
+        self.load_env_info(state_path)
+        return self.load_status(state_path)
 
     def _save_natural_score_avg(self):
         """
