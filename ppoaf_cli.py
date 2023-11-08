@@ -151,6 +151,10 @@ def cli():
         "This will include normalizations like observation normalizers and "
         "useful when loading pre-trained policies.")
 
+    train_parser.add_argument("--freeze_policies", nargs="+", type=str,
+        help="Which policies to 'freeze' the weights of. These policies "
+        "will NOT be further trained; they merely act in the environment.")
+
     #
     # 'test' command subparser
     #
@@ -248,6 +252,8 @@ def cli():
         runner_file             = arg_dict["runner"]
         force_deterministic     = arg_dict["force_deterministic"]
 
+        arg_dict["freeze_policies"] = [] if arg_dict["freeze_policies"] is None \
+            else arg_dict["freeze_policies"]
 
         pretrained_policies = arg_dict["pretrained_policies"]
 

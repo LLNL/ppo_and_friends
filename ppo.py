@@ -52,6 +52,7 @@ class PPO(object):
                  state_path          = "./saved_state",
                  pretrained_policies = {},
                  env_state           = None,
+                 freeze_policies     = [],
                  save_when           = None,
                  save_train_scores   = False,
                  pickle_class        = False,
@@ -144,6 +145,9 @@ class PPO(object):
         env_state: str or None
             An optional path to load environment state from. This is useful
             when loading pre-trained policies.
+        freeze_policies: list
+            A list of policies to "freeze" the weights of. These policies will
+            not be further trained and will merely act in the environment.
         save_when: subclass of ChangeInStateScheduler
             An instance of ChangeInStateScheduler
             that determines when to save. If None,
@@ -492,6 +496,15 @@ class PPO(object):
 
                 rank_print(f"Loading pre-trained policy {policy_id} from {pretrained_path}")
                 self.load_policy(policy_id, pretrained_path)
+
+        for policy_id in freeze_policies:
+            if policy_id not in self.policies:
+                msg  = "ERROR: freeze policy {policy_id} is not registered "
+                msg += "with this environment."
+                rank_print(msg) 
+                comm.Abort()
+
+            self.policies[policy_id].frozen = True
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
@@ -1912,21 +1925,27 @@ class PPO(object):
                 self._save_natural_score_avg()
 
             data_loaders = {}
-            for key in self.policies:
-                data_loaders[key] = DataLoader(
-                    self.policies[key].dataset,
-                    batch_size = self.batch_size,
-                    shuffle    = True)
+            for policy_id in self.policies:
+                if not self.policies[policy_id].frozen:
+                    data_loaders[policy_id] = DataLoader(
+                        self.policies[policy_id].dataset,
+                        batch_size = self.batch_size,
+                        shuffle    = True)
+                else:
+                    data_loaders[policy_id] = None
 
             train_start_time = time.time()
 
-            for key in self.policies:
-                self.policies[key].train()
+            for policy_id in self.policies:
+                self.policies[policy_id].train()
 
             #
             # We train each policy separately.
             #
             for policy_id in data_loaders:
+
+                if self.policies[policy_id].frozen:
+                    continue
 
                 for epoch_idx in range(self.epochs_per_iter):
 

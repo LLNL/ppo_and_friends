@@ -59,6 +59,7 @@ class PPOPolicy():
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
                  use_huber_loss      = False,
+                 freeze              = False,
                  test_mode           = False,
                  verbose             = False,
                  **kw_args):
@@ -156,6 +157,9 @@ class PPOPolicy():
             The beta value used within the ICM.
         use_huber_loss: bool
             Should we use huber loss during the PPO update?
+        freeze: bool
+            Should this policy be frozen? If so, the weights will be
+            frozen in place, and the policy will not be further trained.
         test_mode: bool
             Are we in test mode?
         verbose: bool
@@ -189,6 +193,7 @@ class PPOPolicy():
         self.have_reset_constraints = False
         self.verbose                = verbose
         self.use_huber_loss         = use_huber_loss
+        self.frozen                 = freeze
 
         if callable(lr):
             self.lr = lr
@@ -638,6 +643,9 @@ class PPOPolicy():
         ending_rewards: array-like
             Ending rewards for the episode(s)
         """
+        if self.frozen:
+            return
+
         self.validate_agent_id(agent_id)
 
         for idx, env_i in enumerate(env_idxs):
@@ -931,6 +939,9 @@ class PPOPolicy():
         critic_loss: torch tensor
             The total loss for our critic.
         """
+        if self.frozen:
+            return
+
         #
         # Perform our backwards steps, and average gradients across ranks.
         #
@@ -982,6 +993,9 @@ class PPOPolicy():
         """
         Update the learning rate.
         """
+        if self.frozen:
+            return
+
         update_optimizer_lr(self.actor_optim, self.lr())
         update_optimizer_lr(self.critic_optim, self.lr())
 
