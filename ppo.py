@@ -476,6 +476,12 @@ class PPO(object):
             # Second, load our pretrained policies.
             #
             for policy_id in pretrained_policies:
+                if policy_id not in self.policies:
+                    msg  = "ERROR: pre-trained policy {policy_id} is not "
+                    msg += "registered in this environment."
+                    rank_print(msg)
+                    comm.Abort()
+
                 pretrained_path = pretrained_policies[policy_id]
 
                 if not os.path.exists(os.path.join(pretrained_path, "state_0.pickle")):
