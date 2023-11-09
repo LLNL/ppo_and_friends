@@ -59,7 +59,6 @@ class PPOPolicy():
                  intr_reward_weight  = 1.0,
                  icm_beta            = 0.8,
                  use_huber_loss      = False,
-                 freeze              = False,
                  test_mode           = False,
                  verbose             = False,
                  **kw_args):
@@ -157,9 +156,6 @@ class PPOPolicy():
             The beta value used within the ICM.
         use_huber_loss: bool
             Should we use huber loss during the PPO update?
-        freeze: bool
-            Should this policy be frozen? If so, the weights will be
-            frozen in place, and the policy will not be further trained.
         test_mode: bool
             Are we in test mode?
         verbose: bool
@@ -193,7 +189,7 @@ class PPOPolicy():
         self.have_reset_constraints = False
         self.verbose                = verbose
         self.use_huber_loss         = use_huber_loss
-        self.frozen                 = freeze
+        self.frozen                 = False
 
         if callable(lr):
             self.lr = lr
@@ -1133,7 +1129,7 @@ class PPOPolicy():
             if self.enable_icm:
                 self.icm_model.load(policy_load_path)
 
-    def direct_load(self, policy_load_path):#FIXME: remove?
+    def direct_load(self, policy_load_path):
         """
         Load our policy directly from the provided path.
 
