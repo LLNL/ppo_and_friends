@@ -205,7 +205,7 @@ class FreezeCyclingScheduler():
             self.policies[policy_id].freeze()
 
             if rank == 0:
-                tag = self.status_dict["general"]["iteration"]
+                tag = self.status_dict["global status"]["iteration"]
                 self.policies[policy_id].save(self.state_path, tag)
 
     def _unfreeze_group(self, group_idx):
@@ -227,7 +227,7 @@ class FreezeCyclingScheduler():
         """
         Cycle through freezing groups of policies.
         """
-        current_iteration = self.status_dict["general"]["iteration"]
+        current_iteration = self.status_dict["global status"]["iteration"]
 
         #
         # First step is to freeze all but one policy.
@@ -258,7 +258,7 @@ class StatusScheduler():
 
     def __init__(self,
                  status_key,
-                 status_preface = "general"):
+                 status_preface = "global status"):
 
         self.status_key     = status_key
         self.finalized      = False
@@ -429,7 +429,7 @@ class LinearStepScheduler(StatusScheduler):
         # Tricky business: on the first iteration, out status dict won't
         # have been updated yet, so the values are nonsense.
         #
-        if self.status_dict["general"]["iteration"] == 0:
+        if self.status_dict["global status"]["iteration"] == 0:
             return self.initial_value
 
         step = self._get_step()

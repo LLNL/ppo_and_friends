@@ -339,22 +339,22 @@ class PPO(object):
 
         #
         # Create a dictionary to track the status of training.
-        # These entries can be general, agent specific, or
+        # These entries can be global, agent specific, or
         # policy specific.
         #
         max_int = np.iinfo(np.int32).max
 
         self.status_dict = {}
-        self.status_dict["general"] = {}
-        self.status_dict["general"]["iteration"]      = 0
-        self.status_dict["general"]["rollout time"]   = 0
-        self.status_dict["general"]["train time"]     = 0
-        self.status_dict["general"]["running time"]   = 0
-        self.status_dict["general"]["timesteps"]      = 0
-        self.status_dict["general"]["total episodes"] = 0
-        self.status_dict["general"]["longest run"]    = 0
-        self.status_dict["general"]["shortest run"]   = max_int
-        self.status_dict["general"]["average run"]    = 0
+        self.status_dict["global status"] = {}
+        self.status_dict["global status"]["iteration"]      = 0
+        self.status_dict["global status"]["rollout time"]   = 0
+        self.status_dict["global status"]["train time"]     = 0
+        self.status_dict["global status"]["running time"]   = 0
+        self.status_dict["global status"]["timesteps"]      = 0
+        self.status_dict["global status"]["total episodes"] = 0
+        self.status_dict["global status"]["longest run"]    = 0
+        self.status_dict["global status"]["shortest run"]   = max_int
+        self.status_dict["global status"]["average run"]    = 0
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -421,11 +421,11 @@ class PPO(object):
                         self.status_dict[key] = tmp_status_dict[key]
 
                 if env_state is None:
-                    rank_print("Loading environment state from {env_state}")
+                    rank_print(f"Loading environment state from {env_state}")
                     self.load_env_info(state_path)
 
         if env_state is not None:
-            rank_print("Loading environment state from {env_state}")
+            rank_print(f"Loading environment state from {env_state}")
             self.load_env_info(env_state)
 
         if not os.path.exists(state_path) and rank == 0:
@@ -1241,14 +1241,14 @@ class PPO(object):
         """
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
-        for key in self.status_dict["general"]:
-
+        rank_print("  global status:")
+        for key in self.status_dict["global status"]:
             if key in ["running time", "rollout time", "train time"]:
-                pretty_time = format_seconds(self.status_dict["general"][key])
-                rank_print("  {}: {}".format(key, pretty_time))
+                pretty_time = format_seconds(self.status_dict["global status"][key])
+                rank_print("    {}: {}".format(key, pretty_time))
             else:
-                rank_print("  {}: {}".format(key,
-                    self.status_dict["general"][key]))
+                rank_print("    {}: {}".format(key,
+                    self.status_dict["global status"][key]))
 
         for policy_id in self.policies:
             rank_print("  {}:".format(policy_id))
@@ -1893,11 +1893,11 @@ class PPO(object):
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
         avg_run          = comm.allreduce(avg_run, MPI.SUM) / num_procs
 
-        self.status_dict["general"]["total episodes"] += total_episodes
-        self.status_dict["general"]["longest run"]     = longest_run
-        self.status_dict["general"]["shortest run"]    = shortest_run
-        self.status_dict["general"]["average run"]     = avg_run
-        self.status_dict["general"]["timesteps"]      += total_rollout_ts
+        self.status_dict["global status"]["total episodes"] += total_episodes
+        self.status_dict["global status"]["longest run"]     = longest_run
+        self.status_dict["global status"]["shortest run"]    = shortest_run
+        self.status_dict["global status"]["average run"]     = avg_run
+        self.status_dict["global status"]["timesteps"]      += total_rollout_ts
 
         #
         # Finalize our datasets.
@@ -1907,7 +1907,7 @@ class PPO(object):
 
         comm.barrier()
         stop_time = time.time()
-        self.status_dict["general"]["rollout time"] = stop_time - start_time
+        self.status_dict["global status"]["rollout time"] = stop_time - start_time
 
     def learn(self, num_timesteps):
         """
@@ -1924,23 +1924,23 @@ class PPO(object):
             many timesteps were run during the last save.
         """
         start_time = time.time()
-        ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
-        iteration  = self.status_dict["general"]["iteration"]
+        ts_max     = self.status_dict["global status"]["timesteps"] + num_timesteps
+        iteration  = self.status_dict["global status"]["iteration"]
 
         iter_start_time = time.time()
         iter_stop_time  = iter_start_time
 
-        while self.status_dict["general"]["timesteps"] < ts_max:
+        while self.status_dict["global status"]["timesteps"] < ts_max:
 
             self.freeze_scheduler()
 
             self.rollout()
 
             running_time    = (iter_stop_time - iter_start_time)
-            running_time   += self.status_dict["general"]["rollout time"]
+            running_time   += self.status_dict["global status"]["rollout time"]
             iter_start_time = time.time()
 
-            self.status_dict["general"]["running time"] += running_time
+            self.status_dict["global status"]["running time"] += running_time
 
             self.print_status()
 
@@ -2022,10 +2022,10 @@ class PPO(object):
 
             now_time      = time.time()
             training_time = (now_time - train_start_time)
-            self.status_dict["general"]["train time"] = now_time - train_start_time
+            self.status_dict["global status"]["train time"] = now_time - train_start_time
 
             iteration += 1
-            self.status_dict["general"]["iteration"] = iteration
+            self.status_dict["global status"]["iteration"] = iteration
 
             self.update_learning_rate()
             self.update_entropy_weight()
