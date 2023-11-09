@@ -1068,7 +1068,7 @@ class PPOPolicy():
         """
         return args
 
-    def save(self, save_path):
+    def save(self, save_path, tag=""):
         """
         Save our policy.
 
@@ -1076,6 +1076,8 @@ class PPOPolicy():
         -----------
         save_path: str
             The path to save the policy to.
+        tag: str
+            An optional tag to add to the saved networks.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_save_path = os.path.join(save_path, policy_dir)
@@ -1083,13 +1085,13 @@ class PPOPolicy():
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
 
-        self.actor.save(policy_save_path)
-        self.critic.save(policy_save_path)
+        self.actor.save(policy_save_path, tag)
+        self.critic.save(policy_save_path, tag)
 
         if self.enable_icm:
             self.icm_model.save(policy_save_path)
 
-    def load(self, load_path):
+    def load(self, load_path, tag=""):
         """
         Load our policy.
 
@@ -1097,12 +1099,14 @@ class PPOPolicy():
         -----------
         load_path: str
             The path to load the policy from.
+        tag: str
+            An optional tag to add to the saved networks.
         """
         policy_dir = "{}-policy".format(self.name)
         policy_load_path = os.path.join(load_path, policy_dir)
 
-        self.actor.load(policy_load_path)
-        self.critic.load(policy_load_path)
+        self.actor.load(policy_load_path, tag)
+        self.critic.load(policy_load_path, tag)
 
         if self.enable_icm:
             self.icm_model.load(policy_load_path)
@@ -1126,6 +1130,18 @@ class PPOPolicy():
 
         if self.enable_icm:
             self.icm_model.train()
+
+    def freeze(self):
+        """
+        Freeze the poicy so that its weights are not updated.
+        """
+        self.frozen = True
+
+    def unfreeze(self):
+        """
+        Un-freeze the poicy so that its weights will be updated.
+        """
+        self.frozen = False
 
     def __getstate__(self):
         """

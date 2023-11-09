@@ -16,7 +16,7 @@ num_procs = comm.Get_size()
 
 class PPONetwork(ABC, nn.Module):
     """
-        A base class for PPO networks.
+    A base class for PPO networks.
     """
 
     def __init__(self,
@@ -26,11 +26,16 @@ class PPONetwork(ABC, nn.Module):
                  test_mode = False,
                  **kw_args):
         """
-            Arguments:
-                in_shape   The shape of the input. (int or tuple)
-                out_shape  The shape of the output. (int or tuple)
-                name       The name of the network. (str)
-                test_mode  Are we testing a trained policy? (bool)
+        Parameters:
+        -----------
+        in_shape: int or tuple
+            The shape of the input.
+        out_shape: int or tuple
+            The shape of the output.
+        name: str
+            The name of the network.
+        test_mode: bool
+            Are we testing a trained policy?
         """
         super(PPONetwork, self).__init__()
 
@@ -56,33 +61,65 @@ class PPONetwork(ABC, nn.Module):
 
     def _shape_output(self, output):
         """
-            Reshape the network output to match our expected output shape.
+        Reshape the network output to match our expected output shape.
 
-            Arguments:
-                output    The network output (tensor or numpy array).
+        Parameters:
+        -----------
+        output: tensor or numpy.ndarray
+            The network output
 
-            Returns:
-                The output reshaped.
+        Returns:
+        --------
+        tensor or numpy.ndarray:
+            The output reshaped.
         """
         out_shape = (output.shape[0],) + self.out_shape
         output    = output.reshape(out_shape)
         return output
 
-    def save(self, path):
+    def save(self, path, tag=""):
+        """
+        Save our state dict to a specified path using the
+        class name as an identifier.
+
+        Parameters:
+        -----------
+        path: str
+            The path to save to.
+        tag: str
+            An optional tag to add to our state dict file.
+        """
 
         if self.test_mode:
             return
 
-        f_name = "{}_{}.model".format(self.name, rank)
+        if tag != "":
+            tag = f"_{tag}"
+
+        f_name = "{}_{}{}.model".format(self.name, rank, tag)
         out_f  = os.path.join(path, f_name)
         torch.save(self.state_dict(), out_f)
 
-    def load(self, path):
+    def load(self, path, tag=""):
+        """
+        Load a state dict that was previously save using this class.
+        It's assumed that the name will match this class's name.
+
+        Parameters:
+        -----------
+        path: str
+            The path to save to.
+        tag: str
+            An optional tag to add to our state dict file.
+        """
+
+        if tag != "":
+            tag = f"_{tag}"
 
         if self.test_mode:
-            f_name = "{}_0.model".format(self.name)
+            f_name = "{}_0{}.model".format(self.name, tag)
         else:
-            f_name = "{}_{}.model".format(self.name, rank)
+            f_name = "{}_{}{}.model".format(self.name, rank, tag)
 
         in_f = os.path.join(path, f_name)
 
@@ -117,15 +154,20 @@ class PPOLSTMNetwork(PPONetwork):
                               batch_size,
                               device):
         """
-            Get a hidden state tuple containing the lstm hidden state
-            and cell state as zero tensors.
+        Get a hidden state tuple containing the lstm hidden state
+        and cell state as zero tensors.
 
-            Arguments:
-                batch_size    The batch size to replicate.
-                device        The device to send the states to.
+        Parameters:
+        -----------
+        batch_size: int
+            The batch size to replicate.
+        device: torch.device
+            The device to send the states to.
 
-            Returns:
-                A hidden state tuple containing zero tensors.
+        Returns:
+        --------
+        tuple:
+            A hidden state tuple containing zero tensors.
         """
 
         hidden = torch.zeros(
@@ -140,11 +182,14 @@ class PPOLSTMNetwork(PPONetwork):
 
     def reset_hidden_state(self, batch_size, device):
         """
-            Reset our hidden state to zero tensors.
+        Reset our hidden state to zero tensors.
 
-            Arguments:
-                batch_size    The batch size to replicate.
-                device        The device to send the states to.
+        Parameters:
+        -----------
+        batch_size: int
+            The batch size to replicate.
+        device: torch.device
+            The device to send the states to.
         """
         self.hidden_state = self.get_zero_hidden_state(
             batch_size, device)
@@ -152,19 +197,20 @@ class PPOLSTMNetwork(PPONetwork):
 
 class SingleSplitObservationNetwork(PPONetwork):
     """
-        The idea here is to support splitting the observations into
-        two sub-networks before merging them back together. This is
-        usually used when wanting to split proprioceptive and
-        exteroceptive information.
+    The idea here is to support splitting the observations into
+    two sub-networks before merging them back together. This is
+    usually used when wanting to split proprioceptive and
+    exteroceptive information.
     """
 
     def __init__(self,
                  split_start,
                  **kw_args):
         """
-            Arguments:
-                split_start      Where in the observation space the split
-                                 should start.
+        Parameters:
+        -----------
+        split_start: int
+            Where in the observation space the split should start.
         """
 
         super(SingleSplitObservationNetwork, self).__init__(**kw_args)

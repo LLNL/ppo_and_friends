@@ -17,7 +17,7 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
-from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
+from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler, FreezeCyclingScheduler
 import time
 from mpi4py import MPI
 
@@ -53,6 +53,7 @@ class PPO(object):
                  pretrained_policies = {},
                  env_state           = None,
                  freeze_policies     = [],
+                 freeze_scheduler    = None,
                  save_when           = None,
                  save_train_scores   = False,
                  pickle_class        = False,
@@ -148,6 +149,8 @@ class PPO(object):
         freeze_policies: list
             A list of policies to "freeze" the weights of. These policies will
             not be further trained and will merely act in the environment.
+        freeze_scheduler: FreezeCyclingScheduler
+            An optional scheduler to be used for "freeze cycling".
         save_when: subclass of ChangeInStateScheduler
             An instance of ChangeInStateScheduler
             that determines when to save. If None,
@@ -361,6 +364,7 @@ class PPO(object):
             self.status_dict[policy_id]["natural reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top natural reward"]   = -max_int
             self.status_dict[policy_id]["obs range"]            = (max_int, -max_int)
+            self.status_dict[policy_id]["frozen"]               = False
 
         #
         # Value normalization is discussed in multiple papers, so I'm not
@@ -506,9 +510,23 @@ class PPO(object):
 
             self.policies[policy_id].frozen = True
 
+        if freeze_scheduler is None:
+            self.freeze_scheduler = CallableValue(None)
+        else:
+            if not issubclass(type(freeze_scheduler), FreezeCyclingScheduler):
+                msg  = "ERROR: freeze_scheduler must be a subclass of "
+                msg += f"FreezeCyclingScheduler but received type "
+                msg += f"{type(freeze_scheduler)}"
+                rank_print(msg)
+                comm.Abort()
+
+            self.freeze_scheduler = freeze_scheduler
+
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
         self.save_when.finalize(self.status_dict)
+        self.freeze_scheduler.finalize(self.state_path, self.status_dict, self.policies)
+        self.freeze_scheduler.load_info()
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -1847,6 +1865,7 @@ class PPO(object):
             self.status_dict[policy_id]["obs range"]            = obs_range
             self.status_dict[policy_id]["natural reward range"] = rw_range
             self.status_dict[policy_id]["top natural reward"]   = global_top_reward
+            self.status_dict[policy_id]["frozen"]               = self.policies[policy_id].frozen
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_scores[policy_id].sum()
@@ -1907,6 +1926,8 @@ class PPO(object):
         iter_stop_time  = iter_start_time
 
         while self.status_dict["general"]["timesteps"] < ts_max:
+
+            self.freeze_scheduler()
 
             self.rollout()
 
@@ -2335,6 +2356,7 @@ class PPO(object):
                 for policy_id in self.value_normalizers:
                     self.value_normalizers[policy_id].save_info(self.state_path)
 
+            self.freeze_scheduler.save_info()
 
             file_name  = "state_0.pickle"
             state_file = os.path.join(self.state_path, file_name)
