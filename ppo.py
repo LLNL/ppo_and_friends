@@ -17,7 +17,8 @@ from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_
 from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
-from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler
+from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler, FreezeCyclingScheduler
+from pathlib import Path
 import time
 from mpi4py import MPI
 
@@ -50,6 +51,10 @@ class PPO(object):
                  frame_pause         = 0.0,
                  load_state          = False,
                  state_path          = "./saved_state",
+                 pretrained_policies = {},
+                 env_state           = None,
+                 freeze_policies     = [],
+                 freeze_scheduler    = None,
                  save_when           = None,
                  save_train_scores   = False,
                  pickle_class        = False,
@@ -133,6 +138,25 @@ class PPO(object):
             Should we load a saved state?
         state_path: str
             The path to save/load our state.
+        pretrained_policies: dict or str
+            Either a string indicating the state path to load all policies from
+            or a dictionary mapping policy ids to specific policy save directories.
+            The saved policies must have the same structure as the policies
+            defined for this training.
+            dict example:
+                {'policy_a' : '/foo/my-game/adversary-policy/latest', 
+                 'policy_b' : '/foo/my-game-2/agent-policy/100'}"
+
+            str example:
+                '/foo/my-game/'
+        env_state: str or None
+            An optional path to load environment state from. This is useful
+            when loading pre-trained policies.
+        freeze_policies: list
+            A list of policies to "freeze" the weights of. These policies will
+            not be further trained and will merely act in the environment.
+        freeze_scheduler: FreezeCyclingScheduler
+            An optional scheduler to be used for "freeze cycling".
         save_when: subclass of ChangeInStateScheduler
             An instance of ChangeInStateScheduler
             that determines when to save. If None,
@@ -315,22 +339,22 @@ class PPO(object):
 
         #
         # Create a dictionary to track the status of training.
-        # These entries can be general, agent specific, or
+        # These entries can be global, agent specific, or
         # policy specific.
         #
         max_int = np.iinfo(np.int32).max
 
         self.status_dict = {}
-        self.status_dict["general"] = {}
-        self.status_dict["general"]["iteration"]      = 0
-        self.status_dict["general"]["rollout time"]   = 0
-        self.status_dict["general"]["train time"]     = 0
-        self.status_dict["general"]["running time"]   = 0
-        self.status_dict["general"]["timesteps"]      = 0
-        self.status_dict["general"]["total episodes"] = 0
-        self.status_dict["general"]["longest run"]    = 0
-        self.status_dict["general"]["shortest run"]   = max_int
-        self.status_dict["general"]["average run"]    = 0
+        self.status_dict["global status"] = {}
+        self.status_dict["global status"]["iteration"]      = 0
+        self.status_dict["global status"]["rollout time"]   = 0
+        self.status_dict["global status"]["train time"]     = 0
+        self.status_dict["global status"]["running time"]   = 0
+        self.status_dict["global status"]["timesteps"]      = 0
+        self.status_dict["global status"]["total episodes"] = 0
+        self.status_dict["global status"]["longest run"]    = 0
+        self.status_dict["global status"]["shortest run"]   = max_int
+        self.status_dict["global status"]["average run"]    = 0
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -346,6 +370,7 @@ class PPO(object):
             self.status_dict[policy_id]["natural reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top natural reward"]   = -max_int
             self.status_dict[policy_id]["obs range"]            = (max_int, -max_int)
+            self.status_dict[policy_id]["frozen"]               = False
 
         #
         # Value normalization is discussed in multiple papers, so I'm not
@@ -380,20 +405,28 @@ class PPO(object):
 
         if load_state:
             if not os.path.exists(os.path.join(state_path, "state_0.pickle")):
-                msg  = "WARNING: state_path does not contained saved state. "
+                msg  = "WARNING: {state_path} does not contained saved state. "
                 rank_print(msg)
                 comm.Abort()
             else:
-                rank_print("Loading state from {}".format(state_path))
+                rank_print("Loading status and environment state from {}".format(state_path))
 
                 #
                 # Let's ensure backwards compatibility with previous commits.
                 #
-                tmp_status_dict = self.load_status()
+                tmp_status_dict = self.load_status(state_path)
 
                 for key in tmp_status_dict:
                     if key in self.status_dict:
                         self.status_dict[key] = tmp_status_dict[key]
+
+                if env_state is None:
+                    rank_print(f"Loading environment state from {env_state}")
+                    self.load_env_info(state_path)
+
+        if env_state is not None:
+            rank_print(f"Loading environment state from {env_state}")
+            self.load_env_info(env_state)
 
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
@@ -426,17 +459,79 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
 
+        pretrained_is_direct = True
+        if type(pretrained_policies) == str:
+            pretrained_path      = pretrained_policies
+            pretrained_policies  = {}
+            pretrained_is_direct = False
+
+            for policy_id in self.policies:
+                pretrained_policies[policy_id] = pretrained_path
+
+        elif type(pretrained_policies) != dict:
+            msg  = "ERROR: pretrained_policies must be of type str or "
+            msg += "dict but received {type(pretrained_policies)}"
+            rank_print(msg)
+            comm.Abort()
+
         #
         # Load the policies after they've been finalized.
         #
-        if load_state:
-            if os.path.exists(state_path):
-                rank_print("Loading policies from {}".format(state_path))
-                self.load_policies()
+        if load_state or len(pretrained_policies) > 0:
+
+            #
+            # First, load any policies that are local/not pretrained.
+            #
+            if load_state and os.path.exists(state_path):
+                for policy_id in self.policies:
+                    if policy_id not in pretrained_policies:
+                        rank_print(f"Loading latest policy {policy_id} from {state_path}")
+                        self.load_policy(policy_id, state_path)
+
+            #
+            # Second, load our pretrained policies.
+            #
+            for policy_id in pretrained_policies:
+                if policy_id not in self.policies:
+                    msg  = "ERROR: pre-trained policy {policy_id} is not "
+                    msg += "registered in this environment."
+                    rank_print(msg)
+                    comm.Abort()
+
+                pretrained_path = pretrained_policies[policy_id]
+                rank_print(f"Loading pre-trained policy {policy_id} from {pretrained_path}")
+
+                if pretrained_is_direct:
+                    self.direct_load_policy(policy_id, pretrained_path)
+                else:
+                    self.load_policy(policy_id, pretrained_path)
+
+        for policy_id in freeze_policies:
+            if policy_id not in self.policies:
+                msg  = "ERROR: freeze policy {policy_id} is not registered "
+                msg += "with this environment."
+                rank_print(msg) 
+                comm.Abort()
+
+            self.policies[policy_id].freeze()
+
+        if freeze_scheduler is None:
+            self.freeze_scheduler = CallableValue(None)
+        else:
+            if not issubclass(type(freeze_scheduler), FreezeCyclingScheduler):
+                msg  = "ERROR: freeze_scheduler must be a subclass of "
+                msg += f"FreezeCyclingScheduler but received type "
+                msg += f"{type(freeze_scheduler)}"
+                rank_print(msg)
+                comm.Abort()
+
+            self.freeze_scheduler = freeze_scheduler
 
         self.env.finalize(self.status_dict)
         self.soft_resets.finalize(self.status_dict)
         self.save_when.finalize(self.status_dict)
+        self.freeze_scheduler.finalize(self.state_path, self.status_dict, self.policies)
+        self.freeze_scheduler.load_info()
 
         #
         # If requested, pickle the entire class. This is useful for situations
@@ -1146,14 +1241,14 @@ class PPO(object):
         """
         rank_print("\n--------------------------------------------------------")
         rank_print("Status Report:")
-        for key in self.status_dict["general"]:
-
+        rank_print("  global status:")
+        for key in self.status_dict["global status"]:
             if key in ["running time", "rollout time", "train time"]:
-                pretty_time = format_seconds(self.status_dict["general"][key])
-                rank_print("  {}: {}".format(key, pretty_time))
+                pretty_time = format_seconds(self.status_dict["global status"][key])
+                rank_print("    {}: {}".format(key, pretty_time))
             else:
-                rank_print("  {}: {}".format(key,
-                    self.status_dict["general"][key]))
+                rank_print("    {}: {}".format(key,
+                    self.status_dict["global status"][key]))
 
         for policy_id in self.policies:
             rank_print("  {}:".format(policy_id))
@@ -1775,6 +1870,7 @@ class PPO(object):
             self.status_dict[policy_id]["obs range"]            = obs_range
             self.status_dict[policy_id]["natural reward range"] = rw_range
             self.status_dict[policy_id]["top natural reward"]   = global_top_reward
+            self.status_dict[policy_id]["frozen"]               = self.policies[policy_id].frozen
 
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_scores[policy_id].sum()
@@ -1797,11 +1893,11 @@ class PPO(object):
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
         avg_run          = comm.allreduce(avg_run, MPI.SUM) / num_procs
 
-        self.status_dict["general"]["total episodes"] += total_episodes
-        self.status_dict["general"]["longest run"]     = longest_run
-        self.status_dict["general"]["shortest run"]    = shortest_run
-        self.status_dict["general"]["average run"]     = avg_run
-        self.status_dict["general"]["timesteps"]      += total_rollout_ts
+        self.status_dict["global status"]["total episodes"] += total_episodes
+        self.status_dict["global status"]["longest run"]     = longest_run
+        self.status_dict["global status"]["shortest run"]    = shortest_run
+        self.status_dict["global status"]["average run"]     = avg_run
+        self.status_dict["global status"]["timesteps"]      += total_rollout_ts
 
         #
         # Finalize our datasets.
@@ -1811,7 +1907,7 @@ class PPO(object):
 
         comm.barrier()
         stop_time = time.time()
-        self.status_dict["general"]["rollout time"] = stop_time - start_time
+        self.status_dict["global status"]["rollout time"] = stop_time - start_time
 
     def learn(self, num_timesteps):
         """
@@ -1828,21 +1924,23 @@ class PPO(object):
             many timesteps were run during the last save.
         """
         start_time = time.time()
-        ts_max     = self.status_dict["general"]["timesteps"] + num_timesteps
-        iteration  = self.status_dict["general"]["iteration"]
+        ts_max     = self.status_dict["global status"]["timesteps"] + num_timesteps
+        iteration  = self.status_dict["global status"]["iteration"]
 
         iter_start_time = time.time()
         iter_stop_time  = iter_start_time
 
-        while self.status_dict["general"]["timesteps"] < ts_max:
+        while self.status_dict["global status"]["timesteps"] < ts_max:
+
+            self.freeze_scheduler()
 
             self.rollout()
 
             running_time    = (iter_stop_time - iter_start_time)
-            running_time   += self.status_dict["general"]["rollout time"]
+            running_time   += self.status_dict["global status"]["rollout time"]
             iter_start_time = time.time()
 
-            self.status_dict["general"]["running time"] += running_time
+            self.status_dict["global status"]["running time"] += running_time
 
             self.print_status()
 
@@ -1853,21 +1951,27 @@ class PPO(object):
                 self._save_natural_score_avg()
 
             data_loaders = {}
-            for key in self.policies:
-                data_loaders[key] = DataLoader(
-                    self.policies[key].dataset,
-                    batch_size = self.batch_size,
-                    shuffle    = True)
+            for policy_id in self.policies:
+                if not self.policies[policy_id].frozen:
+                    data_loaders[policy_id] = DataLoader(
+                        self.policies[policy_id].dataset,
+                        batch_size = self.batch_size,
+                        shuffle    = True)
+                else:
+                    data_loaders[policy_id] = None
 
             train_start_time = time.time()
 
-            for key in self.policies:
-                self.policies[key].train()
+            for policy_id in self.policies:
+                self.policies[policy_id].train()
 
             #
             # We train each policy separately.
             #
             for policy_id in data_loaders:
+
+                if self.policies[policy_id].frozen:
+                    continue
 
                 for epoch_idx in range(self.epochs_per_iter):
 
@@ -1918,10 +2022,10 @@ class PPO(object):
 
             now_time      = time.time()
             training_time = (now_time - train_start_time)
-            self.status_dict["general"]["train time"] = now_time - train_start_time
+            self.status_dict["global status"]["train time"] = now_time - train_start_time
 
             iteration += 1
-            self.status_dict["general"]["iteration"] = iteration
+            self.status_dict["global status"]["iteration"] = iteration
 
             self.update_learning_rate()
             self.update_entropy_weight()
@@ -2257,6 +2361,7 @@ class PPO(object):
                 for policy_id in self.value_normalizers:
                     self.value_normalizers[policy_id].save_info(self.state_path)
 
+            self.freeze_scheduler.save_info()
 
             file_name  = "state_0.pickle"
             state_file = os.path.join(self.state_path, file_name)
@@ -2266,9 +2371,14 @@ class PPO(object):
 
         comm.barrier()
 
-    def load_status(self):
+    def load_status(self, state_path):
         """
         Load our status dictionary from a restart.
+
+        Parameters:
+        -----------
+        state_path: str
+            The path to our saved state.
 
         Returns:
         --------
@@ -2276,33 +2386,77 @@ class PPO(object):
             The loaded status dictionary.
         """
         file_name  = "state_0.pickle"
-        state_file = os.path.join(self.state_path, file_name)
+        state_file = os.path.join(state_path, file_name)
 
         with open(state_file, "rb") as in_f:
             tmp_status_dict = pickle.load(in_f)
 
         return tmp_status_dict
 
-    def load_policies(self):
+    def load_policy(self, policy_id, state_path):
         """
         Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        policy_id: str
+            The id of the policy to load.
+        state_path: str
+            The state path to load the policy from.
+        """
+        self.policies[policy_id].load(state_path)
+
+        if self.normalize_values and policy_id in self.value_normalizers:
+            self.value_normalizers[policy_id].load_info(state_path)
+
+    def direct_load_policy(self, policy_id, policy_path):
+        """
+        Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        policy_id: str
+            The id of the policy to load.
+        state_path: str
+            The state path to load the policy from.
+        """
+        self.policies[policy_id].direct_load(policy_path)
+
+        state_path = Path(policy_path).parent.parent.absolute()
+
+        if self.normalize_values and policy_id in self.value_normalizers:
+            self.value_normalizers[policy_id].load_info(state_path)
+
+    def load_policies(self, state_path):
+        """
+        Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        state_path: str
+            The state path to load the policies from.
         """
         for policy_id in self.policies:
-            self.policies[policy_id].load(self.state_path)
+            self.load_policy(policy_id, state_path)
 
+    def load_env_info(self, env_info_path):
+        """
+        """
         if self.save_env_info and self.env != None:
-            self.env.load_info(self.state_path)
-
-        if self.normalize_values:
-            for policy_id in self.value_normalizers:
-                self.value_normalizers[policy_id].load_info(self.state_path)
+            self.env.load_info(env_info_path)
         
-    def load(self):
+    def load(self, state_path):
         """
         Load all information required for a restart.
+
+        Parameters:
+        -----------
+        state_path: str
+            The state path to load from.
         """
-        self.load_policies()
-        return self.load_status()
+        self.load_policies(state_path)
+        self.load_env_info(state_path)
+        return self.load_status(state_path)
 
     def _save_natural_score_avg(self):
         """

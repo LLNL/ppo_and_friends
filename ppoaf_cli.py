@@ -21,6 +21,40 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 
+def update_pretrained(arg_dict):
+    """
+    Validate and update the pretrained_policies argument in the
+    parsed args dict.
+
+    Parameters:
+    -----------
+    arg_dict: dict
+        The argument dictionary from parsed args.
+    """
+    pretrained_policies = arg_dict["pretrained_policies"]
+
+    if len(pretrained_policies) == 0:
+        msg  = "ERROR: invalid pretrained policies given, "
+        msg += "{pretrained_policies}"
+        rank_print(msg)
+        comm.Abort()
+
+    #
+    # If the string looks like a dictionary, we turn it into one. Otherwise,
+    # it better be an existing state path.
+    #
+    if pretrained_policies[0] == "{":
+        pretrained_policies = ast.literal_eval(pretrained_policies)
+
+    elif not os.path.exists(pretrained_policies):
+        msg  = "ERROR: pretrained_policies path {pretrained_policies} "
+        msg += "does not exist."
+        rank_print(msg)
+        comm.Abort()
+
+    arg_dict["pretrained_policies"] = pretrained_policies
+    return arg_dict
+
 def get_runner_class(runner_file):
     """
     Get the runner class from a runner file.
@@ -133,12 +167,28 @@ def cli():
     train_parser.add_argument("--clobber", action="store_true",
         help="Clobber any existing saves associated with this environment.")
 
-    #TODO: let's also let users stop at an iteration rather than timestep.
     train_parser.add_argument("--num_timesteps", default=1000000, type=int,
         help="The number of timesteps to train for.")
 
     train_parser.add_argument("--envs_per_proc", default=1, type=int,
         help="The number of environment instances each processor should have.")
+
+    train_parser.add_argument("--pretrained_policies", default="{}", type=str,
+        help="Where to load pre-trained policies from. This can either be a "
+        "string to a single state path where all policies should be loaded "
+        "from (latest saves) or a dictionary mapping policy ids to specific "
+        "save directories. Dict example: {'policy_a' : '/foo/my-game/adversary-policy/latest', "
+        "'policy_b' : '/foo/my-game-2/agent-policy/100'}. String example: "
+        "'/foo/my-game/'.")
+
+    train_parser.add_argument("--env_state", default=None, type=str,
+        help="An optional path to load pre-trained environment state from. "
+        "This will include normalizations like observation normalizers and "
+        "useful when loading pre-trained policies.")
+
+    train_parser.add_argument("--freeze_policies", nargs="+", type=str,
+        help="Which policies to 'freeze' the weights of. These policies "
+        "will NOT be further trained; they merely act in the environment.")
 
     #
     # 'test' command subparser
@@ -168,6 +218,19 @@ def cli():
 
     test_parser.add_argument("--gif_fps", type=int, default=15,
         help="The frames per second for rendering a gif.")
+
+    test_parser.add_argument("--pretrained_policies", default="{}", type=str,
+        help="Where to load pre-trained policies from. This can either be a "
+        "string to a single state path where all policies should be loaded "
+        "from (latest saves) or a dictionary mapping policy ids to specific "
+        "save directories. Dict example: {'policy_a' : '/foo/my-game/adversary-policy/latest', "
+        "'policy_b' : '/foo/my-game-2/agent-policy/100'}. String example: "
+        "'/foo/my-game/'.")
+
+    test_parser.add_argument("--env_state", default=None, type=str,
+        help="An optional path to load pre-trained environment state from. "
+        "This will include normalizations like observation normalizers and "
+        "useful when loading pre-trained policies.")
 
     #
     # 'plot' command subparser
@@ -237,6 +300,11 @@ def cli():
         runner_file             = arg_dict["runner"]
         force_deterministic     = arg_dict["force_deterministic"]
 
+        arg_dict["freeze_policies"] = [] if arg_dict["freeze_policies"] is None \
+            else arg_dict["freeze_policies"]
+
+        arg_dict = update_pretrained(arg_dict)
+
         #
         # Set random seeds (this doesn't guarantee reproducibility, but it should
         # help).
@@ -289,6 +357,9 @@ def cli():
         comm.barrier()
 
     elif args.command == "test":
+
+        arg_dict = update_pretrained(arg_dict)
+
         #
         # We parse again here because all args should be known. This is just
         # a safety measure.

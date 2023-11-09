@@ -189,6 +189,7 @@ class PPOPolicy():
         self.have_reset_constraints = False
         self.verbose                = verbose
         self.use_huber_loss         = use_huber_loss
+        self.frozen                 = False
 
         if callable(lr):
             self.lr = lr
@@ -638,6 +639,9 @@ class PPOPolicy():
         ending_rewards: array-like
             Ending rewards for the episode(s)
         """
+        if self.frozen:
+            return
+
         self.validate_agent_id(agent_id)
 
         for idx, env_i in enumerate(env_idxs):
@@ -931,6 +935,9 @@ class PPOPolicy():
         critic_loss: torch tensor
             The total loss for our critic.
         """
+        if self.frozen:
+            return
+
         #
         # Perform our backwards steps, and average gradients across ranks.
         #
@@ -982,6 +989,9 @@ class PPOPolicy():
         """
         Update the learning rate.
         """
+        if self.frozen:
+            return
+
         update_optimizer_lr(self.actor_optim, self.lr())
         update_optimizer_lr(self.critic_optim, self.lr())
 
@@ -1054,17 +1064,23 @@ class PPOPolicy():
         """
         return args
 
-    def save(self, save_path):
+    def save(self, save_path, tag="latest"):
         """
         Save our policy.
 
         Parameters:
         -----------
         save_path: str
-            The path to save the policy to.
+            The state path to save the policy to.
+        tag: str
+            An optional tag directory to save the network to. This
+            defaults to "latest".
         """
+        if type(tag) != str:
+            tag = str(tag)
+
         policy_dir = "{}-policy".format(self.name)
-        policy_save_path = os.path.join(save_path, policy_dir)
+        policy_save_path = os.path.join(save_path, policy_dir, tag)
 
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
@@ -1075,18 +1091,53 @@ class PPOPolicy():
         if self.enable_icm:
             self.icm_model.save(policy_save_path)
 
-    def load(self, load_path):
+    def load(self, load_path, tag="latest"):
         """
         Load our policy.
 
         Parameters:
         -----------
         load_path: str
-            The path to load the policy from.
+            The state path to load the policy from.
+        tag: str
+            An optional tag directory to load the network from. This
+            defaults to "latest".
         """
         policy_dir = "{}-policy".format(self.name)
-        policy_load_path = os.path.join(load_path, policy_dir)
+        policy_load_path = os.path.join(load_path, policy_dir, tag)
 
+        try:
+            self.actor.load(policy_load_path)
+            self.critic.load(policy_load_path)
+
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
+
+        except Exception as e:
+            if tag != "latest":
+                raise Exception(e)
+
+            #
+            # Backward compatibility. Support old saves that don't have 
+            # the "latest" dir.
+            #
+            policy_dir = "{}-policy".format(self.name)
+            policy_load_path = os.path.join(load_path, policy_dir)
+            self.actor.load(policy_load_path)
+            self.critic.load(policy_load_path)
+
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
+
+    def direct_load(self, policy_load_path):
+        """
+        Load our policy directly from the provided path.
+
+        Parameters:
+        -----------
+        policy_load_path: str
+            The direct path to load the policy from.
+        """
         self.actor.load(policy_load_path)
         self.critic.load(policy_load_path)
 
@@ -1112,6 +1163,18 @@ class PPOPolicy():
 
         if self.enable_icm:
             self.icm_model.train()
+
+    def freeze(self):
+        """
+        Freeze the poicy so that its weights are not updated.
+        """
+        self.frozen = True
+
+    def unfreeze(self):
+        """
+        Un-freeze the poicy so that its weights will be updated.
+        """
+        self.frozen = False
 
     def __getstate__(self):
         """
