@@ -10,6 +10,25 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class MPESimpleTagRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--freeze_cycling", action="store_true",
+            help="Use 'freeze cycling'.")
+
+        return parser
+
     def run(self):
 
         policy_map = lambda name : 'adversary' if 'adversary' in name \
@@ -66,6 +85,14 @@ class MPESimpleTagRunner(GymRunner):
                  policy_args),
         }
 
+        freeze_scheduler = None
+        if self.cli_args.freeze_cycling:
+            freeze_scheduler = FreezeCyclingScheduler(
+                policy_groups = [["agent"], ["adversary"]],
+                iterations    = 50,
+                delay         = 50,
+                verbose       = True)
+
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
@@ -76,4 +103,5 @@ class MPESimpleTagRunner(GymRunner):
                      obs_clip            = None,
                      normalize_rewards   = False,
                      reward_clip         = None,
+                     freeze_scheduler    = freeze_scheduler,
                      **self.kw_run_args)
