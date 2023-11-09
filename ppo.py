@@ -18,6 +18,7 @@ from ppo_and_friends.utils.mpi_utils import mpi_avg
 from ppo_and_friends.utils.mpi_utils import rank_print, set_torch_threads
 from ppo_and_friends.utils.misc import format_seconds
 from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler, FreezeCyclingScheduler
+from pathlib import Path
 import time
 from mpi4py import MPI
 
@@ -138,11 +139,16 @@ class PPO(object):
         state_path: str
             The path to save/load our state.
         pretrained_policies: dict or str
-            Either a dictionary mapping policy ids to state paths to load those
-            policies from or a string indicating the state path to load all
-            policies from.
+            Either a string indicating the state path to load all policies from
+            or a dictionary mapping policy ids to specific policy save directories.
             The saved policies must have the same structure as the policies
             defined for this training.
+            dict example:
+                {'policy_a' : '/foo/my-game/adversary-policy/latest', 
+                 'policy_b' : '/foo/my-game-2/agent-policy/100'}"
+
+            str example:
+                '/foo/my-game/'
         env_state: str or None
             An optional path to load environment state from. This is useful
             when loading pre-trained policies.
@@ -453,9 +459,11 @@ class PPO(object):
                 self.status_dict[policy_id]["intr reward weight"] = \
                     policy.intr_reward_weight()
 
+        pretrained_is_direct = True
         if type(pretrained_policies) == str:
-            pretrained_path = pretrained_policies
-            pretrained_policies = {}
+            pretrained_path      = pretrained_policies
+            pretrained_policies  = {}
+            pretrained_is_direct = False
 
             for policy_id in self.policies:
                 pretrained_policies[policy_id] = pretrained_path
@@ -477,7 +485,7 @@ class PPO(object):
             if load_state and os.path.exists(state_path):
                 for policy_id in self.policies:
                     if policy_id not in pretrained_policies:
-                        rank_print(f"Loading policiy {policy_id} from {state_path}")
+                        rank_print(f"Loading latest policy {policy_id} from {state_path}")
                         self.load_policy(policy_id, state_path)
 
             #
@@ -491,15 +499,12 @@ class PPO(object):
                     comm.Abort()
 
                 pretrained_path = pretrained_policies[policy_id]
-
-                if not os.path.exists(os.path.join(pretrained_path, "state_0.pickle")):
-                    msg  = "ERROR: {pretrained_path} does not contained "
-                    msg += "pretrained policies to load."
-                    rank_print(msg)
-                    comm.Abort()
-
                 rank_print(f"Loading pre-trained policy {policy_id} from {pretrained_path}")
-                self.load_policy(policy_id, pretrained_path)
+
+                if pretrained_is_direct:
+                    self.direct_load_policy(policy_id, pretrained_path)
+                else:
+                    self.load_policy(policy_id, pretrained_path)
 
         for policy_id in freeze_policies:
             if policy_id not in self.policies:
@@ -508,7 +513,7 @@ class PPO(object):
                 rank_print(msg) 
                 comm.Abort()
 
-            self.policies[policy_id].frozen = True
+            self.policies[policy_id].freeze()
 
         if freeze_scheduler is None:
             self.freeze_scheduler = CallableValue(None)
@@ -2400,6 +2405,24 @@ class PPO(object):
             The state path to load the policy from.
         """
         self.policies[policy_id].load(state_path)
+
+        if self.normalize_values and policy_id in self.value_normalizers:
+            self.value_normalizers[policy_id].load_info(state_path)
+
+    def direct_load_policy(self, policy_id, policy_path):
+        """
+        Load our policies and related state from a checkpoint.
+
+        Parameters:
+        -----------
+        policy_id: str
+            The id of the policy to load.
+        state_path: str
+            The state path to load the policy from.
+        """
+        self.policies[policy_id].direct_load(policy_path)
+
+        state_path = Path(policy_path).parent.parent.absolute()
 
         if self.normalize_values and policy_id in self.value_normalizers:
             self.value_normalizers[policy_id].load_info(state_path)

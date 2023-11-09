@@ -77,7 +77,7 @@ class PPONetwork(ABC, nn.Module):
         output    = output.reshape(out_shape)
         return output
 
-    def save(self, path, tag=""):
+    def save(self, path):
         """
         Save our state dict to a specified path using the
         class name as an identifier.
@@ -86,21 +86,16 @@ class PPONetwork(ABC, nn.Module):
         -----------
         path: str
             The path to save to.
-        tag: str
-            An optional tag to add to our state dict file.
         """
 
         if self.test_mode:
             return
 
-        if tag != "":
-            tag = f"_{tag}"
-
-        f_name = "{}_{}{}.model".format(self.name, rank, tag)
+        f_name = "{}_{}.model".format(self.name, rank)
         out_f  = os.path.join(path, f_name)
         torch.save(self.state_dict(), out_f)
 
-    def load(self, path, tag=""):
+    def load(self, path):
         """
         Load a state dict that was previously save using this class.
         It's assumed that the name will match this class's name.
@@ -109,17 +104,12 @@ class PPONetwork(ABC, nn.Module):
         -----------
         path: str
             The path to save to.
-        tag: str
-            An optional tag to add to our state dict file.
         """
 
-        if tag != "":
-            tag = f"_{tag}"
-
         if self.test_mode:
-            f_name = "{}_0{}.model".format(self.name, tag)
+            f_name = "{}_0.model".format(self.name)
         else:
-            f_name = "{}_{}{}.model".format(self.name, rank, tag)
+            f_name = "{}_{}.model".format(self.name, rank)
 
         in_f = os.path.join(path, f_name)
 

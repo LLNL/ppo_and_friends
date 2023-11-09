@@ -1068,45 +1068,82 @@ class PPOPolicy():
         """
         return args
 
-    def save(self, save_path, tag=""):
+    def save(self, save_path, tag="latest"):
         """
         Save our policy.
 
         Parameters:
         -----------
         save_path: str
-            The path to save the policy to.
+            The state path to save the policy to.
         tag: str
-            An optional tag to add to the saved networks.
+            An optional tag directory to save the network to. This
+            defaults to "latest".
         """
+        if type(tag) != str:
+            tag = str(tag)
+
         policy_dir = "{}-policy".format(self.name)
-        policy_save_path = os.path.join(save_path, policy_dir)
+        policy_save_path = os.path.join(save_path, policy_dir, tag)
 
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
 
-        self.actor.save(policy_save_path, tag)
-        self.critic.save(policy_save_path, tag)
+        self.actor.save(policy_save_path)
+        self.critic.save(policy_save_path)
 
         if self.enable_icm:
             self.icm_model.save(policy_save_path)
 
-    def load(self, load_path, tag=""):
+    def load(self, load_path, tag="latest"):
         """
         Load our policy.
 
         Parameters:
         -----------
         load_path: str
-            The path to load the policy from.
+            The state path to load the policy from.
         tag: str
-            An optional tag to add to the saved networks.
+            An optional tag directory to load the network from. This
+            defaults to "latest".
         """
         policy_dir = "{}-policy".format(self.name)
-        policy_load_path = os.path.join(load_path, policy_dir)
+        policy_load_path = os.path.join(load_path, policy_dir, tag)
 
-        self.actor.load(policy_load_path, tag)
-        self.critic.load(policy_load_path, tag)
+        try:
+            self.actor.load(policy_load_path)
+            self.critic.load(policy_load_path)
+
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
+
+        except Exception as e:
+            if tag != "latest":
+                raise Exception(e)
+
+            #
+            # Backward compatibility. Support old saves that don't have 
+            # the "latest" dir.
+            #
+            policy_dir = "{}-policy".format(self.name)
+            policy_load_path = os.path.join(load_path, policy_dir)
+            self.actor.load(policy_load_path)
+            self.critic.load(policy_load_path)
+
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
+
+    def direct_load(self, policy_load_path):#FIXME: remove?
+        """
+        Load our policy directly from the provided path.
+
+        Parameters:
+        -----------
+        policy_load_path: str
+            The direct path to load the policy from.
+        """
+        self.actor.load(policy_load_path)
+        self.critic.load(policy_load_path)
 
         if self.enable_icm:
             self.icm_model.load(policy_load_path)
