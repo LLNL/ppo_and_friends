@@ -56,7 +56,9 @@ class PPO(object):
                  freeze_policies     = [],
                  freeze_scheduler    = None,
                  save_when           = None,
-                 save_train_scores   = False,
+                 save_train_scores   = True,
+                 save_avg_ep_len     = True,
+                 save_running_time   = True,
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
@@ -164,6 +166,12 @@ class PPO(object):
         save_train_scores: bool
             If True, the extrinsic reward averages
             for each policy are saved every iteration.
+        save_avg_ep_len: bool
+            If True, the average episode length will be saved as
+            a curve for plotting.
+        save_running_time: bool
+            If True, the running time will be saved out as a curve every
+            iteration.
         pickle_class: bool
             When enabled, the entire PPO class will
             be pickled and saved into the output
@@ -305,6 +313,8 @@ class PPO(object):
         self.force_gc            = force_gc
         self.save_when           = save_when
         self.save_train_scores   = save_train_scores
+        self.save_avg_ep_len     = save_avg_ep_len
+        self.save_running_time   = save_running_time
 
         rank_print("Using device: {}".format(self.device))
         rank_print("Number of processors: {}".format(num_procs))
@@ -346,15 +356,15 @@ class PPO(object):
 
         self.status_dict = {}
         self.status_dict["global status"] = {}
-        self.status_dict["global status"]["iteration"]      = 0
-        self.status_dict["global status"]["rollout time"]   = 0
-        self.status_dict["global status"]["train time"]     = 0
-        self.status_dict["global status"]["running time"]   = 0
-        self.status_dict["global status"]["timesteps"]      = 0
-        self.status_dict["global status"]["total episodes"] = 0
-        self.status_dict["global status"]["longest run"]    = 0
-        self.status_dict["global status"]["shortest run"]   = max_int
-        self.status_dict["global status"]["average run"]    = 0
+        self.status_dict["global status"]["iteration"]         = 0
+        self.status_dict["global status"]["rollout time"]      = 0
+        self.status_dict["global status"]["train time"]        = 0
+        self.status_dict["global status"]["running time"]      = 0
+        self.status_dict["global status"]["timesteps"]         = 0
+        self.status_dict["global status"]["total episodes"]    = 0
+        self.status_dict["global status"]["longest episode"]   = 0
+        self.status_dict["global status"]["shortest episode"]  = max_int
+        self.status_dict["global status"]["average episode"]   = 0
 
         for policy_id in self.policies:
             policy = self.policies[policy_id]
@@ -431,11 +441,22 @@ class PPO(object):
         if not os.path.exists(state_path) and rank == 0:
             os.makedirs(state_path)
 
-        if self.save_train_scores and rank == 0:
-            score_path = os.path.join(state_path, "scores")
+        self.curve_path       = os.path.join(state_path, "curves")
+        self.train_score_path = os.path.join(self.curve_path, "scores")
+        self.ep_len_path      = os.path.join(self.curve_path, "episode_length")
+        self.runtime_path     = os.path.join(self.curve_path, "runtime")
 
-            if not os.path.exists(score_path):
-                os.makedirs(score_path)
+        if self.save_train_scores and rank == 0:
+            if not os.path.exists(self.train_score_path):
+                os.makedirs(self.train_score_path)
+
+        if self.save_avg_ep_len and rank == 0:
+            if not os.path.exists(self.ep_len_path):
+                os.makedirs(self.ep_len_path)
+
+        if self.save_running_time and rank == 0:
+            if not os.path.exists(self.runtime_path):
+                os.makedirs(self.runtime_path)
 
         comm.barrier()
 
@@ -1893,11 +1914,11 @@ class PPO(object):
         total_rollout_ts = comm.allreduce(total_rollout_ts, MPI.SUM)
         avg_run          = comm.allreduce(avg_run, MPI.SUM) / num_procs
 
-        self.status_dict["global status"]["total episodes"] += total_episodes
-        self.status_dict["global status"]["longest run"]     = longest_run
-        self.status_dict["global status"]["shortest run"]    = shortest_run
-        self.status_dict["global status"]["average run"]     = avg_run
-        self.status_dict["global status"]["timesteps"]      += total_rollout_ts
+        self.status_dict["global status"]["total episodes"]  += total_episodes
+        self.status_dict["global status"]["longest episode"]  = longest_run
+        self.status_dict["global status"]["shortest episode"] = shortest_run
+        self.status_dict["global status"]["average episode"]  = avg_run
+        self.status_dict["global status"]["timesteps"]       += total_rollout_ts
 
         #
         # Finalize our datasets.
@@ -1949,6 +1970,12 @@ class PPO(object):
 
             if self.save_train_scores:
                 self._save_natural_score_avg()
+
+            if self.save_avg_ep_len:
+                self._save_average_episode()
+
+            if self.save_running_time:
+                self._save_running_time()
 
             data_loaders = {}
             for policy_id in self.policies:
@@ -2463,13 +2490,38 @@ class PPO(object):
         Save the natural reward averages of each policy to numpy
         txt files.
         """
-        for policy_id in self.policies:
-            score = self.status_dict[policy_id]["natural score avg"]
-            score_f = os.path.join(self.state_path,
-                "scores", f"{policy_id}_scores.npy")
+        if rank == 0:
+            for policy_id in self.policies:
+                score = self.status_dict[policy_id]["natural score avg"]
+                score_f = os.path.join(self.train_score_path,
+                    f"{policy_id}_scores.npy")
 
-            with open(score_f, "ab") as out_f:
-                np.savetxt(out_f, np.array([score]))
+                with open(score_f, "ab") as out_f:
+                    np.savetxt(out_f, np.array([score]))
+
+    def _save_average_episode(self):
+        """
+        Save the average episode length to a numpy txt file.
+        """
+        if rank == 0:
+            avg_ep   = self.status_dict["global status"]["average episode"]
+            len_file = os.path.join(self.ep_len_path,
+                f"average_episode.npy")
+
+            with open(len_file, "ab") as out_f:
+                np.savetxt(out_f, np.array([avg_ep]))
+
+    def _save_running_time(self):
+        """
+        Save the current running time to a numpy txt file.
+        """
+        if rank == 0:
+            runtime      = self.status_dict["global status"]["running time"]
+            runtime_file = os.path.join(self.runtime_path,
+                f"running_time.npy")
+
+            with open(runtime_file, "ab") as out_f:
+                np.savetxt(out_f, np.array([runtime]))
 
     def set_test_mode(self, test_mode):
         """

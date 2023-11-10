@@ -12,7 +12,7 @@ import os
 import re
 import ast
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.plot_scores import plot_score_files
+from ppo_and_friends.utils.plotting import plot_curve_files
 import shutil
 from mpi4py import MPI
 
@@ -159,10 +159,20 @@ def cli():
     train_parser.add_argument("--state_path", default="./saved_states",
         help="Where to save states and policy info.")
 
-    train_parser.add_argument("--save_train_scores", action="store_true",
-        help="If True, each policy's extrinsic score average will be saved "
-        "in a text file every iteration. Each agent will have an individual "
-        "file in the state directory.")
+    train_parser.add_argument("--disable_save_train_scores",
+        action="store_true", help="By default, the 'natural score avg' for "
+        "each agent is saved into a numpy file during training. Enabling this "
+        "flag will disable this feature, and the scores will not be saved.")
+
+    train_parser.add_argument("--disable_save_avg_ep_len",
+        action="store_true", help="By default, the average episode length "
+        "is saved into a numpy file during training. Enabling this "
+        "flag will disable this feature.")
+
+    train_parser.add_argument("--disable_save_running_time",
+        action="store_true", help="By default, the running time "
+        "is saved into a numpy file during training. Enabling this "
+        "flag will disable this feature.")
 
     train_parser.add_argument("--clobber", action="store_true",
         help="Clobber any existing saves associated with this environment.")
@@ -205,13 +215,13 @@ def cli():
         "enabled during training.")
 
     test_parser.add_argument("--num_test_runs", type=int, default=1,
-        help="If used with --test, this will define the number of test "
+        help="This will define the number of test "
         "iterations that are run. The min, max, and average scores will "
         "be reported.")
 
     test_parser.add_argument("--save_test_scores", action="store_true",
-        help="If used with --test, the test scores for each agent will be "
-        "saved as a pickle file in the output directory.")
+        help="The test scores for each agent will be "
+        "saved to a yaml file in the output directory.")
 
     test_parser.add_argument("--render_gif", action="store_true",
         help="Render a gif when testing.")
@@ -238,11 +248,20 @@ def cli():
     plot_parser = subparser.add_parser("plot",
         help="Plot reward curves from trained policies.")
 
-    plot_parser.add_argument("scores", type=str, nargs="+", help="Paths to the "
+    plot_parser.add_argument("curves", type=str, nargs="+", help="Paths to the "
         "policy score files that you wish to plot. This can be paths "
         "to the actual score files, directories containing the score files, "
         "or directories containing sub-directories (at any depth) containing "
         "score files.")
+
+    plot_parser.add_argument("--curve_type", type=str, default="scores",
+        choices=["scores", "runtime", "episode_length"],
+        help="The 'curve_type' is used to refine searches for saved curves "
+        "when the curve file is not explicitly set. For instance, if "
+        "a user sets 'curves' to a directory to be searched, the searching "
+        "algorithm will look for subdirectories named <curve_type> within "
+        "the 'curves' directory of state paths. Only these curves will be "
+        "collected.")
 
     plot_parser.add_argument("--search_patterns", type=str, nargs="+",
         help="Only grab plot files that contain these strings within "
@@ -258,7 +277,6 @@ def cli():
         "format is {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface' "
         ": {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is "
         "one of <, >, <=, >=, =.")
-       
 
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
@@ -285,7 +303,13 @@ def cli():
         msg += f"received type {type(status_constraints)}."
         assert type(status_constraints) == dict, msg
 
-        plot_score_files(args.scores, search_patterns, exclude_patterns, status_constraints)
+        plot_curve_files(
+            args.curve_type,
+            args.curves,
+            search_patterns,
+            exclude_patterns,
+            status_constraints)
+
         return
 
     elif args.command == "train":
@@ -299,6 +323,14 @@ def cli():
         random_seed             = arg_dict["random_seed"]
         runner_file             = arg_dict["runner"]
         force_deterministic     = arg_dict["force_deterministic"]
+
+        #
+        # We need to add the parameters for saving out curves. These are
+        # the inverse of the disabling flags.
+        #
+        arg_dict["save_train_scores"] = not arg_dict["disable_save_train_scores"]
+        arg_dict["save_avg_ep_len"]   = not arg_dict["disable_save_avg_ep_len"]
+        arg_dict["save_running_time"] = not arg_dict["disable_save_running_time"]
 
         arg_dict["freeze_policies"] = [] if arg_dict["freeze_policies"] is None \
             else arg_dict["freeze_policies"]
