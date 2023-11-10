@@ -1103,6 +1103,9 @@ class PPOPolicy():
             An optional tag directory to load the network from. This
             defaults to "latest".
         """
+        if type(tag) != str:
+            tag = str(tag)
+
         policy_dir = "{}-policy".format(self.name)
         policy_load_path = os.path.join(load_path, policy_dir, tag)
 
