@@ -1,6 +1,5 @@
 import torch
 import sys
-import dill as pickle
 import yaml
 from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
@@ -35,7 +34,7 @@ def test_policy(ppo,
     frame_pause: float
         If rendering, sleep frame_pause seconds between renderings.
     save_test_scores: bool
-        If True, save the agent scores to a pickled dictionary.
+        If True, save the agent scores to a yaml file.
     verbose: bool
         Enable verbosity?
     """
