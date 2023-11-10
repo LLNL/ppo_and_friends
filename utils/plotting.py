@@ -1,5 +1,5 @@
 """
-Plot save extrinsice score average files for policies.
+Plot curve files saved from ppoaf training.
 """
 import pickle
 import numpy as np
@@ -126,25 +126,25 @@ def include_plot_file(
             #
             # Get status file
             #
-            state_path  = Path(plot_file).parent.parent.absolute()
+            state_path  = Path(plot_file).parent.parent.parent.absolute()
             status_dict = get_status_dict(state_path)
             return status_conditions_are_met(status_conditions, status_dict)
 
     return False
 
-def find_score_files(
-    score_dir_name,
+def find_curve_files(
+    curve_dir_name,
     root,
     search_patterns,
     exclude_patterns,
     status_conditions):
     """
-    Recursively find all desired score files from a given path.
+    Recursively find all desired curve files from a given path.
 
     Parameters:
     -----------
-    score_dir_name: str
-        The name of the directory containing score files.
+    curve_dir_name: str
+        The name of the directory containing curve files.
     root: str
         The root directory to recursively search.
     search_patterns: array-like
@@ -163,35 +163,74 @@ def find_score_files(
     Returns:
     --------
     list:
-        Full paths to all score files that meet the given contraints.
+        Full paths to all curve files that meet the given contraints.
     """
-    score_files = []
+    curve_files = []
     for path, dirs, files in os.walk(root):
-        if score_dir_name in dirs:
-            score_dir = os.path.join(path, score_dir_name)
+        if curve_dir_name in dirs:
+            curve_dir = os.path.join(path, curve_dir_name)
 
-            np_files = os.path.join(score_dir, "*.npy")
+            np_files = os.path.join(curve_dir, "*.npy")
             for dir_file in glob.glob(np_files):
                 if include_plot_file(dir_file, search_patterns, exclude_patterns, status_conditions):
-                    score_files.append(dir_file)
+                    curve_files.append(dir_file)
 
-    return score_files
+    return curve_files
 
-def plot_score_files(
+
+def plot_curves_with_plotly(curve_files):
+    """
+    Plot a list of curve files with plotly.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of numpy txt files containing curves to plot.
+    """
+    curves      = []
+    curve_names = []
+    for cf in curve_files:
+        path_parts = cf.split(os.sep)
+        test_name  = path_parts[-3]
+        curve_name = path_parts[-1]
+        curve_name = " ".join(curve_name.split(".")[0].split("_"))
+        name       = f"{test_name} {curve_name}"
+
+        curve_names.append(name)
+        with open(cf, "rb") as in_f:
+            curves.append(np.loadtxt(in_f))
+
+    fig = go.Figure()
+
+    for i in range(len(curve_names)):
+        iterations = np.arange(curves[i].size)
+        fig.add_trace(go.Scatter(x=iterations, y=curves[i],
+                            mode='lines+markers',
+                            name=curve_names[i]))
+    
+    fig.show()
+
+def plot_curve_files(
+    curve_type,
     search_paths,
     search_patterns,
     exclude_patterns,
     status_conditions):
     """
-    Plot any number of score files using plotly.
+    Plot any number of curve files using plotly.
 
     Parameters:
     -----------
+    curve_type: str
+        The name of the curve type to search for. For instance, "scores" will
+        result in searching for scores. These curve types will be located in
+        <state_path>/curves/. A the time of writing this, curve types are
+        "scores", "episode_length", and "runtime".
     search_paths: array-like
-        Paths to the policy score files that you wish to plot. This can be paths
-        to the actual score files, directories containing the score files,
+        Paths to the policy curve files that you wish to plot. This can be paths
+        to the actual curve files, directories containing the curve files,
         or directories containing sub-directories (at any depth) containing
-        score files.
+        curve files. These curve files are numpy txt files.
     search_patterns: array-like
         Only plot files that contain these strings within their paths.
     exclude_patterns: array-like
@@ -203,37 +242,16 @@ def plot_score_files(
         : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
         one of <, >, <=, >=, =.
     """
-    score_files = []
+    curve_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
             if include_plot_file(sp, search_patterns, exclude_patterns, status_conditions):
-                score_files.append(sp) 
+                curve_files.append(sp) 
         else:
-            score_files.extend(find_score_files("scores", sp, search_patterns, exclude_patterns, status_conditions))
+            curve_files.extend(find_curve_files(curve_type, sp, search_patterns, exclude_patterns, status_conditions))
 
-    print(f"Found the following score files: \n{score_files}")
-    if len(score_files) == 0:
+    print(f"Found the following curve files: \n{curve_files}")
+    if len(curve_files) == 0:
         sys.exit()
 
-    score_arrays = []
-    score_names  = []
-    for sf in score_files:
-        path_parts = sf.split(os.sep)
-        test_name  = path_parts[-3]
-        score_name = path_parts[-1]
-        score_name = " ".join(score_name.split(".")[0].split("_"))
-        name       = f"{test_name} {score_name}"
-
-        score_names.append(name)
-        with open(sf, "rb") as in_f:
-            score_arrays.append(np.loadtxt(in_f))
-
-    fig = go.Figure()
-
-    for i in range(len(score_names)):
-        iterations = np.arange(score_arrays[i].size)
-        fig.add_trace(go.Scatter(x=iterations, y=score_arrays[i],
-                            mode='lines+markers',
-                            name=score_names[i]))
-    
-    fig.show()
+    plot_curves_with_plotly(curve_files)
