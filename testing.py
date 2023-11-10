@@ -1,6 +1,7 @@
 import torch
 import sys
 import dill as pickle
+import yaml
 from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
@@ -149,25 +150,23 @@ def test_policy(ppo,
     if save_test_scores:
         for agent_id in env.agent_ids:
             score_info[agent_id] = {\
-                "low_score"  : min_agent_scores[agent_id],
-                "high_score" : max_agent_scores[agent_id],
-                "avg_score"  : total_agent_scores[agent_id] / num_test_runs,
-                "policy"     : ppo.policy_mapping_fn(agent_id),
+                "low_score"  : float(min_agent_scores[agent_id]),
+                "high_score" : float(max_agent_scores[agent_id]),
+                "avg_score"  : float(total_agent_scores[agent_id] / num_test_runs),
+                "policy"     : str(ppo.policy_mapping_fn(agent_id)),
             }
 
         for policy_id in ppo.policies:
             score_info[policy_id] = {\
-                "low_score"  : min_policy_scores[policy_id],
-                "high_score" : max_policy_scores[policy_id],
-                "avg_score"  : total_policy_scores[policy_id] / num_test_runs,
+                "low_score"  : float(min_policy_scores[policy_id]),
+                "high_score" : float(max_policy_scores[policy_id]),
+                "avg_score"  : float(total_policy_scores[policy_id] / num_test_runs),
             }
 
+        score_file = os.path.join(ppo.state_path, "test-scores.yaml")
 
-        score_file = os.path.join(ppo.state_path, "test-scores.pickle")
-
-        with open(score_file, "wb") as out_f:
-            pickle.dump(score_info, out_f,
-                protocol=pickle.HIGHEST_PROTOCOL)
+        with open(score_file, "w") as out_f:
+            yaml.dump(score_info, out_f, default_flow_style=False)
 
     if render_gif:
         print("Attempting to create gif..")
