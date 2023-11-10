@@ -886,7 +886,7 @@ class MATPolicy(PPOPolicy):
         if self.enable_icm:
             update_optimizer_lr(self.icm_optim, self.icm_lr())
 
-    def save(self, save_path):
+    def save(self, save_path, tag="latest"):
         """
         Save our policy.
 
@@ -894,9 +894,15 @@ class MATPolicy(PPOPolicy):
         -----------
         save_path: str
             The path to save the policy to.
+        tag: str
+            An optional tag directory to save the network to. This
+            defaults to "latest".
         """
+        if type(tag) != str:
+            tag = str(tag)
+
         policy_dir = "{}-policy".format(self.name)
-        policy_save_path = os.path.join(save_path, policy_dir)
+        policy_save_path = os.path.join(save_path, policy_dir, tag)
 
         if rank == 0 and not os.path.exists(policy_save_path):
             os.makedirs(policy_save_path)
@@ -906,7 +912,7 @@ class MATPolicy(PPOPolicy):
         if self.enable_icm:
             self.icm_model.save(policy_save_path)
 
-    def load(self, load_path):
+    def load(self, load_path, tag="latest"):
         """
         Load our policy.
 
@@ -914,14 +920,37 @@ class MATPolicy(PPOPolicy):
         -----------
         load_path: str
             The path to load the policy from.
+        tag: str
+            An optional tag directory to load the network from. This
+            defaults to "latest".
         """
+        if type(tag) != str:
+            tag = str(tag)
+
         policy_dir = "{}-policy".format(self.name)
-        policy_load_path = os.path.join(load_path, policy_dir)
+        policy_load_path = os.path.join(load_path, policy_dir, tag)
 
-        self.actor_critic.load(policy_load_path)
+        try:
+            self.actor_critic.load(policy_load_path)
 
-        if self.enable_icm:
-            self.icm_model.load(policy_load_path)
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
+
+        except Exception as e:
+            if tag != "latest":
+                raise Exception(e)
+
+            #
+            # Backward compatibility. Support old saves that don't have 
+            # the "latest" dir.
+            #
+            policy_dir = "{}-policy".format(self.name)
+            policy_load_path = os.path.join(load_path, policy_dir)
+
+            self.actor_critic.load(policy_load_path)
+
+            if self.enable_icm:
+                self.icm_model.load(policy_load_path)
 
     def eval(self):
         """
