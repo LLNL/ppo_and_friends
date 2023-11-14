@@ -21,7 +21,7 @@ class AbmarlGridPosMazeRunner(EnvironmentRunner):
         lr = 0.0005
 
         entropy_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 0.03,
             compare_fn      = np.less_equal,
             status_triggers = [200, 100, 20],
