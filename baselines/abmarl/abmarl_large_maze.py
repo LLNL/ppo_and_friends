@@ -29,14 +29,14 @@ class AbmarlLargeMazeRunner(EnvironmentRunner):
         lr = 0.0005
         soft_resets = False
         intr_reward_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 1e-3,
             compare_fn      = np.less_equal,
             status_triggers = [4000, 3000, 2000, 500,],
             step_values     = [1e-4, 1e-5, 1e-6, 0.0,])
 
         entropy_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 0.04,
             compare_fn      = np.less_equal,
             status_triggers = [4000, 3000, 2000, 500],

@@ -149,7 +149,7 @@ class PressurePlateRunner(GymRunner):
             policy_type   = policy_type)
 
         save_when = ChangeInStateScheduler(
-            status_key  = "longest run",
+            status_key  = "longest episode",
             compare_fn  = np.less_equal,
             persistent  = True)
 
