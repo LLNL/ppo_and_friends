@@ -28,14 +28,14 @@ class AbmarlBlindMazeRunner(EnvironmentRunner):
         # exploring so much.
         #
         intr_reward_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 1e-2,
             compare_fn      = np.less_equal,
             status_triggers = [200, 100, 20,],
             step_values     = [1e-3, 1e-4, 0.0,])
 
         entropy_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 0.03,
             compare_fn      = np.less_equal,
             status_triggers = [200, 100, 20],
