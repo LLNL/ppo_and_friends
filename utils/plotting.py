@@ -191,7 +191,7 @@ def plot_curves_with_plotly(curve_files):
     curve_names = []
     for cf in curve_files:
         path_parts = cf.split(os.sep)
-        test_name  = path_parts[-3]
+        test_name  = path_parts[-4]
         curve_name = path_parts[-1]
         curve_name = " ".join(curve_name.split(".")[0].split("_"))
         name       = f"{test_name} {curve_name}"
