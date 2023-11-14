@@ -9,13 +9,13 @@ except ImportError:
 
 def get_custom_generator(env, **kwargs):
       """
-          Create a custom populated ParameterGenerator.
-          
-          This function recreates the exact same parameter set as the sample LULESH
-          specifications. The point of this file is to present an example of how to
-          generate custom parameters.
-          
-          :returns: A ParameterGenerator populated with parameters.
+      Create a custom populated ParameterGenerator.
+      
+      This function recreates the exact same parameter set as the sample LULESH
+      specifications. The point of this file is to present an example of how to
+      generate custom parameters.
+      
+      :returns: A ParameterGenerator populated with parameters.
       """
       import sys
       p_gen = ParameterGenerator()
@@ -32,14 +32,17 @@ def get_custom_generator(env, **kwargs):
       linked_ps = {}
       linked = {}
 
-      for k, val in yml["generator.parameters"].items():
+      for key, val in yml["generator.parameters"].items():
+
           if "values" in val:
               if isinstance(val["values"], (list,tuple)):
-                  p_in[k] = list(val["values"])
+                  p_in[key] = list(val["values"])
               else:
-                  p_in[k] = [val["values"],]
-              labels[k] = val["label"]
-          elif k == "LINKED":
+                  p_in[key] = [val["values"],]
+
+              labels[key] = val["label"]
+
+          elif key == "LINKED":
               linked = val
 
       for plink in linked:
@@ -51,22 +54,22 @@ def get_custom_generator(env, **kwargs):
       grid = ParameterGrid(p_in)
       p = {}
       for g in grid:
-          for k in g:
-              if k not in p:
-                  p[k] = [g[k], ]
-                  if k in linked_ps:
-                      for link in linked_ps[k]:
-                          p[link] = [linked_ps[k][link][p_in[k].index(g[k])],]
+          for key in g:
+              if key not in p:
+                  p[key] = [g[key], ]
+                  if key in linked_ps:
+                      for link in linked_ps[key]:
+                          p[link] = [linked_ps[key][link][p_in[key].index(g[key])],]
               else:
-                  p[k].append(g[k])
-                  if k in linked_ps:
-                      for link in linked_ps[k]:
-                          p[link].append(linked_ps[k][link][p_in[k].index(g[k])])
+                  p[key].append(g[key])
+                  if key in linked_ps:
+                      for link in linked_ps[key]:
+                          p[link].append(linked_ps[key][link][p_in[key].index(g[key])])
 
 
-      for k, val in p.items():
-          labels[k] = labels[k] + "_%%"
+      for key, val in p.items():
+          labels[key] = labels[key] + "_%%"
 
-      for k, val in p.items():
-          p_gen.add_parameter(k, val, labels[k])
+      for key, val in p.items():
+          p_gen.add_parameter(key, val, labels[key])
       return p_gen

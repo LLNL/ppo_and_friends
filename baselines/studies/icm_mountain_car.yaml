@@ -11,7 +11,7 @@ batch:
 env:
     variables:
         OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
-        ENV_PATH: source /usr/workspace/maguire7/virtual_env/ppo-af-dec//bin/activate
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/mountain_car.py
 
 generator.parameters:
