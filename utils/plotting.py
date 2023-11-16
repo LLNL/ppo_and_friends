@@ -8,6 +8,8 @@ import os
 import plotly.graph_objects as go
 import sys
 from pathlib import Path
+import difflib
+import plotly.express as px
 
 comp_str_map = {
     "<"  : np.less,
@@ -16,6 +18,27 @@ comp_str_map = {
     ">=" : np.greater_equal,
     "="  : np.equal,
 }
+
+def get_str_overlap(s1, s2):
+    """
+    Nice function for finding the overlap between two strings.
+    Taken from
+    https://stackoverflow.com/questions/14128763/how-to-find-the-overlap-between-2-sequences-and-return-it
+
+    Parameters:
+    -----------
+    s1: str
+        String 1.
+    s2: str
+        String 2.
+
+    Returns:
+    --------
+        The overlap between s1 and s2.
+    """
+    match = difflib.SequenceMatcher(None, s1, s2)
+    pos_a, pos_b, size = match.find_longest_match(0, len(s1), 0, len(s2)) 
+    return s1[pos_a : pos_a + size]
 
 def get_status_dict(state_path):
     """
@@ -178,7 +201,9 @@ def find_curve_files(
     return curve_files
 
 
-def plot_curves_with_plotly(curve_files):
+def plot_curves_with_plotly(
+    curve_files,
+    add_markers = False):
     """
     Plot a list of curve files with plotly.
 
@@ -186,6 +211,8 @@ def plot_curves_with_plotly(curve_files):
     -----------
     curve_files: array-like
         An array/list of numpy txt files containing curves to plot.
+    add_markers: bool
+        Should we add markers to our lines?
     """
     curves      = []
     curve_names = []
@@ -202,11 +229,125 @@ def plot_curves_with_plotly(curve_files):
 
     fig = go.Figure()
 
+    mode = "lines"
+    if add_markers:
+        mode = f"{mode}+markers"
+
     for i in range(len(curve_names)):
         iterations = np.arange(curves[i].size)
-        fig.add_trace(go.Scatter(x=iterations, y=curves[i],
-                            mode='lines+markers',
-                            name=curve_names[i]))
+        fig.add_trace(
+            go.Scatter(
+                x      = iterations,
+                y      = curves[i],
+                mode   = mode,
+                name   = curve_names[i]))
+    
+    fig.show()
+
+def plot_grouped_curves_with_plotly(
+    curve_files,
+    group_names = [],
+    add_markers = False,
+    verbose     = False):
+    """
+    Plot a list of curve file gruops with plotly. The std and mean of
+    each group will be plotted.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of lists containing numpy txt files containing curves
+        to plot. Each sub-list is considered a group.
+    group_names: list
+        An optional list of group names. If empty, a name will be auto-generated.
+        If not empty, there must be a name for every group.
+    add_markers: bool
+        Should we add markers to our lines?
+    verbose: bool
+        Enable verbosity?
+    """
+    fig    = go.Figure()
+    colors = px.colors.qualitative.Plotly
+
+    mean_mode = "lines"
+    if add_markers:
+        mean_mode = f"{mean_mode}+markers"
+
+    auto_group_name = True
+    if len(group_names) > 0:
+        msg  = "ERROR: when defining group_names, there must be a name "
+        msg += f"for every group. Found {len(group_names)} group names "
+        msg += f"and {len(curve_files)} groups."
+        assert len(curve_files) == len(group_names), msg
+
+        auto_group_name = False
+
+    for g_idx, group in enumerate(curve_files):
+        curves      = []
+        group_color = colors[g_idx]
+
+        if auto_group_name:
+            group_name = None
+        else:
+            group_name = group_names[g_idx]
+
+        for cf in group:
+            path_parts = cf.split(os.sep)
+            test_name  = path_parts[-4]
+            curve_name = path_parts[-1]
+            curve_name = " ".join(curve_name.split(".")[0].split("_"))
+            name       = f"{test_name} {curve_name}"
+
+            if auto_group_name:
+                if group_name is None:
+                    group_name = name
+                else:
+                    group_name = get_str_overlap(group_name, name)
+
+            with open(cf, "rb") as in_f:
+                curves.append(np.loadtxt(in_f))
+
+        x_size = curves[0].size
+        for c in curves:
+            msg  = "ERROR: grouped curves must all have the same number "
+            msg += "of iterations."
+            assert x_size == c.size, msg
+
+        if auto_group_name and group_name == "":
+            group_name = f"group_{g_idx}"
+            msg  = "WARNING: unable to find overlapping group name. "
+            msg += f"Defaulting to generic name '{group_name}'."
+            print(msg)
+
+        if verbose:
+            print(f"Adding group {group_name} with files {group}")
+
+        curve_stack = np.stack(curves)
+        std_min     = curve_stack.min(axis=0)
+        std_max     = curve_stack.max(axis=0)
+        mean        = curve_stack.mean(axis=0)
+
+        iterations = np.arange(x_size)
+
+        fig.add_trace(
+            go.Scatter(
+                x          = iterations,
+                y          = mean,
+                line       = dict(color=group_color),
+                mode       = mean_mode,
+                name       = group_name))
+
+        std_name = f"{group_name}_std"
+        fig.add_trace(
+            go.Scatter(
+                x          = np.concatenate([iterations, iterations[::-1]]),
+                y          = np.concatenate([std_max, std_min[::-1]]),
+                fill       = 'toself',
+                fillcolor  = group_color,
+                mode       = 'none',
+                opacity    = 0.2,
+                showlegend = False,
+                name       = std_name))
     
     fig.show()
 
@@ -215,7 +356,11 @@ def plot_curve_files(
     search_paths,
     search_patterns,
     exclude_patterns,
-    status_conditions):
+    status_conditions,
+    add_markers = False,
+    grouping    = False,
+    group_names = [],
+    verbose     = False):
     """
     Plot any number of curve files using plotly.
 
@@ -241,17 +386,51 @@ def plot_curve_files(
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
         : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
         one of <, >, <=, >=, =.
+    add_markers: bool
+        If True, add markers to the line plots.
+    grouping: bool
+        If grouping is True, curves will be grouped together
+        by their search paths. The std and mean of each group will be plotted.
+    group_names: list
+        An optional list of group names. If empty, a name will be auto-generated.
+        If not empty, there must be a name for every group.
+        Only applicable when grouping == True.
+    verbose: bool
+        Enable verbosity?
     """
     curve_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
             if include_plot_file(sp, search_patterns, exclude_patterns, status_conditions):
-                curve_files.append(sp) 
+                if grouping:
+                    curve_files.append([sp])
+                else:
+                    curve_files.append(sp)
         else:
-            curve_files.extend(find_curve_files(curve_type, sp, search_patterns, exclude_patterns, status_conditions))
+            path_files = find_curve_files(
+                curve_type,
+                sp,
+                search_patterns,
+                exclude_patterns,
+                status_conditions)
+
+            if grouping:
+                curve_files.append(path_files)
+            else:
+                curve_files.extend(path_files)
 
     print(f"Found the following curve files: \n{curve_files}")
     if len(curve_files) == 0:
         sys.exit()
 
-    plot_curves_with_plotly(curve_files)
+    if grouping:
+        plot_grouped_curves_with_plotly(
+            curve_files = curve_files,
+            group_names = group_names,
+            add_markers = add_markers,
+            verbose     = verbose)
+    else:
+        plot_curves_with_plotly(
+            curve_files = curve_files,
+            add_markers = add_markers)
+
