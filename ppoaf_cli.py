@@ -278,6 +278,20 @@ def cli():
         ": {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is "
         "one of <, >, <=, >=, =.")
 
+    plot_parser.add_argument("--grouping", action="store_true",
+        help="If enabled, all curves from specified paths will be "
+        "grouped together by their given paths. The curves within "
+        "each group will be used to define a std and mean, which will be "
+        "plotted per group.")
+
+    plot_parser.add_argument("--group_names", type=str, nargs="+",
+        help="If --grouping is True, this flag can be used to assign "
+        "names to each of the groups. The number of group_names MUST "
+        "match the number of groups.")
+
+    plot_parser.add_argument("--verbose", action="store_true",
+        help="Enable verbosity.")
+
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
@@ -298,17 +312,25 @@ def cli():
         search_patterns    = [""] if args.search_patterns is None else args.search_patterns
         exclude_patterns   = [] if args.exclude_patterns is None else args.exclude_patterns
         status_constraints = args.status_constraints
+        group_names        = [] if args.group_names is None else args.group_names
 
         msg  = f"ERROR: expected status_constraints to be of type dict but "
         msg += f"received type {type(status_constraints)}."
         assert type(status_constraints) == dict, msg
+
+        if not args.grouping and len(group_names) > 0:
+            print("ERROR: group_names can only be used when --grouping is True.")
+            sys.exit(1)
 
         plot_curve_files(
             args.curve_type,
             args.curves,
             search_patterns,
             exclude_patterns,
-            status_constraints)
+            status_constraints,
+            grouping    = args.grouping,
+            group_names = group_names,
+            verbose     = args.verbose)
 
         return
 
