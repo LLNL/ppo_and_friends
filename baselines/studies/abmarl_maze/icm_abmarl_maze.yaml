@@ -1,6 +1,6 @@
 description:
-    name: mountain_car_icm
-    description: Train mountain car with and without ICM
+    name: abmarl_maze_icm_search
+    description: Abmarl maze study
 
 batch:
     type: slurm
@@ -10,13 +10,13 @@ batch:
 
 env:
     variables:
-        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
+        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-abmarl-maze
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
-        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/mountain_car.py
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/abmarl/abmarl_large_grid_pos_maze.py
 
 generator.parameters:
     SEED:
-      values: [0, 1, 2, 3, 4]
+      values: [0]
       label: SEED.%%
     INVERSE_SIZE:
       values: [16, 32, 128]
@@ -25,7 +25,7 @@ generator.parameters:
       values: [16, 32, 128]
       label: FORWARD_SIZE.%%
     OBS_DIM:
-      values: [0, 1, 2]
+      values: [3, 6, 9]
       label: OBS_DIM.%%
     ICM_LR:
       values: [0.0001, 0.001, 0.01]
@@ -33,9 +33,12 @@ generator.parameters:
     INTR_WEIGHT:
       values: [1.0, 0.01, 0.001]
       label: INTR_WEIGHT.%%
+    LR:
+      values: [0.01, 0.001, 0.0005, 0.0001]
+      label: LR.%%
 
 study:
-    - name: MountainCarICM
+    - name: AbmarlMaze
       description: Run an experiment with PPO-AF
       run:
           cmd: |
@@ -50,7 +53,8 @@ study:
                 --icm_encoded_obs_dim $(OBS_DIM) \
                 --icm_learning_rate $(ICM_LR) \
                 --intr_reward_weight $(INTR_WEIGHT) \
-                --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-seed_$(SEED)
+                --learning_rate $(LR) \
+                --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-lr_$(LR)-seed_$(SEED)
 
           nodes: 1
           procs: 36

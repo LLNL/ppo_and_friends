@@ -1,0 +1,45 @@
+description:
+    name: mountain_car_bs_clip_lr
+    description: Train mountain car with and without bootstrap clip
+
+batch:
+    type: slurm
+    host: pascal
+    bank: aiwargm
+    queue: pbatch
+
+env:
+    variables:
+        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/mountain_car.py
+
+generator.parameters:
+    BS_CLIP_MIN:
+      values: [0.0001]
+      label: BS_CLIP_MIN.%%
+    SEED:
+      values: [0]
+      label: SEED.%%
+    LR:
+      values: [0.01, 0.001, 0.0003, 0.0001]
+      label: LR.%%
+
+study:
+    - name: MountainCarBSClip-LR
+      description: Run an experiment with PPO-AF
+      run:
+          cmd: |
+            source $(ENV_PATH)
+
+            $(LAUNCHER) ppoaf train $(RUNNER) \
+                --num_timesteps 20_000_000 \
+                --random_seed $(SEED) \
+                --bs_clip_min $(BS_CLIP_MIN) \
+                --learning_rate $(LR) \
+                --state_tag seed_$(SEED)-lr_$(LR)-bs_clip_min_$(BS_CLIP_MIN)
+
+          nodes: 1
+          procs: 36
+          exclusive: True
+          walltime: "24:00:00"
