@@ -56,7 +56,7 @@ class BreakoutPixelsRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-1., 1.),
+            "bootstrap_clip"   : (-1., 100.),
             "target_kl"        : 0.2,
         }
 

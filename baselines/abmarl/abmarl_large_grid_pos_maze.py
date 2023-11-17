@@ -63,7 +63,7 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
         # Decay entropy as our policy converges.
         #
         entropy_weight = LinearStepScheduler(
-            status_key      = "longest run",
+            status_key      = "longest episode",
             initial_value   = 0.04,
             compare_fn      = np.less_equal,
             status_triggers = [4000, 3000, 2000, 500],
