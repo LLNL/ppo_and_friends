@@ -5,6 +5,7 @@ from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
+import numpy as np
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 @ppoaf_runner
@@ -27,7 +28,7 @@ class AntRunner(GymRunner):
         parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
         parser.add_argument("--bs_clip_max", default=np.inf, type=float)
 
-        parser.add_argument("--learning_rate", default=5e-4, type=float)
+        parser.add_argument("--learning_rate", default=0.00025, type=float)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -56,12 +57,6 @@ class AntRunner(GymRunner):
 
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
-
-        lr = LinearScheduler(
-            status_key    = "iteration",
-            status_max    = 100,
-            max_value     = 0.00025,
-            min_value     = 0.0001)
 
         bs_clip_min = self.cli_args.bs_clip_min
         bs_clip_max = self.cli_args.bs_clip_max

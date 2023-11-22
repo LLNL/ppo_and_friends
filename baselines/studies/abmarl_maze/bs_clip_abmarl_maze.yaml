@@ -16,14 +16,23 @@ env:
 
 generator.parameters:
     BS_CLIP_MIN:
-      values: [-1.0, 0.0, 0.01, 1.0e-4, 1.0e-5, 1.0e-6, 1.0e-7]
+      values: [-0.001, -0.0001, -0.00001, 0.0, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]
       label: BS_CLIP_MIN.%%
     SEED:
       values: [0]
       label: SEED.%%
     LR:
-      values: [0.01, 0.001, 0.0005, 0.0001]
+      values: [0.001, 0.0003, 0.0005, 0.0001]
       label: LR.%%
+    ACTOR_HIDDEN:
+      values: [16, 32, 64, 128, 256]
+      label: ACTOR_HIDDEN.%%
+    CRITIC_MULT:
+      values: [1, 2]
+      label: CRITIC_MULT.%%
+    TS_PER_EP:
+      values: [16, 32, 64, 128, 256]
+      label: TS_PER_EP.%%
 
 study:
     - name: AbmarlMaze
@@ -37,7 +46,10 @@ study:
                 --random_seed $(SEED) \
                 --bs_clip_min $(BS_CLIP_MIN) \
                 --learning_rate $(LR) \
-                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)-lr_$(LR)
+                --actor_hidden $(ACTOR_HIDDEN) \
+                --critic_hidden_mult $(CRITIC_MULT) \
+                --max_ts_per_ep $(TS_PER_EP) \
+                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)-lr_$(LR)-actor_hidden_$(ACTOR_HIDDEN)-critic_mult_$(CRITIC_MULT)-ts_per_ep_$(TS_PER_EP)
 
           nodes: 1
           procs: 36

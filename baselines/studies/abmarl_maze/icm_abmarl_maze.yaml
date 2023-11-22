@@ -34,7 +34,7 @@ generator.parameters:
       values: [1.0, 0.01, 0.001]
       label: INTR_WEIGHT.%%
     LR:
-      values: [0.01, 0.001, 0.0005, 0.0001]
+      values: [0.001, 0.0003, 0.0005, 0.0001]
       label: LR.%%
 
 study:
