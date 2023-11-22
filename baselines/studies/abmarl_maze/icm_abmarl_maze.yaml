@@ -1,5 +1,5 @@
 description:
-    name: abmarl_maze_icm_search
+    name: abmarl_maze_icm_search_fixed_from_bs
     description: Abmarl maze study
 
 batch:
@@ -36,6 +36,15 @@ generator.parameters:
     LR:
       values: [0.001, 0.0003, 0.0005, 0.0001]
       label: LR.%%
+    ACTOR_HIDDEN:
+      values: [64]
+      label: ACTOR_HIDDEN.%%
+    CRITIC_MULT:
+      values: [2]
+      label: CRITIC_MULT.%%
+    TS_PER_EP:
+      values: [256]
+      label: TS_PER_EP.%%
 
 study:
     - name: AbmarlMaze
@@ -54,6 +63,9 @@ study:
                 --icm_learning_rate $(ICM_LR) \
                 --intr_reward_weight $(INTR_WEIGHT) \
                 --learning_rate $(LR) \
+                --actor_hidden $(ACTOR_HIDDEN) \
+                --critic_hidden_mult $(CRITIC_MULT) \
+                --max_ts_per_ep $(TS_PER_EP) \
                 --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-lr_$(LR)-seed_$(SEED)
 
           nodes: 1
