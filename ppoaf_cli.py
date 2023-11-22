@@ -292,6 +292,16 @@ def cli():
     plot_parser.add_argument("--verbose", action="store_true",
         help="Enable verbosity.")
 
+    plot_parser.add_argument("--floor", type=float, default=-np.inf,
+        help="Only plot curves that have the following characterstic: <floor> "
+        "is exceeded at least once within the curve, AND, once <floor> has been "
+        "exceeded, the curve never drops below <floor>.")
+
+    plot_parser.add_argument("--ceiling", type=float, default=np.inf,
+        help="Only plot curves that have the following characterstic: the "
+        "curve drops below <ceil> at least once, AND, once the curve is "
+        "below <ceil>, it never exceeds <ceil> again.")
+
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
@@ -330,7 +340,9 @@ def cli():
             status_constraints,
             grouping    = args.grouping,
             group_names = group_names,
-            verbose     = args.verbose)
+            verbose     = args.verbose,
+            floor       = args.floor,
+            ceil        = args.ceiling)
 
         return
 

@@ -19,6 +19,91 @@ comp_str_map = {
     "="  : np.equal,
 }
 
+def filter_curves_by_floor(curve_files, floor):
+    """
+    Filter out curve files by a given floor.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    keeper_curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+
+            #
+            # Make sure that this curve exceeds the floor at least once.
+            # if not, scrap it.
+            #
+            where_greater = np.where(curve > floor)[0]
+            if where_greater.size == 0:
+                continue
+
+            #
+            # Make sure that, once the curve has exceeded floor, it no
+            # longer dips below.
+            #
+            g_start = where_greater[0]
+            if np.where(curve[g_start : ] < floor)[0].size == 0:
+                keeper_curves.append(cf)
+
+    return keeper_curves
+
+def filter_curves_by_ceil(curve_files, ceil):
+    """
+    Filter out curve files by a given ceil.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    keeper_curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+
+            #
+            # Make sure that this curve drops below ceil at least once.
+            # if not, scrap it.
+            #
+            where_greater = np.where(curve < ceil)[0]
+            if where_greater.size == 0:
+                continue
+
+            #
+            # Make sure that, once the curve has dropped below ceil, it no
+            # longer exceeds it.
+            #
+            g_start = where_greater[0]
+            if np.where(curve[g_start : ] > ceil)[0].size == 0:
+                keeper_curves.append(cf)
+
+    return keeper_curves
+
+
 def get_str_overlap(s1, s2):
     """
     Nice function for finding the overlap between two strings.
@@ -360,6 +445,8 @@ def plot_curve_files(
     add_markers = False,
     grouping    = False,
     group_names = [],
+    floor       = -np.inf,
+    ceil        = np.inf,
     verbose     = False):
     """
     Plot any number of curve files using plotly.
@@ -395,6 +482,14 @@ def plot_curve_files(
         An optional list of group names. If empty, a name will be auto-generated.
         If not empty, there must be a name for every group.
         Only applicable when grouping == True.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
     verbose: bool
         Enable verbosity?
     """
@@ -418,6 +513,9 @@ def plot_curve_files(
                 curve_files.append(path_files)
             else:
                 curve_files.extend(path_files)
+
+    curve_files = filter_curves_by_floor(curve_files, floor)
+    curve_files = filter_curves_by_ceil(curve_files, ceil)
 
     print(f"Found the following curve files: \n{curve_files}")
     if len(curve_files) == 0:
