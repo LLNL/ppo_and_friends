@@ -302,6 +302,14 @@ def cli():
         "curve drops below <ceil> at least once, AND, once the curve is "
         "below <ceil>, it never exceeds <ceil> again.")
 
+    plot_parser.add_argument("--top", type=int, default=0,
+        help="If > 0, only plot the highest <top> curves. Each curve is "
+        "summed along the x axis before comparisons are made.")
+
+    plot_parser.add_argument("--bottom", type=int, default=0,
+        help="If > 0, only plot the lowest <bottom> curves. Each curve is "
+        "summed along the x axis before comparisons are made.")
+
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
@@ -342,7 +350,9 @@ def cli():
             group_names = group_names,
             verbose     = args.verbose,
             floor       = args.floor,
-            ceil        = args.ceiling)
+            ceil        = args.ceiling,
+            top         = args.top,
+            bottom      = args.bottom)
 
         return
 

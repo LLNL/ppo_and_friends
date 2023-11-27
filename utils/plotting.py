@@ -103,6 +103,94 @@ def filter_curves_by_ceil(curve_files, ceil):
 
     return keeper_curves
 
+def get_curves_from_files(curve_files):
+    """
+    Load all curves from the given files into a list of numpy arrays.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+
+    Returns:
+    --------
+    list:
+        A list of numpy arrays.
+    """
+    curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+            curves.append(curve)
+
+    return curves
+
+def get_sorted_curve_files(curve_files):
+    """
+    Get a version of the curve files that is sorted from lowest to highest
+    sum.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+
+    Returns:
+    --------
+    list:
+        A list of sorted curve_files.
+    """
+    curves = get_curves_from_files(curve_files)
+    curves = [c.sum() for c in curves]
+
+    sorted_idxs = np.argsort(curves)
+    return np.array(curve_files)[sorted_idxs]
+
+def filter_curves_by_top(curve_files, top):
+    """
+    Filter out curve files by only keeping the highest <top> curves.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    top: int
+        After all curves are ranked in descending order, only return the
+        highest <top> curves.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    sorted_cf = get_sorted_curve_files(curve_files)
+    sorted_cf = np.flip(sorted_cf)
+
+    return sorted_cf[:top]
+
+def filter_curves_by_bottom(curve_files, bottom):
+    """
+    Filter out curve files by only keeping the highest <bottom> curves.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    bottom: int
+        After all curves are ranked in ascending order, only return the
+        lowest <bottom> curves.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    sorted_cf = get_sorted_curve_files(curve_files)
+    return sorted_cf[:bottom]
 
 def get_str_overlap(s1, s2):
     """
@@ -447,6 +535,8 @@ def plot_curve_files(
     group_names = [],
     floor       = -np.inf,
     ceil        = np.inf,
+    top         = 0,
+    bottom      = 0,
     verbose     = False):
     """
     Plot any number of curve files using plotly.
@@ -490,6 +580,12 @@ def plot_curve_files(
         Only plot curves that have the following characterstic: the
         curve drops below <ceil> at least once, AND, once the curve is
         below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
     verbose: bool
         Enable verbosity?
     """
@@ -516,6 +612,12 @@ def plot_curve_files(
 
     curve_files = filter_curves_by_floor(curve_files, floor)
     curve_files = filter_curves_by_ceil(curve_files, ceil)
+
+    if top > 0:
+        curve_files = filter_curves_by_top(curve_files, top)
+
+    if bottom > 0:
+        curve_files = filter_curves_by_bottom(curve_files, bottom)
 
     print(f"Found the following curve files: \n{curve_files}")
     if len(curve_files) == 0:
