@@ -263,9 +263,15 @@ def cli():
         "the 'curves' directory of state paths. Only these curves will be "
         "collected.")
 
-    plot_parser.add_argument("--search_patterns", type=str, nargs="+",
+    plot_parser.add_argument("--inclusive_search_patterns", "--isp",
+        type=str, nargs="+",
         help="Only grab plot files that contain these strings within "
-        "their path.")
+        "their path. ALL strings must be contained in every path.")
+
+    plot_parser.add_argument("--exclusive_search_patterns", "--esp",
+        type=str, nargs="+",
+        help="Only grab plot files that contain these strings within "
+        "their path. Only ONE string must be contained in each path.")
 
     plot_parser.add_argument("--exclude_patterns", type=str, nargs="+",
         help="Exclude any plot files that contain these strings in their "
@@ -327,7 +333,9 @@ def cli():
         # Our default search pattern list includes "" because we want
         # everything.
         #
-        search_patterns    = [""] if args.search_patterns is None else args.search_patterns
+        inclusive_search_patterns = [""] if args.inclusive_search_patterns is None else args.inclusive_search_patterns
+        exclusive_search_patterns = [""] if args.exclusive_search_patterns is None else args.exclusive_search_patterns
+
         exclude_patterns   = [] if args.exclude_patterns is None else args.exclude_patterns
         status_constraints = args.status_constraints
         group_names        = [] if args.group_names is None else args.group_names
@@ -341,18 +349,19 @@ def cli():
             sys.exit(1)
 
         plot_curve_files(
-            args.curve_type,
-            args.curves,
-            search_patterns,
-            exclude_patterns,
-            status_constraints,
-            grouping    = args.grouping,
-            group_names = group_names,
-            verbose     = args.verbose,
-            floor       = args.floor,
-            ceil        = args.ceiling,
-            top         = args.top,
-            bottom      = args.bottom)
+            curve_type                = args.curve_type,
+            search_paths              = args.curves,
+            inclusive_search_patterns = inclusive_search_patterns,
+            exclusive_search_patterns = exclusive_search_patterns,
+            exclude_patterns          = exclude_patterns,
+            status_constraints        = status_constraints,
+            grouping                  = args.grouping,
+            group_names               = group_names,
+            verbose                   = args.verbose,
+            floor                     = args.floor,
+            ceil                      = args.ceiling,
+            top                       = args.top,
+            bottom                    = args.bottom)
 
         return
 

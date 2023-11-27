@@ -38,6 +38,13 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         parser.add_argument("--icm_encoded_obs_dim", type=int, default=9)
         parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
         parser.add_argument("--intr_reward_weight", type=float, default=1.0)
+
+        parser.add_argument("--actor_hidden", type=int, default=128)
+        parser.add_argument("--critic_hidden_mult", type=int, default=2)
+
+        parser.add_argument("--max_ts_per_ep", type=int, default=64)
+
+        parser.add_argument("--mini_batch_size", type=int, default=512)
         return parser
 
     def run(self):
@@ -48,10 +55,17 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         actor_kw_args = {}
         actor_kw_args["std_offset"]  = 0.1
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 256
+        actor_kw_args["hidden_size"] = self.cli_args.actor_hidden
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 512
+        critic_kw_args["hidden_size"] = self.cli_args.actor_hidden * self.cli_args.critic_hidden_mult
+
+        icm_kw_args = {}
+        icm_kw_args["encoded_obs_dim"]      = self.cli_args.icm_encoded_obs_dim
+        icm_kw_args["inverse_hidden_depth"] = self.cli_args.icm_inverse_depth
+        icm_kw_args["inverse_hidden_size"]  = self.cli_args.icm_inverse_size
+        icm_kw_args["forward_hidden_depth"] = self.cli_args.icm_forward_depth
+        icm_kw_args["forward_hidden_size"]  = self.cli_args.icm_forward_size
 
         #
         # This environment is a pretty challenging one and can be
@@ -120,8 +134,9 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     batch_size         = 512,
-                     max_ts_per_ep      = 32,
+                     batch_size         = self.cli_args.mini_batch_size,
+                     epochs_per_iter    = 32,
+                     max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      ts_per_rollout     = ts_per_rollout,
                      normalize_obs      = True,
                      normalize_rewards  = True,

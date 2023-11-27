@@ -236,14 +236,14 @@ def get_status_dict(state_path):
 
     return status_dict
 
-def status_conditions_are_met(status_conditions, status_dict):
+def status_constraints_are_met(status_constraints, status_dict):
     """
     Determine whether or not status conditions are met within
     a particular status diciontary.
 
     Parameters:
     -----------
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -258,9 +258,9 @@ def status_conditions_are_met(status_conditions, status_dict):
         Whether or not all conditions are met.
     """
 
-    for key in status_conditions:
+    for key in status_constraints:
 
-        val = status_conditions[key]
+        val = status_constraints[key]
 
         if type(val) == tuple:
             comp_str, comp_val = val
@@ -275,30 +275,37 @@ def status_conditions_are_met(status_conditions, status_dict):
                 print(msg)
                 return False
 
-            if not status_conditions_are_met(status_conditions[key], status_dict[key.strip()]):
+            if not status_constraints_are_met(status_constraints[key], status_dict[key.strip()]):
                 return False
 
     return True
 
-def include_plot_file(
+def file_meets_patterns_and_conditions(
     plot_file,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions):
+    status_constraints):
     """
-    Given search and exclude patterns, should the plot file be included?
+    Does a given plot file meet search patterns, exclude patterns, and
+    status conditions?
 
     Parameters:
     -----------
     plot_file: str
         A path to a potential file to plot.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Array of strings representing patterns that should be plotted
-        (while excluding all others).
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Array of strings representing patterns that should be plotted
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Array of strings representing patterns that should not be plotted
         (while including all others).
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -308,32 +315,55 @@ def include_plot_file(
     Returns:
     --------
     bool:
-        Whether or not the plot file should be plotted. This will be True
-        iff all strings within search_patterns are contained within plot_file
-        and all strings within exclude_patterns are NOT contained within
-        plot_file.
+        Whether or not the plot file should be plotted.
     """
-    for s_p in search_patterns:
+    #
+    # Ensure that the file path contains ALL search patterns,
+    # contains NO exclude patterns, and meets all status conditions.
+    #
+    for s_p in inclusive_search_patterns:
         if s_p in plot_file:
             for e_p in exclude_patterns:
                 if e_p in plot_file:
                     return False
 
             #
-            # Get status file
+            # Get status file.
             #
             state_path  = Path(plot_file).parent.parent.parent.absolute()
             status_dict = get_status_dict(state_path)
-            return status_conditions_are_met(status_conditions, status_dict)
+
+            if not status_constraints_are_met(status_constraints, status_dict):
+                return False
+        else:
+            return False
+
+    if len(exclusive_search_patterns) == 0:
+        return True
+
+    for s_p in exclusive_search_patterns:
+        if s_p in plot_file:
+            for e_p in exclude_patterns:
+                if e_p in plot_file:
+                    return False
+
+            #
+            # Get status file.
+            #
+            state_path  = Path(plot_file).parent.parent.parent.absolute()
+            status_dict = get_status_dict(state_path)
+
+            return status_constraints_are_met(status_constraints, status_dict)
 
     return False
 
 def find_curve_files(
     curve_dir_name,
     root,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions):
+    status_constraints):
     """
     Recursively find all desired curve files from a given path.
 
@@ -343,13 +373,18 @@ def find_curve_files(
         The name of the directory containing curve files.
     root: str
         The root directory to recursively search.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Array of strings representing patterns that should be plotted
-        (while excluding all others).
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Array of strings representing patterns that should be plotted
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Array of strings representing patterns that should not be plotted
         (while including all others).
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -368,7 +403,13 @@ def find_curve_files(
 
             np_files = os.path.join(curve_dir, "*.npy")
             for dir_file in glob.glob(np_files):
-                if include_plot_file(dir_file, search_patterns, exclude_patterns, status_conditions):
+                if file_meets_patterns_and_conditions(
+                    dir_file,
+                    inclusive_search_patterns,
+                    exclusive_search_patterns,
+                    exclude_patterns,
+                    status_constraints):
+
                     curve_files.append(dir_file)
 
     return curve_files
@@ -527,17 +568,18 @@ def plot_grouped_curves_with_plotly(
 def plot_curve_files(
     curve_type,
     search_paths,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions,
-    add_markers = False,
-    grouping    = False,
-    group_names = [],
-    floor       = -np.inf,
-    ceil        = np.inf,
-    top         = 0,
-    bottom      = 0,
-    verbose     = False):
+    status_constraints,
+    add_markers               = False,
+    grouping                  = False,
+    group_names               = [],
+    floor                     = -np.inf,
+    ceil                      = np.inf,
+    top                       = 0,
+    bottom                    = 0,
+    verbose                   = False):
     """
     Plot any number of curve files using plotly.
 
@@ -553,11 +595,17 @@ def plot_curve_files(
         to the actual curve files, directories containing the curve files,
         or directories containing sub-directories (at any depth) containing
         curve files. These curve files are numpy txt files.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Only plot files that contain these strings within their paths.
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Only plot files that contain these strings within their paths.
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Only plot files that don't contain these strings within their paths.
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -592,7 +640,13 @@ def plot_curve_files(
     curve_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
-            if include_plot_file(sp, search_patterns, exclude_patterns, status_conditions):
+            if file_meets_patterns_and_conditions(
+                sp,
+                inclusive_search_patterns,
+                exclusive_search_patterns,
+                exclude_patterns,
+                status_constraints):
+
                 if grouping:
                     curve_files.append([sp])
                 else:
@@ -601,9 +655,10 @@ def plot_curve_files(
             path_files = find_curve_files(
                 curve_type,
                 sp,
-                search_patterns,
+                inclusive_search_patterns,
+                exclusive_search_patterns,
                 exclude_patterns,
-                status_conditions)
+                status_constraints)
 
             if grouping:
                 curve_files.append(path_files)

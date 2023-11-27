@@ -44,6 +44,7 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
         parser.add_argument("--max_ts_per_ep", type=int, default=64)
 
         parser.add_argument("--mini_batch_size", type=int, default=512)
+        parser.add_argument("--ts_per_rollout", type=int, default=4096)
         return parser
 
     def run(self):
@@ -96,7 +97,7 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
              policy_args)
         }
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(4096)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
