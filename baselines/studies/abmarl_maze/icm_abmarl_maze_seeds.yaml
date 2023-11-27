@@ -16,7 +16,7 @@ env:
 
 generator.parameters:
     SEED:
-      values: [0]
+      values: [0, 1, 2, 3, 4]
       label: SEED.%%
     INVERSE_SIZE:
       values: [32]
