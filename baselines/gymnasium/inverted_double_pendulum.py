@@ -38,7 +38,6 @@ class InvertedDoublePendulumRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-10., 10.),
             "entropy_weight"   : 0.0,
         }
 

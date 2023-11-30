@@ -1,0 +1,74 @@
+description:
+    name: abmarl_maze_icm_search_fixed_from_bs
+    description: Abmarl maze study
+
+batch:
+    type: slurm
+    host: pascal
+    bank: aiwargm
+    queue: pbatch
+
+env:
+    variables:
+        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-abmarl-maze
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/abmarl/abmarl_large_grid_pos_maze.py
+
+generator.parameters:
+    SEED:
+      values: [0]
+      label: SEED.%%
+    INVERSE_SIZE:
+      values: [16, 32, 128]
+      label: INVERSE_SIZE.%%
+    FORWARD_SIZE:
+      values: [16, 32, 128]
+      label: FORWARD_SIZE.%%
+    OBS_DIM:
+      values: [3, 6, 9]
+      label: OBS_DIM.%%
+    ICM_LR:
+      values: [0.0001, 0.001, 0.01]
+      label: ICM_LR.%%
+    INTR_WEIGHT:
+      values: [1.0, 0.01, 0.001]
+      label: INTR_WEIGHT.%%
+    LR:
+      values: [0.001, 0.0003, 0.0005, 0.0001]
+      label: LR.%%
+    ACTOR_HIDDEN:
+      values: [64]
+      label: ACTOR_HIDDEN.%%
+    CRITIC_MULT:
+      values: [2]
+      label: CRITIC_MULT.%%
+    TS_PER_EP:
+      values: [256]
+      label: TS_PER_EP.%%
+
+study:
+    - name: AbmarlMaze
+      description: Run an experiment with PPO-AF
+      run:
+          cmd: |
+            source $(ENV_PATH)
+
+            $(LAUNCHER) ppoaf train $(RUNNER) \
+                --num_timesteps 20_000_000 \
+                --enable_icm 1 \
+                --random_seed $(SEED) \
+                --icm_inverse_size $(INVERSE_SIZE) \
+                --icm_forward_size $(FORWARD_SIZE) \
+                --icm_encoded_obs_dim $(OBS_DIM) \
+                --icm_learning_rate $(ICM_LR) \
+                --intr_reward_weight $(INTR_WEIGHT) \
+                --learning_rate $(LR) \
+                --actor_hidden $(ACTOR_HIDDEN) \
+                --critic_hidden_mult $(CRITIC_MULT) \
+                --max_ts_per_ep $(TS_PER_EP) \
+                --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-lr_$(LR)-seed_$(SEED)
+
+          nodes: 1
+          procs: 36
+          exclusive: True
+          walltime: "24:00:00"
