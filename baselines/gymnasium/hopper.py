@@ -10,6 +10,24 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class HopperRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
+        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
+        return parser
+
     def run(self):
         env_generator = lambda : \
             SingleAgentGymWrapper(gym.make('Hopper-v4',
@@ -28,12 +46,16 @@ class HopperRunner(GymRunner):
             status_triggers = [400,],
             step_values     = [0.0001,])
 
+        bs_clip_min = self.cli_args.bs_clip_min
+        bs_clip_max = self.cli_args.bs_clip_max
+
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
             "entropy_weight"   : 0.0,
+            "bootstrap_clip"   : (bs_clip_min, bs_clip_max),
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
