@@ -1,5 +1,5 @@
 description:
-    name: abmarl_maze_icm_seeds
+    name: abmarl_maze_bs_clip_icm_seeds
     description: Abmarl maze study
 
 batch:
@@ -15,8 +15,11 @@ env:
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/abmarl/abmarl_large_grid_pos_maze.py
 
 generator.parameters:
+    BS_CLIP_MIN:
+      values: [0.1]
+      label: BS_CLIP_MIN.%%
     SEED:
-      values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+      values: [0, 1, 2, 3, 4]
       label: SEED.%%
     INVERSE_SIZE:
       values: [32]
@@ -58,6 +61,7 @@ study:
                 --enable_icm 1 \
                 --random_seed $(SEED) \
                 --icm_inverse_size $(INVERSE_SIZE) \
+                --bs_clip_min $(BS_CLIP_MIN) \
                 --icm_forward_size $(FORWARD_SIZE) \
                 --icm_encoded_obs_dim $(OBS_DIM) \
                 --icm_learning_rate $(ICM_LR) \
@@ -66,7 +70,7 @@ study:
                 --actor_hidden $(ACTOR_HIDDEN) \
                 --critic_hidden_mult $(CRITIC_MULT) \
                 --max_ts_per_ep $(TS_PER_EP) \
-                --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-lr_$(LR)-seed_$(SEED)
+                --state_tag inverse_size_$(INVERSE_SIZE)-forward_size_$(FORWARD_SIZE)-obs_dim_$(OBS_DIM)-icm_lr_$(ICM_LR)-intr_weight_$(INTR_WEIGHT)-lr_$(LR)-bs_clip_min_$(BS_CLIP_MIN)-seed_$(SEED)
 
           nodes: 1
           procs: 36
