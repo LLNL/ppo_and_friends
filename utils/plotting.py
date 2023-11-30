@@ -417,6 +417,7 @@ def find_curve_files(
 
 def plot_curves_with_plotly(
     curve_files,
+    curve_type  = "",
     add_markers = False):
     """
     Plot a list of curve files with plotly.
@@ -425,6 +426,8 @@ def plot_curves_with_plotly(
     -----------
     curve_files: array-like
         An array/list of numpy txt files containing curves to plot.
+    curve_type: string
+        The type of curve we're plotting. This will become the y axis label.
     add_markers: bool
         Should we add markers to our lines?
     """
@@ -455,12 +458,18 @@ def plot_curves_with_plotly(
                 y      = curves[i],
                 mode   = mode,
                 name   = curve_names[i]))
+
+    fig.update_layout(
+        xaxis_title = "Iterations",
+        yaxis_title = curve_type,
+    )
     
     fig.show()
 
 def plot_grouped_curves_with_plotly(
     curve_files,
     group_names = [],
+    curve_type  = "",
     add_markers = False,
     verbose     = False):
     """
@@ -475,6 +484,8 @@ def plot_grouped_curves_with_plotly(
     group_names: list
         An optional list of group names. If empty, a name will be auto-generated.
         If not empty, there must be a name for every group.
+    curve_type: string
+        The type of curve we're plotting. This will become the y axis label.
     add_markers: bool
         Should we add markers to our lines?
     verbose: bool
@@ -497,6 +508,10 @@ def plot_grouped_curves_with_plotly(
         auto_group_name = False
 
     for g_idx, group in enumerate(curve_files):
+        if len(group) == 0:
+            print(f"Group at index {g_idx} is empty. Skipping...")
+            continue
+
         curves      = []
         group_color = colors[g_idx]
 
@@ -562,8 +577,119 @@ def plot_grouped_curves_with_plotly(
                 opacity    = 0.2,
                 showlegend = False,
                 name       = std_name))
-    
+
+    fig.update_layout(
+        xaxis_title = "Iterations",
+        yaxis_title = curve_type,
+    )
+
     fig.show()
+
+def filter_grouped_curve_files_by_scores(
+    curve_files,
+    floor,
+    ceil,
+    top,
+    bottom):
+    """
+    Filter grouped curve files by their scores.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
+
+    Returns:
+    --------
+    list:
+        A list of lists of curve files filtered by their scores.
+    """
+    filtered_curve_files = []
+
+    for group in curve_files:
+        filtered_curve_files.append(filter_curves_by_floor(group, floor))
+
+    curve_files = filtered_curve_files
+    filtered_curve_files = []
+
+    for group in curve_files:
+        filtered_curve_files.append(filter_curves_by_ceil(group, ceil))
+
+    if top > 0:
+        curve_files = filtered_curve_files
+        filtered_curve_files = []
+
+        for group in curve_files:
+            filtered_curve_files.append(filter_curves_by_top(group, top))
+
+    if bottom > 0:
+        curve_files = filtered_curve_files
+        filtered_curve_files = []
+
+        for group in curve_files:
+            filtered_curve_files.append(filter_curves_by_bottom(group, bottom))
+
+    return filtered_curve_files
+
+def filter_curve_files_by_scores(
+    curve_files,
+    floor,
+    ceil,
+    top,
+    bottom):
+    """
+    Filter curve files by their scores.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
+
+    Returns:
+    --------
+    list:
+        A list of curve files filtered by their scores.
+    """
+    curve_files = filter_curves_by_floor(curve_files, floor)
+    curve_files = filter_curves_by_ceil(curve_files, ceil)
+
+    if top > 0:
+        curve_files = filter_curves_by_top(curve_files, top)
+
+    if bottom > 0:
+        curve_files = filter_curves_by_bottom(curve_files, bottom)
+
+    return curve_files
 
 def plot_curve_files(
     curve_type,
@@ -665,27 +791,34 @@ def plot_curve_files(
             else:
                 curve_files.extend(path_files)
 
-    curve_files = filter_curves_by_floor(curve_files, floor)
-    curve_files = filter_curves_by_ceil(curve_files, ceil)
-
-    if top > 0:
-        curve_files = filter_curves_by_top(curve_files, top)
-
-    if bottom > 0:
-        curve_files = filter_curves_by_bottom(curve_files, bottom)
-
     print(f"Found the following curve files: \n{curve_files}")
     if len(curve_files) == 0:
         sys.exit()
 
     if grouping:
+        curve_files = filter_grouped_curve_files_by_scores(
+            curve_files = curve_files,
+            floor       = floor,
+            ceil        = ceil,
+            top         = top,
+            bottom      = bottom)
+
         plot_grouped_curves_with_plotly(
             curve_files = curve_files,
             group_names = group_names,
+            curve_type  = curve_type,
             add_markers = add_markers,
             verbose     = verbose)
     else:
+        curve_files = filter_curve_files_by_scores(
+            curve_files = curve_files,
+            floor       = floor,
+            ceil        = ceil,
+            top         = top,
+            bottom      = bottom)
+
         plot_curves_with_plotly(
             curve_files = curve_files,
+            curve_type  = curve_type,
             add_markers = add_markers)
 
