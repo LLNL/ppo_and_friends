@@ -19,6 +19,179 @@ comp_str_map = {
     "="  : np.equal,
 }
 
+def filter_curves_by_floor(curve_files, floor):
+    """
+    Filter out curve files by a given floor.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    keeper_curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+
+            #
+            # Make sure that this curve exceeds the floor at least once.
+            # if not, scrap it.
+            #
+            where_greater = np.where(curve > floor)[0]
+            if where_greater.size == 0:
+                continue
+
+            #
+            # Make sure that, once the curve has exceeded floor, it no
+            # longer dips below.
+            #
+            g_start = where_greater[0]
+            if np.where(curve[g_start : ] < floor)[0].size == 0:
+                keeper_curves.append(cf)
+
+    return keeper_curves
+
+def filter_curves_by_ceil(curve_files, ceil):
+    """
+    Filter out curve files by a given ceil.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    keeper_curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+
+            #
+            # Make sure that this curve drops below ceil at least once.
+            # if not, scrap it.
+            #
+            where_greater = np.where(curve < ceil)[0]
+            if where_greater.size == 0:
+                continue
+
+            #
+            # Make sure that, once the curve has dropped below ceil, it no
+            # longer exceeds it.
+            #
+            g_start = where_greater[0]
+            if np.where(curve[g_start : ] > ceil)[0].size == 0:
+                keeper_curves.append(cf)
+
+    return keeper_curves
+
+def get_curves_from_files(curve_files):
+    """
+    Load all curves from the given files into a list of numpy arrays.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+
+    Returns:
+    --------
+    list:
+        A list of numpy arrays.
+    """
+    curves = []
+    for cf in curve_files:
+        with open(cf, "rb") as in_f:
+            curve = np.loadtxt(in_f)
+            curves.append(curve)
+
+    return curves
+
+def get_sorted_curve_files(curve_files):
+    """
+    Get a version of the curve files that is sorted from lowest to highest
+    sum.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+
+    Returns:
+    --------
+    list:
+        A list of sorted curve_files.
+    """
+    curves = get_curves_from_files(curve_files)
+    curves = [c.sum() for c in curves]
+
+    sorted_idxs = np.argsort(curves)
+    return np.array(curve_files)[sorted_idxs]
+
+def filter_curves_by_top(curve_files, top):
+    """
+    Filter out curve files by only keeping the highest <top> curves.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    top: int
+        After all curves are ranked in descending order, only return the
+        highest <top> curves.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    sorted_cf = get_sorted_curve_files(curve_files)
+    sorted_cf = np.flip(sorted_cf)
+
+    return sorted_cf[:top]
+
+def filter_curves_by_bottom(curve_files, bottom):
+    """
+    Filter out curve files by only keeping the highest <bottom> curves.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    bottom: int
+        After all curves are ranked in ascending order, only return the
+        lowest <bottom> curves.
+
+    Returns:
+    --------
+    list:
+        A list of filtered curve_files.
+    """
+    sorted_cf = get_sorted_curve_files(curve_files)
+    return sorted_cf[:bottom]
+
 def get_str_overlap(s1, s2):
     """
     Nice function for finding the overlap between two strings.
@@ -63,14 +236,14 @@ def get_status_dict(state_path):
 
     return status_dict
 
-def status_conditions_are_met(status_conditions, status_dict):
+def status_constraints_are_met(status_constraints, status_dict):
     """
     Determine whether or not status conditions are met within
     a particular status diciontary.
 
     Parameters:
     -----------
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -85,9 +258,9 @@ def status_conditions_are_met(status_conditions, status_dict):
         Whether or not all conditions are met.
     """
 
-    for key in status_conditions:
+    for key in status_constraints:
 
-        val = status_conditions[key]
+        val = status_constraints[key]
 
         if type(val) == tuple:
             comp_str, comp_val = val
@@ -102,30 +275,37 @@ def status_conditions_are_met(status_conditions, status_dict):
                 print(msg)
                 return False
 
-            if not status_conditions_are_met(status_conditions[key], status_dict[key.strip()]):
+            if not status_constraints_are_met(status_constraints[key], status_dict[key.strip()]):
                 return False
 
     return True
 
-def include_plot_file(
+def file_meets_patterns_and_conditions(
     plot_file,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions):
+    status_constraints):
     """
-    Given search and exclude patterns, should the plot file be included?
+    Does a given plot file meet search patterns, exclude patterns, and
+    status conditions?
 
     Parameters:
     -----------
     plot_file: str
         A path to a potential file to plot.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Array of strings representing patterns that should be plotted
-        (while excluding all others).
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Array of strings representing patterns that should be plotted
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Array of strings representing patterns that should not be plotted
         (while including all others).
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -135,32 +315,55 @@ def include_plot_file(
     Returns:
     --------
     bool:
-        Whether or not the plot file should be plotted. This will be True
-        iff all strings within search_patterns are contained within plot_file
-        and all strings within exclude_patterns are NOT contained within
-        plot_file.
+        Whether or not the plot file should be plotted.
     """
-    for s_p in search_patterns:
+    #
+    # Ensure that the file path contains ALL search patterns,
+    # contains NO exclude patterns, and meets all status conditions.
+    #
+    for s_p in inclusive_search_patterns:
         if s_p in plot_file:
             for e_p in exclude_patterns:
                 if e_p in plot_file:
                     return False
 
             #
-            # Get status file
+            # Get status file.
             #
             state_path  = Path(plot_file).parent.parent.parent.absolute()
             status_dict = get_status_dict(state_path)
-            return status_conditions_are_met(status_conditions, status_dict)
+
+            if not status_constraints_are_met(status_constraints, status_dict):
+                return False
+        else:
+            return False
+
+    if len(exclusive_search_patterns) == 0:
+        return True
+
+    for s_p in exclusive_search_patterns:
+        if s_p in plot_file:
+            for e_p in exclude_patterns:
+                if e_p in plot_file:
+                    return False
+
+            #
+            # Get status file.
+            #
+            state_path  = Path(plot_file).parent.parent.parent.absolute()
+            status_dict = get_status_dict(state_path)
+
+            return status_constraints_are_met(status_constraints, status_dict)
 
     return False
 
 def find_curve_files(
     curve_dir_name,
     root,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions):
+    status_constraints):
     """
     Recursively find all desired curve files from a given path.
 
@@ -170,13 +373,18 @@ def find_curve_files(
         The name of the directory containing curve files.
     root: str
         The root directory to recursively search.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Array of strings representing patterns that should be plotted
-        (while excluding all others).
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Array of strings representing patterns that should be plotted
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Array of strings representing patterns that should not be plotted
         (while including all others).
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -195,7 +403,13 @@ def find_curve_files(
 
             np_files = os.path.join(curve_dir, "*.npy")
             for dir_file in glob.glob(np_files):
-                if include_plot_file(dir_file, search_patterns, exclude_patterns, status_conditions):
+                if file_meets_patterns_and_conditions(
+                    dir_file,
+                    inclusive_search_patterns,
+                    exclusive_search_patterns,
+                    exclude_patterns,
+                    status_constraints):
+
                     curve_files.append(dir_file)
 
     return curve_files
@@ -203,6 +417,7 @@ def find_curve_files(
 
 def plot_curves_with_plotly(
     curve_files,
+    curve_type  = "",
     add_markers = False):
     """
     Plot a list of curve files with plotly.
@@ -211,6 +426,8 @@ def plot_curves_with_plotly(
     -----------
     curve_files: array-like
         An array/list of numpy txt files containing curves to plot.
+    curve_type: string
+        The type of curve we're plotting. This will become the y axis label.
     add_markers: bool
         Should we add markers to our lines?
     """
@@ -241,12 +458,18 @@ def plot_curves_with_plotly(
                 y      = curves[i],
                 mode   = mode,
                 name   = curve_names[i]))
+
+    fig.update_layout(
+        xaxis_title = "Iterations",
+        yaxis_title = curve_type,
+    )
     
     fig.show()
 
 def plot_grouped_curves_with_plotly(
     curve_files,
     group_names = [],
+    curve_type  = "",
     add_markers = False,
     verbose     = False):
     """
@@ -261,6 +484,8 @@ def plot_grouped_curves_with_plotly(
     group_names: list
         An optional list of group names. If empty, a name will be auto-generated.
         If not empty, there must be a name for every group.
+    curve_type: string
+        The type of curve we're plotting. This will become the y axis label.
     add_markers: bool
         Should we add markers to our lines?
     verbose: bool
@@ -283,6 +508,10 @@ def plot_grouped_curves_with_plotly(
         auto_group_name = False
 
     for g_idx, group in enumerate(curve_files):
+        if len(group) == 0:
+            print(f"Group at index {g_idx} is empty. Skipping...")
+            continue
+
         curves      = []
         group_color = colors[g_idx]
 
@@ -348,19 +577,135 @@ def plot_grouped_curves_with_plotly(
                 opacity    = 0.2,
                 showlegend = False,
                 name       = std_name))
-    
+
+    fig.update_layout(
+        xaxis_title = "Iterations",
+        yaxis_title = curve_type,
+    )
+
     fig.show()
+
+def filter_grouped_curve_files_by_scores(
+    curve_files,
+    floor,
+    ceil,
+    top,
+    bottom):
+    """
+    Filter grouped curve files by their scores.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
+
+    Returns:
+    --------
+    list:
+        A list of lists of curve files filtered by their scores.
+    """
+    filtered_curve_files = []
+
+    for group in curve_files:
+        filtered_curve_files.append(filter_curves_by_floor(group, floor))
+
+    curve_files = filtered_curve_files
+    filtered_curve_files = []
+
+    for group in curve_files:
+        filtered_curve_files.append(filter_curves_by_ceil(group, ceil))
+
+    if top > 0:
+        curve_files = filtered_curve_files
+        filtered_curve_files = []
+
+        for group in curve_files:
+            filtered_curve_files.append(filter_curves_by_top(group, top))
+
+    if bottom > 0:
+        curve_files = filtered_curve_files
+        filtered_curve_files = []
+
+        for group in curve_files:
+            filtered_curve_files.append(filter_curves_by_bottom(group, bottom))
+
+    return filtered_curve_files
+
+def filter_curve_files_by_scores(
+    curve_files,
+    floor,
+    ceil,
+    top,
+    bottom):
+    """
+    Filter curve files by their scores.
+
+    Parameters:
+    -----------
+    curve_files: array-like
+        An array/list of paths to numpy txt files containing curves
+        to filter.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
+
+    Returns:
+    --------
+    list:
+        A list of curve files filtered by their scores.
+    """
+    curve_files = filter_curves_by_floor(curve_files, floor)
+    curve_files = filter_curves_by_ceil(curve_files, ceil)
+
+    if top > 0:
+        curve_files = filter_curves_by_top(curve_files, top)
+
+    if bottom > 0:
+        curve_files = filter_curves_by_bottom(curve_files, bottom)
+
+    return curve_files
 
 def plot_curve_files(
     curve_type,
     search_paths,
-    search_patterns,
+    inclusive_search_patterns,
+    exclusive_search_patterns,
     exclude_patterns,
-    status_conditions,
-    add_markers = False,
-    grouping    = False,
-    group_names = [],
-    verbose     = False):
+    status_constraints,
+    add_markers               = False,
+    grouping                  = False,
+    group_names               = [],
+    floor                     = -np.inf,
+    ceil                      = np.inf,
+    top                       = 0,
+    bottom                    = 0,
+    verbose                   = False):
     """
     Plot any number of curve files using plotly.
 
@@ -376,11 +721,17 @@ def plot_curve_files(
         to the actual curve files, directories containing the curve files,
         or directories containing sub-directories (at any depth) containing
         curve files. These curve files are numpy txt files.
-    search_patterns: array-like
+    inclusive_search_patterns: array-like
         Only plot files that contain these strings within their paths.
+        (while excluding all others). These are inclusive, meaning ALL
+        of them need to appear in the file path.
+    exclusive_search_patterns: array-like
+        Only plot files that contain these strings within their paths.
+        (while excluding all others). These are exclusive, meaning only
+        ONE needs to appear in the file path.
     exclude_patterns: array-like
         Only plot files that don't contain these strings within their paths.
-    status_conditions: dict
+    status_constraints: dict
         A diciontary of status conditions. The should map status keys
         to other status keys or tuples. Example:
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
@@ -395,13 +746,33 @@ def plot_curve_files(
         An optional list of group names. If empty, a name will be auto-generated.
         If not empty, there must be a name for every group.
         Only applicable when grouping == True.
+    floor: float
+        Only plot curves that have the following characterstic: <floor>
+        is exceeded at least once within the curve, AND, once <floor> has been
+        exceeded, the curve never drops below <floor>.
+    ceil: float
+        Only plot curves that have the following characterstic: the
+        curve drops below <ceil> at least once, AND, once the curve is
+        below <ceil>, it never exceeds <ceil> again.
+    top: int
+        If > 0, only plot the highest <top> curves. Each curve is
+        summed along the x axis before comparisons are made.
+    bottom: int
+        If > 0, only plot the lowest <bottom> curves. Each curve is
+        summed along the x axis before comparisons are made.
     verbose: bool
         Enable verbosity?
     """
     curve_files = []
     for sp in search_paths:
         if sp.endswith(".npy"):
-            if include_plot_file(sp, search_patterns, exclude_patterns, status_conditions):
+            if file_meets_patterns_and_conditions(
+                sp,
+                inclusive_search_patterns,
+                exclusive_search_patterns,
+                exclude_patterns,
+                status_constraints):
+
                 if grouping:
                     curve_files.append([sp])
                 else:
@@ -410,9 +781,10 @@ def plot_curve_files(
             path_files = find_curve_files(
                 curve_type,
                 sp,
-                search_patterns,
+                inclusive_search_patterns,
+                exclusive_search_patterns,
                 exclude_patterns,
-                status_conditions)
+                status_constraints)
 
             if grouping:
                 curve_files.append(path_files)
@@ -424,13 +796,29 @@ def plot_curve_files(
         sys.exit()
 
     if grouping:
+        curve_files = filter_grouped_curve_files_by_scores(
+            curve_files = curve_files,
+            floor       = floor,
+            ceil        = ceil,
+            top         = top,
+            bottom      = bottom)
+
         plot_grouped_curves_with_plotly(
             curve_files = curve_files,
             group_names = group_names,
+            curve_type  = curve_type,
             add_markers = add_markers,
             verbose     = verbose)
     else:
+        curve_files = filter_curve_files_by_scores(
+            curve_files = curve_files,
+            floor       = floor,
+            ceil        = ceil,
+            top         = top,
+            bottom      = bottom)
+
         plot_curves_with_plotly(
             curve_files = curve_files,
+            curve_type  = curve_type,
             add_markers = add_markers)
 

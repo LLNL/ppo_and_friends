@@ -35,7 +35,6 @@ class AcrobotRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-10., 10.),
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(

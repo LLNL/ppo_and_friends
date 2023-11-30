@@ -1,0 +1,54 @@
+description:
+    name: ppoaf_robot_warehouse
+    description: Robot warehouse parameter study
+
+batch:
+    type: slurm
+    host: pascal
+    bank: aiwargm
+    queue: pbatch
+
+env:
+    variables:
+        OUTPUT_PATH: /p/lustre1/maguire7/ppoaf-study
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/mat-dec/bin/activate
+        RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/robot_warehouse_hard.py
+
+generator.parameters:
+    USE_ICM:
+      values: [0, 1]
+      label: ICM.%%
+    TRIAL:
+      values: [0]
+      label: TRIAL.%%
+    GRID_SIZE:
+      values: ["medium", "large"]
+      label: GRID_SIZE.%%
+    TS_PER_ROLLOUT:
+      values: [1000, 2000]
+      label: TS_PER_ROLLOUT.%%
+    POLICY:
+      values: ["mappo", "mat"]
+      label: POLICY.%%
+
+study:
+    - name: MAT_Robot_Warehouse
+      description: Run an experiment with PPO-AF
+      run:
+          cmd: |
+            source $(ENV_PATH)
+
+            $(LAUNCHER) ppoaf train $(RUNNER) \
+                --save_train_scores \
+                --num_timesteps 20000000 \
+                --random_seed $(TRIAL) \
+                --grid_size $(GRID_SIZE) \
+                --ts_per_rollout $(TS_PER_ROLLOUT) \
+                --policy $(POLICY) \
+                --use_icm $(USE_ICM) \
+                --state_tag grid_$(GRID_SIZE)-($TS_PER_ROLLOUT)_ts_per_rollout-$(POLICY)-$(USE_ICM)_icm-seed_$(TRIAL)
+
+          nodes: 1
+          procs: 36
+          exclusive: True
+          walltime: "24:00:00"

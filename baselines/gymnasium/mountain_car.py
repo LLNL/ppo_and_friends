@@ -10,6 +10,36 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class MountainCarRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
+        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
+        parser.add_argument("--cut_off_bs_clip", default=0, type=int)
+
+        parser.add_argument("--learning_rate", default=0.0003, type=float)
+
+        parser.add_argument("--enable_icm", type=int, default=0)
+        parser.add_argument("--icm_inverse_size", type=int, default=32)
+        parser.add_argument("--icm_inverse_depth", type=int, default=2)
+        parser.add_argument("--icm_forward_size", type=int, default=32)
+        parser.add_argument("--icm_forward_depth", type=int, default=2)
+        parser.add_argument("--icm_encoded_obs_dim", type=int, default=0)
+        parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
+        parser.add_argument("--intr_reward_weight", type=float, default=1.0)
+        return parser
+
     def run(self):
 
         env_generator = lambda : \
@@ -25,23 +55,42 @@ class MountainCarRunner(GymRunner):
         critic_kw_args["hidden_depth"] = 2
 
         icm_kw_args = {}
-        icm_kw_args["encoded_obs_dim"] = 0
-        icm_kw_args["inverse_hidden_depth"] = 2
-        icm_kw_args["inverse_hidden_size"]  = 32
-        icm_kw_args["forward_hidden_depth"] = 2
-        icm_kw_args["forward_hidden_size"]  = 32
+        icm_kw_args["encoded_obs_dim"]      = self.cli_args.icm_encoded_obs_dim
+        icm_kw_args["inverse_hidden_depth"] = self.cli_args.icm_inverse_depth
+        icm_kw_args["inverse_hidden_size"]  = self.cli_args.icm_inverse_size
+        icm_kw_args["forward_hidden_depth"] = self.cli_args.icm_forward_depth
+        icm_kw_args["forward_hidden_size"]  = self.cli_args.icm_forward_size
 
-        lr = 0.0003
+        if self.cli_args.cut_off_bs_clip > 0:
+            bs_clip_min  = LinearStepScheduler(
+                status_key      = "extrinsic reward avg",
+                status_preface  = "single_agent",
+                initial_value   = self.cli_args.bs_clip_min,
+                compare_fn      = np.greater_equal,
+                status_triggers = [-140,],
+                step_values     = [-np.inf,])
+
+            bs_clip_max  = LinearStepScheduler(
+                status_key      = "extrinsic reward avg",
+                status_preface  = "single_agent",
+                initial_value   = self.cli_args.bs_clip_max,
+                compare_fn      = np.greater_equal,
+                status_triggers = [-140,],
+                step_values     = [np.inf,])
+        else:
+            bs_clip_min = self.cli_args.bs_clip_min
+            bs_clip_max = self.cli_args.bs_clip_max
 
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
-            "bootstrap_clip"   : (-.01, 0.0),
-            "enable_icm"       : True,
-            "icm_kw_args"      : icm_kw_args,
-            "icm_lr"           : 0.0003,
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
+            "lr"                 : self.cli_args.learning_rate,
+            "enable_icm"         : self.cli_args.enable_icm,
+            "icm_kw_args"        : icm_kw_args,
+            "icm_lr"             : self.cli_args.icm_learning_rate,
+            "bootstrap_clip"     : (bs_clip_min, bs_clip_max),
+            "intr_reward_weight" : self.cli_args.intr_reward_weight,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -73,7 +122,6 @@ class MountainCarRunner(GymRunner):
                      ts_per_rollout     = ts_per_rollout,
                      epochs_per_iter    = 32,
                      max_ts_per_ep      = 200,
-                     ext_reward_weight  = 1./100.,
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      normalize_values   = False,

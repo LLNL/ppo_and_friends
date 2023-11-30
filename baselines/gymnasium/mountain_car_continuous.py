@@ -5,6 +5,7 @@ from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
+import numpy as np
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 @ppoaf_runner
@@ -38,7 +39,7 @@ class MountainCarContinuousRunner(GymRunner):
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
             "lr"                 : lr,
-            "bootstrap_clip"   : (-0.001, 0.0),
+            "bootstrap_clip"   : (-0.001, np.inf),
             "enable_icm"         : True,
             "icm_kw_args"        : icm_kw_args,
         }
