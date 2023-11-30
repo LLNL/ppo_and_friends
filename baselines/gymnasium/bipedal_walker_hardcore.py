@@ -113,6 +113,9 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         #    status_triggers = [4000,],
         #    step_values     = [-10.,])
 
+        bs_clip_min = self.cli_args.bs_clip_min
+        bs_clip_max = self.cli_args.bs_clip_max
+
         policy_args = {\
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
