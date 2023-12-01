@@ -20,6 +20,7 @@ from ppo_and_friends.utils.misc import format_seconds
 from ppo_and_friends.utils.schedulers import LinearStepScheduler, CallableValue, ChangeInStateScheduler, FreezeCyclingScheduler
 from pathlib import Path
 import time
+from collections import OrderedDict
 from mpi4py import MPI
 
 comm      = MPI.COMM_WORLD
@@ -354,8 +355,8 @@ class PPO(object):
         #
         max_int = np.iinfo(np.int32).max
 
-        self.status_dict = {}
-        self.status_dict["global status"] = {}
+        self.status_dict = OrderedDict()
+        self.status_dict["global status"] = OrderedDict()
         self.status_dict["global status"]["iteration"]         = 0
         self.status_dict["global status"]["rollout time"]      = 0
         self.status_dict["global status"]["train time"]        = 0
@@ -369,7 +370,7 @@ class PPO(object):
         for policy_id in self.policies:
             policy = self.policies[policy_id]
 
-            self.status_dict[policy_id] = {}
+            self.status_dict[policy_id] = OrderedDict()
             self.status_dict[policy_id]["score avg"]            = 0
             self.status_dict[policy_id]["natural score avg"]    = 0
             self.status_dict[policy_id]["top score"]            = -max_int
@@ -379,6 +380,7 @@ class PPO(object):
             self.status_dict[policy_id]["kl avg"]               = 0
             self.status_dict[policy_id]["natural reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top natural reward"]   = -max_int
+            self.status_dict[policy_id]["reward range"]         = (max_int, -max_int)
             self.status_dict[policy_id]["obs range"]            = (max_int, -max_int)
             self.status_dict[policy_id]["frozen"]               = False
 
@@ -1463,6 +1465,8 @@ class PPO(object):
         env_batch_size  = self.env.get_batch_size()
 
         top_rollout_score       = {}
+        rollout_max_reward      = {}
+        rollout_min_reward      = {}
         rollout_max_nat_reward  = {}
         rollout_min_nat_reward  = {}
         rollout_max_intr_reward = {}
@@ -1479,6 +1483,8 @@ class PPO(object):
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]       = -np.finfo(np.float32).max
+            rollout_max_reward[policy_id]      = -np.finfo(np.float32).max
+            rollout_min_reward[policy_id]      = np.finfo(np.float32).max
             rollout_max_nat_reward[policy_id]  = -np.finfo(np.float32).max
             rollout_min_nat_reward[policy_id]  = np.finfo(np.float32).max
             rollout_max_intr_reward[policy_id] = -np.finfo(np.float32).max
@@ -1615,6 +1621,14 @@ class PPO(object):
                     log_probs            = log_prob[agent_id],
                     rewards              = reward[agent_id],
                     where_done           = where_term)
+
+                rollout_max_reward[policy_id] = \
+                    max(rollout_max_reward[policy_id],
+                        reward[agent_id].max())
+
+                rollout_min_reward[policy_id] = \
+                    min(rollout_min_reward[policy_id],
+                        reward[agent_id].min())
 
                 rollout_max_nat_reward[policy_id] = \
                     max(rollout_max_nat_reward[policy_id],
@@ -1850,8 +1864,13 @@ class PPO(object):
             # episodes, but I think it's a bit more helpful to see the
             # fluctuations across rollouts.
             #
-            max_reward = rollout_max_nat_reward[policy_id]
-            min_reward = rollout_min_nat_reward[policy_id]
+            max_nat_reward = rollout_max_nat_reward[policy_id]
+            min_nat_reward = rollout_min_nat_reward[policy_id]
+            max_nat_reward = comm.allreduce(max_nat_reward, MPI.MAX)
+            min_nat_reward = comm.allreduce(min_nat_reward, MPI.MIN)
+
+            max_reward = rollout_max_reward[policy_id]
+            min_reward = rollout_min_reward[policy_id]
             max_reward = comm.allreduce(max_reward, MPI.MAX)
             min_reward = comm.allreduce(min_reward, MPI.MIN)
 
@@ -1879,6 +1898,7 @@ class PPO(object):
             running_nat_reward = nat_reward_sum / total_episodes
             running_reward     = total_scores_sum / total_episodes
             rw_range           = (min_reward, max_reward)
+            nat_rw_range       = (min_nat_reward, max_nat_reward)
             obs_range          = (min_obs, max_obs)
 
             global_top_reward = max(self.status_dict[policy_id]["top natural reward"],
@@ -1889,7 +1909,8 @@ class PPO(object):
             self.status_dict[policy_id]["natural score avg"]    = running_nat_reward
             self.status_dict[policy_id]["top score"]            = top_score
             self.status_dict[policy_id]["obs range"]            = obs_range
-            self.status_dict[policy_id]["natural reward range"] = rw_range
+            self.status_dict[policy_id]["reward range"]         = rw_range
+            self.status_dict[policy_id]["natural reward range"] = nat_rw_range
             self.status_dict[policy_id]["top natural reward"]   = global_top_reward
             self.status_dict[policy_id]["frozen"]               = self.policies[policy_id].frozen
 
@@ -1900,12 +1921,12 @@ class PPO(object):
                 ism = intr_reward / (total_episodes/ env_batch_size)
                 self.status_dict[policy_id]["intrinsic score avg"] = ism.item()
 
-                max_reward = rollout_max_intr_reward[policy_id]
-                min_reward = rollout_min_intr_reward[policy_id]
+                max_intr_reward = rollout_max_intr_reward[policy_id]
+                min_intr_reward = rollout_min_intr_reward[policy_id]
 
-                max_reward   = comm.allreduce(max_reward, MPI.MAX)
-                min_reward   = comm.allreduce(min_reward, MPI.MIN)
-                reward_range = (min_reward, max_reward)
+                max_intr_reward = comm.allreduce(max_intr_reward, MPI.MAX)
+                min_intr_reward = comm.allreduce(min_intr_reward, MPI.MIN)
+                reward_range = (min_intr_reward, max_intr_reward)
 
                 self.status_dict[policy_id]["intr reward range"] = reward_range
 
