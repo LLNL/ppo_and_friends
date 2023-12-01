@@ -2,23 +2,36 @@ from mpi4py import MPI
 import torch
 import numpy as np
 import sys
+from inspect import currentframe, getframeinfo
 
 comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 def rank_print(msg,
-               root = 0):
+               root       = 0,
+               debug = False):
     """
-        Print from a single rank.
+    Print from a single rank.
 
-        Arguments: 
-            msg            The message to print.
-            root           The rank to print from.
+    Parameters: 
+    -----------
+    msg: str
+        The message to print.
+    root: int
+        The rank to print from.
+    debug: bool
+        Whether or not to print debugging info.
     """
     if root == rank:
         rank_msg = "{}: {}".format(root, msg)
+
+        if debug:
+            frameinfo = getframeinfo(currentframe())
+            rank_msg  = f"{rank_msg}:::line {frameinfo.lineno} of {frameinfo.filename}"
+
         print(rank_msg)
+
     sys.stdout.flush()
 
 def set_torch_threads():

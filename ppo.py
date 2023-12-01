@@ -2033,6 +2033,9 @@ class PPO(object):
 
                     self._ppo_batch_train(data_loaders[policy_id], policy_id)
 
+                    if self.policies[policy_id].enable_icm:
+                        self._icm_batch_train(data_loaders[policy_id], policy_id)
+
                     #
                     # Early ending using KL.
                     # NOTE: OpenAI's implementation multiplies the kl target
@@ -2051,9 +2054,6 @@ class PPO(object):
                             msg += "{} epochs)".format(epoch_idx + 1)
                             rank_print(msg)
                         break
-
-                    if self.policies[policy_id].enable_icm:
-                        self._icm_batch_train(data_loaders[policy_id], policy_id)
 
             #
             # We don't want to hange on to this memory as we loop back around.
