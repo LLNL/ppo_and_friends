@@ -1,5 +1,5 @@
 description:
-    name: bipedal_walker_hardcore_search
+    name: bipedal_walker_hardcore_lrs_search
     description: Bipedal Walker Hardcore Study
 
 batch:
@@ -39,7 +39,7 @@ study:
             source $(ENV_PATH)
 
             $(LAUNCHER) ppoaf train $(RUNNER) \
-                --num_timesteps 50_000_000 \
+                --num_timesteps 500_000_000 \
                 --random_seed $(SEED) \
                 --learning_rate $(LR) \
                 --actor_hidden $(ACTOR_HIDDEN) \
