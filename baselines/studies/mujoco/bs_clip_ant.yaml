@@ -22,16 +22,20 @@ generator.parameters:
       values: [0]
       label: SEED.%%
     LR:
-      values: ["0.0001"]
+      #values: ["0.0001"]
+      values: ["0.001", "0.0003", "0.0005", "0.0001"]
       label: LR.%%
     ACTOR_HIDDEN:
-      values: [256]
+      #values: [256]
+      values: [32, 64, 128, 256]
       label: ACTOR_HIDDEN.%%
     CRITIC_MULT:
-      values: [1]
+      #values: [1]
+      values: [1, 2]
       label: CRITIC_MULT.%%
     TS_PER_EP:
-      values: [16]
+      #values: [16]
+      values: [16, 32, 64, 128, 256]
       label: TS_PER_EP.%%
 
 study:
