@@ -126,7 +126,7 @@ def get_curves_from_files(curve_files):
 
     return curves
 
-def get_sorted_curve_files(curve_files):
+def get_sorted_curve_files(curve_files, reduce_x_by = "sum"):
     """
     Get a version of the curve files that is sorted from lowest to highest
     sum.
@@ -136,19 +136,21 @@ def get_sorted_curve_files(curve_files):
     curve_files: array-like
         An array/list of paths to numpy txt files containing curves
         to filter.
+    reduce_x_by: str
+        How to reduce the curves before comparing them.
 
     Returns:
     --------
     list:
         A list of sorted curve_files.
     """
-    curves = get_curves_from_files(curve_files)
-    curves = [c.sum() for c in curves]
+    curves  = get_curves_from_files(curve_files)
+    reduced = [getattr(np, reduce_x_by)(c) for c in curves]
 
-    sorted_idxs = np.argsort(curves)
+    sorted_idxs = np.argsort(reduced)
     return np.array(curve_files)[sorted_idxs]
 
-def filter_curves_by_top(curve_files, top):
+def filter_curves_by_top(curve_files, top, reduce_x_by):
     """
     Filter out curve files by only keeping the highest <top> curves.
 
@@ -160,18 +162,20 @@ def filter_curves_by_top(curve_files, top):
     top: int
         After all curves are ranked in descending order, only return the
         highest <top> curves.
+    reduce_x_by: str
+        How to reduce the curves before comparing them.
 
     Returns:
     --------
     list:
         A list of filtered curve_files.
     """
-    sorted_cf = get_sorted_curve_files(curve_files)
+    sorted_cf = get_sorted_curve_files(curve_files, reduce_x_by)
     sorted_cf = np.flip(sorted_cf)
 
     return sorted_cf[:top]
 
-def filter_curves_by_bottom(curve_files, bottom):
+def filter_curves_by_bottom(curve_files, bottom, reduce_x_by):
     """
     Filter out curve files by only keeping the highest <bottom> curves.
 
@@ -183,13 +187,15 @@ def filter_curves_by_bottom(curve_files, bottom):
     bottom: int
         After all curves are ranked in ascending order, only return the
         lowest <bottom> curves.
+    reduce_x_by: str
+        How to reduce the curves before comparing them.
 
     Returns:
     --------
     list:
         A list of filtered curve_files.
     """
-    sorted_cf = get_sorted_curve_files(curve_files)
+    sorted_cf = get_sorted_curve_files(curve_files, reduce_x_by)
     return sorted_cf[:bottom]
 
 def get_str_overlap(s1, s2):
@@ -590,7 +596,8 @@ def filter_grouped_curve_files_by_scores(
     floor,
     ceil,
     top,
-    bottom):
+    bottom,
+    reduce_x_by):
     """
     Filter grouped curve files by their scores.
 
@@ -613,6 +620,8 @@ def filter_grouped_curve_files_by_scores(
     bottom: int
         If > 0, only plot the lowest <bottom> curves. Each curve is
         summed along the x axis before comparisons are made.
+    reduce_x_by: str
+        How to reduce the curves before comparing them.
 
     Returns:
     --------
@@ -635,14 +644,16 @@ def filter_grouped_curve_files_by_scores(
         filtered_curve_files = []
 
         for group in curve_files:
-            filtered_curve_files.append(filter_curves_by_top(group, top))
+            filtered_curve_files.append(
+                filter_curves_by_top(group, top, reduce_x_by))
 
     if bottom > 0:
         curve_files = filtered_curve_files
         filtered_curve_files = []
 
         for group in curve_files:
-            filtered_curve_files.append(filter_curves_by_bottom(group, bottom))
+            filtered_curve_files.append(
+                filter_curves_by_bottom(group, bottom, reduce_x_by))
 
     return filtered_curve_files
 
@@ -651,7 +662,8 @@ def filter_curve_files_by_scores(
     floor,
     ceil,
     top,
-    bottom):
+    bottom,
+    reduce_x_by):
     """
     Filter curve files by their scores.
 
@@ -674,6 +686,8 @@ def filter_curve_files_by_scores(
     bottom: int
         If > 0, only plot the lowest <bottom> curves. Each curve is
         summed along the x axis before comparisons are made.
+    reduce_x_by: str
+        How to reduce the curves before comparing them.
 
     Returns:
     --------
@@ -684,10 +698,10 @@ def filter_curve_files_by_scores(
     curve_files = filter_curves_by_ceil(curve_files, ceil)
 
     if top > 0:
-        curve_files = filter_curves_by_top(curve_files, top)
+        curve_files = filter_curves_by_top(curve_files, top, reduce_x_by)
 
     if bottom > 0:
-        curve_files = filter_curves_by_bottom(curve_files, bottom)
+        curve_files = filter_curves_by_bottom(curve_files, bottom, reduce_x_by)
 
     return curve_files
 
@@ -705,6 +719,7 @@ def plot_curve_files(
     ceil                      = np.inf,
     top                       = 0,
     bottom                    = 0,
+    reduce_x_by               = "sum",
     verbose                   = False):
     """
     Plot any number of curve files using plotly.
@@ -760,6 +775,9 @@ def plot_curve_files(
     bottom: int
         If > 0, only plot the lowest <bottom> curves. Each curve is
         summed along the x axis before comparisons are made.
+    reduce_x_by: str
+        How to reduce the x axis of curves before comparisons are made
+        when using the <top> or <bottom> args.
     verbose: bool
         Enable verbosity?
     """
@@ -791,7 +809,11 @@ def plot_curve_files(
             else:
                 curve_files.extend(path_files)
 
-    print(f"Found the following curve files: \n{curve_files}")
+    if verbose:
+        print(f"Found the following curve files: \n{curve_files}")
+    else:
+        print(f"Found {len(curve_files)} curve files")
+
     if len(curve_files) == 0:
         sys.exit()
 
@@ -801,7 +823,13 @@ def plot_curve_files(
             floor       = floor,
             ceil        = ceil,
             top         = top,
-            bottom      = bottom)
+            bottom      = bottom,
+            reduce_x_by = reduce_x_by)
+
+        if verbose:
+            print(f"Curve files filtered down to: \n{curve_files}")
+        else:
+            print(f"Curve files filtered down to {len(curve_files)}")
 
         plot_grouped_curves_with_plotly(
             curve_files = curve_files,
@@ -815,7 +843,13 @@ def plot_curve_files(
             floor       = floor,
             ceil        = ceil,
             top         = top,
-            bottom      = bottom)
+            bottom      = bottom,
+            reduce_x_by = reduce_x_by)
+
+        if verbose:
+            print(f"Curve files filtered down to: \n{curve_files}")
+        else:
+            print(f"Curve files filtered down to {len(curve_files)}")
 
         plot_curves_with_plotly(
             curve_files = curve_files,

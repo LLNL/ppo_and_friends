@@ -114,7 +114,7 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         #    status_triggers = [4000,],
         #    step_values     = [-10.,])
 
-        if bool(args.use_lr_scheduler):
+        if bool(self.cli_args.use_lr_scheduler):
             lr = LinearScheduler(
                 status_key = "iteration",
                 status_max = 30_000,

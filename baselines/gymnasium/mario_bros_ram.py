@@ -25,7 +25,7 @@ class MarioBrosRAMRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
+        parser.add_argument("--bs_clip_min", default=-10_000_000, type=float)
         parser.add_argument("--bs_clip_max", default=10_000_000, type=float)
 
         parser.add_argument("--learning_rate", default=0.0001, type=float)
