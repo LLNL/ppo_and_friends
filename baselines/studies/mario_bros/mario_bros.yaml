@@ -45,11 +45,18 @@ study:
                 --num_timesteps 50_000_000 \
                 --random_seed $(SEED) \
                 --learning_rate $(LR) \
+<<<<<<< HEAD
                 --soft_resets $(SOFT_RESETS) \
                 --actor_hidden $(ACTOR_HIDDEN) \
                 --critic_hidden_mult $(CRITIC_MULT) \
                 --max_ts_per_ep $(TS_PER_EP) \
                 --state_tag seed_$(SEED)-lr_$(LR)-actor_hidden_$(ACTOR_HIDDEN)-critic_mult_$(CRITIC_MULT)-ts_per_ep_$(TS_PER_EP)-soft_resets_$(SOFT_RESETS)
+=======
+                --actor_hidden $(ACTOR_HIDDEN) \
+                --critic_hidden_mult $(CRITIC_MULT) \
+                --max_ts_per_ep $(TS_PER_EP) \
+                --state_tag seed_$(SEED)-lr_$(LR)-actor_hidden_$(ACTOR_HIDDEN)-critic_mult_$(CRITIC_MULT)-ts_per_ep_$(TS_PER_EP)
+>>>>>>> main
 
           nodes: 1
           procs: 36
