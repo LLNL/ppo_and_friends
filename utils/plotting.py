@@ -1,6 +1,7 @@
 """
 Plot curve files saved from ppoaf training.
 """
+import functools
 import pickle
 import numpy as np
 import glob
@@ -554,9 +555,6 @@ def plot_grouped_curves_with_plotly(
             msg += f"Defaulting to generic name '{group_name}'."
             print(msg)
 
-        if verbose:
-            print(f"Adding group {group_name} with files {group}")
-
         curve_stack = np.stack(curves)
         std_min     = curve_stack.min(axis=0)
         std_max     = curve_stack.max(axis=0)
@@ -812,12 +810,18 @@ def plot_curve_files(
     if verbose:
         print(f"Found the following curve files: \n{curve_files}")
     else:
-        print(f"Found {len(curve_files)} curve files")
+        if grouping:
+            num_files = sum(len(l) for l in curve_files)
+        else:
+            num_files = len(curve_files)
+
+        print(f"Found {num_files} curve files")
 
     if len(curve_files) == 0:
         sys.exit()
 
     if grouping:
+
         curve_files = filter_grouped_curve_files_by_scores(
             curve_files = curve_files,
             floor       = floor,
@@ -829,7 +833,8 @@ def plot_curve_files(
         if verbose:
             print(f"Curve files filtered down to: \n{curve_files}")
         else:
-            print(f"Curve files filtered down to {len(curve_files)}")
+            num_files = sum(len(l) for l in curve_files)
+            print(f"Curve files filtered down to {num_files}")
 
         plot_grouped_curves_with_plotly(
             curve_files = curve_files,
@@ -838,6 +843,7 @@ def plot_curve_files(
             add_markers = add_markers,
             verbose     = verbose)
     else:
+
         curve_files = filter_curve_files_by_scores(
             curve_files = curve_files,
             floor       = floor,
