@@ -28,7 +28,7 @@ generator.parameters:
       values: [256]
       label: ACTOR_HIDDEN.%%
     CRITIC_MULT:
-      values: [1]
+      values: [2]
       label: CRITIC_MULT.%%
     TS_PER_EP:
       values: [16]
