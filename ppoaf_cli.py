@@ -310,11 +310,18 @@ def cli():
 
     plot_parser.add_argument("--top", type=int, default=0,
         help="If > 0, only plot the highest <top> curves. Each curve is "
-        "summed along the x axis before comparisons are made.")
+        "reduced along the x-axis before comparisons are made, and the "
+        "reduction technique used is defined by the --reduce_x_by flag.")
 
     plot_parser.add_argument("--bottom", type=int, default=0,
         help="If > 0, only plot the lowest <bottom> curves. Each curve is "
-        "summed along the x axis before comparisons are made.")
+        "reduced along the x-axis before comparisons are made, and the "
+        "reduction technique used is defined by the --reduce_x_by flag.")
+
+    plot_parser.add_argument("--reduce_x_by", type=str, default="sum",
+        choices=["sum", "min", "max"],
+        help="How to reduce the x axis of curves before comparisons are made "
+        "when using the --top or --bottom flags.")
 
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
@@ -361,7 +368,8 @@ def cli():
             floor                     = args.floor,
             ceil                      = args.ceiling,
             top                       = args.top,
-            bottom                    = args.bottom)
+            bottom                    = args.bottom,
+            reduce_x_by               = args.reduce_x_by)
 
         return
 

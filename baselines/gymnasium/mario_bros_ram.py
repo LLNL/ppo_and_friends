@@ -25,10 +25,10 @@ class MarioBrosRAMRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
-        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
+        parser.add_argument("--bs_clip_min", default=-10_000_000, type=float)
+        parser.add_argument("--bs_clip_max", default=10_000_000, type=float)
 
-        parser.add_argument("--learning_rate", default=0.00025, type=float)
+        parser.add_argument("--learning_rate", default=0.0001, type=float)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -43,6 +43,8 @@ class MarioBrosRAMRunner(GymRunner):
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
         parser.add_argument("--max_ts_per_ep", type=int, default=64)
+        parser.add_argument("--ts_per_rollout", type=int, default=2048)
+        parser.add_argument("--soft_resets", type=int, default=0)
 
         parser.add_argument("--mini_batch_size", type=int, default=512)
         return parser
@@ -87,7 +89,6 @@ class MarioBrosRAMRunner(GymRunner):
             "ac_network"         : FeedForwardNetwork,
             "actor_kw_args"      : actor_kw_args,
             "critic_kw_args"     : critic_kw_args,
-            "target_kl"          : 0.01,
             "lr"                 : self.cli_args.learning_rate,
             "enable_icm"         : self.cli_args.enable_icm,
             "icm_kw_args"        : icm_kw_args,
@@ -100,14 +101,17 @@ class MarioBrosRAMRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
                      ts_per_rollout     = ts_per_rollout,
+                     soft_resets        = bool(self.cli_args.soft_resets),
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
                      reward_clip        = (-10., 10.),
+                     normalize_obs      = True,
+                     normalize_rewards  = True,
                      **self.kw_run_args)

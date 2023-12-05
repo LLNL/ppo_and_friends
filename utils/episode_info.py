@@ -238,6 +238,12 @@ class EpisodeInfo(PPOEpisode):
             Returns:
                 An array containing the GAEs.
         """
+        if np.isinf(padded_values).any():
+            msg  = "ERROR: inf encountered in padded values while "
+            msg += "computing gae advantages!"
+            rank_print(msg, debug = True)
+            comm.Abort()
+
         deltas = rewards + (self.gamma * padded_values[1:]) - \
             padded_values[:-1]
 
