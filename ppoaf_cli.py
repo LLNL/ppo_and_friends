@@ -287,13 +287,18 @@ def cli():
     plot_parser.add_argument("--grouping", action="store_true",
         help="If enabled, all curves from specified paths will be "
         "grouped together by their given paths. The curves within "
-        "each group will be used to define a std and mean, which will be "
+        "each group will be used to define a deviation and mean, which will be "
         "plotted per group.")
 
     plot_parser.add_argument("--group_names", type=str, nargs="+",
         help="If --grouping is True, this flag can be used to assign "
         "names to each of the groups. The number of group_names MUST "
         "match the number of groups.")
+
+    plot_parser.add_argument("--group_deviation", type=str, default="std",
+        choices=["std", "min_max"],
+        help="If --grouping is True, this flag can be used to determine "
+        "how the deviation around the group means is plotted.")
 
     plot_parser.add_argument("--verbose", action="store_true",
         help="Enable verbosity.")
@@ -364,6 +369,7 @@ def cli():
             status_constraints        = status_constraints,
             grouping                  = args.grouping,
             group_names               = group_names,
+            group_deviation           = args.group_deviation,
             verbose                   = args.verbose,
             floor                     = args.floor,
             ceil                      = args.ceiling,

@@ -478,9 +478,10 @@ def plot_grouped_curves_with_plotly(
     group_names = [],
     curve_type  = "",
     add_markers = False,
+    deviation   = "std",
     verbose     = False):
     """
-    Plot a list of curve file gruops with plotly. The std and mean of
+    Plot a list of curve file gruops with plotly. The deviation and mean of
     each group will be plotted.
 
     Parameters:
@@ -495,9 +496,16 @@ def plot_grouped_curves_with_plotly(
         The type of curve we're plotting. This will become the y axis label.
     add_markers: bool
         Should we add markers to our lines?
+    deviation: str
+        How should the deviation around the mean be plotted?
     verbose: bool
         Enable verbosity?
     """
+    avail_dev = ["min_max", "std"]
+    msg  = f"ERROR: deviation must be one of {avail_dev} but received "
+    msg += f"{deviation}."
+    assert deviation in avail_dev, msg
+
     fig    = go.Figure()
     colors = px.colors.qualitative.Plotly
 
@@ -556,9 +564,18 @@ def plot_grouped_curves_with_plotly(
             print(msg)
 
         curve_stack = np.stack(curves)
-        std_min     = curve_stack.min(axis=0)
-        std_max     = curve_stack.max(axis=0)
-        mean        = curve_stack.mean(axis=0)
+
+        dev_min = None
+        dev_max = None
+        mean    = curve_stack.mean(axis=0)
+
+        if deviation == "min_max":
+            dev_min = curve_stack.min(axis=0)
+            dev_max = curve_stack.max(axis=0)
+        elif deviation == "std":
+            std     = curve_stack.std(axis=0)
+            dev_min = mean - std
+            dev_max = mean + std
 
         iterations = np.arange(x_size)
 
@@ -574,7 +591,7 @@ def plot_grouped_curves_with_plotly(
         fig.add_trace(
             go.Scatter(
                 x          = np.concatenate([iterations, iterations[::-1]]),
-                y          = np.concatenate([std_max, std_min[::-1]]),
+                y          = np.concatenate([dev_max, dev_min[::-1]]),
                 fill       = 'toself',
                 fillcolor  = group_color,
                 mode       = 'none',
@@ -713,6 +730,7 @@ def plot_curve_files(
     add_markers               = False,
     grouping                  = False,
     group_names               = [],
+    group_deviation           = "std",
     floor                     = -np.inf,
     ceil                      = np.inf,
     top                       = 0,
@@ -754,11 +772,13 @@ def plot_curve_files(
         If True, add markers to the line plots.
     grouping: bool
         If grouping is True, curves will be grouped together
-        by their search paths. The std and mean of each group will be plotted.
+        by their search paths. The deviation and mean of each group will be plotted.
     group_names: list
         An optional list of group names. If empty, a name will be auto-generated.
         If not empty, there must be a name for every group.
         Only applicable when grouping == True.
+    group_deviation: str
+        How should the deviation around the mean be plotted?
     floor: float
         Only plot curves that have the following characterstic: <floor>
         is exceeded at least once within the curve, AND, once <floor> has been
@@ -841,6 +861,7 @@ def plot_curve_files(
             group_names = group_names,
             curve_type  = curve_type,
             add_markers = add_markers,
+            deviation   = group_deviation,
             verbose     = verbose)
     else:
 
