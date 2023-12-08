@@ -42,7 +42,7 @@ study:
             source $(ENV_PATH)
 
             $(LAUNCHER) ppoaf train $(RUNNER) \
-                --num_timesteps 50_000_000 \
+                --num_timesteps 100_000_000 \
                 --random_seed $(SEED) \
                 --bs_clip_min $(BS_CLIP_MIN) \
                 --learning_rate $(LR) \

@@ -29,7 +29,8 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         parser.add_argument("--bs_clip_max", default=np.inf, type=float)
 
         parser.add_argument("--learning_rate", default=0.00025, type=float)
-        parser.add_argument("--use_lr_scheduler", default=1, type=int)
+        parser.add_argument("--use_lr_scheduler", default=0, type=int)
+        parser.add_argument("--lr_scheduler_status_max", default=100_000_000, type=int)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -117,7 +118,7 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         if bool(self.cli_args.use_lr_scheduler):
             lr = LinearScheduler(
                 status_key = "iteration",
-                status_max = 30_000,
+                status_max = self.cli_args.lr_scheduler_status_max,
                 max_value  = self.cli_args.learning_rate,
                 min_value  = 1e-10)
         else:
