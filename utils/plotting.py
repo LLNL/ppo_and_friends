@@ -765,7 +765,7 @@ def plot_curve_files(
         The name of the curve type to search for. For instance, "scores" will
         result in searching for scores. These curve types will be located in
         <state_path>/curves/. A the time of writing this, curve types are
-        "scores", "episode_length", and "runtime".
+        "scores", "episode_length", "runtime", "bs_min", "bs_max", "bs_avg".
     search_paths: array-like
         Paths to the policy curve files that you wish to plot. This can be paths
         to the actual curve files, directories containing the curve files,

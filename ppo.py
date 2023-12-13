@@ -60,6 +60,7 @@ class PPO(object):
                  save_train_scores   = True,
                  save_avg_ep_len     = True,
                  save_running_time   = True,
+                 save_bs_info        = True,
                  pickle_class        = False,
                  soft_resets         = False,
                  obs_augment         = False,
@@ -173,6 +174,9 @@ class PPO(object):
         save_running_time: bool
             If True, the running time will be saved out as a curve every
             iteration.
+        save_bs_info: bool
+            If True, min, max, and avg of the boostrap value will be saved out
+            as a curve every iteration.
         pickle_class: bool
             When enabled, the entire PPO class will
             be pickled and saved into the output
@@ -316,6 +320,7 @@ class PPO(object):
         self.save_train_scores   = save_train_scores
         self.save_avg_ep_len     = save_avg_ep_len
         self.save_running_time   = save_running_time
+        self.save_bs_info        = save_bs_info
 
         rank_print("Using device: {}".format(self.device))
         rank_print("Number of processors: {}".format(num_procs))
@@ -381,6 +386,8 @@ class PPO(object):
             self.status_dict[policy_id]["natural reward range"] = (max_int, -max_int)
             self.status_dict[policy_id]["top natural reward"]   = -max_int
             self.status_dict[policy_id]["reward range"]         = (max_int, -max_int)
+            self.status_dict[policy_id]["bootstrap range"]      = (max_int, -max_int)
+            self.status_dict[policy_id]["bootstrap avg"]        = "N/A"
             self.status_dict[policy_id]["obs range"]            = (max_int, -max_int)
             self.status_dict[policy_id]["frozen"]               = False
 
@@ -447,6 +454,9 @@ class PPO(object):
         self.train_score_path = os.path.join(self.curve_path, "scores")
         self.ep_len_path      = os.path.join(self.curve_path, "episode_length")
         self.runtime_path     = os.path.join(self.curve_path, "runtime")
+        self.bs_min_path      = os.path.join(self.curve_path, "bs_min")
+        self.bs_max_path      = os.path.join(self.curve_path, "bs_max")
+        self.bs_avg_path      = os.path.join(self.curve_path, "bs_avg")
 
         if self.save_train_scores and rank == 0:
             if not os.path.exists(self.train_score_path):
@@ -459,6 +469,16 @@ class PPO(object):
         if self.save_running_time and rank == 0:
             if not os.path.exists(self.runtime_path):
                 os.makedirs(self.runtime_path)
+
+        if self.save_bs_info and rank == 0:
+            if not os.path.exists(self.bs_min_path):
+                os.makedirs(self.bs_min_path)
+
+            if not os.path.exists(self.bs_max_path):
+                os.makedirs(self.bs_max_path)
+
+            if not os.path.exists(self.bs_avg_path):
+                os.makedirs(self.bs_avg_path)
 
         comm.barrier()
 
@@ -1480,6 +1500,9 @@ class PPO(object):
         total_intr_scores       = {}
         total_scores            = {}
         top_reward              = {}
+        bs_min                  = {}
+        bs_max                  = {}
+        bs_sum                  = {}
 
         for policy_id in self.policies:
             top_rollout_score[policy_id]       = -np.finfo(np.float32).max
@@ -1498,6 +1521,9 @@ class PPO(object):
             total_intr_scores[policy_id]       = np.zeros((env_batch_size, 1))
             total_scores[policy_id]            = np.zeros((env_batch_size, 1))
             top_reward[policy_id]              = -np.finfo(np.float32).max
+            bs_min[policy_id]                  = np.finfo(np.float32).max
+            bs_max[policy_id]                  = -np.finfo(np.float32).max
+            bs_sum[policy_id]                  = np.zeros((env_batch_size,))
 
         episode_lengths = np.zeros(env_batch_size).astype(np.int32)
         ep_ts           = np.zeros(env_batch_size).astype(np.int32)
@@ -1780,6 +1806,14 @@ class PPO(object):
                     for agent_id in next_reward:
                         policy_id = self.policy_mapping_fn(agent_id)
 
+                        bs_min[policy_id] = min(bs_min[policy_id],
+                            float(next_reward[agent_id].min()))
+
+                        bs_max[policy_id] = max(bs_max[policy_id],
+                            float(next_reward[agent_id].max()))
+
+                        bs_sum[policy_id] += next_reward[agent_id]
+
                         if self.policies[policy_id].enable_icm:
                             ism = self.status_dict[policy_id]["intrinsic score avg"]
                             surprise = intr_reward[agent_id][where_maxed] - ism
@@ -1914,6 +1948,16 @@ class PPO(object):
             self.status_dict[policy_id]["top natural reward"]   = global_top_reward
             self.status_dict[policy_id]["frozen"]               = self.policies[policy_id].frozen
 
+            #
+            # Update our bootstrap status info.
+            #
+            bs_rank_max = comm.allreduce(bs_max[policy_id], MPI.MAX)
+            bs_rank_min = comm.allreduce(bs_min[policy_id], MPI.MIN)
+            bs_rank_avg = comm.allreduce(bs_sum[policy_id].sum(), MPI.SUM) / total_episodes
+
+            self.status_dict[policy_id]["bootstrap range"] = (bs_rank_min, bs_rank_max)
+            self.status_dict[policy_id]["bootstrap avg"]   = bs_rank_avg
+
             if self.policies[policy_id].enable_icm:
                 intr_reward = total_intr_scores[policy_id].sum()
                 intr_reward = comm.allreduce(intr_reward, MPI.SUM)
@@ -1997,6 +2041,9 @@ class PPO(object):
 
             if self.save_running_time:
                 self._save_running_time()
+
+            if self.save_bs_info:
+                self._save_bs_info()
 
             data_loaders = {}
             for policy_id in self.policies:
@@ -2543,6 +2590,34 @@ class PPO(object):
 
             with open(runtime_file, "ab") as out_f:
                 np.savetxt(out_f, np.array([runtime]))
+
+    def _save_bs_info(self):
+        """
+        Save the current bootstrap min, max, and avg.
+        """
+        if rank == 0:
+
+            for policy_id in self.policies:
+                bs_min  = self.status_dict[policy_id]["bootstrap range"][0]
+                bs_file = os.path.join(self.bs_min_path,
+                    f"{policy_id}_bs_min.npy")
+
+                with open(bs_file, "ab") as out_f:
+                    np.savetxt(out_f, np.array([bs_min]))
+
+                bs_max  = self.status_dict[policy_id]["bootstrap range"][1]
+                bs_file = os.path.join(self.bs_max_path,
+                    f"{policy_id}_bs_max.npy")
+
+                with open(bs_file, "ab") as out_f:
+                    np.savetxt(out_f, np.array([bs_max]))
+
+                bs_avg  = self.status_dict[policy_id]["bootstrap avg"]
+                bs_file = os.path.join(self.bs_avg_path,
+                    f"{policy_id}_bs_avg.npy")
+
+                with open(bs_file, "ab") as out_f:
+                    np.savetxt(out_f, np.array([bs_avg]))
 
     def set_test_mode(self, test_mode):
         """
