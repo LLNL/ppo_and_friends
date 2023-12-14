@@ -542,6 +542,7 @@ def plot_grouped_curves_with_plotly(
             continue
 
         curves      = []
+        curve_names = []
         group_color = colors[g_idx]
 
         if auto_group_name:
@@ -556,6 +557,8 @@ def plot_grouped_curves_with_plotly(
             curve_name = " ".join(curve_name.split(".")[0].split("_"))
             name       = f"{test_name} {curve_name}"
 
+            curve_names.append(curve_name)
+
             if auto_group_name:
                 if group_name is None:
                     group_name = name
@@ -565,17 +568,25 @@ def plot_grouped_curves_with_plotly(
             with open(cf, "rb") as in_f:
                 curves.append(np.loadtxt(in_f))
 
-        x_size = curves[0].size
-        for c in curves:
-            msg  = "ERROR: grouped curves must all have the same number "
-            msg += "of iterations."
-            assert x_size == c.size, msg
-
         if auto_group_name and group_name == "":
             group_name = f"group_{g_idx}"
             msg  = "WARNING: unable to find overlapping group name. "
             msg += f"Defaulting to generic name '{group_name}'."
             print(msg)
+
+        x_size = curves[0].size
+        failed_size_check = False
+        for c in curves:
+            if x_size != c.size:
+                msg  = "\nERROR: grouped curves must all have the same number "
+                msg += f"of iterations, but group {group_name} does not."
+                msg += f"\ncurves sizes: "
+
+                for i in range(len(curve_names)):
+                    msg += f"\n    {curve_names[i]}: {curves[i].size}"
+
+                sys.stderr.write(msg) 
+                sys.exit(1)
 
         curve_stack = np.stack(curves)
 
