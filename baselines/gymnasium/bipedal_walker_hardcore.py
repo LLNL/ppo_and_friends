@@ -41,10 +41,11 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
         parser.add_argument("--intr_reward_weight", type=float, default=1.0)
 
-        parser.add_argument("--actor_hidden", type=int, default=128)
+        parser.add_argument("--actor_hidden", type=int, default=256)
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
         parser.add_argument("--max_ts_per_ep", type=int, default=64)
+        parser.add_argument("--ts_per_rollout", type=int, default=512)
 
         parser.add_argument("--mini_batch_size", type=int, default=512)
         return parser
@@ -143,7 +144,7 @@ class BipedalWalkerHardcoreRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
