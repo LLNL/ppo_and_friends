@@ -143,7 +143,8 @@ class AtariEnvWrapper(ABC):
             # in either case.
             #
             if not terminated and self.allow_life_loss and info["life lost"]:
-                obs = self.reset()
+                obs, new_info = self.reset()
+                info.update(new_info)
 
         info["life lost"] = life_lost
 
