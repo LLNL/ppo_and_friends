@@ -80,7 +80,12 @@ class AtariEnvWrapper(ABC):
             What to do when we've acceptably lost a life, but we haven't
             ended the game.
         """
-        raise NotImplementedError
+        #
+        # NOTE: 0 is generally a NOOP action, but I'm not sure that's
+        # guaranteed...
+        #
+        obs, _, _, _, info = self.env.step(0)
+        return obs, info
 
     def reset(self, *args, **kw_args):
         """
@@ -196,12 +201,12 @@ class AtariEnvWrapper(ABC):
 
         if self.true_done:
             self.true_done = False
-            obs = self.true_done_reset()
+            obs, info = self.true_done_reset()
         else:
-            obs = self.false_done_reset()
+            obs, info = self.false_done_reset()
 
         self.lives = self.env.ale.lives()
-        return obs, true_done
+        return obs, info, true_done
 
     def seed(self, seed):
         """
@@ -309,7 +314,7 @@ class PixelHistEnvWrapper(AtariPixels):
         self.use_frame_pooling = use_frame_pooling
 
     def reset(self, *args, **kw_args):
-        cur_frame, true_done = self._state_dependent_reset()
+        cur_frame, info, true_done = self._state_dependent_reset()
         cur_frame = self.rgb_to_processed_frame(cur_frame)
 
         if true_done:
@@ -317,7 +322,7 @@ class PixelHistEnvWrapper(AtariPixels):
 
         self.prev_frame  = cur_frame.copy()
 
-        return self.frame_cache.copy(), {}
+        return self.frame_cache.copy(), info
 
     def step(self, action):
         cur_frame, reward, terminated, truncated, info = self.env.step(action)
@@ -384,13 +389,13 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.ram_cache = np.tile(cur_ram, self.hist_size)
 
     def reset(self, *args, **kw_args):
-        cur_ram, true_done= self._state_dependent_reset()
+        cur_ram, info, true_done = self._state_dependent_reset()
         cur_ram = cur_ram.astype(np.float32) / 255.
 
         if true_done:
             self._reset_ram_cache(cur_ram)
 
-        return self.ram_cache.copy(), {}
+        return self.ram_cache.copy(), info
 
     def step(self, action):
         cur_ram, reward, terminated, truncated, info = self.env.step(action)
@@ -401,7 +406,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         offset = self.cache_size - self.ram_size
         self.ram_cache[offset :] = cur_ram.copy()
 
-        terminated, life_lost   = self._check_if_done(terminated)
+        terminated, life_lost = self._check_if_done(terminated)
         info["life lost"] = life_lost
 
         return self.ram_cache.copy(), reward, terminated, truncated, info
@@ -468,7 +473,7 @@ class BreakoutEnvWrapper():
         self.env.reset()
         self._set_random_start_pos()
         obs, _, _, _, _ = self.fire_ball()
-        return obs
+        return obs, {}
 
     def false_done_reset(self):
         """
@@ -478,7 +483,7 @@ class BreakoutEnvWrapper():
             In this case, we need to fire the ball again.
         """
         obs, _, _, _, _ = self.fire_ball()
-        return obs
+        return obs, {}
 
 
 class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
