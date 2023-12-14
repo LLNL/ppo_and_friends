@@ -36,19 +36,19 @@ def show_frame(frame_cache):
 
 class AtariEnvWrapper(ABC):
     """
-        A base class generic wrapper for atari games.
+    A base class generic wrapper for atari games.
 
-        Some important concepts:
-            1. While gym environments do offer frame skip, they don't
-               allow access to the skipped frames, which is important.
-               This class re-implements frame skipping in such a way
-               that allows access to these frames.
-            2. false_done_reset and true_done_reset are actions that
-               are taken under the following conditions, respectively:
-                   a. A life is lost, but the game is not over, i.e
-                      allow_life_loss is set to False, which results
-                      in a "done" state, but we don't end the game.
-                   b. A life is lost, and the game is over.
+    Some important concepts:
+        1. While gym environments do offer frame skip, they don't
+           allow access to the skipped frames, which is important.
+           This class re-implements frame skipping in such a way
+           that allows access to these frames.
+        2. false_done_reset and true_done_reset are actions that
+           are taken under the following conditions, respectively:
+               a. A life is lost, but the game is not over, i.e
+                  allow_life_loss is set to False, which results
+                  in a "done" state, but we don't end the game.
+               b. A life is lost, and the game is over.
     """
 
     def __init__(self,
@@ -57,16 +57,20 @@ class AtariEnvWrapper(ABC):
                  skip_k_frames   = 1,
                  **kw_args):
         """
-            Arguments:
-                env              The atari environment to wrap.
-                allow_life_loss  If True, the game will only end when you've
-                                 lost your last life. If False, the game will
-                                 end after losing any lives.
-                skip_k_frames    The number of frames to skip. In reality, this
-                                 is a misleading name. A value of 1 means no
-                                 frames are skipped. A value of 2 means 1 frame
-                                 is skipped. I'm only following this convention
-                                 because it's what's used in papers...
+        Parameters:
+        -----------
+        env: gymnasium env
+            The atari environment to wrap.
+        allow_life_loss: bool
+            If True, the game will only end when you've
+            lost your last life. If False, the game will
+            end after losing any lives.
+        skip_k_frames: int
+            The number of frames to skip. In reality, this
+            is a misleading name. A value of 1 means no
+            frames are skipped. A value of 2 means 1 frame
+            is skipped. I'm only following this convention
+            because it's what's used in papers...
         """
         self.allow_life_loss   = allow_life_loss
         self.life_count        = env.ale.lives()
@@ -77,8 +81,8 @@ class AtariEnvWrapper(ABC):
 
     def false_done_reset(self):
         """
-            What to do when we've acceptably lost a life, but we haven't
-            ended the game.
+        What to do when we've acceptably lost a life, but we haven't
+        ended the game.
         """
         #
         # NOTE: 0 is generally a NOOP action, but I'm not sure that's
@@ -89,15 +93,15 @@ class AtariEnvWrapper(ABC):
 
     def reset(self, *args, **kw_args):
         """
-            Reset the environment.
+        Reset the environment.
         """
         raise NotImplementedError
 
     def true_done_reset(self):
         """
-            The action we should take when we are truly done, not just
-            when we've acceptable lost a life. This will be called by
-            the state_dependent_reset parent method.
+        The action we should take when we are truly done, not just
+        when we've acceptable lost a life. This will be called by
+        the state_dependent_reset parent method.
         """
         return self.env.reset()
 
@@ -105,23 +109,28 @@ class AtariEnvWrapper(ABC):
                          action,
                          step_func = None):
         """
-            Take a step in the environment while skipping frames
-            if requested.
+        Take a step in the environment while skipping frames
+        if requested.
 
-            Arguments:
-                action     The action to take. This will be repeated for every
-                           skipped frame.
-                step_func  An optional function to perform the actual step.
-                           If none, the environment's step function will be
-                           used. NOTE: this is an important argument, as it
-                           allows you to step in a way that has access to the
-                           skipped frames.
+        Parameters:
+        -----------
+        action: array-like or number
+            The action to take. This will be repeated for every
+            skipped frame.
+        step_func: function
+            An optional function to perform the actual step.
+            If none, the environment's step function will be
+            used. NOTE: this is an important argument, as it
+            allows you to step in a way that has access to the
+            skipped frames.
 
-            Returns:
-                A tuple of form (observation, reward, terminated,
-                truncated, inf), where reward
-                is actually the sum of all rewards from the frames that were
-                stepped through.
+        Returns:
+        --------
+        tuple:
+            A tuple of form (observation, reward, terminated,
+            truncated, inf), where reward
+            is actually the sum of all rewards from the frames that were
+            stepped through.
         """
 
         if step_func == None:
@@ -157,19 +166,23 @@ class AtariEnvWrapper(ABC):
 
     def _check_if_done(self, done):
         """
-            Determine whether or not we're "done". This is a bit tricky here;
-            if we've lost a life, we say that we're done, but we don't reset
-            the environment. We considered this a "false done". This method
-            will return whether or not we're truly done or falsely done, and
-            it will set a flag that says whether or not we're truly done.
+        Determine whether or not we're "done". This is a bit tricky here;
+        if we've lost a life, we say that we're done, but we don't reset
+        the environment. We considered this a "false done". This method
+        will return whether or not we're truly done or falsely done, and
+        it will set a flag that says whether or not we're truly done.
 
-            Arguments:
-                done    Whether or not the environment is actually done and
-                        requires a reset.
+        Parameters:
+        -----------
+        done: bool
+            Whether or not the environment is actually done and
+            requires a reset.
 
-            Returns:
-                Whether or not we're truly or falsely done. In other words,
-                did we lose any lives?
+        Returns:
+        --------
+        bool:
+            Whether or not we're truly or falsely done. In other words,
+            did we lose any lives?
         """
         self.true_done = done
 
@@ -187,15 +200,16 @@ class AtariEnvWrapper(ABC):
 
     def _state_dependent_reset(self):
         """
-            Perform any needed actions for a reset. Again, this is tricky.
-            If our environment is truly done, we need to perform a reset.
-            If we're not done, we're allowing life loss, and we've lost a life,
-            then we don't reset the environment, but we may need to take an
-            action (like firing a ball).
+        Perform any needed actions for a reset. Again, this is tricky.
+        If our environment is truly done, we need to perform a reset.
+        If we're not done, we're allowing life loss, and we've lost a life,
+        then we don't reset the environment, but we may need to take an
+        action (like firing a ball).
 
-            Returns:
-                A resulting observation from taking a true done or false done
-                action, and whether or not we are truly done.
+        Returns:
+        --------
+        tuple:
+            (obs, info, true_done)
         """
         true_done = self.true_done
 
@@ -210,17 +224,19 @@ class AtariEnvWrapper(ABC):
 
     def seed(self, seed):
         """
-            Set the environment's random seed.
+        Set the environment's random seed.
 
-            Arguments:
-                seed    The random seed.
+        Parameters:
+        -----------
+        seed: int or None
+            The random seed.
         """
         self.env.seed(seed)
 
 
 class AtariPixels(AtariEnvWrapper):
     """
-        A generic wrapper for atari games with pixel observations.
+    A generic wrapper for atari games with pixel observations.
     """
 
     def __init__(self,
@@ -466,9 +482,9 @@ class BreakoutEnvWrapper():
 
     def true_done_reset(self):
         """
-            The action we should take when we are truly done, not just
-            when we've acceptable lost a life. This will be called by
-            the state_dependent_reset parent method.
+        The action we should take when we are truly done, not just
+        when we've acceptable lost a life. This will be called by
+        the state_dependent_reset parent method.
         """
         self.env.reset()
         self._set_random_start_pos()
@@ -477,10 +493,10 @@ class BreakoutEnvWrapper():
 
     def false_done_reset(self):
         """
-            What to do when we've acceptably lost a life, but we haven't
-            ended the game.
+        What to do when we've acceptably lost a life, but we haven't
+        ended the game.
 
-            In this case, we need to fire the ball again.
+        In this case, we need to fire the ball again.
         """
         obs, _, _, _, _ = self.fire_ball()
         return obs, {}
