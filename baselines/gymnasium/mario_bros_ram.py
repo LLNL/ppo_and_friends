@@ -29,10 +29,10 @@ class MarioBrosRAMRunner(GymRunner):
         parser.add_argument("--bs_clip_min", default=-10_000_000, type=float)
         parser.add_argument("--bs_clip_max", default=10_000_000, type=float)
 
-        parser.add_argument("--reward_clip_min", default=-100, type=float)
-        parser.add_argument("--reward_clip_max", default=100, type=float)
+        parser.add_argument("--reward_clip_min", default=-1, type=float)
+        parser.add_argument("--reward_clip_max", default=1, type=float)
 
-        parser.add_argument("--learning_rate", default=0.0001, type=float)
+        parser.add_argument("--learning_rate", default=0.001, type=float)
 
         parser.add_argument("--hist_size", default=2, type=int)
 
@@ -50,7 +50,6 @@ class MarioBrosRAMRunner(GymRunner):
 
         parser.add_argument("--max_ts_per_ep", type=int, default=16)
         parser.add_argument("--ts_per_rollout", type=int, default=512)
-        parser.add_argument("--soft_resets", type=int, default=0)
 
         parser.add_argument("--mini_batch_size", type=int, default=128)
         return parser
@@ -122,7 +121,6 @@ class MarioBrosRAMRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
                      ts_per_rollout     = ts_per_rollout,
-                     soft_resets        = bool(self.cli_args.soft_resets),
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
                      reward_clip        = (self.cli_args.reward_clip_min, self.cli_args.reward_clip_max),
