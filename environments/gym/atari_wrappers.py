@@ -242,8 +242,20 @@ class AtariPixels(AtariEnvWrapper):
     def __init__(self,
                  env,
                  allow_life_loss = False,
-                 frame_size = 84,
+                 frame_size      = 84,
                  **kw_args):
+        """
+        Parameters:
+        -----------
+        env: gymnasium env
+            The environment to wrap.
+        allow_life_loss: bool
+            If True, the game will only end when you've
+            lost your last life. If False, the game will
+            end after losing any lives.
+        frame_size: int
+            The pixel frame size to enforce.
+        """
 
         super(AtariPixels, self).__init__(
             env,
@@ -268,6 +280,19 @@ class AtariPixels(AtariEnvWrapper):
             dtype = np.float32)
 
     def rgb_to_gray(self, rgb_frame):
+        """
+        Convert an RGB frame to grayscale.
+
+        Parameters:
+        -----------
+        rgb_frame: np.ndarray
+             An array containing RGB pixel information.
+
+        Returns:
+        --------
+        np.ndarray:
+            A grayscale version of the input frame.
+        """
         rgb_frame  = rgb_frame.astype(np.float32) / 255.
         gray_dot   = np.array([0.2989, 0.587 , 0.114 ], dtype=np.float32)
         gray_frame = np.expand_dims(np.dot(rgb_frame, gray_dot), axis=0)
@@ -280,6 +305,27 @@ class AtariPixels(AtariEnvWrapper):
                    h_stop  = None,
                    w_start = None,
                    w_stop  = None):
+        """
+        Crop a given frame.
+
+        Parameters:
+        -----------
+        frame: np.ndarray
+            The frame to crop.
+        h_start: int or None
+            Height start.
+        h_stop: int or None
+            Height stop.
+        w_start: int or None
+            Width start.
+        w_stop: int or None
+            Width stop.
+
+        Returns:
+        --------
+        np.ndarray:
+            The cropped frame.
+        """
 
         h_start = self.h_start if h_start == None else h_start
         h_stop  = self.h_stop if h_stop == None else h_stop
@@ -292,6 +338,23 @@ class AtariPixels(AtariEnvWrapper):
                      frame,
                      shape  = None,
                      interp = cv2.INTER_AREA):
+        """
+        Resize a given frame.
+
+        Parameters:
+        -----------
+        frame: np.ndarray
+            The frame to resize.
+        shape: tuple or None
+            The new shape for the frame.
+        interp: cv2 interpolation method
+            Which method to use for interpolation
+
+        Returns:
+        --------
+        np.ndarray:
+            A resized version of the input frame.
+        """
 
         #
         # c2v is reversed.
@@ -303,6 +366,19 @@ class AtariPixels(AtariEnvWrapper):
         return cv2.resize(frame, shape, interpolation = interp)
 
     def rgb_to_processed_frame(self, rgb_frame):
+        """
+        Process an RGB frame into an observation frame.
+
+        Parameters:
+        -----------
+        rgb_frame: np.ndarray
+            The input RGB frame.
+
+        Returns:
+        --------
+        np.ndarray:
+            The resulting processed frame.
+        """
         new_frame = self.rgb_to_gray(rgb_frame)
         new_frame = self.crop_frame(new_frame)
         new_frame = np.expand_dims(self.resize_frame(new_frame.squeeze()), 0)
@@ -316,6 +392,7 @@ class PixelHistEnvWrapper(AtariPixels):
                  hist_size         = 2,
                  allow_life_loss   = False,
                  use_frame_pooling = True,
+                 punish_end        = False,
                  **kw_args):
 
         super(PixelHistEnvWrapper, self).__init__(
@@ -328,6 +405,7 @@ class PixelHistEnvWrapper(AtariPixels):
         self.action_space      = env.action_space
         self.hist_size         = hist_size
         self.use_frame_pooling = use_frame_pooling
+        self.punish_end        = punish_end
 
     def reset(self, *args, **kw_args):
         cur_frame, info, true_done = self._state_dependent_reset()
@@ -340,7 +418,7 @@ class PixelHistEnvWrapper(AtariPixels):
 
         return self.frame_cache.copy(), info
 
-    def step(self, action):
+    def _env_step(self, action):
         cur_frame, reward, terminated, truncated, info = self.env.step(action)
 
         cur_frame = self.rgb_to_processed_frame(cur_frame)
@@ -364,6 +442,21 @@ class PixelHistEnvWrapper(AtariPixels):
 
         return self.frame_cache, reward, terminated, truncated, info
 
+    def step(self, action):
+
+        obs, reward, terminated, truncated, info = self._frame_skip_step(
+            action    = action,
+            step_func = self._env_step)
+
+        if self.punish_end:
+            #
+            # Return a negative reward for failure.
+            #
+            if terminated and reward == 0:
+                reward = -1.
+
+        return obs, reward, terminated, truncated, info
+
     def render(self, **kwargs):
         return self.env.render(**kwargs)
 
@@ -374,6 +467,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
                  env,
                  hist_size = 2,
                  allow_life_loss = False,
+                 punish_end      = False,
                  **kw_args):
 
         super(RAMHistEnvWrapper, self).__init__(
@@ -399,6 +493,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         self.env                = env
         self.ram_cache          = None
         self.action_space       = env.action_space
+        self.punish_end         = punish_end
 
     def _reset_ram_cache(self,
                          cur_ram):
@@ -416,7 +511,7 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
 
         return self.ram_cache.copy(), info
 
-    def step(self, action):
+    def _env_step(self, action):
         cur_ram, reward, terminated, truncated, info = self.env.step(action)
         cur_ram  = cur_ram.astype(np.float32) / 255.
 
@@ -429,6 +524,20 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         info["life lost"] = life_lost
 
         return self.ram_cache.copy(), reward, terminated, truncated, info
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self._frame_skip_step(
+            action    = action,
+            step_func = self._env_step)
+
+        if self.punish_end:
+            #
+            # Return a negative reward for failure.
+            #
+            if terminated and reward == 0:
+                reward = -1.
+
+        return obs, reward, terminated, truncated, info
 
     def render(self, **kwargs):
         return self.env.render(**kwargs)
@@ -526,7 +635,7 @@ class BreakoutRAMEnvWrapper(BreakoutEnvWrapper, RAMHistEnvWrapper):
 
     def step(self, action):
         action    = self.action_map[action]
-        step_func = lambda a : RAMHistEnvWrapper.step(self, a)
+        step_func = lambda a : RAMHistEnvWrapper._env_step(self, a)
 
         obs, reward, terminated, truncated, info = self._frame_skip_step(
             action    = action,
@@ -584,7 +693,7 @@ class BreakoutPixelsEnvWrapper(BreakoutEnvWrapper, PixelHistEnvWrapper):
     def step(self, action):
 
         action    = self.action_map[action]
-        step_func = lambda a : PixelHistEnvWrapper.step(self, a)
+        step_func = lambda a : PixelHistEnvWrapper._env_step(self, a)
 
         obs, reward, terminated, truncated, info = self._frame_skip_step(
             action    = action,
