@@ -34,7 +34,7 @@ class MarioBrosRAMRunner(GymRunner):
 
         parser.add_argument("--learning_rate", default=0.0001, type=float)
 
-        parser.add_argument("--hist_size", default=4, type=int)
+        parser.add_argument("--hist_size", default=2, type=int)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -126,6 +126,6 @@ class MarioBrosRAMRunner(GymRunner):
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
                      reward_clip        = (self.cli_args.reward_clip_min, self.cli_args.reward_clip_max),
-                     normalize_obs      = True,
+                     normalize_obs      = False,
                      normalize_rewards  = True,
                      **self.kw_run_args)

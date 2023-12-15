@@ -35,7 +35,7 @@ class BreakoutPixelsRunner(GymRunner):
         breakout_generator = lambda : BreakoutPixelsEnvWrapper(
             env              = gym_generator(),
             allow_life_loss  = self.kw_run_args["test"],
-            hist_size        = 4,
+            hist_size        = 2,
             skip_k_frames    = 4)
 
         env_generator = lambda : \
@@ -56,7 +56,6 @@ class BreakoutPixelsRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
             "lr"               : lr,
-            "bootstrap_clip"   : (-1., 100.),
             "target_kl"        : 0.2,
         }
 
@@ -74,4 +73,5 @@ class BreakoutPixelsRunner(GymRunner):
                      max_ts_per_ep      = 64,
                      epochs_per_iter    = 30,
                      reward_clip        = (-1., 1.),
+                     normalize_obs      = False,
                      **self.kw_run_args)

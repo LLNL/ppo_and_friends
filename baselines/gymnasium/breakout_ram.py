@@ -31,7 +31,7 @@ class BreakoutRAMRunner(GymRunner):
         parser.add_argument("--reward_clip_min", default=-1, type=float)
         parser.add_argument("--reward_clip_max", default=1, type=float)
 
-        parser.add_argument("--hist_size", default=4, type=int)
+        parser.add_argument("--hist_size", default=2, type=int)
 
         parser.add_argument("--learning_rate", default=0.0003, type=float)
         parser.add_argument("--use_lr_scheduler", default=0, type=int)
@@ -46,7 +46,7 @@ class BreakoutRAMRunner(GymRunner):
         parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
         parser.add_argument("--intr_reward_weight", type=float, default=1.0)
 
-        parser.add_argument("--actor_hidden", type=int, default=128)
+        parser.add_argument("--actor_hidden", type=int, default=256)
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
         parser.add_argument("--max_ts_per_ep", type=int, default=16)
@@ -136,4 +136,6 @@ class BreakoutRAMRunner(GymRunner):
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
                      reward_clip        = (self.cli_args.reward_clip_min, self.cli_args.reward_clip_max),
+                     normalize_obs      = False,
+                     normalize_rewards  = True,
                      **self.kw_run_args)
