@@ -259,13 +259,13 @@ class AtariPixels(AtariEnvWrapper):
 
         new_shape = (1, frame_size, frame_size)
         low       = np.zeros(new_shape)
-        high      = np.full(new_shape, 255)
+        high      = np.full(new_shape, 1.0)
 
         self.observation_space = Box(
             low   = low,
             high  = high,
             shape = new_shape,
-            dtype = np.uint8)
+            dtype = np.float32)
 
     def rgb_to_gray(self, rgb_frame):
         rgb_frame  = rgb_frame.astype(np.float32) / 255.
@@ -385,13 +385,13 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         cache_shape = (ram_shape[0] * hist_size,)
 
         low       = np.zeros(cache_shape)
-        high      = np.full(cache_shape, 255)
+        high      = np.full(cache_shape, 1.0)
 
         self.observation_space = Box(
             low   = low,
             high  = high,
             shape = cache_shape,
-            dtype = np.uint8)
+            dtype = np.float32)
 
         self.ram_size           = ram_shape[0]
         self.cache_size         = cache_shape[0]
@@ -408,6 +408,9 @@ class RAMHistEnvWrapper(AtariEnvWrapper):
         cur_ram, info, true_done = self._state_dependent_reset()
         cur_ram = cur_ram.astype(np.float32) / 255.
 
+        #
+        # NOTE: this wrapper has 'soft-resets' baked into it.
+        #
         if true_done:
             self._reset_ram_cache(cur_ram)
 
