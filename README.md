@@ -3,79 +3,58 @@
 PPO and Friends is a PyTorch implementation of Proximal Policy Optimation
 along with various extra optimizations and add-ons (freinds).
 
-While this project is intended to be compatible with Gymnasium environments
-and interfaces, you'll occasionally see situtations where utilities that gym
-(or stable baselines) provides have been ignored in favor of creating our
-own versions of these utilities. These choices are made to more easily handle
-environments and/or algorithms that don't follow the standard rules and
-assumptions enforced by existing frameworks.
+We are currently compatible with the following environment frameworks:
+* Gymnasium
+* Gym (including versions <= 0.21)
+* PettingZoo
+* Abmarl Gridworld
 
 # Our Friends
 
 Some of our friends:
 
+* Decentralized Distributed Proximal Policy Optimization (DD-PPO)
 * Intrinsic Curiosity Module (ICM)
 * Multi Agent Proximal Policy Optimization (MAPPO)
+* Multi-Agent Transformer (MAT)
 * Generalized Advantage Estimations (GAE)
-* LSTM integration into PPO algorithm
+* LSTM
 * Gradient, reward, bootstrap, value, and observation clipping
 * KL based early ending
 * KL punishment
-* Splitting observations by proprioceptive and exteroceptive information
 * Observation, advantage, and reward normalization
 * Advantage re-calculation
-* Learning rate annealing
-* Entropy annealing
-* Intrinsic reward weight annealing
 * Vectorized environments
-* Observational augmentations
-* Multi-Agent Transformer
 
 For a full list of policy options and their defaults, see 
-`ppo_and_friends/policies/agent_policy.py`.
+`ppo_and_friends/policies/`
 
 Note that this implementation of PPO uses separate networks for critics
 and actors (except for the Multi-Agent Transformer).
 
-# MAPPO
+# Installation
 
-This implementation of PPO supports multi-agent environments (MAPPO), and,
-as such, there are many design decisions to made. Currently, ppo-and-friends
-follows the standards outlined below.
+Simpy issue the following command from the
+top directory to install the standard PPO-And-Friends library.
+```
+pip install .
+```
 
-1. All actions sent to the step function will be wrapped in a dictionary
-   mapping agent ids to actions.
-2. Calling `env.step(actions)` will result in a tuple of the following form:
-   `(obs, critic_obs, reward, info, done)` s.t. each tuple element is a
-   dictionary mapping agent ids to the appropriate data.
-3. Death masking is used at all times, which means that all agents are
-   expected to exist in the `step` results as long as an episode hasn't
-   terminated.
+Optionally, you can install the following extensions as well. Note that these extensions
+are not always cross-compatible. For instance, `abmarl` support is not currently compatible
+with `gym_baselines` support.
 
-Since not all environments will adhere to the above standards, various
-wrappers are provided in the `environments/` directory. For best results,
-all environments should be wrapped in a class inherting from
-`PPOEnvironmentWrapper`.
+```
+# Install support for Abmarl
+pip install .[abmarl]
 
-Design decisions that may have an impact on learning have largely come
-from the following two papers:
-arXiv:2103.01955v2
-arXiv:2006.07869v4
+# Install support running the (old) gym environments in baselines/gym
+pip install --upgrade pip wheel==0.38.4
+pip install .[gym]
 
-# Multi-Agent Transformer
-
-The Multi-Agent Transformer (MAT) can be enabled by setting a policie's class
-to MATPolicy. Different policy classses can be used for different policies
-within the same game. For instance, you can have one team use MATPolicy
-and another team use PPOPolicy.
-
-The implemenation of MAT within PPO-AF follows the original publication as
-closely as possible. Some exceptions were made to account for differences
-between the publication and it's associated source code and differences
-in architecture between PPO-AF and the publication's source code.
-
-Full details on MAT can be found at its official site:
-https://sites.google.com/view/multi-agent-transformer
+# Install support for running the gymnasium environments in baselines/gymnasium
+pip install .[gymnasium]
+```
 
 # Terminology
 Terminology varies across implemenations and publications, so here are
@@ -99,32 +78,72 @@ some commonly overloaded terms and how we define them.
    an episode's trajectory to end. This is defined as `max_ts_per_ep` in our
    code.
 
+# Policy Options
 
-# Installation
+This implementation of PPO supports both single and multi-agent environments, and,
+as such, there are many design decisions to made. Currently, ppo-and-friends
+follows the standards outlined below.
 
-After activating a virtual environment, issue the following command from the
-top directory to install the standard PPO-And-Friends library.
-```
-pip install .
-```
+1. All actions sent to the step function will be wrapped in a dictionary
+   mapping agent ids to actions.
+2. Calling `env.step(actions)` will result in a tuple of the following form:
+   `(obs, critic_obs, reward, info, done)` s.t. each tuple element is a
+   dictionary mapping agent ids to the appropriate data.
+3. Death masking is used at all times, which means that all agents are
+   expected to exist in the `step` results as long as an episode hasn't
+   terminated.
 
-Optionally, you can install the following extensions as well. Note that these extensions
-are not always cross-compatible. For instance, `abmarl` support is not currently compatible
-with `gym_baselines` support.
+Since not all environments will adhere to the above standards, various
+wrappers are provided in the `environments/` directory. For best results,
+all environments should be wrapped in a class inherting from
+`PPOEnvironmentWrapper`.
 
-```
-# Install support for Abmarl
-pip install .[abmarl]
+## PPO
+This is the default policy for single-agent environments.
 
-# Install support running the (old) gym environments in baselines/gym
-pip install --upgrade pip wheel==0.38.4
-pip install .[gym_baselines]
+## MAPPO and IPPO
+arXiv:2103.01955v4 makes the distinction between MAPPO and IPPO such that
+the former uses a centralized critic receiving global information about
+the agents of a shared policy (usually a concatenation of the observations),
+and the later uses an independent, decentralized critic.
 
-# Install support for running the gymnasium environments in baselines/gymnasium
-pip install .[gymnasium_baselines]
-```
+Both options can be enabled by setting the `critic_view` parameter in
+the `PPOEnvironmentWrapper` appropriately. Options as of now are
+"global", "policy", and "local".
 
-# Environments
+* global: this option will send observations from ALL agents in the environment,
+  regardless of which policy they belong to, to every critic. Note that, when using
+  a single policy, this is identical to MAPPO. However, when using multiple policies,
+  each critic can see the observations of other policies.
+* policy: this option will combine observations from all agents under shared policies,
+  and the critics of those policies will receive the shared observations. This option
+  is identical to MAPPO when using a single policy, and it alows for similar behavior
+  when using multiple polices (multiple policies was not convered in the paper, but
+  this general concept translates well).
+* local: this option will send local observations from each agent to the critic of
+  their respective policy. This is IPPO when using a single policy with multiple agents
+  and PPO when using a single policy with one agent.
+
+All multi-agent environment wrappers that inherit from `PPOEnvironmentWrapper`
+allow users to set `critic_view` with the exception of `MAT`, which cannot
+decouple the critic's from the actors' observations.
+
+## Multi-Agent Transformer
+
+The Multi-Agent Transformer (MAT) can be enabled by setting a policie's class
+to MATPolicy. Different policy classses can be used for different policies
+within the same game. For instance, you can have one team use MATPolicy
+and another team use PPOPolicy.
+
+The implemenation of MAT within PPO-AF follows the original publication as
+closely as possible. Some exceptions were made to account for differences
+between the publication and it's associated source code and differences
+in architecture between PPO-AF and the publication's source code.
+
+Full details on MAT can be found at its official site:
+https://sites.google.com/view/multi-agent-transformer
+
+# Environment Wrappers
 
 ## Gymnasium
 
@@ -133,11 +152,43 @@ the `SingleAgentGymWrapper` and `MultiAgentGymWrapper`, respectively.
 For examples on how to train a gymnasium environment, check out the runners
 in `baselines/gymnasium/`.
 
+**IMPORTANT**: While Gymnasium does not have a standard interface for multi-agent games,
+I've found some commonalities among many publications, and we are using this
+as our standard. You may need to make changes to your multi-agent gymnasium
+environments before they can be wrapped in the `MultiAgentGymWrapper`.
+
+Our expectaions of multi-agent Gymnasium environments are as follows:
+* The step method must return observation, reward, terminated, truncated, info.
+  observation, reward, terminated, and truncated
+  must be iterables s.t. each index maps to a specific agent, and this order
+  must not change. info must be a dict.
+* The reset method must return the agent observations as an iterable with
+  the same index constraints defined above.
+* Both `env.observation_space` and `env.action_space` must be iterables
+  such that indices map to agents in the same order they are given from
+  the step and reset methods.
+
 ## Gym <= 0.21
 
 For environments that only exist in versions <= 0.21 of Gym, you
 can use the `Gym21ToGymnasium` wrapper. See `baselines/gym/`
 for examples.
+
+**IMPORTANT**: While Gym does not have a standard interface for multi-agent games,
+I've found some commonalities among many publications, and we are using this
+as our standard. You may need to make changes to your multi-agent gymnasium
+environments before they can be wrapped in the `MultiAgentGymWrapper`.
+
+Our expectaions of multi-agent Gym environments are as follows:
+* The step method must return observation, reward, done, info.
+  observation, reward, and done
+  must be iterables s.t. each index maps to a specific agent, and this order
+  must not change. info must be a dict.
+* The reset method must return the agent observations as an iterable with
+  the same index constraints defined above.
+* Both `env.observation_space` and `env.action_space` must be iterables
+  such that indices map to agents in the same order they are given from
+  the step and reset methods.
 
 ## Gym To Gymnasium
 
@@ -159,9 +210,68 @@ for examples.
 ## Custom
 
 All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
-using a custom environment that doesn't conform to Gym or Abmarl standards,
+using a custom environment that doesn't conform to supported standards,
 you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
 found in `environments/ppo_env_wrappers.py`.
+
+# MPI And Environments Per Processor
+Both MPI and multiple environment instances per processor are supported,
+and utilizing these options can greatly speed up training time. Some
+environments may be sensitive to the choices here, which can have an
+impact on training. See the **Tips and Tricks** section for some general
+setting suggestions.
+
+Currently, the default is to use GPUs when training on a single processor
+and CPUs when training on multiple processors. This can be overridden with
+the `--alow_mpi_gpu` flag, which is helpful for environments that require
+networks that can benefit from GPUs (convolutions, for example).
+
+NOTE: the current implementation of multiple environment instances per
+processor assumes that the rollout bottleneck will come from inference rather
+than stepping through the environment. Because of this, the multiple environment
+instances are run in succession rather than in parallel, and the speed up
+comes from batched inference during the rollout. Very slow environments may
+not see a performance gain from increasing `envs_per_proc`.
+
+**Usage:**
+
+mpirun:
+```
+mpirun -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
+```
+
+srun:
+```
+srun -N1 -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
+```
+
+Some things to note:
+1. The total timesteps per rollout is divided among the processors. So,
+   if the environment is set to run 1024 timesteps per rollout, each
+   processor will collect 1024/N of those timesteps, where N is the total
+   number of processors (remainders go to processor 0). Note that there
+   are various side effects of this, some of which are outlined below.
+   Also, `envs_per_proc` can have a similar effect on reducing the total
+   timesteps that each environment instance experiences, especially if
+   each instance can reach its max timesteps before being "done".
+2. Increasing the processor count doesn't always increase training speed.
+   For instance, imagine an environment that can only reach unique states
+   in the set `U` after running for at least 500 time steps. If our total
+   timesteps per rollout is set to 1024, and we run with > 2 processors,
+   we will never collect states from `U` and thus might not ever learn
+   how to handle those unique situations. A similar logic applies for
+   `envs_per_proc`. **Note**: this particular issue is now partially
+   mitigated by the recent addition of "soft resets", but this feature
+   has its own complications.
+3. When running with multiple processors or environment instances,
+   the stats that are displayed might not fully reflect the true status
+   of learning. For instance, imagine an environment that, when performing
+   well, receives +1 for every timestep and is allowed to run for a
+   maximum of 100 timesteps. This results in a max score of +100. If each
+   processor is only collecting 32 timesteps per rollout, the highest
+   score any of them could ever achieve would be 32. Therefore, a reported
+   score around 32 might actually signal a converged policy.
+
 
 # Environment Runners
 
@@ -186,6 +296,23 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 @ppoaf_runner
 class CartPoleRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--learning_rate", type=float, default=0.002)
+        return parser
+
     def run(self):
 
         env_generator = lambda : \
@@ -203,7 +330,7 @@ class CartPoleRunner(GymRunner):
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
+            "lr"               : self.cli_args.lr,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
@@ -282,136 +409,6 @@ PPO-And-Friend's ploting utility.
 ppoaf plot path1 path2 path3 ... <options>
 ```
 
-# Documentation
-
-When specific implentation choices have been made as a result of a publication,
-the goal is to reference these publications in the relevant code. For
-implementation details that are not directly derived from publications, there
-should be appropriate comments describing why these choices were made.
-
-Documentation is a work in progress.
-
-# MPI And Environments Per Processor
-Both MPI and multiple environment instances per processor are supported,
-and utilizing these options can greatly speed up training time. Some
-environments may be sensitive to the choices here, which can have an
-impact on training. See the **Tips and Tricks** section for some general
-setting suggestions.
-
-Currently, the default is to use GPUs when training on a single processor
-and CPUs when training on multiple processors. This can be overridden with
-the `--alow_mpi_gpu` flag, which is helpful for environments that require
-networks that can benefit from GPUs (convolutions, for example).
-
-NOTE: the current implementation of multiple environment instances per
-processor assumes that the rollout bottleneck will come from inference rather
-than stepping through the environment. Because of this, the multiple environment
-instances are run in succession rather than in parallel, and the speed up
-comes from batched inference during the rollout. Very slow environments may
-not see a performance gain from increasing `envs_per_proc`.
-
-**Usage:**
-
-mpirun:
-```
-mpirun -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
-```
-
-srun:
-```
-srun -N1 -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
-```
-
-Some things to note:
-1. The total timesteps per rollout is divided among the processors. So,
-   if the environment is set to run 1024 timesteps per rollout, each
-   processor will collect 1024/N of those timesteps, where N is the total
-   number of processors (remainders go to processor 0). Note that there
-   are various side effects of this, some of which are outlined below.
-   Also, `envs_per_proc` can have a similar effect on reducing the total
-   timesteps that each environment instance experiences, especially if
-   each instance can reach its max timesteps before being "done".
-2. Increasing the processor count doesn't always increase training speed.
-   For instance, imagine an environment that can only reach unique states
-   in the set `U` after running for at least 500 time steps. If our total
-   timesteps per rollout is set to 1024, and we run with > 2 processors,
-   we will never collect states from `U` and thus might not ever learn
-   how to handle those unique situations. A similar logic applies for
-   `envs_per_proc`. **Note**: this particular issue is now partially
-   mitigated by the recent addition of "soft resets", but this feature
-   has its own complications.
-3. When running with multiple processors or environment instances,
-   the stats that are displayed might not fully reflect the true status
-   of learning. For instance, imagine an environment that, when performing
-   well, receives +1 for every timestep and is allowed to run for a
-   maximum of 100 timesteps. This results in a max score of +100. If each
-   processor is only collecting 32 timesteps per rollout, the highest
-   score any of them could ever achieve would be 32. Therefore, a reported
-   score around 32 might actually signal a converged policy.
-
-# Other Features
-
-## Observational Augmentations
-
-### What are observational augmentations?
-Imagine we have a 3D environment where we
-want to learn to move a ball as fast as possible. There are two options to
-consider here; do we want the ball to move in a single direction, or should
-the ball be able to move in any direction? In other words, should direction
-matter at all in our reward? If the answer is yes, we should learn to move
-the ball in one direction only, then we can proceed as usual. Environments
-like Ant employ this kind of reward. However, if our answer is no, we have
-an interesting situation here. If we're using the standard approach for this
-case, we need to wait for the policy to experience enough directions to
-learn that direction doesn't matter. On the other hand, the policy might
-learn a simplified version of this idea early on and just choose a random
-direction and stick with it. But what if we *want* the policy to learn that
-direction doesn't matter? In this case, we really do need to wait for the
-policy to encounter enough experiences to learn this on its own (maybe we start
-the ball rolling in a random direction with every reset). If direction truly
-doesn't matter, though, do we really need to wait for those experiences
-to stack up? Well, this likely depends on the environment. In this case,
-our observations are simple enough that we can *augment* a single observation
-to obtain a batch of observations corresponding to different directions.
-We can get away with this because *the reward trajectories will be identical
-regardless of direction*. In other words, we can cheat the system, and,
-instead of waiting for the environment to crank out a bunch of directions,
-we can take a short cut by artificially generating those directions and
-their trajectories from a single observation.
-
-### How to utilize observational augmentations
-Both `run`, located in `runners/env_runner.py` and our `PPO` class have
-an `obs_augment` argument that, when enabled, will try to wrap your environment
-in `AugmentingEnvWrapper`. This wrapper expects (and checks) that your
-environment has a method named `augment_observation`, which takes a *single*
-observation and returns a batch of observations. This batch will contain the
-original observation plus a number of augmentations, and the batch size is
-expected to always be the same. The values for actions, dones, and rewards
-are all duplicated to be identical for every instance in the batch. Info is also
-duplicated, except that it might contain augmented terminal observations.
-
-**NOTE:** we don't currently prohibit the use of multiple environments per
-processor in conjunction with `aug_observation`, but it is untested and
-should be used with caution and consideration.
-
-## Soft Resets
-
-### What are soft resets?
-In short, the environment is only reset back to its starting state when it
-reaches a done state. This can be useful when you want to keep your timesteps
-per episode fairly short while allowing your agent(s) to explore the
-environment at further time states.
-**NOTE:** This feature is sometimes referred to as "soft horizons".
-
-### When to use caution
-While soft resets can be very useful, there are also situations where they
-can be detrimental. Imagine a scenario where your agent can easily fall into
-inescapable "traps" midway through exploring the environment. If soft resets
-are enabled, you might find that your rollouts are starting with the agent
-in this trap, which could negatively impact learning. On the other hand, if
-the traps are escapable, and escaping is a desired learned behavior, then
-using soft resets might actually be helpful in the long term.
-
 # Tips And Tricks
 
 **Action Space**
@@ -471,83 +468,6 @@ GPU:
 ```
 GP104BM [GeForce GTX 1070 Mobile]
 ```
-
-## Environment Settings
-
-I have by no means run any comprehensive studies to figure out what the
-optimal choices are for hyper-parameters, but the settings located
-in the baselines tend to work well. In general, using as
-many processors as you have access to will speed up training, but
-there is also communication overhead that will become more noticable
-as you scale up. This, combined with the limitations of how often
-the policy is updated, will lead to diminishing returns at some point.
-
-The number of environments per processor is a little less straightforward,
-as this setting will further divide up the episode lengths. I typically see
-good results by setting this to something between 2 and 4, depending on the
-environment.
-
-I've added extra information and tips for some of our more unique environments
-below.
-
-### BipedalWalker
-The environment is considered solved when the average score over 100 test 
-runs is >= 300. This policy easily gets an average score >= 320.
-
-### BipedalWalkerHardcore
-This is one of the most challenging environments in this repo, and it takes a
-significant amount of time to reach a solved policy. Using 4 processors and
-1 environment per processor, I generally see a solved policy around 4 hours
-or so of training (~6000->7000 iterations), but the policy can still be a 
-bit brittle at this point. For example, testing the policy 4 times in a row
-with each test averaging over 100 test runs might result in 3 out of the 4
-averages being >= 300. Longer training will result in a more stable policy.
-The environment is considered solved when the average score over 100 test
-runs is >= 300. This policy generally gets an average score >= 320 once
-solved.
-
-### All Atari pixel environments
-I recommend using `--device 'gpu'` for systems with GPUs.
-
-### Ant
-In order to solve the environment, you need to reach an average score >= 6000
-over 100 test runs.
-
-### Walker2d and Hopper
-Both Walker2d and Hopper are oddly sensitive to the trajectory lengths.
-They will learn to run a bit beyond the max trajectory length very well,
-but they often stumble afterwards. For this reason, I recommend using no
-training with a single environment per processor.
-This will result in a solved policy fairly quickly.
-
-### HumanoidStandup
-This is an unsolved environment.
-
-### RobotWarehouseTiny
-There are many configuration options for the robot warehouse. This one
-uses 3 agents in a "tiny" warehouse.
-This environment has very sparse rewards, so it can take a while for the
-agents to explore enough to reach a good policy.
-
-NOTE: this environment requires gym version 0.21 and pyglet version 1.5
-
-### RobotWarehouseSmall
-There are many configuration options for the robot warehouse. This one
-uses 4 agents in a "small" warehouse.
-This is the same as RobotWarehouseTiny, except that it is slightly larger. The
-complexity of the environment is increased with the increase in size, so
-learning takes longer.
-
-NOTE: this environment requires gym version 0.21 and pyglet version 1.5
-
-### LevelBasedForaging
-There are many configuration options for this environment. This configuration
-uses 3 players, an 8x8 grid, 2 food sources, and each agent is aware of
-the entire grid.
-
-### PressurePlate
-This environment allows configuration of the number of players. This
-configuration uses 4 players.
 
 # Baselines
 
