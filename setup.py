@@ -47,7 +47,7 @@ setup(name             = "ppo_and_friends",
 
       extras_require = {
           'gym': ['gym==0.21.0', 'rware', 'pressureplate'],
-          'gymnasium': ['gymnasium[mujoco]', 'gymnasium[atari]', 'autorom[accept-rom-license]'],
+          'gymnasium': ['gymnasium[mujoco]', 'gymnasium[atari]', 'autorom[accept-rom-license]', 'gym==0.23.0'],
           'abmarl': ['abmarl', 'gym==0.23.0'],
       },
 
