@@ -17,10 +17,6 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
     def __init__(self,
                  env,
-                 test_mode         = False,
-                 add_agent_ids     = False,
-                 critic_view       = "policy",
-                 policy_mapping_fn = None,
                  **kw_args):
         """
             Initialize our environment.
@@ -29,19 +25,11 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             FlattenWrapper, which is provided by Abmarl.
 
             Arguments:
-                env                An instance of the Abmarl environment.
-                test_mode          Are we in test mode?
-                add_agent_ids      Should we add agent ids to the observations?
-                critic_view        What view should the critic have?
-                policy_mapping_fn  The function mapping agent ids to policy ids.
+                env     An instance of the Abmarl environment.
         """
-        super(AbmarlWrapper, self).__init__(
-            env               = env,
-            test_mode         = test_mode,
-            add_agent_ids     = add_agent_ids,
-            critic_view       = critic_view,
-            policy_mapping_fn = policy_mapping_fn,
-            *kw_args)
+        super().__init__(
+            env = env,
+            **kw_args)
 
         self.fig = None
         self.need_action_wrap = False

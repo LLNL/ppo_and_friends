@@ -179,6 +179,8 @@ class BoxIntActionEnvironment(ABC):
         An abstract environment wrapper that helps convert Box int action
         spaces to MultiDiscrete.
     """
+    def __init__(self, **kw_args):
+        pass
 
     def _wrap_action_space(self, action_space):
         """
