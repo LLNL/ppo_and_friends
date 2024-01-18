@@ -38,7 +38,8 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
         env_generator = lambda : \
                 AbmarlWrapper(env               = abmarl_rtt_env,
                               policy_mapping_fn = policy_mapping_fn,
-                              critic_view       = "policy")
+                              critic_view       = "policy",
+                              death_mask_reward = -1.)
 
         #
         # This environment is multi-agent and requires different policies.
