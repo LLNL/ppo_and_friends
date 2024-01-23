@@ -1,21 +1,28 @@
 import os
 import numpy as np
-from abmarl.examples import MazeNavigationAgent, MazeNavigationSim
+from abmarl.examples import MazeNavigationAgent
+from abmarl.sim.gridworld.actor import MoveActor
+from abmarl.sim.gridworld.smart import SmartGridWorldSimulation
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
 from abmarl.external import MultiAgentWrapper
 from abmarl.sim.wrappers import FlattenWrapper
 
 
-class MazeNavigationSim2(MazeNavigationSim):
+class MazeNavigationSim2(SmartGridWorldSimulation):
+    def __init__(self, max_steps=4096, **kwargs):
+        super().__init__(**kwargs)
+        self.navigator  = self.agents['navigator']
+        self.target     = self.agents['target']
+        self.max_steps  = max_steps
+        self.step_count = 0
+
+        # Action Components
+        self.move_actor = MoveActor(**kwargs)
+
+        self.finalize()
 
     def step(self, action_dict, **kwargs):
-        #
-        # NOTE: This is identical to Abmarl's original sim, except that
-        # we don't punish for "bad" moves. I find that punishment really
-        # impedes learning.
-        #
-
         # Process moves
         action = action_dict['navigator']
         move_result = self.move_actor.process_action(self.navigator, action, **kwargs)
@@ -25,6 +32,18 @@ class MazeNavigationSim2(MazeNavigationSim):
 
         # Entropy penalty
         self.rewards['navigator'] -= 0.01
+
+        self.step_count += 1
+
+    def get_done(self, agent_id, **kwargs):
+        return self.get_all_done()
+
+    def get_all_done(self, **kwargs):
+        return np.all(self.navigator.position == self.target.position) or self.step_count >= self.max_steps
+
+    def reset(self, **kwargs):
+        self.step_count = 0
+        return super().reset(**kwargs)
 
 
 object_registry = {
