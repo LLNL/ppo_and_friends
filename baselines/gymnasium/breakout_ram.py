@@ -66,13 +66,13 @@ class BreakoutRAMRunner(GymRunner):
             gym_generator = lambda : gym.make(
                 "ALE/Breakout-ram-v5",
                 frameskip                 = 1,
-                repeat_action_probability = 0.0,
+                repeat_action_probability = 0.25,
                 render_mode               = 'human')
         else:
             gym_generator = lambda : gym.make(
                 "ALE/Breakout-ram-v5",
                 frameskip                 = 1,
-                repeat_action_probability = 0.0)
+                repeat_action_probability = 0.25)
 
         breakout_generator = lambda : BreakoutRAMEnvWrapper(
             env              = gym_generator(),
