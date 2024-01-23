@@ -10,7 +10,7 @@ batch:
 
 env:
     variables:
-        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-study
+        OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-mountain-car
         ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/gymnasium/mountain_car.py
 
@@ -22,7 +22,7 @@ generator.parameters:
       values: [0, 1, 2, 3, 4]
       label: SEED.%%
     LR:
-      values: [0.001, 0.0003]
+      values: [0.001]
       label: LR.%%
 
 study:
