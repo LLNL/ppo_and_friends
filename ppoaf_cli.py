@@ -264,6 +264,11 @@ def cli():
         "the 'curves' directory of state paths. Only these curves will be "
         "collected.")
 
+    plot_parser.add_argument("--save_path", type=str, default="",
+        help="Optional path to save a figure to instead of rendering in a "
+        "window. The the file should have an extension that is supported "
+        "by plotly.")
+
     plot_parser.add_argument("--title", type=str, default="",
         help="The plot title to use.")
 
@@ -390,7 +395,8 @@ def cli():
             ceil                      = args.ceiling,
             top                       = args.top,
             bottom                    = args.bottom,
-            reduce_x_by               = args.reduce_x_by)
+            reduce_x_by               = args.reduce_x_by,
+            save_path                 = args.save_path)
 
         return
 

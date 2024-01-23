@@ -426,7 +426,8 @@ def plot_curves_with_plotly(
     curve_files,
     curve_type  = "",
     title       = "",
-    add_markers = False):
+    add_markers = False,
+    save_path   = ""):
     """
     Plot a list of curve files with plotly.
 
@@ -440,6 +441,9 @@ def plot_curves_with_plotly(
         The plot title.
     add_markers: bool
         Should we add markers to our lines?
+    save_path: str
+        Optional path to save a figure to instead of rendering in a window.
+        The the file should have an extension that is supported by plotly.
     """
     curves      = []
     curve_names = []
@@ -476,7 +480,10 @@ def plot_curves_with_plotly(
         title_x     = 0.5,
     )
     
-    fig.show()
+    if save_path != "":
+        fig.write_image(save_path)
+    else:
+        fig.show()
 
 def plot_grouped_curves_with_plotly(
     curve_files,
@@ -487,6 +494,7 @@ def plot_grouped_curves_with_plotly(
     deviation     = "std",
     deviation_min = -np.inf,
     deviation_max = np.inf,
+    save_path     = "",
     verbose       = False):
     """
     Plot a list of curve file gruops with plotly. The deviation and mean of
@@ -512,6 +520,9 @@ def plot_grouped_curves_with_plotly(
         The minimum deviation to plot.
     deviation_max: float
         The maximum deviation to plot.
+    save_path: str
+        Optional path to save a figure to instead of rendering in a window.
+        The the file should have an extension that is supported by plotly.
     verbose: bool
         Enable verbosity?
     """
@@ -631,7 +642,10 @@ def plot_grouped_curves_with_plotly(
         title_x     = 0.5,
     )
 
-    fig.show()
+    if save_path != "":
+        fig.write_image(save_path)
+    else:
+        fig.show()
 
 def filter_grouped_curve_files_by_scores(
     curve_files,
@@ -766,6 +780,7 @@ def plot_curve_files(
     top                       = 0,
     bottom                    = 0,
     reduce_x_by               = "sum",
+    save_path                 = "",
     verbose                   = False):
     """
     Plot any number of curve files using plotly.
@@ -832,6 +847,9 @@ def plot_curve_files(
     reduce_x_by: str
         How to reduce the x axis of curves before comparisons are made
         when using the <top> or <bottom> args.
+    save_path: str
+        Optional path to save a figure to instead of rendering in a window.
+        The the file should have an extension that is supported by plotly.
     verbose: bool
         Enable verbosity?
     """
@@ -901,6 +919,7 @@ def plot_curve_files(
             deviation      = group_deviation,
             deviation_min  = deviation_min,
             deviation_max  = deviation_max,
+            save_path      = save_path,
             verbose        = verbose)
     else:
 
@@ -921,5 +940,6 @@ def plot_curve_files(
             curve_files = curve_files,
             curve_type  = curve_type,
             title       = title,
-            add_markers = add_markers)
+            add_markers = add_markers,
+            save_path   = save_path)
 
