@@ -1,5 +1,5 @@
 description:
-    name: abmarl_maze_bs_clip_seeds
+    name: abmarl_maze_bs_clip_seeds_3
     description: Abmarl maze study
 
 batch:
@@ -11,7 +11,7 @@ batch:
 env:
     variables:
         OUTPUT_PATH: /p/lustre1/maguire7/bs-clip-abmarl-maze
-        ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip//bin/activate
+        ENV_PATH: source /usr/workspace/maguire7/virtual_env/bsclip2//bin/activate
         RUNNER: /usr/workspace/wsb/maguire7/decsup/ppo_and_friends/baselines/abmarl/abmarl_large_grid_pos_maze.py
 
 generator.parameters:
@@ -19,23 +19,20 @@ generator.parameters:
       values: [0.1]
       label: BS_CLIP_MIN.%%
     SEED:
-      values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+      values: [0, 1, 2, 3, 4]
       label: SEED.%%
     LR:
-      values: [0.001]
+      values: [0.0005]
       label: LR.%%
     ACTOR_HIDDEN:
-      values: [64]
+      values: [128]
       label: ACTOR_HIDDEN.%%
     CRITIC_MULT:
       values: [2]
       label: CRITIC_MULT.%%
     TS_PER_EP:
-      values: [128]
+      values: [64]
       label: TS_PER_EP.%%
-    TS_PER_ROLLOUT:
-      values: [4096]
-      label: TS_PER_ROLLOUT.%%
 
 study:
     - name: AbmarlMaze
@@ -52,8 +49,9 @@ study:
                 --actor_hidden $(ACTOR_HIDDEN) \
                 --critic_hidden_mult $(CRITIC_MULT) \
                 --max_ts_per_ep $(TS_PER_EP) \
-                --ts_per_rollout $(TS_PER_ROLLOUT) \
-                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)-lr_$(LR)-actor_hidden_$(ACTOR_HIDDEN)-critic_mult_$(CRITIC_MULT)-ts_per_ep_$(TS_PER_EP)-ts_per_rollout_$(TS_PER_ROLLOUT)
+                --soft_resets 1 \
+                --ts_per_rollout 512 \
+                --state_tag seed_$(SEED)-bs_clip_min_$(BS_CLIP_MIN)-lr_$(LR)-actor_hidden_$(ACTOR_HIDDEN)-cm_$(CRITIC_MULT)-ts_per_ep_$(TS_PER_EP)
 
           nodes: 1
           procs: 36
