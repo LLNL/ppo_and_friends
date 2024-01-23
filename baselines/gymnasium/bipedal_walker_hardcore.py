@@ -29,7 +29,8 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         parser.add_argument("--bs_clip_max", default=np.inf, type=float)
 
         parser.add_argument("--learning_rate", default=0.00025, type=float)
-        parser.add_argument("--use_lr_scheduler", default=1, type=int)
+        parser.add_argument("--use_lr_scheduler", default=0, type=int)
+        parser.add_argument("--lr_scheduler_status_max", default=100_000_000, type=int)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -40,10 +41,11 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
         parser.add_argument("--intr_reward_weight", type=float, default=1.0)
 
-        parser.add_argument("--actor_hidden", type=int, default=128)
+        parser.add_argument("--actor_hidden", type=int, default=256)
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
         parser.add_argument("--max_ts_per_ep", type=int, default=64)
+        parser.add_argument("--ts_per_rollout", type=int, default=512)
 
         parser.add_argument("--mini_batch_size", type=int, default=512)
         return parser
@@ -117,7 +119,7 @@ class BipedalWalkerHardcoreRunner(GymRunner):
         if bool(self.cli_args.use_lr_scheduler):
             lr = LinearScheduler(
                 status_key = "iteration",
-                status_max = 30_000,
+                status_max = self.cli_args.lr_scheduler_status_max,
                 max_value  = self.cli_args.learning_rate,
                 min_value  = 1e-10)
         else:
@@ -142,7 +144,7 @@ class BipedalWalkerHardcoreRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
 
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,

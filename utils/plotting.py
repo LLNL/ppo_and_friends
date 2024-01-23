@@ -425,6 +425,7 @@ def find_curve_files(
 def plot_curves_with_plotly(
     curve_files,
     curve_type  = "",
+    title       = "",
     add_markers = False):
     """
     Plot a list of curve files with plotly.
@@ -433,8 +434,10 @@ def plot_curves_with_plotly(
     -----------
     curve_files: array-like
         An array/list of numpy txt files containing curves to plot.
-    curve_type: string
+    curve_type: str
         The type of curve we're plotting. This will become the y axis label.
+    title: str
+        The plot title.
     add_markers: bool
         Should we add markers to our lines?
     """
@@ -469,17 +472,22 @@ def plot_curves_with_plotly(
     fig.update_layout(
         xaxis_title = "Iterations",
         yaxis_title = curve_type,
+        title       = title,
+        title_x     = 0.5,
     )
     
     fig.show()
 
 def plot_grouped_curves_with_plotly(
     curve_files,
-    group_names = [],
-    curve_type  = "",
-    add_markers = False,
-    deviation   = "std",
-    verbose     = False):
+    group_names   = [],
+    curve_type    = "",
+    title         = "",
+    add_markers   = False,
+    deviation     = "std",
+    deviation_min = -np.inf,
+    deviation_max = np.inf,
+    verbose       = False):
     """
     Plot a list of curve file gruops with plotly. The deviation and mean of
     each group will be plotted.
@@ -494,10 +502,16 @@ def plot_grouped_curves_with_plotly(
         If not empty, there must be a name for every group.
     curve_type: string
         The type of curve we're plotting. This will become the y axis label.
+    title: str
+        The plot title.
     add_markers: bool
         Should we add markers to our lines?
     deviation: str
         How should the deviation around the mean be plotted?
+    deviation_min: float
+        The minimum deviation to plot.
+    deviation_max: float
+        The maximum deviation to plot.
     verbose: bool
         Enable verbosity?
     """
@@ -528,6 +542,7 @@ def plot_grouped_curves_with_plotly(
             continue
 
         curves      = []
+        curve_names = []
         group_color = colors[g_idx]
 
         if auto_group_name:
@@ -542,6 +557,8 @@ def plot_grouped_curves_with_plotly(
             curve_name = " ".join(curve_name.split(".")[0].split("_"))
             name       = f"{test_name} {curve_name}"
 
+            curve_names.append(curve_name)
+
             if auto_group_name:
                 if group_name is None:
                     group_name = name
@@ -551,17 +568,25 @@ def plot_grouped_curves_with_plotly(
             with open(cf, "rb") as in_f:
                 curves.append(np.loadtxt(in_f))
 
-        x_size = curves[0].size
-        for c in curves:
-            msg  = "ERROR: grouped curves must all have the same number "
-            msg += "of iterations."
-            assert x_size == c.size, msg
-
         if auto_group_name and group_name == "":
             group_name = f"group_{g_idx}"
             msg  = "WARNING: unable to find overlapping group name. "
             msg += f"Defaulting to generic name '{group_name}'."
             print(msg)
+
+        x_size = curves[0].size
+        failed_size_check = False
+        for c in curves:
+            if x_size != c.size:
+                msg  = "\nERROR: grouped curves must all have the same number "
+                msg += f"of iterations, but group {group_name} does not."
+                msg += f"\ncurves sizes: "
+
+                for i in range(len(curve_names)):
+                    msg += f"\n    {curve_names[i]}: {curves[i].size}"
+
+                sys.stderr.write(msg) 
+                sys.exit(1)
 
         curve_stack = np.stack(curves)
 
@@ -570,12 +595,12 @@ def plot_grouped_curves_with_plotly(
         mean    = curve_stack.mean(axis=0)
 
         if deviation == "min_max":
-            dev_min = curve_stack.min(axis=0)
-            dev_max = curve_stack.max(axis=0)
+            dev_min = np.clip(curve_stack.min(axis=0), deviation_min, np.inf)
+            dev_max = np.clip(curve_stack.max(axis=0), -np.inf, deviation_max)
         elif deviation == "std":
             std     = curve_stack.std(axis=0)
-            dev_min = mean - std
-            dev_max = mean + std
+            dev_min = np.clip(mean - std, deviation_min, np.inf)
+            dev_max = np.clip(mean + std, -np.inf, deviation_max)
 
         iterations = np.arange(x_size)
 
@@ -602,6 +627,8 @@ def plot_grouped_curves_with_plotly(
     fig.update_layout(
         xaxis_title = "Iterations",
         yaxis_title = curve_type,
+        title       = title,
+        title_x     = 0.5,
     )
 
     fig.show()
@@ -727,10 +754,13 @@ def plot_curve_files(
     exclusive_search_patterns,
     exclude_patterns,
     status_constraints,
+    title                     = "",
     add_markers               = False,
     grouping                  = False,
     group_names               = [],
     group_deviation           = "std",
+    deviation_min             = -np.inf,
+    deviation_max             = np.inf,
     floor                     = -np.inf,
     ceil                      = np.inf,
     top                       = 0,
@@ -746,7 +776,7 @@ def plot_curve_files(
         The name of the curve type to search for. For instance, "scores" will
         result in searching for scores. These curve types will be located in
         <state_path>/curves/. A the time of writing this, curve types are
-        "scores", "episode_length", and "runtime".
+        "scores", "episode_length", "runtime", "bs_min", "bs_max", "bs_avg".
     search_paths: array-like
         Paths to the policy curve files that you wish to plot. This can be paths
         to the actual curve files, directories containing the curve files,
@@ -768,6 +798,8 @@ def plot_curve_files(
         {'status_name_0' : ('comp_func_0', comp_val_0), 'status_preface'
         : {'status_name_1' : ('comp_func_1', comp_val_1)}} s.t. 'comp_func_i' is
         one of <, >, <=, >=, =.
+    title: str
+        The plot title to use.
     add_markers: bool
         If True, add markers to the line plots.
     grouping: bool
@@ -779,6 +811,10 @@ def plot_curve_files(
         Only applicable when grouping == True.
     group_deviation: str
         How should the deviation around the mean be plotted?
+    deviation_min: float
+        The minimum deviation to plot.
+    deviation_max: float
+        The maximum deviation to plot.
     floor: float
         Only plot curves that have the following characterstic: <floor>
         is exceeded at least once within the curve, AND, once <floor> has been
@@ -857,12 +893,15 @@ def plot_curve_files(
             print(f"Curve files filtered down to {num_files}")
 
         plot_grouped_curves_with_plotly(
-            curve_files = curve_files,
-            group_names = group_names,
-            curve_type  = curve_type,
-            add_markers = add_markers,
-            deviation   = group_deviation,
-            verbose     = verbose)
+            curve_files    = curve_files,
+            group_names    = group_names,
+            curve_type     = curve_type,
+            title          = title,
+            add_markers    = add_markers,
+            deviation      = group_deviation,
+            deviation_min  = deviation_min,
+            deviation_max  = deviation_max,
+            verbose        = verbose)
     else:
 
         curve_files = filter_curve_files_by_scores(
@@ -881,5 +920,6 @@ def plot_curve_files(
         plot_curves_with_plotly(
             curve_files = curve_files,
             curve_type  = curve_type,
+            title       = title,
             add_markers = add_markers)
 

@@ -255,13 +255,17 @@ def cli():
         "score files.")
 
     plot_parser.add_argument("--curve_type", type=str, default="scores",
-        choices=["scores", "runtime", "episode_length"],
+        choices=["scores", "runtime", "episode_length",
+        "bs_min", "bs_max", "bs_avg"],
         help="The 'curve_type' is used to refine searches for saved curves "
         "when the curve file is not explicitly set. For instance, if "
         "a user sets 'curves' to a directory to be searched, the searching "
         "algorithm will look for subdirectories named <curve_type> within "
         "the 'curves' directory of state paths. Only these curves will be "
         "collected.")
+
+    plot_parser.add_argument("--title", type=str, default="",
+        help="The plot title to use.")
 
     plot_parser.add_argument("--inclusive_search_patterns", "--isp",
         type=str, nargs="+",
@@ -299,6 +303,14 @@ def cli():
         choices=["std", "min_max"],
         help="If --grouping is True, this flag can be used to determine "
         "how the deviation around the group means is plotted.")
+
+    plot_parser.add_argument("--deviation_min", type=float, default=-np.inf,
+        help="This flag can be used in conjunction with --group_deviation to "
+        "limit the lower end of the plotted deviation.")
+
+    plot_parser.add_argument("--deviation_max", type=float, default=np.inf,
+        help="This flag can be used in conjunction with --group_deviation to "
+        "limit the upper end of the plotted deviation.")
 
     plot_parser.add_argument("--verbose", action="store_true",
         help="Enable verbosity.")
@@ -363,6 +375,7 @@ def cli():
         plot_curve_files(
             curve_type                = args.curve_type,
             search_paths              = args.curves,
+            title                     = args.title,
             inclusive_search_patterns = inclusive_search_patterns,
             exclusive_search_patterns = exclusive_search_patterns,
             exclude_patterns          = exclude_patterns,
@@ -370,6 +383,8 @@ def cli():
             grouping                  = args.grouping,
             group_names               = group_names,
             group_deviation           = args.group_deviation,
+            deviation_min             = args.deviation_min,
+            deviation_max             = args.deviation_max,
             verbose                   = args.verbose,
             floor                     = args.floor,
             ceil                      = args.ceiling,

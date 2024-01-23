@@ -1,5 +1,6 @@
 import gymnasium as gym
 from ppo_and_friends.environments.gym.wrappers import SingleAgentGymWrapper
+from ppo_and_friends.environments.gym.atari_wrappers import RAMHistEnvWrapper
 from ppo_and_friends.policies.utils import get_single_policy_defaults
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
@@ -28,7 +29,12 @@ class MarioBrosRAMRunner(GymRunner):
         parser.add_argument("--bs_clip_min", default=-10_000_000, type=float)
         parser.add_argument("--bs_clip_max", default=10_000_000, type=float)
 
-        parser.add_argument("--learning_rate", default=0.0001, type=float)
+        parser.add_argument("--reward_clip_min", default=-1, type=float)
+        parser.add_argument("--reward_clip_max", default=1, type=float)
+
+        parser.add_argument("--learning_rate", default=0.001, type=float)
+
+        parser.add_argument("--hist_size", default=2, type=int)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -39,14 +45,13 @@ class MarioBrosRAMRunner(GymRunner):
         parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
         parser.add_argument("--intr_reward_weight", type=float, default=1.0)
 
-        parser.add_argument("--actor_hidden", type=int, default=128)
+        parser.add_argument("--actor_hidden", type=int, default=256)
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
-        parser.add_argument("--max_ts_per_ep", type=int, default=64)
-        parser.add_argument("--ts_per_rollout", type=int, default=2048)
-        parser.add_argument("--soft_resets", type=int, default=0)
+        parser.add_argument("--max_ts_per_ep", type=int, default=16)
+        parser.add_argument("--ts_per_rollout", type=int, default=512)
 
-        parser.add_argument("--mini_batch_size", type=int, default=512)
+        parser.add_argument("--mini_batch_size", type=int, default=128)
         return parser
 
     def run(self):
@@ -57,14 +62,22 @@ class MarioBrosRAMRunner(GymRunner):
             #
             self.kw_run_args["render"] = False
 
-            mario_generator = lambda : gym.make(
-                "ALE/MarioBros-v5",
-                obs_type="ram",
+            gym_generator = lambda : gym.make(
+                "ALE/MarioBros-ram-v5",
+                frameskip                 = 1,
+                repeat_action_probability = 0.0,
                 render_mode = "human")
         else:
-            mario_generator = lambda : gym.make(
-                "ALE/MarioBros-v5",
-                obs_type="ram")
+            gym_generator = lambda : gym.make(
+                "ALE/MarioBros-ram-v5",
+                frameskip                 = 1,
+                repeat_action_probability = 0.0)
+
+        mario_generator = lambda : RAMHistEnvWrapper(
+            env              = gym_generator(),
+            allow_life_loss  = self.kw_run_args["test"],
+            hist_size        = self.cli_args.hist_size,
+            skip_k_frames    = 4)
 
         env_generator = lambda : SingleAgentGymWrapper(mario_generator())
 
@@ -108,10 +121,9 @@ class MarioBrosRAMRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
                      ts_per_rollout     = ts_per_rollout,
-                     soft_resets        = bool(self.cli_args.soft_resets),
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
-                     reward_clip        = (-10., 10.),
-                     normalize_obs      = True,
+                     reward_clip        = (self.cli_args.reward_clip_min, self.cli_args.reward_clip_max),
+                     normalize_obs      = False,
                      normalize_rewards  = True,
                      **self.kw_run_args)

@@ -28,6 +28,7 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
         parser.add_argument("--bs_clip_max", default=np.inf, type=float)
 
         parser.add_argument("--learning_rate", default=5e-4, type=float)
+        parser.add_argument("--soft_resets", default=0, type=int)
 
         parser.add_argument("--enable_icm", type=int, default=0)
         parser.add_argument("--icm_inverse_size", type=int, default=32)
@@ -43,7 +44,7 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
 
         parser.add_argument("--max_ts_per_ep", type=int, default=64)
 
-        parser.add_argument("--mini_batch_size", type=int, default=512)
+        parser.add_argument("--mini_batch_size", type=int, default=128)
         parser.add_argument("--ts_per_rollout", type=int, default=4096)
         return parser
 
@@ -103,9 +104,10 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
-                     epochs_per_iter    = 20,
+                     epochs_per_iter    = 30,
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      ts_per_rollout     = ts_per_rollout,
+                     soft_resets        = bool(self.cli_args.soft_resets),
                      normalize_obs      = False,
                      normalize_rewards  = False,
                      obs_clip           = None,
