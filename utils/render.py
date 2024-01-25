@@ -1,5 +1,3 @@
-from matplotlib import animation
-import matplotlib.pyplot as plt
 from moviepy.editor import ImageSequenceClip
 import numpy as np
 import os
