@@ -127,18 +127,18 @@ class PPONetwork(ABC, nn.Module):
 
 class PPOConv2dNetwork(PPONetwork):
 
-    def __init__(self, **kw_args):
+    def __init__(self, *args, **kw_args):
         """
         """
-        super(PPOConv2dNetwork, self).__init__(**kw_args)
+        super(PPOConv2dNetwork, self).__init__(*args, **kw_args)
 
 
 class PPOLSTMNetwork(PPONetwork):
 
-    def __init__(self, **kw_args):
+    def __init__(self, *args, **kw_args):
         """
         """
-        super(PPOLSTMNetwork, self).__init__(**kw_args)
+        super(PPOLSTMNetwork, self).__init__(*args, **kw_args)
 
     def get_zero_hidden_state(self,
                               batch_size,
