@@ -9,6 +9,10 @@ from ppo_and_friends.runners.runner_tags import ppoaf_runner
 
 @ppoaf_runner
 class CartPoleLSTMRunner(GymRunner):
+    """
+    This enviornment does not need LSTM to train. This is merely an example of
+    how to use LSTM for an environment.
+    """
 
     #
     # NOTE: this is just an example of how to extend the ppoaf CLI args.
