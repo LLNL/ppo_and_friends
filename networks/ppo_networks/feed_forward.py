@@ -228,4 +228,6 @@ class SplitObsNetwork(SingleSplitObservationNetwork):
         out = torch.cat((s1_out, s2_out), dim=1)
         out = self.combined_layers(out)
 
+        out = self.output_func(out)
+
         return self._shape_output(out)
