@@ -123,6 +123,10 @@ class MATPolicy(PPOPolicy):
         self.actor  = self.actor_critic.actor
         self.critic = self.actor_critic.critic
 
+        if self.verbose:
+            rank_print(f"\nActor network:\n{self.actor}")
+            rank_print(f"\nCritic network:\n{self.critic}")
+
         if enable_icm:
             self.icm_agent_ids = None
             icm_obs_space      = self.actor_obs_space

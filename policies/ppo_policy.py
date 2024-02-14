@@ -417,6 +417,10 @@ class PPOPolicy():
         self.actor  = self.actor.to(self.device)
         self.critic = self.critic.to(self.device)
 
+        if self.verbose:
+            rank_print(f"\nActor network:\n{self.actor}")
+            rank_print(f"\nCritic network:\n{self.critic}")
+
         broadcast_model_parameters(self.actor)
         broadcast_model_parameters(self.critic)
         comm.barrier()

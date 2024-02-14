@@ -231,6 +231,11 @@ class PPO(object):
         for policy_id in policy_settings:
             settings = policy_settings[policy_id]
 
+            #
+            # Pass our verbosity flag to the policy classes.
+            #
+            settings[4]["verbose"] = verbose
+
             self.policies[policy_id] = \
                 generate_policy(
                     envs_per_proc            = envs_per_proc,
