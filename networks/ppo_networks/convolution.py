@@ -13,11 +13,15 @@ num_procs = comm.Get_size()
 class AtariPixelNetwork(PPOConv2dNetwork):
 
     def __init__(self,
-                 out_init,
+                 in_shape,
+                 out_shape,
+                 out_init   = np.sqrt(2),
                  activation = nn.ReLU(),
                  **kw_args):
 
         super(AtariPixelNetwork, self).__init__(
+            in_shape  = in_shape,
+            out_shape = out_shape,
             **kw_args)
 
         self.a_f   = activation
@@ -53,7 +57,7 @@ class AtariPixelNetwork(PPOConv2dNetwork):
         width  = get_conv2d_out_size(width, pad, k_s, strd)
 
         self.l1 = init_layer(nn.Linear(height * width * 64, 512))
-        self.l2 = init_layer(nn.Linear(512, self.out_shape), gain=out_init)
+        self.l2 = init_layer(nn.Linear(512, self.out_size), gain=out_init)
 
 
     def forward(self, _input):
