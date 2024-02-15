@@ -367,7 +367,7 @@ class PPOEnvironmentWrapper(ABC):
                  env,
                  test_mode         = False,
                  add_agent_ids     = False,
-                 agent_ids_as      = "one-hot",
+                 agent_ids_as      = "float",
                  critic_view       = "policy",
                  policy_mapping_fn = None,
                  death_mask_reward = 0.0,
@@ -656,9 +656,9 @@ class PPOEnvironmentWrapper(ABC):
         """
         for a_id in obs:
             if self.agent_ids_as == "float":
-                obs[a_id] = np.concatenate((obs[a_id],
-                    (self.agent_int_ids[a_id],))).astype(obs[a_id].dtype) /\
-                    self.num_agents
+                scaled_id = self.agent_int_ids[a_id] / self.num_agents
+                obs[a_id] = np.concatenate(
+                    (obs[a_id], (scaled_id,)))
 
             elif self.agent_ids_as == "one-hot":
                 obs[a_id] = np.concatenate((obs[a_id],
