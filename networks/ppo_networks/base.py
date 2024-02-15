@@ -124,7 +124,7 @@ class PPONetwork(ABC, nn.Module):
 
         self.load_state_dict(torch.load(in_f))
 
-
+# TODO: this class is out-dated and not really needed anymore.
 class PPOConv2dNetwork(PPONetwork):
 
     def __init__(self, *args, **kw_args):
@@ -185,6 +185,7 @@ class PPOLSTMNetwork(PPONetwork):
             batch_size, device)
 
 
+# FIXME: this has not been tested in a long while...
 class SingleSplitObservationNetwork(PPONetwork):
     """
     The idea here is to support splitting the observations into

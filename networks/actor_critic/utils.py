@@ -28,8 +28,8 @@ def get_actor_distribution(
         (distribtion, output_func). output_func is the function to
         apply to the output of the actor network.
     """
-    action_dtype    = get_action_dtype(action_space)
-    output_func = lambda x : x
+    action_dtype = get_action_dtype(action_space)
+    output_func  = lambda x : x
 
     if action_dtype not in ["discrete", "continuous",
         "multi-binary", "multi-discrete"]:
@@ -49,6 +49,43 @@ def get_actor_distribution(
     
     elif action_dtype == "continuous":
         out_size = get_flattened_space_length(action_space)
+        distribution_min = kw_args.get("distribution_min")
+        distribution_max = kw_args.get("distribution_max")
+
+        if distribution_min is None:
+            act_min = action_space.low.min()
+
+            if np.isinf(act_min):
+                msg  = f"ERROR: attempted to use the action min as the "
+                msg += f"guassian distribution min, but the distribution min "
+                msg += f"must not be inf and action min is {act_min}. "
+                msg += f"Set the distribution min through the actor or MAT "
+                msg += f"kw_args like so: actor_kw_args['distribution_min'] = k."
+                rank_print(msg)
+                comm.Abort()
+            else:
+                msg  = f"Setting distribution min to the action space "
+                msg += f"min of {act_min}."
+                rank_print(msg)
+                kw_args["distribution_min"] = act_min
+
+        if distribution_max is None:
+            act_max = action_space.high.max()
+
+            if np.isinf(act_max):
+                msg  = f"ERROR: attempted to use the action max as the "
+                msg += f"guassian distribution max, but the distribution max "
+                msg += f"must not be inf and action max is {act_max}. "
+                msg += f"Set the distribution max through the actor or MAT "
+                msg += f"kw_args like so: actor_kw_args['distribution_max'] = k."
+                rank_print(msg)
+                comm.Abort()
+            else:
+                msg  = f"Setting distribution max to the action space "
+                msg += f"max of {act_max}."
+                rank_print(msg)
+                kw_args["distribution_max"] = act_max
+
         distribution = GaussianDistribution(out_size, **kw_args)
     
     elif action_dtype == "multi-binary":
