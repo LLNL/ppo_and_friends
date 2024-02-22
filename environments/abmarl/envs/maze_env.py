@@ -5,7 +5,6 @@ from abmarl.sim.gridworld.actor import MoveActor
 from abmarl.sim.gridworld.smart import SmartGridWorldSimulation
 from abmarl.sim.gridworld.agent import GridWorldAgent
 from abmarl.managers import AllStepManager
-from abmarl.external import MultiAgentWrapper
 from abmarl.sim.wrappers import FlattenWrapper
 
 
@@ -72,7 +71,7 @@ small_maze = os.path.join(os.path.realpath(
 large_maze = os.path.join(os.path.realpath(
     os.path.dirname(__file__)), "large_maze.txt")
 
-sm_abmarl_maze = MultiAgentWrapper(
+sm_abmarl_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -84,9 +83,8 @@ sm_abmarl_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
 
-sm_abmarl_blind_maze = MultiAgentWrapper(
+sm_abmarl_blind_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -98,9 +96,8 @@ sm_abmarl_blind_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
 
-sm_abmarl_grid_pos_maze = MultiAgentWrapper(
+sm_abmarl_grid_pos_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -113,9 +110,8 @@ sm_abmarl_grid_pos_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
 
-lg_abmarl_maze = MultiAgentWrapper(
+lg_abmarl_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -127,9 +123,8 @@ lg_abmarl_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
 
-lg_abmarl_blind_maze = MultiAgentWrapper(
+lg_abmarl_blind_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -141,9 +136,8 @@ lg_abmarl_blind_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
 
-lg_abmarl_grid_pos_maze = MultiAgentWrapper(
+lg_abmarl_grid_pos_maze = \
         AllStepManager(
             FlattenWrapper(
                 MazeNavigationSim2.build_sim_from_file(
@@ -156,4 +150,3 @@ lg_abmarl_grid_pos_maze = MultiAgentWrapper(
                 )
             )
         )
-    )
