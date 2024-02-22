@@ -12,7 +12,6 @@ import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import gym as old_gym
 
 class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
