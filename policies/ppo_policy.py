@@ -263,7 +263,7 @@ class PPOPolicy():
 
         if self.verbose:
             msg  = f"Policy {self.name} is using action dim {self.action_dim} "
-            msg += "and action prediction size {self.action_pred_size}"
+            msg += f"and action prediction size {self.action_pred_size}"
             rank_print(msg)
 
         self.network_args = {
