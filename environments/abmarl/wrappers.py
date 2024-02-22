@@ -12,6 +12,7 @@ import copy
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import gym as old_gym
 
 class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
 
@@ -69,7 +70,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             self.observation_space = copy.deepcopy(self.env.observation_space)
         else:
             self.observation_space = Dict({
-                agent.id: agent.observation_space
+                agent.id: gym_space_to_gymnasium_space(agent.observation_space)
                 for agent in self.env.sim.agents.values()
                 if isinstance(agent, ObservingAgent)
             })
@@ -84,7 +85,7 @@ class AbmarlWrapper(PPOEnvironmentWrapper, BoxIntActionEnvironment):
             self.action_space = self.env.action_space
         else:
             self.action_space = Dict({
-                agent.id: agent.action_space
+                agent.id: gym_space_to_gymnasium_space(agent.action_space)
                 for agent in self.env.sim.agents.values()
                 if isinstance(agent, ActingAgent)
             })
