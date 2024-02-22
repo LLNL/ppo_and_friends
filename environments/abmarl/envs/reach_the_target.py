@@ -1,7 +1,6 @@
 import numpy as np
 from abmarl.examples import ReachTheTargetSim, RunningAgent, TargetAgent, BarrierAgent
 from abmarl.managers import AllStepManager
-from abmarl.external import MultiAgentWrapper
 from abmarl.sim.wrappers import FlattenWrapper
 
 grid_size = 7
@@ -46,17 +45,15 @@ attack_mapping = {
     2: {3},
 }
 
-sim = MultiAgentWrapper(
-        AllStepManager(
-            FlattenWrapper(
-                ReachTheTargetSim.build_sim(
-                    7, 7,
-                    agents=agents,
-                    overlapping=overlapping,
-                    attack_mapping=attack_mapping
-                )
+sim = AllStepManager(
+        FlattenWrapper(
+            ReachTheTargetSim.build_sim(
+                7, 7,
+                agents=agents,
+                overlapping=overlapping,
+                attack_mapping=attack_mapping
             )
         )
-)
+    )
 
 abmarl_rtt_env = sim
