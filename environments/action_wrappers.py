@@ -1,4 +1,5 @@
 from gymnasium.spaces import Box, MultiDiscrete
+import gym as old_gym
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
 import numpy as np
@@ -73,7 +74,9 @@ class BoxIntActionWrapper():
             Arguments:
                 space    The space to wrap. This should of type Box int.
         """
-        if type(space) != Box or not np.issubdtype(space.dtype, np.integer):
+        if ((type(space) != Box and type(space) != old_gym.spaces.Box)
+            or not np.issubdtype(space.dtype, np.integer)):
+
             msg  = "ERROR: BoxIntActionWrapper only accepts spaces of "
             msg += f"type Box int. Received type {type(space)} {space.dtype}"
             rank_print(msg)
@@ -99,7 +102,14 @@ class BoxIntActionWrapper():
 
             self.range[i] = len(self.true_values[i])
 
-        self.multi_discrete_space = MultiDiscrete(self.range)
+        if type(space) == old_gym.spaces.Box:
+            msg  = "WARNING: BoxIntActionWrapper received an old gym space. "
+            msg += "It will use old gym for consistency."
+            rank_print(msg)
+
+            self.multi_discrete_space = old_gym.spaces.MultiDiscrete(self.range)
+        else:
+            self.multi_discrete_space = MultiDiscrete(self.range)
 
     def sample(self):
         """
