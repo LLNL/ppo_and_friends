@@ -1466,6 +1466,7 @@ class PPO(object):
             self.policies[key].initialize_dataset()
 
         total_episodes   = 0.0
+        total_bs         = 0
         total_rollout_ts = 0
         longest_run      = 0
         shortest_run     = self.ts_per_rollout / self.envs_per_proc
@@ -1818,6 +1819,7 @@ class PPO(object):
                             float(next_reward[agent_id].max()))
 
                         bs_sum[policy_id] += next_reward[agent_id]
+                        total_bs += 1
 
                         if self.policies[policy_id].enable_icm:
                             ism = self.status_dict[policy_id]["intrinsic score avg"]
@@ -1885,6 +1887,7 @@ class PPO(object):
         # Update the status dictionary.
         #
         total_episodes = comm.allreduce(total_episodes, MPI.SUM)
+        total_bs       = comm.allreduce(total_bs, MPI.SUM)
 
         for policy_id in self.policies:
             #
@@ -1958,7 +1961,11 @@ class PPO(object):
             #
             bs_rank_max = comm.allreduce(bs_max[policy_id], MPI.MAX)
             bs_rank_min = comm.allreduce(bs_min[policy_id], MPI.MIN)
-            bs_rank_avg = comm.allreduce(bs_sum[policy_id].sum(), MPI.SUM) / total_episodes
+
+            if total_bs == 0:
+                bs_rank_avg = 0.0
+            else:
+                bs_rank_avg = comm.allreduce(bs_sum[policy_id].sum(), MPI.SUM) / total_bs
 
             self.status_dict[policy_id]["bootstrap range"] = (bs_rank_min, bs_rank_max)
             self.status_dict[policy_id]["bootstrap avg"]   = bs_rank_avg
