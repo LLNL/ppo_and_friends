@@ -717,18 +717,35 @@ class PPOPolicy():
         """
         if len(obs.shape) < 2:
             msg  = "ERROR: get_rollout_actions expects a "
-            msg ++ "batch of observations but "
+            msg += "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
             comm.Abort()
 
         t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
 
+        if torch.isnan(t_obs).any():
+            msg  = "ERROR: get_rollout_actions received observations "
+            msg += "containing nan values!"
+            msg += f"\n{t_obs}"
+            rank_print(msg)
+            comm.Abort()
+
+
         with torch.no_grad():
             action_pred = self.actor(t_obs)
 
         action_pred = action_pred.cpu().detach()
-        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        if torch.isnan(action_pred).any():
+            msg  = "ERROR: action prediction contains nan values!"
+            msg += f"\nactions: {action_pred}"
+            msg += f"\nobservations: {t_obs}"
+            msg += f"\nobservations range: {t_obs.min()}, {t_obs.max()}"
+            rank_print(msg)
+            comm.Abort()
+
+        dist = self.actor.distribution.get_distribution(action_pred)
 
         #
         # Our distribution gives us two potentially distinct actions, one of
@@ -859,9 +876,32 @@ class PPOPolicy():
             from our probability distribution, and entropies are the
             entropies from our distribution.
         """
-        values      = self.critic(batch_critic_obs).squeeze()
+        if torch.isnan(batch_critic_obs).any():
+            msg  = "ERROR: evaluate received observations "
+            msg += "containing nan values!"
+            msg += f"\n{batch_critic_obs}"
+            rank_print(msg)
+            comm.Abort()
+
+        values = self.critic(batch_critic_obs).squeeze()
+
+        if torch.isnan(values).any():
+            msg  = "ERROR: evaluate value prediction contains nan values!"
+            msg += f"\nvalues: {values}"
+            msg += f"\nobservations range: {batch_critic_obs.min()}, {batch_critic_obs.max()}"
+            rank_print(msg)
+            comm.Abort()
+
         action_pred = self.actor(batch_obs).cpu()
-        dist        = self.actor.distribution.get_distribution(action_pred)
+
+        if torch.isnan(action_pred).any():
+            msg  = "ERROR: evaluate action prediction contains nan values!"
+            msg += f"\nactions: {action_pred}"
+            msg += f"\nobservations range: {batch_obs.min()}, {batch_obs.max()}"
+            rank_print(msg)
+            comm.Abort()
+
+        dist = self.actor.distribution.get_distribution(action_pred)
 
         if self.action_dtype == "continuous" and len(batch_actions.shape) < 2:
             log_probs = self.actor.distribution.get_log_probs(
