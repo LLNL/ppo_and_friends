@@ -235,7 +235,7 @@ class MultiCategoricalDistribution(PPODistribution):
             Returns:
                 A numpy array of PyTorch Categorical distribution objects.
         """
-        dists  = []
+        dists = []
         start = 0
         for dim in self.nvec:
             stop = start + dim
@@ -260,10 +260,26 @@ class MultiCategoricalDistribution(PPODistribution):
                 The log probabilities of the given actions from the
                 given distributions.
         """
-        log_probs = []
-        for dist, act in zip(dists, torch.split(actions, 1, dim=-1)):
-            log_probs.append(dist.log_prob(act.squeeze(-1)))
 
+        #
+        # The actions have shape (batch_size, num_distributions). We need to
+        # grab each action and send it through its associated distribution to
+        # calcualte the log probs for that action.
+        #
+        log_probs = []
+        for idx, dist in enumerate(dists):
+
+            dist_actions = actions[:, idx]
+            log_probs.append(dist.log_prob(dist_actions))
+
+        #
+        # I believe we generally sum the log probs of each distribution
+        # because we consider these to be independent actions =>
+        # P(A_0 and A_1) == P(A_0) * P(A_1). arXiv:1912.11077v1 suggests
+        # that there are times when we may need more sophisticated approaches
+        # to handle dependencies between actions, but, at least here, we
+        # we let ourselves take the naive route.
+        #
         return torch.stack(log_probs, dim=-1).sum(dim=-1)
 
     def sample_distribution(self, dists):
@@ -285,7 +301,7 @@ class MultiCategoricalDistribution(PPODistribution):
         for idx in range(len(dists)):
             sample.append(dists[idx].sample())
 
-        sample = torch.unsqueeze(torch.cat(sample), 0)
+        sample = torch.stack(sample, dim=1)
 
         return sample, sample
 
