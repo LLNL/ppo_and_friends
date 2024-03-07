@@ -38,14 +38,9 @@ def test_policy(ppo,
     verbose: bool
         Enable verbosity?
     """
-    env        = ppo.env
-    policies   = ppo.policies
-    render     = ppo.render
-
-    action_dtype = {}
-    for agent_id in env.agent_ids:
-        action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
-
+    env          = ppo.env
+    policies     = ppo.policies
+    render       = ppo.render
     max_int      = np.iinfo(np.int32).max
     num_steps    = 0
     total_policy_scores = {policy_id : 0.0 for policy_id in ppo.policies}
