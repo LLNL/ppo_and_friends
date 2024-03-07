@@ -51,10 +51,8 @@ class FeedForwardNetwork(PPONetwork):
             out_shape = out_shape,
             **kw_args)
 
-        self.is_embedded   = is_embedded
-        self.have_hidden   = True
-        self.two_layer_net = False
-        self.activation    = activation
+        self.is_embedded = is_embedded
+        self.activation  = activation
 
         self.sequential_net = \
             create_sequential_network(
@@ -68,6 +66,12 @@ class FeedForwardNetwork(PPONetwork):
     def forward(self, _input):
         out = _input.flatten(start_dim = 1)
         out = self.sequential_net(out)
+
+        if torch.isnan(out).any():
+            msg  = "ERROR: self.sequential_net as output nan values! "
+            msg += "\n{out}"
+            rank_print(msg)
+            comm.Abort()
 
         #
         # If this network is embedded in a larger network,

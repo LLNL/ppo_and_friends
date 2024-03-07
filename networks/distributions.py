@@ -12,137 +12,163 @@ class PPODistribution(object):
     def __init__(self,
                  **kw_args):
         """
-            Nothing to see here...
+        Nothing to see here...
         """
         pass
 
     @abstractmethod
     def get_distribution(self, probs):
         """
-            Given a set of probabilities, create and return a
-            distribution.
+        Given a set of probabilities, create and return a
+        distribution.
 
-            Arguments:
-                probs    The probabilities that require a distribution.
+        Parameters:
+        -----------
+        probs: torch tensor
+            The probabilities that require a distribution.
 
-            Returns:
-                A distribution object.
+        Returns:
+        --------
+        A distribution object.
         """
         return
 
     @abstractmethod
     def get_log_probs(self, dist, actions):
         """
-            Get the log probabilities from a distribution and
-            a set of actions.
+        Get the log probabilities from a distribution and
+        a set of actions.
 
-            Arguments:
-                dist        The distribution.
-                actions     The actions to find the log probs of.
+        Parameters:
+        -----------
+        dist: torch distribution
+            The distribution.
+        actions: torch tensor
+            The actions to find the log probs of.
 
-            Returns:
-                The log probabilities of the given actions from the
-                given distribution.
+        Returns:
+        --------
+        The log probabilities of the given actions from the
+        given distribution.
         """
         return
 
     def sample_distribution(self, dist):
         """
-            Given a distribution, return a sample from that distribution.
-            Tricky business: some distributions will alter one of the
-            returned samples. In that case, we still need access to the
-            original sample. This distribution does not perform any
-            alterations, so we just return the same sample twice.
+        Given a distribution, return a sample from that distribution.
+        Tricky business: some distributions will alter one of the
+        returned samples. In that case, we still need access to the
+        original sample. This distribution does not perform any
+        alterations, so we just return the same sample twice.
 
-            Arguments:
-                dist    The distribution to sample from.
+        Paraemters:
+        -----------
+        dist: torch distribution
+            The distribution to sample from.
 
-            Returns:
-                A tuple of form (sample, sample), where each item
-                is an identical sample from the distribution.
+        Returns:
+        --------
+        A tuple of form (sample, sample), where each item
+        is an identical sample from the distribution.
         """
         sample = dist.sample()
         return sample, sample
 
     def get_entropy(self, dist, _):
         """
-            Get the entropy of a bernoulli distribution.
+        Get the entropy of a bernoulli distribution.
 
-            Arguments:
-                dist    The distribution to get the entropy of.
+        Parameters:
+        -----------
+        dist: torch distribution
+            The distribution to get the entropy of.
 
-            Returns:
-                The distributions entropy.
+        Returns:
+        --------
+        The distributions entropy.
         """
         return dist.entropy()
 
     def refine_prediction(self,
                           prediction):
         """
-            Given a prediction from our network, refine it for use in
-            the environment as an action.
+        Given a prediction from our network, refine it for use in
+        the environment as an action.
 
-            NOTE: this method inhibits exploration. To allow exploration,
-            the distribution must be sampled.
+        NOTE: this method inhibits exploration. To allow exploration,
+        the distribution must be sampled.
 
-            Arguments:
-                prediction    The prediction to refine.
+        Parameters:
+        -----------
+        prediction: float or torch tensor
+            The prediction to refine.
 
-            Returns:
-                The refined prediction.
+        Returns:
+        --------
+        The refined prediction.
         """
         return prediction
 
 
 class BernoulliDistribution(PPODistribution):
     """
-        A module for obtaining a bernoulli probability distribution.
+    A module for obtaining a bernoulli probability distribution.
 
-        NOTE: this module is very simple, but it has support structures
-        for more complicated cases.
+    NOTE: this module is very simple, but it has support structures
+    for more complicated cases.
     """
 
     def get_distribution(self, probs):
         """
-            Given a set of probabilities, create and return a
-            bernoulli distribution.
+        Given a set of probabilities, create and return a
+        bernoulli distribution.
 
-            Arguments:
-                probs    The probabilities that require a distribution.
+        Parameters:
+        -----------
+        probs: torch tensor
+            The probabilities that require a distribution.
 
-            Returns:
-                A PyTorch Bernoulli distribution object.
+        Returns:
+        --------
+        A PyTorch Bernoulli distribution object.
         """
         return Bernoulli(probs)
 
     def get_log_probs(self, dist, actions):
         """
-            Get the log probabilities from a distribution and
-            a set of actions.
+        Get the log probabilities from a distribution and
+        a set of actions.
 
-            Arguments:
-                dist        The distribution.
-                actions     The actions to find the log probs of.
+        Parameters:
+        -----------
+        dist: torch distribution
+            The distribution.
+        actions: torch tensor
+            The actions to find the log probs of.
 
-            Returns:
-                The log probabilities of the given actions from the
-                given distribution.
+        Returns:
+        --------
+        The log probabilities of the given actions from the
+        given distribution.
         """
         return dist.log_prob(actions).sum(dim=-1)
 
     def refine_prediction(self, prediction):
         """
-            Given a prediction from our network, refine it for use in
-            the environment as an action.
+        Given a prediction from our network, refine it for use in
+        the environment as an action.
 
-            NOTE: this method inhibits exploration. To allow exploration,
-            the distribution must be sampled.
+        NOTE: this method inhibits exploration. To allow exploration,
+        the distribution must be sampled.
 
-            Arguments:
-                prediction    The prediction to refine.
+        Parameters:
+        -----------
+        prediction: torch tensor
+            The prediction to refine.
 
-            Returns:
-                The refined prediction.
+        Returns:
+        --------
+        The refined prediction.
         """
         prediction[prediction >= 0.5] = 1.0
         prediction[prediction < 0.5]  = 0.0
@@ -151,53 +177,63 @@ class BernoulliDistribution(PPODistribution):
 
 class CategoricalDistribution(PPODistribution):
     """
-        A module for obtaining a categorical probability distribution.
+    A module for obtaining a categorical probability distribution.
 
-        NOTE: this module is very simple, but it has support structures
-        for more complicated cases.
+    NOTE: this module is very simple, but it has support structures
+    for more complicated cases.
     """
 
     def get_distribution(self, probs):
         """
-            Given a set of probabilities, create and return a
-            categorical distribution.
+        Given a set of probabilities, create and return a
+        categorical distribution.
 
-            Arguments:
-                probs    The probabilities that require a distribution.
+        Parameters:
+        -----------
+        probs: torch tensor
+            The probabilities that require a distribution.
 
-            Returns:
-                A PyTorch Categorical distribution object.
+        Returns:
+        --------
+        A PyTorch Categorical distribution object.
         """
         return Categorical(probs)
 
     def get_log_probs(self, dist, actions):
         """
-            Get the log probabilities from a distribution and
-            a set of actions.
+         Get the log probabilities from a distribution and
+         a set of actions.
 
-            Arguments:
-                dist        The distribution.
-                actions     The actions to find the log probs of.
+         Parameters:
+         -----------
+         dist: torch distribution
+             The distribution.
+         actions: torch tensor
+             The actions to find the log probs of.
 
-            Returns:
-                The log probabilities of the given actions from the
-                given distribution.
+         Returns:
+         --------
+         The log probabilities of the given actions from the
+         given distribution.
         """
         return dist.log_prob(actions)
 
     def refine_prediction(self, prediction):
         """
-            Given a prediction from our network, refine it for use in
-            the environment as an action.
+        Given a prediction from our network, refine it for use in
+        the environment as an action.
 
-            NOTE: this method inhibits exploration. To allow exploration,
-            the distribution must be sampled.
+        NOTE: this method inhibits exploration. To allow exploration,
+        the distribution must be sampled.
 
-            Arguments:
-                prediction    The prediction to refine.
+        Parameters:
+        -----------
+        prediction: torch tensor
+            The prediction to refine.
 
-            Returns:
-                The refined prediction.
+        Returns:
+        --------
+        The refined prediction.
         """
         prediction = torch.argmax(prediction, axis=-1)
         return prediction
@@ -205,37 +241,42 @@ class CategoricalDistribution(PPODistribution):
 
 class MultiCategoricalDistribution(PPODistribution):
     """
-        A multi-categorical distribution for supporting MultiDiscrete
-        action spaces. This is basically the same as the Categorical
-        distribution, except that we create lists of distributions.
+    A multi-categorical distribution for supporting MultiDiscrete
+    action spaces. This is basically the same as the Categorical
+    distribution, except that we create lists of distributions.
 
-        This implementation is largely inspired by
-        https://github.com/pytorch/pytorch/issues/43250
+    This implementation is largely inspired by
+    https://github.com/pytorch/pytorch/issues/43250
     """
 
     def __init__(self, nvec, **kw_args):
         """
-            Arguments:
-                nvec    The result of calling <action_space>.nvec on a
-                        MultiDiscrete action space. This is a numpy array
-                        containing the number of choices for each action.
+        Parameters:
+        -----------
+        nvec: array-like
+            The result of calling <action_space>.nvec on a
+            MultiDiscrete action space. This is a numpy array
+            containing the number of choices for each action.
         """
         super(MultiCategoricalDistribution, self).__init__(**kw_args)
         self.nvec = nvec
 
     def get_distribution(self, probs):
         """
-            Given a set of probabilities, create and return a
-            multi-categorical distribution, which is an array
-            of categorical distributions.
+        Given a set of probabilities, create and return a
+        multi-categorical distribution, which is an array
+        of categorical distributions.
 
-            Arguments:
-                probs    The probabilities that require a distribution.
+        Parameters:
+        -----------
+        probs: torch tensor
+            The probabilities that require a distribution.
 
-            Returns:
-                A numpy array of PyTorch Categorical distribution objects.
+        Returns:
+        --------
+        A numpy array of PyTorch Categorical distribution objects.
         """
-        dists  = []
+        dists = []
         start = 0
         for dim in self.nvec:
             stop = start + dim
@@ -249,71 +290,103 @@ class MultiCategoricalDistribution(PPODistribution):
 
     def get_log_probs(self, dists, actions):
         """
-            Get the log probabilities from an array of distributions and
-            a set of actions.
+        Get the log probabilities from an array of distributions and
+        a set of actions.
 
-            Arguments:
-                dists        The distributions.
-                actions      The actions to find the log probs of.
+        Parameters:
+        -----------
+        dists: torch distribution
+            The distributions.
+        actions: torch tensor
+            The actions to find the log probs of.
 
-            Returns:
-                The log probabilities of the given actions from the
-                given distributions.
+        Returns:
+        --------
+        The log probabilities of the given actions from the
+        given distributions.
         """
-        log_probs = []
-        for dist, act in zip(dists, torch.split(actions, 1, dim=-1)):
-            log_probs.append(dist.log_prob(act.squeeze(-1)))
 
+        #
+        # The actions have shape (batch_size, num_distributions). We need to
+        # grab each action and send it through its associated distribution to
+        # calcualte the log probs for that action.
+        #
+        log_probs = []
+        for idx, dist in enumerate(dists):
+
+            dist_actions = actions[:, idx]
+            log_probs.append(dist.log_prob(dist_actions))
+
+        #
+        # I believe we generally sum the log probs of each distribution
+        # because we consider these to be independent actions =>
+        # P(A_0 and A_1) == P(A_0) * P(A_1). arXiv:1912.11077v1 suggests
+        # that there are times when we may need more sophisticated approaches
+        # to handle dependencies between actions. One appraoch is to use
+        # a multi-head actor network that captures dependencies between
+        # the different actions. This seems like a good approach when
+        # P(A_0 and A_1) == P(A_0) * P(A_1 | A_0). In either case,
+        # summing the log probabilities here should hold.
+        #
         return torch.stack(log_probs, dim=-1).sum(dim=-1)
 
     def sample_distribution(self, dists):
         """
-            Given a distribution, return a sample from that distribution.
-            Tricky business: some distributions will alter one of the
-            returned samples. In that case, we still need access to the
-            original sample. This distribution does not perform any
-            alterations, so we just return the same sample twice.
+        Given a distribution, return a sample from that distribution.
+        Tricky business: some distributions will alter one of the
+        returned samples. In that case, we still need access to the
+        original sample. This distribution does not perform any
+        alterations, so we just return the same sample twice.
 
-            Arguments:
-                dists    The distributions to sample from.
+        Parameters:
+        -----------
+        dists: torch distribution
+            The distributions to sample from.
 
-            Returns:
-                A tuple of form (sample, sample), where each item
-                is an identical sample from the distributions.
+        Returns:
+        --------
+        A tuple of form (sample, sample), where each item
+        is an identical sample from the distributions.
         """
         sample = []
         for idx in range(len(dists)):
             sample.append(dists[idx].sample())
 
-        sample = torch.unsqueeze(torch.cat(sample), 0)
+        sample = torch.stack(sample, dim=1)
 
         return sample, sample
 
     def get_entropy(self, dists, _):
         """
-            Get the entropy of the categorical distributions.
+        Get the entropy of the categorical distributions.
 
-            Arguments:
-                dists    The distributions to get the entropy of.
+        Parameters:
+        -----------
+        dists: array-like
+            The distributions to get the entropy of.
 
-            Returns:
-                The distributions entropy.
+        Returns:
+        --------
+        The distributions entropy.
         """
         return torch.stack([d.entropy() for d in dists], dim=-1).sum(dim=-1)
 
     def refine_prediction(self, prediction):
         """
-            Given a prediction from our network, refine it for use in
-            the environment as an action.
+        Given a prediction from our network, refine it for use in
+        the environment as an action.
 
-            NOTE: this method inhibits exploration. To allow exploration,
-            the distribution must be sampled.
+        NOTE: this method inhibits exploration. To allow exploration,
+        the distribution must be sampled.
 
-            Arguments:
-                prediction    The prediction to refine.
+        Parameters:
+        -----------
+        prediction: torch tensor
+            The prediction to refine.
 
-            Returns:
-                The refined prediction.
+        Returns:
+        --------
+        The refined prediction.
         """
         #
         # Our network predicts the actions as a contiguous
@@ -337,12 +410,12 @@ class MultiCategoricalDistribution(PPODistribution):
 
 class GaussianDistribution(nn.Module, PPODistribution):
     """
-        A module for obtaining a Gaussian distribution.
+    A module for obtaining a Gaussian distribution.
 
-        This distribution will learn the log_std from training.
-        arXiv:2006.05990v1 suggests that learning this in the
-        network or separately doesn't really make a difference.
-        This is a bit simpler.
+    This distribution will learn the log_std from training.
+    arXiv:2006.05990v1 suggests that learning this in the
+    network or separately doesn't really make a difference.
+    This is a bit simpler.
     """
 
     def __init__(self,
@@ -353,13 +426,19 @@ class GaussianDistribution(nn.Module, PPODistribution):
                  distribution_max = 1.,
                  **kw_args):
         """
-            Arguments:
-                act_dim           The action dimension.
-                std_offset        An offset to use when initializing the log
-                                  std. It will be negated.
-                min_std           A minimum action std to enforce.
-                distribution_min  A lower bound to enforce in the distribution.
-                distribution_max  An upper bound to enforce in the distribution.
+        Parameters:
+        -----------
+        act_dim: int
+            The action dimension.
+        std_offset: float
+            An offset to use when initializing the log
+            std. It will be negated.
+        min_std: float
+            A minimum action std to enforce.
+        distribution_min: float
+            A lower bound to enforce in the distribution.
+        distribution_max: float
+            An upper bound to enforce in the distribution.
         """
         super(GaussianDistribution, self).__init__()
 
@@ -378,14 +457,17 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
     def get_distribution(self, action_mean):
         """
-            Given an action mean or batch of action means, return
-            gaussian distributions.
+        Given an action mean or batch of action means, return
+        gaussian distributions.
 
-            Arguments:
-                action_mean    A single isntance of batch of action means.
+        Parameters:
+        -----------
+        action_mean: torch tensor
+            A single isntance of batch of action means.
 
-            Returns:
-                A Gaussian distribution.
+        Returns:
+        --------
+        A Gaussian distribution.
         """
 
         #
@@ -402,19 +484,24 @@ class GaussianDistribution(nn.Module, PPODistribution):
                       pre_tanh_actions,
                       epsilon = 1e-6):
         """
-            Given a Gaussian distribution and "raw" (pre-tanh) actions,
-            return the log probabilities of those actions.
+        Given a Gaussian distribution and "raw" (pre-tanh) actions,
+        return the log probabilities of those actions.
 
-            Arguments:
-                dist                The Guassian distribution to query.
-                pre_tanh_actions    A set of "raw" actions, i.e. actions
-                                    that have not been squashed using Tanh
-                                    (or any function).
-                epsilon             A small number to help with avoiding
-                                    zero-divisions.
+        Parameters:
+        ----------
+        dist: torch distribution
+            The Guassian distribution to query.
+        pre_tanh_actions: torch tensor
+            A set of "raw" actions, i.e. actions
+            that have not been squashed using Tanh
+            (or any function).
+        epsilon: float
+            A small number to help with avoiding
+            zero-divisions.
 
-            Returns:
-                The log probabilities of the given actions.
+        Returns:
+        --------
+        The log probabilities of the given actions.
         """
         #
         # NOTE: while wrapping our samples in tanh does change
@@ -436,14 +523,17 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
     def _enforce_sample_range(self, sample):
         """
-            Force a given sample into the range [dist_min, dist_max].
+        Force a given sample into the range [dist_min, dist_max].
 
-            Arguments:
-                sample    The sample to alter into the above range.
+        Parameters:
+        -----------
+        sample: torch tensor or float
+            The sample to alter into the above range.
 
-            Returns:
-                The input sample after being transformed into the
-                range [dist_min, dist_max].
+        Returns:
+        --------
+        The input sample after being transformed into the
+        range [dist_min, dist_max].
         """
         #
         # We can use a simple interpolation:
@@ -458,15 +548,18 @@ class GaussianDistribution(nn.Module, PPODistribution):
     def refine_sample(self,
                       sample):
         """
-            Given a sample from the distribution, refine this
-            sample. In our case, this means checking if we need
-            to enforce a particular range.
+        Given a sample from the distribution, refine this
+        sample. In our case, this means checking if we need
+        to enforce a particular range.
 
-            Arguments:
-                sample      The sample to refine.
+        Parameters:
+        ----------
+        sample: torch tensor or float
+            The sample to refine.
 
-            Returns:
-                The refined sample.
+        Returns:
+        --------
+        The refined sample.
         """
         #
         # NOTE: I've seen peculiar behavior with adding/omitting
@@ -481,17 +574,20 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
     def refine_prediction(self, prediction):
         """
-            Given a prediction from our network, refine it for use in
-            the environment as an action.
+        Given a prediction from our network, refine it for use in
+        the environment as an action.
 
-            NOTE: this method inhibits exploration. To allow exploration,
-            the distribution must be sampled.
+        NOTE: this method inhibits exploration. To allow exploration,
+        the distribution must be sampled.
 
-            Arguments:
-                prediction    The prediction to refine.
+        Parameters:
+        -----------
+        prediction: torch tensor
+            The prediction to refine.
 
-            Returns:
-                The refined prediction.
+        Returns:
+        --------
+        The refined prediction.
         """
         #
         # In this case, we can just rely on the refine_sample method.
@@ -500,19 +596,22 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
     def sample_distribution(self, dist):
         """
-            Sample a Gaussian distribution. In this case, we
-            want to return two different versions of the sample:
-                1. The un-altered, raw sample.
-                2. A version of the sample that has been sent though
-                   a Tanh function, i.e. squashed to a [-1, 1] range,
-                   and potentially altered further to fit a different
-                   range.
+        Sample a Gaussian distribution. In this case, we
+        want to return two different versions of the sample:
+            1. The un-altered, raw sample.
+            2. A version of the sample that has been sent though
+               a Tanh function, i.e. squashed to a [-1, 1] range,
+               and potentially altered further to fit a different
+               range.
 
-            Arguments:
-                dist    The Gaussian distribution to sample.
+        Parameters:
+        -----------
+        dist: torch distribution
+            The Gaussian distribution to sample.
 
-            Returns:
-                A tuple of form (tanh_sample, raw_sample).
+        Returns:
+        --------
+        A tuple of form (tanh_sample, raw_sample).
         """
         sample  = dist.sample()
         refined = self.refine_sample(sample)
@@ -524,27 +623,32 @@ class GaussianDistribution(nn.Module, PPODistribution):
                     pre_tanh_actions,
                     epsilon = 1e-6):
         """
-            Given a Gaussian distribution, calculate the entropy of
-            a set of pre-tanh actions, i.e. raw actions that have
-            not been altered by a tanh (or any other) function.
+        Given a Gaussian distribution, calculate the entropy of
+        a set of pre-tanh actions, i.e. raw actions that have
+        not been altered by a tanh (or any other) function.
 
-            Arguments:
-                dist                The Guassian distribution to query.
-                pre_tanh_actions    A set of "raw" actions, i.e. actions
-                                    that have not been squashed using Tanh
-                                    (or any function).
-                epsilon             A small number to help with avoiding
-                                    zero-divisions.
+        Parameters:
+        ----------
+        dist: torch distribution
+            The Guassian distribution to query.
+        pre_tanh_actions: torch tensor
+            A set of "raw" actions, i.e. actions
+            that have not been squashed using Tanh
+            (or any function).
+        epsilon: float
+            A small number to help with avoiding
+            zero-divisions.
 
-            Returns:
-                The entropy of the given actions.
+        Returns:
+        --------
+        The entropy of the given actions.
         """
         #
         # This is a bit odd here... arXiv:2006.05990v1 suggests using
         # tanh to move the actions into a [-1, 1] range, but this also
         # changes the probability densities. They suggest it is okay for most
-        # situations because if the differntiation (see above comments),
-        # but it does affect the entropy. They suggest using the equation
+        # situations because of the differntiation (see above comments),
+        # but it does affect the entropy. They suggest using
         # the following equation:
         #    Ex[-log(x) + log(tanh^prime (x))] s.t. x is the pre-tanh
         #    computed probability distribution.
