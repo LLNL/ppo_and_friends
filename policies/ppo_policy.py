@@ -952,6 +952,12 @@ class PPOPolicy():
             action = torch.tensor(action,
                 dtype=torch.float).to(self.device)
 
+        else:
+            msg  = f"ERROR: unknown action dtype of {self.action_dtype} "
+            msg += "encountered when getting intrinsic reward."
+            rank_print(msg)
+            comm.Abort()
+
         if len(action.shape) != 2:
             action = action.unsqueeze(1)
 

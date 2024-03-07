@@ -809,6 +809,12 @@ class PPODataset(Dataset):
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.long).to(self.device)
 
+        else:
+            msg  = f"ERROR: unknown action_dtype  of {action_dtype} encountered "
+            msg += "in PPODataset."
+            rank_print(msg)
+            comm.Abort()
+
         self.is_built = True
 
     def __len__(self):

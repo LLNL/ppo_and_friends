@@ -333,6 +333,12 @@ class MATPolicy(PPOPolicy):
                 (batch_size, num_agents, self.action_pred_size + 1)).to(self.device)
             action_block[:, 0, 0] = 1
 
+        else:
+            msg  = f"ERROR: unknown action dtype of {self.action_dtype} "
+            msg += "encountered when getting tokened action block."
+            rank_print(msg)
+            comm.Abort()
+
         return action_block
 
     def _multi_discrete_prob_to_one_hot(self, actions):
