@@ -703,7 +703,7 @@ class PPOPolicy():
 
         Parameters:
         -----------
-        obs: dict
+        obs: array-like
             The environment observations.
 
         Returns:
@@ -731,7 +731,6 @@ class PPOPolicy():
             rank_print(msg)
             comm.Abort()
 
-
         with torch.no_grad():
             action_pred = self.actor(t_obs)
 
@@ -753,6 +752,7 @@ class PPOPolicy():
         # other might be altered in some way (usually to enforce a range).
         #
         action, raw_action = self.actor.distribution.sample_distribution(dist)
+
         log_prob = self.actor.distribution.get_log_probs(dist, raw_action)
 
         raw_action = raw_action.detach().numpy()
