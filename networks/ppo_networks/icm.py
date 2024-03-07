@@ -79,6 +79,10 @@ class LinearInverseModel(nn.Module):
         elif action_dtype == "multi-binary":
             self.output_func = t_functional.sigmoid
 
+        else:
+            rank_print("ERROR: unsupported action space {action_dtype}")
+            comm.Abort()
+
         self.activation = activation
 
         #
@@ -301,6 +305,12 @@ class ICM(PPONetwork):
 
         self.reward_scale = reward_scale
         self.action_dtype = get_action_dtype(action_space)
+
+        if self.action_dtype not in ["discrete", "multi-discrete", "continuous"]:
+            msg  = f"ERROR: action type of {self.action_dtype} is not currenty "
+            msg += "in the ICM module."
+            rank_print(msg)
+            comm.Abort()
 
         self.action_nvec = None
         if hasattr(action_space, "nvec"):
