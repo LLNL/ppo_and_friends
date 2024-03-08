@@ -119,8 +119,8 @@ def run_training(baseline_type,
 
 def run_test(baseline_runner,
              num_test_runs,
-             explore = True,
-             verbose = False):
+             deterministic = False,
+             verbose       = False):
     """
     Run a testing phase using a trained model.
 
@@ -131,8 +131,8 @@ def run_test(baseline_runner,
         This should be located in the baselines directory.
     num_test_runs: int
         The number of test runs to perform.
-    explore: bool
-        Enable exploration while testing?
+    deterministic: bool
+        Enable determinism while testing?
     verbose: bool
         Enable verbosity?
     """
@@ -141,8 +141,8 @@ def run_test(baseline_runner,
     test_command += f"--save_test_scores "
     test_command += f"--num_test_runs {num_test_runs} --verbose "
 
-    if explore:
-        test_command += f"--test_explore"
+    if deterministic:
+        test_command += f"--deterministic"
 
     run_command(test_command, verbose)
 
@@ -150,7 +150,7 @@ def average_score_test(name,
                        baseline_runner,
                        num_test_runs,
                        passing_scores,
-                       explore = True,
+                       deterministic = False,
                        verbose = False):
     """
     Run a testing phase using a trained model and determine if
@@ -167,12 +167,12 @@ def average_score_test(name,
         The number of test runs to perform.
     passing_scores: dict
         A dict containing passing scores for each agent.
-    explore: bool
-        Enable exploration while testing?
+    deterministic: bool
+        Enable deterministic while testing?
     verbose: bool
         Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs, explore)
+    run_test(baseline_runner, num_test_runs, deterministic)
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,
@@ -197,8 +197,8 @@ def high_score_test(name,
                     baseline_runner,
                     num_test_runs,
                     passing_scores,
-                    explore = True,
-                    verbose = False):
+                    deterministic = False,
+                    verbose       = False):
     """
     Run a testing phase using a trained model and determine if
     the model reaches passing high scores.
@@ -214,12 +214,12 @@ def high_score_test(name,
         The number of test runs to perform.
     passing_scores: dict
         A dict containing passing scores for each agent.
-    explore: bool
-        Enable exploration while testing?
+    deterministic: bool
+        Enable deterministic while testing?
     verbose: bool
         Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs, explore)
+    run_test(baseline_runner, num_test_runs, deterministic)
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,

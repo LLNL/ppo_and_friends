@@ -16,7 +16,6 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
-from ppo_and_friends.utils.misc import get_agent_shared_space
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -749,7 +748,7 @@ class PPOPolicy():
         #
         # Our distribution gives us two potentially distinct actions, one of
         # which is guaranteed to be a raw sample from the distribution. The
-        # other might be altered in some way (usually to enforce a range).
+        # other might be altered in some way (usually enforcing a range).
         #
         action, raw_action = self.actor.distribution.sample_distribution(dist)
 
@@ -760,7 +759,7 @@ class PPOPolicy():
 
         return raw_action, action, log_prob.detach()
 
-    def get_inference_actions(self, obs, explore):
+    def get_inference_actions(self, obs, deterministic):
         """
         Given observations from our environment, determine what the
         actions should be.
@@ -772,19 +771,21 @@ class PPOPolicy():
         -----------
         obs: dict
             The environment observation.
-        explore: bool
-            Should we allow exploration?
+        deterministic: bool
+            If True, the action will always come from the highest
+            probability action. Otherwise, our actions come from
+            sampling the distribution.
 
         Returns:
         --------
         np.ndarray
             Predicted actions to perform in the environment.
         """
-        if explore:
-            return self._get_actions_with_exploration(obs)
-        return self._get_actions_without_exploration(obs)
+        if deterministic:
+            return self._get_deterministic_actions(obs)
+        return self._get_actions(obs)
 
-    def _get_actions_with_exploration(self, obs):
+    def _get_actions(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be taken while allowing natural exploration.
@@ -804,7 +805,7 @@ class PPOPolicy():
             probability distribution.
         """
         if len(obs.shape) < 2:
-            msg  = "ERROR: _get_actions_with_exploration expects a "
+            msg  = "ERROR: _get_actions expects a "
             msg ++ "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
@@ -826,7 +827,7 @@ class PPOPolicy():
         action, _ = self.actor.distribution.sample_distribution(dist)
         return action
 
-    def _get_actions_without_exploration(self, obs):
+    def _get_deterministic_actions(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be while not allowing any exploration.
@@ -842,7 +843,7 @@ class PPOPolicy():
             The next actions to perform.
         """
         if len(obs.shape) < 2:
-            msg  = "ERROR: _get_actions_without_exploration expects a "
+            msg  = "ERROR: _get_deterministic_actions expects a "
             msg ++ "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)

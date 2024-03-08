@@ -209,10 +209,11 @@ def cli():
     test_parser.add_argument("state_path", type=str,
         help="Path to the saved state to evaluate.")
 
-    test_parser.add_argument("--test_explore", action="store_true",
-        help="Enable exploration while testing. Note that this flag"
-        "only has an effect while in test mode. Exploration is always"
-        "enabled during training.")
+    #FIXME: test this
+    test_parser.add_argument("--deterministic", action="store_true",
+        help="Make the actor behave deterministically. If used, "
+        "the action probabilities will not be sampled. Instead, we "
+        "will always act using the highest probability action.")
 
     test_parser.add_argument("--num_test_runs", type=int, default=1,
         help="This will define the number of test "
