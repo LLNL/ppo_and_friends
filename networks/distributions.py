@@ -949,6 +949,7 @@ class MixedDistribution(PPODistribution):
 
 def get_actor_distribution(
     action_space,
+    verbose = True,
     **kw_args):
     """
     Get the action distribution for an actor network.
@@ -957,6 +958,8 @@ def get_actor_distribution(
     -----------
     action_space: gymnasium space
         The action space to create a distribution for.
+    verbose: bool
+        Enable verbosity?
     kw_args: dict
         Keyword args to pass to the distribution class.
 
@@ -977,14 +980,51 @@ def get_actor_distribution(
         comm.Abort()
 
     if action_dtype == "mixed":
-        #FIXME:
-        assert 0
+        distribution = MixedDistribution(action_space, **kw_args)
 
-    if action_dtype == "discrete":
+        #
+        # We need a more complicated output function here. It needs to be
+        # capable of applying different output functions to each action type.
+        #
+        output_funcs = []
+        for sub_space in action_space:
+            sub_dtype = get_action_dtype(sub_space)
+
+            if sub_dtype == "mixed":
+                msg  = "ERROR: 'mixed' action data types cannot contain "
+                msg += "mixed action dtypes!"
+                rank_print(msg)
+                comm.Abort()
+
+            _, sub_out_func = get_actor_distribution(
+                sub_space, verbose = False, **kw_args)
+
+            output_funcs.append(sub_out_func)
+
+        output_funcs = tuple(output_funcs)
+        pred_sizes   = distribution.pred_sizes.copy()
+
+        assert pred_sizes.size == len(output_funcs)
+
+        def output_func(pred):
+
+            start = 0
+            for idx, pred_size in enumerate(pred_sizes):
+
+                out_func = output_funcs[idx]
+                stop = start + pred_size
+
+                pred[:, start : stop] = out_func(pred[:, start : stop])
+
+                start = stop
+
+            return pred
+                
+    elif action_dtype == "discrete":
         distribution = CategoricalDistribution(**kw_args)
         output_func  = lambda x : t_functional.softmax(x, dim=-1)
     
-    if action_dtype == "multi-discrete":
+    elif action_dtype == "multi-discrete":
         distribution = MultiCategoricalDistribution(
             nvec = action_space.nvec, **kw_args)
         output_func  = lambda x : t_functional.softmax(x, dim=-1)
@@ -1006,9 +1046,11 @@ def get_actor_distribution(
                 rank_print(msg)
                 comm.Abort()
             else:
-                msg  = f"Setting distribution min to the action space "
-                msg += f"min of {act_min}."
-                rank_print(msg)
+                if verbose:
+                    msg  = f"Setting Gaussian distribution min to the action space "
+                    msg += f"min of {act_min}."
+                    rank_print(msg)
+
                 kw_args["distribution_min"] = act_min
 
         if distribution_max is None:
@@ -1023,9 +1065,10 @@ def get_actor_distribution(
                 rank_print(msg)
                 comm.Abort()
             else:
-                msg  = f"Setting distribution max to the action space "
-                msg += f"max of {act_max}."
-                rank_print(msg)
+                if verbose:
+                    msg  = f"Setting Gaussian distribution max to the action space "
+                    msg += f"max of {act_max}."
+                    rank_print(msg)
                 kw_args["distribution_max"] = act_max
 
         distribution = GaussianDistribution(out_size, **kw_args)

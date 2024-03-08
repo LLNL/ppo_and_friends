@@ -1,6 +1,6 @@
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_space_shape, get_action_prediction_shape
-from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
+from ppo_and_friends.networks.distributions import get_actor_distribution
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -30,6 +30,8 @@ def to_actor(ac_network):
                 out_shape = get_action_prediction_shape(action_space),
                 **kw_args)
 
+            # FIXME: need a network type that handles mixed action spaces. It
+            # will need different output functions for each head.
             self.obs_space = obs_space
             self.distribution, self.output_func = \
                 get_actor_distribution(action_space, **kw_args)

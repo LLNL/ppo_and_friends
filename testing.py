@@ -6,9 +6,10 @@ import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
 
+#FIXME: make sure that the deterministic flag is coming through.
 def test_policy(ppo,
-                explore,
                 num_test_runs,
+                deterministic    = False,
                 render_gif       = False,
                 gif_fps          = 15,
                 frame_pause      = 0.0,
@@ -22,9 +23,9 @@ def test_policy(ppo,
     ----------
     ppo: object
         An instance of PPO from ppo.py.
-    explore: bool
-        Bool determining whether or not exploration should
-        be enabled while testing.
+    deterministic: bool
+        Bool determining whether or not we should sample our action
+        prob distributions when testing.
     render_gif: bool
         Create a gif from the renderings.
     gif_fps: int
@@ -77,7 +78,7 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render())
 
-            actions = ppo.get_inference_actions(obs, explore)
+            actions = ppo.get_inference_actions(obs, deterministic)
             obs, _, reward, terminated, truncated, info = \
                 ppo.apply_policy_step_constraints(*env.step(actions))
 

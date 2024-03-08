@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.nn import functional as t_func
 import numpy as np
 from ppo_and_friends.networks.ppo_networks.base import PPONetwork
-from ppo_and_friends.networks.actor_critic.utils import get_actor_distribution
+from ppo_and_friends.networks.distributions import get_actor_distribution
 from ppo_and_friends.networks.attention import SelfAttentionEncodingBlock
 from ppo_and_friends.networks.attention import SelfAttentionDecodingBlock
 from ppo_and_friends.utils.misc import get_space_shape, get_action_prediction_shape
