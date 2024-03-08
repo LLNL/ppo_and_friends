@@ -240,10 +240,10 @@ def get_space_shape(space):
             space_shapes.append(get_space_shape(sub_space))
 
         for i in range(1, len(space_shapes)):
-            if len(space_shapes[i]) != len(space_shapes[i-1]):
+            if len(space_shapes[i]) > 1:
                 msg  = "ERROR: the sub-spaces of mixed action spaces must "
-                msg += "all have the same length shapes, but found the following "
-                msg += f"shapes: {space_shapes}"
+                msg += "have a length of 1 but received shapes: "
+                msg += f"{space_shapes}"
                 rank_print(msg)
                 comm.Abort()
 
@@ -329,9 +329,25 @@ def get_action_prediction_shape(space):
     elif issubclass(space_type, MultiDiscrete):
         return (functools.reduce(lambda a, b: a+b, space.nvec),)
 
+    elif issubclass(space_type, Tuple):
+
+        pred_shapes = []
+        for sub_space in space:
+            pred_shapes.append(get_action_prediction_shape(sub_space))
+
+        for i in range(1, len(pred_shapes)):
+            if len(pred_shapes[i]) > 1:
+                msg  = "ERROR: the sub-spaces of mixed action spaces must "
+                msg += "have a length of 1 but received prediction shapes: "
+                msg += f"{pred_shapes}"
+                rank_print(msg)
+                comm.Abort()
+
+        return tuple(np.array(pred_shapes).sum(axis=0))
+
     else:
-        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
-        msg += "get_space_shape."
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in "
+        msg += "get_action_prediciont_shape."
         rank_print(msg) 
         comm.Abort()
 
