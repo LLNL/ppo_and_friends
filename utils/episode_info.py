@@ -796,7 +796,7 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_dtype in ["continuous", "multi-binary"]:
+        if self.action_dtype in ["continuous", "multi-binary", "mixed"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
