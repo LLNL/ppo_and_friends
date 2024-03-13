@@ -14,14 +14,18 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def get_action_dtype(action_space):
+def get_space_dtype(action_space):
     """
-        Get our action space data type.
-        Arguments:
-            env    The action space to query.
+    Get the data type of a gymnasium space.
 
-        Returns:
-            A string representing the action space dtype.
+    Parameters:
+    -----------
+    env: environment object
+        The action space to query.
+
+    Returns:
+    --------
+    A string representing the action space dtype.
     """
     if (issubclass(type(action_space), Box) and
         np.issubdtype(action_space.dtype, np.integer)):
@@ -33,7 +37,7 @@ def get_action_dtype(action_space):
         rank_print(msg)
         comm.Abort()
 
-    if type(action_space) == Tuple:
+    if issubclass(type(action_space), Tuple):
         return "mixed"
 
     elif np.issubdtype(action_space.dtype, np.floating):

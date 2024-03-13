@@ -4,9 +4,9 @@ from torch.distributions.normal import Normal
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_action_dtype
+from ppo_and_friends.utils.misc import get_space_dtype
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
-import functools
+from ppo_and_friends.utils.spaces import FlatteningTuple
 import gymnasium.spaces as spaces
 import numpy as np
 import torch
@@ -680,11 +680,16 @@ class MixedDistribution(PPODistribution):
         -----------
         """
         super(MixedDistribution, self).__init__(**kw_args)
-        assert issubclass(type(tuple_space), spaces.Tuple)
+
+        if not issubclass(type(tuple_space), FlatteningTuple):
+            msg  = f"ERROR: MixedDistribution only accepts spaces of type "
+            msg += "{FlatteningTuple} but received {type(tuple_space)}"
+            rank_print(msg)
+            comm.Abort()
 
         self.nvec         = []
         self.dist_classes = []
-        self.pred_sizes = []
+        self.pred_sizes   = []
 
         for space in tuple_space:
 
@@ -698,7 +703,6 @@ class MixedDistribution(PPODistribution):
                     comm.Abort()
 
                 self.nvec.append(get_flattened_space_length(space))
-                self.pred_sizes.append(get_action_prediction_shape(space)[0])
 
             elif issubclass(type(space), spaces.MultiBinary):
 
@@ -710,15 +714,12 @@ class MixedDistribution(PPODistribution):
                     comm.Abort()
 
                 self.nvec.append(space.n)
-                self.pred_sizes.append(get_action_prediction_shape(space)[0])
 
             elif issubclass(type(space), spaces.Discrete):
                 self.nvec.append(space.n)
-                self.pred_sizes.append(get_action_prediction_shape(space)[0])
 
             elif issubclass(type(space), spaces.MultiDiscrete):
                 self.nvec.append(space.nvec.sum())
-                self.pred_sizes.append(get_action_prediction_shape(space)[0])
 
             else:
                 msg  = f"ERROR: encountered unsupported space of type "
@@ -726,16 +727,9 @@ class MixedDistribution(PPODistribution):
                 rank_print(msg)
                 comm.Abort()
 
+            self.pred_sizes.append(get_action_prediction_shape(space)[0])
             dist_class, _ = get_actor_distribution(space, **kw_args)
             self.dist_classes.append(dist_class)
-
-        self.action_sizes = []
-        for space in tuple_space:
-            sample = space.sample()
-            if type(sample) == np.ndarray:
-                self.action_sizes.append(sample.size)
-            else:
-                self.action_sizes.append(1)
 
         assert len(self.pred_sizes) == len(self.nvec)
         assert len(self.pred_sizes) == len(self.dist_classes)
@@ -745,10 +739,11 @@ class MixedDistribution(PPODistribution):
 
         self.nvec         = np.array(self.nvec)
         self.dist_classes = tuple(self.dist_classes)
-        self.pred_size    = functools.reduce(lambda a, b : a + b, self.pred_sizes)
         self.pred_sizes   = np.array(self.pred_sizes)
-        self.action_size  = functools.reduce(lambda a, b : a + b, self.action_sizes)
-        self.action_sizes = np.array(self.action_sizes)
+        self.pred_size    = self.pred_sizes.sum()
+
+        self.action_sizes = tuple_space.sample_sizes
+        self.action_size  = tuple_space.flattened_size
 
     def get_distribution(self, probs):
         """
@@ -969,7 +964,7 @@ def get_actor_distribution(
         (distribtion, output_func). output_func is the function to
         apply to the output of the actor network.
     """
-    action_dtype = get_action_dtype(action_space)
+    action_dtype = get_space_dtype(action_space)
     output_func  = lambda x : x
 
     if action_dtype not in ["discrete", "continuous",
@@ -988,7 +983,7 @@ def get_actor_distribution(
         #
         output_funcs = []
         for sub_space in action_space:
-            sub_dtype = get_action_dtype(sub_space)
+            sub_dtype = get_space_dtype(sub_space)
 
             if sub_dtype == "mixed":
                 msg  = "ERROR: 'mixed' action data types cannot contain "

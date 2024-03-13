@@ -8,7 +8,7 @@ from torch import nn
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOSharedEpisodeDataset
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_action_dtype
+from ppo_and_friends.utils.misc import get_space_dtype
 import gymnasium.spaces as spaces
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
@@ -16,6 +16,7 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.networks.actor_critic.wrappers import to_actor, to_critic
 from ppo_and_friends.utils.schedulers import LinearScheduler, CallableValue
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
+from ppo_and_friends.utils.spaces import FlatteningTuple, gym_space_to_gymnasium_space
 
 from mpi4py import MPI
 comm      = MPI.COMM_WORLD
@@ -210,7 +211,30 @@ class PPOPolicy():
         else:
             self.intr_reward_weight = CallableValue(intr_reward_weight)
 
-        self.action_dtype = get_action_dtype(self.action_space)
+        #
+        # Check for any old-gym spaces and convert them to gymnasium.
+        #
+        self.action_space     = gym_space_to_gymnasium_space(self.action_space)
+        self.actor_obs_space  = gym_space_to_gymnasium_space(self.actor_obs_space)
+        self.critic_obs_space = gym_space_to_gymnasium_space(self.critic_obs_space)
+
+        self.action_dtype = get_space_dtype(self.action_space)
+
+        #
+        # If we've been given Tuple spaces, we need to convert them to
+        # FlatteningTuple.
+        #
+        if (self.action_dtype == "mixed" and
+            issubclass(type(self.action_space), spaces.Tuple)):
+            self.action_space = FlatteningTuple(self.action_space.spaces)
+
+        if (get_space_dtype(self.actor_obs_space) == "mixed" and
+            issubclass(type(self.actor_obs_space), spaces.Tuple)):
+            self.action_space = FlatteningTuple(self.actor_obs_space.spaces)
+
+        if (get_space_dtype(self.critic_obs_space) == "mixed" and
+            issubclass(type(self.critic_obs_space), spaces.Tuple)):
+            self.action_space = FlatteningTuple(self.critic_obs_space.spaces)
 
         if self.action_dtype == "unknown":
             msg  = "ERROR: unknown action type: "
@@ -319,6 +343,14 @@ class PPOPolicy():
                 lr=self.icm_lr(), eps=1e-5)
         else:
             self.icm_optim = None
+
+    def seed(self, seed):
+        """
+        Set random seeds.
+        """
+        self.action_space.seed(seed)
+        self.actor_obs_space.seed(seed)
+        self.critic_obs_space.seed(seed)
 
     def register_agent(self, agent_id):
         """

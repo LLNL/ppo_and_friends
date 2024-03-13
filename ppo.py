@@ -496,6 +496,7 @@ class PPO(object):
             # rates and various weights (not model weights).
             #
             self.policies[policy_id].finalize(self.status_dict, self.device)
+            self.policies[policy_id].seed(random_seed)
 
             self.status_dict[policy_id]["lr"] = policy.lr()
             self.status_dict[policy_id]["entropy weight"] = \

@@ -1,12 +1,10 @@
 import torch
 import sys
 import yaml
-from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
 
-#FIXME: make sure that the deterministic flag is coming through.
 def test_policy(ppo,
                 num_test_runs,
                 deterministic    = False,

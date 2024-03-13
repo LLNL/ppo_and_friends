@@ -1,4 +1,4 @@
-from gymnasium.spaces import Box, MultiDiscrete
+from gymnasium.spaces import Box, MultiDiscrete, Tuple
 import gym as old_gym
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -267,3 +267,4 @@ class BoxIntActionEnvironment(ABC):
                     action[agent_id])
 
         return self.env.step(step_action)
+

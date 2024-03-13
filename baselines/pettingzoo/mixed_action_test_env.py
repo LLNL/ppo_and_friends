@@ -173,7 +173,7 @@ class MixedActionMirror(ParallelEnv):
 
         for agent_id in actions:
             obs[agent_id]    = self.agents[agent_id].target - actions[agent_id]
-            reward[agent_id] = -torch.nn.MSELoss()(actions[agent_id], self.agents[agent_id].target)
+            reward[agent_id] = -np.square(actions[agent_id] - self.agents[agent_id].target).mean()
 
             if self.current_step >= self.max_steps:
                 terminated[agent_id] = True
@@ -181,6 +181,7 @@ class MixedActionMirror(ParallelEnv):
                 terminated[agent_id] = False
 
             truncated[agent_id] = False
+            info[agent_id]      = {}
 
         self.current_step += 1
 
