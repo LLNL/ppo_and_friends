@@ -209,7 +209,6 @@ def cli():
     test_parser.add_argument("state_path", type=str,
         help="Path to the saved state to evaluate.")
 
-    #FIXME: test this
     test_parser.add_argument("--deterministic", action="store_true",
         help="Make the actor behave deterministically. If used, "
         "the action probabilities will not be sampled. Instead, we "
