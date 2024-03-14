@@ -690,12 +690,15 @@ class GaussianDistribution(nn.Module, PPODistribution):
 
 class MixedDistribution(PPODistribution):
     """
+    A distribution class that combines multiple distributions into one.
     """
 
     def __init__(self, tuple_space, **kw_args):
         """
         Parameters:
         -----------
+        tuple_space: FlatteningTuple
+            A FlatteningTuple space to create the distribution from.
         """
         super(MixedDistribution, self).__init__(**kw_args)
 
@@ -765,9 +768,9 @@ class MixedDistribution(PPODistribution):
 
     def get_distribution(self, probs):
         """
-        Given a set of probabilities, create and return a
-        multi-categorical distribution, which is an array
-        of categorical distributions.
+        Given an array of probabilities, create and return an
+        array of distributions. The probabilities are sent to their
+        respective distribution types for creating the distributions.
 
         Parameters:
         -----------
@@ -776,7 +779,7 @@ class MixedDistribution(PPODistribution):
 
         Returns:
         --------
-        A numpy array of PyTorch Categorical distribution objects.
+        A numpy array of PyTorch distribution objects.
         """
         dists = []
         start = 0
@@ -847,20 +850,17 @@ class MixedDistribution(PPODistribution):
 
     def sample_distribution(self, dists):
         """
-        Given a distribution, return a sample from that distribution.
-        Tricky business: some distributions will alter one of the
-        returned samples. In that case, we still need access to the
-        original sample. This distribution does not perform any
-        alterations, so we just return the same sample twice.
+        Given an array of distributions, create an array of samples
+        from the associated distributions.
 
         Parameters:
         -----------
-        dists: torch distribution
-            The distributions to sample from.
+        dists: array-like
+            An array of distributions to sample from.
 
         Returns:
         --------
-        A tuple of form (refined_sample, sample).
+        A tuple of form (refined_samples, samples).
         """
         sample  = []
         refined = []
@@ -884,18 +884,18 @@ class MixedDistribution(PPODistribution):
 
     def get_entropy(self, dists, unrefined_probs, **kw_args):
         """
-        Get the entropy of the categorical distributions.
+        Get the entropy of an array of distributions.
 
         Parameters:
         -----------
         dists: array-like
-            The distributions to get the entropy of.
+            An array of distributions to get the entropy of.
         unrefined_probs: torch tensor
             Unrefined action probabilities.
 
         Returns:
         --------
-        The distributions entropy.
+        The distributions' entropy.
         """
         entropy  = []
 
@@ -924,8 +924,9 @@ class MixedDistribution(PPODistribution):
         Given a prediction from our network, refine it for use in
         the environment as an action.
 
-        NOTE: this method inhibits exploration. To allow exploration,
-        the distribution must be sampled.
+        NOTE: this method inhibits exploration and the ability to 
+        handle stochastic environments. To allow exploration and/or
+        handle stochastic environments, the distribution must be sampled.
 
         Parameters:
         -----------
