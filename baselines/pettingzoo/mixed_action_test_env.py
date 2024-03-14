@@ -136,50 +136,13 @@ class MixedActionMirror(ParallelEnv):
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent_id):
-        """
-        Return the observation space for a specific agent.
-
-        Parameters:
-        -----------
-        agent_id: str
-            The agent id.
-
-        Returns:
-        --------
-        gymnasium space:
-            The observation space for the given agent.
-        """
         return self.agents[agent_id].observation_space
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent_id):
-        """
-        Return the action space for a specific agent.
-
-        Parameters:
-        -----------
-        agent_id: str
-            The agent id.
-
-        Returns:
-        --------
-        gymnasium space:
-            The action space for the given agent.
-        """
         return self.agents[agent_id].action_space
 
     def seed(self, seed=None):
-        """Summary
-        Parameters
-        ----------
-        seed : None, optional
-            Description
-
-        Returns
-        -------
-        TYPE
-            Description
-        """
         if seed is not None and seed >= 0:
             np.random.seed(seed)
             random.seed(seed)
