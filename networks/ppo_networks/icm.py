@@ -11,7 +11,7 @@ from ppo_and_friends.networks.ppo_networks.base import PPONetwork
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
 from ppo_and_friends.utils.misc import get_flattened_space_length
-from ppo_and_friends.utils.misc import get_space_dtype, get_space_shape, get_action_prediction_shape
+from ppo_and_friends.utils.misc import get_space_dtype_str, get_space_shape, get_action_prediction_shape
 
 
 from mpi4py import MPI
@@ -304,7 +304,7 @@ class ICM(PPONetwork):
         act_size, act_shape = get_size_and_shape(act_shape)
 
         self.reward_scale = reward_scale
-        self.action_dtype = get_space_dtype(action_space)
+        self.action_dtype = get_space_dtype_str(action_space)
 
         if self.action_dtype not in ["discrete", "multi-discrete", "continuous"]:
             msg  = f"ERROR: action type of {self.action_dtype} is not currenty "

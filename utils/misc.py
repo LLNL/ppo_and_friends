@@ -14,7 +14,7 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def get_space_dtype(action_space):
+def get_space_dtype_str(action_space):
     """
     Get the data type of a gymnasium space.
 

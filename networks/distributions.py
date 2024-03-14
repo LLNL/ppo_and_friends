@@ -4,7 +4,7 @@ from torch.distributions.normal import Normal
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
 import torch.nn.functional as t_functional
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_space_dtype
+from ppo_and_friends.utils.misc import get_space_dtype_str
 from ppo_and_friends.utils.misc import get_flattened_space_length, get_action_prediction_shape
 from ppo_and_friends.utils.spaces import FlatteningTuple
 import gymnasium.spaces as spaces
@@ -982,7 +982,7 @@ def get_actor_distribution(
         (distribtion, output_func). output_func is the function to
         apply to the output of the actor network.
     """
-    action_dtype = get_space_dtype(action_space)
+    action_dtype = get_space_dtype_str(action_space)
     output_func  = lambda x : x
 
     if action_dtype not in ["discrete", "continuous",
@@ -1001,7 +1001,7 @@ def get_actor_distribution(
         #
         output_funcs = []
         for sub_space in action_space:
-            sub_dtype = get_space_dtype(sub_space)
+            sub_dtype = get_space_dtype_str(sub_space)
 
             if sub_dtype == "mixed":
                 msg  = "ERROR: 'mixed' action data types cannot contain "

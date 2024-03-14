@@ -15,7 +15,7 @@ from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.utils.spaces import FlatteningTuple
-from ppo_and_friends.utils.misc import get_flattened_space_length, get_space_dtype
+from ppo_and_friends.utils.misc import get_flattened_space_length, get_space_dtype_str
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 from gymnasium.spaces import Discrete, MultiDiscrete
@@ -79,7 +79,7 @@ class MixedActionMirror(ParallelEnv):
     action that is a sample of their action space.
     """
 
-    def __init__(self, max_steps=200, omit_spaces=[]):
+    def __init__(self, max_steps=256, omit_spaces=[]):
 
         for i in range(len(omit_spaces)):
             omit_spaces[i] = int(omit_spaces[i])
@@ -107,7 +107,7 @@ class MixedActionMirror(ParallelEnv):
         low  = np.inf
         high = -np.inf
         for space in mixed_spaces:
-            space_dtype = get_space_dtype(space)
+            space_dtype = get_space_dtype_str(space)
 
             if space_dtype == "discrete":
                 low  = min(0, low)
@@ -231,10 +231,10 @@ class MixedActionMirrorRunner(GymRunner):
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 32
+        actor_kw_args["hidden_size"] = 64
 
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 32
+        critic_kw_args["hidden_size"] = 64
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
@@ -256,7 +256,7 @@ class MixedActionMirrorRunner(GymRunner):
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 32,
-                     epochs_per_iter     = 10,
+                     epochs_per_iter     = 15,
                      ts_per_rollout      = ts_per_rollout,
                      batch_size          = 256,
                      normalize_obs       = False,

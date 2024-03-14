@@ -8,7 +8,7 @@ from torch import nn
 from ppo_and_friends.utils.episode_info import EpisodeInfo, PPODataset, PPOSharedEpisodeDataset
 from ppo_and_friends.networks.ppo_networks.icm import ICM
 from ppo_and_friends.utils.mpi_utils import rank_print
-from ppo_and_friends.utils.misc import get_space_dtype
+from ppo_and_friends.utils.misc import get_space_dtype_str
 import gymnasium.spaces as spaces
 from ppo_and_friends.utils.mpi_utils import broadcast_model_parameters, mpi_avg_gradients
 from ppo_and_friends.utils.misc import update_optimizer_lr
@@ -218,7 +218,7 @@ class PPOPolicy():
         self.actor_obs_space  = gym_space_to_gymnasium_space(self.actor_obs_space)
         self.critic_obs_space = gym_space_to_gymnasium_space(self.critic_obs_space)
 
-        self.action_dtype = get_space_dtype(self.action_space)
+        self.action_dtype = get_space_dtype_str(self.action_space)
 
         #
         # If we've been given Tuple spaces, we need to convert them to
@@ -228,11 +228,11 @@ class PPOPolicy():
             issubclass(type(self.action_space), spaces.Tuple)):
             self.action_space = FlatteningTuple(self.action_space.spaces)
 
-        if (get_space_dtype(self.actor_obs_space) == "mixed" and
+        if (get_space_dtype_str(self.actor_obs_space) == "mixed" and
             issubclass(type(self.actor_obs_space), spaces.Tuple)):
             self.action_space = FlatteningTuple(self.actor_obs_space.spaces)
 
-        if (get_space_dtype(self.critic_obs_space) == "mixed" and
+        if (get_space_dtype_str(self.critic_obs_space) == "mixed" and
             issubclass(type(self.critic_obs_space), spaces.Tuple)):
             self.action_space = FlatteningTuple(self.critic_obs_space.spaces)
 

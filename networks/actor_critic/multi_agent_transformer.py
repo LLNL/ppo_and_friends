@@ -7,7 +7,7 @@ from ppo_and_friends.networks.distributions import get_actor_distribution
 from ppo_and_friends.networks.attention import SelfAttentionEncodingBlock
 from ppo_and_friends.networks.attention import SelfAttentionDecodingBlock
 from ppo_and_friends.utils.misc import get_space_shape, get_action_prediction_shape
-from ppo_and_friends.utils.misc import get_space_dtype
+from ppo_and_friends.utils.misc import get_space_dtype_str
 from ppo_and_friends.utils.misc import get_flattened_space_length
 from ppo_and_friends.networks.utils import init_layer
 from ppo_and_friends.utils.misc import get_size_and_shape
@@ -80,7 +80,7 @@ class MATActor(PPONetwork):
         self.distribution, self.output_func = \
             get_actor_distribution(action_space, **kw_args)
 
-        self.action_dtype   = get_space_dtype(action_space)
+        self.action_dtype   = get_space_dtype_str(action_space)
         self.embedding_size = embedding_size
         self.num_agents     = num_agents
 
