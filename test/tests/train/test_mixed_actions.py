@@ -1,9 +1,6 @@
 from utils import run_training, high_score_test
 
-#
-# MPE tests
-#
-def test_mpe_simple_tag_mpi(num_ranks):
+def test_mixed_actions_mpi(num_ranks):
     num_timesteps  = 30000
     passing_scores = {}
 
