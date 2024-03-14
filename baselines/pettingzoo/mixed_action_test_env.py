@@ -1,5 +1,5 @@
 """
-A PettingZoo environment for testing mixed action spaces.
+A very simple PettingZoo environment for testing mixed action spaces.
 """
 import numpy as np
 import functools
@@ -15,6 +15,7 @@ from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.utils.spaces import FlatteningTuple
+from ppo_and_friends.utils.misc import get_flattened_space_length, get_space_dtype
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
 from gymnasium.spaces import Discrete, MultiDiscrete
@@ -72,26 +73,59 @@ class MixedActionMirrorAgent():
         self.action_space.seed(seed)
 
 class MixedActionMirror(ParallelEnv):
+    """
+    A simple game to help debug and test mixed-action space functionality.
+    In this game, agents are rewarded for their actions mirroring a "target"
+    action that is a sample of their action space.
+    """
 
-    def __init__(self, max_steps=200):
-        """
-        """
+    def __init__(self, max_steps=200, omit_spaces=[]):
+
+        for i in range(len(omit_spaces)):
+            omit_spaces[i] = int(omit_spaces[i])
 
         self.max_steps    = max_steps
         self.current_step = 0
 
-        mixed_spaces = [\
-            spaces.Box(-1, 1, (2,)),           # observed as 2
-            spaces.Discrete(3),                 # observed as 1
-            spaces.Box(-10, 2, (3,)),          # observed as 3
-            spaces.MultiBinary(5),              # observed as 5
-            spaces.MultiDiscrete([5, 10, 20]), # observed as 3
+        avail_spaces = [\
+            spaces.Box(-1, 1, (2,)),
+            spaces.Discrete(3),
+            spaces.Box(-10, 2, (3,)),
+            spaces.MultiBinary(5),
+            spaces.MultiDiscrete([5, 10, 20]),
         ]
 
-        #obs_size       = 6
-        obs_size       = 14
-        action_space      = FlatteningTuple(mixed_spaces)
-        observation_space = spaces.Box(-10, 22, (obs_size,))
+        mixed_spaces = []
+
+        for i in range(len(avail_spaces)):
+            if i not in omit_spaces:
+                mixed_spaces.append(avail_spaces[i])
+
+        action_space = FlatteningTuple(mixed_spaces)
+        obs_size     = get_flattened_space_length(action_space)
+
+        low  = np.inf
+        high = -np.inf
+        for space in mixed_spaces:
+            space_dtype = get_space_dtype(space)
+
+            if space_dtype == "discrete":
+                low  = min(0, low)
+                high = max(space.n - 1, high)
+
+            elif space_dtype == "multi-discrete":
+                low  = min(0, low)
+                high = max(space.nvec.max() - 1, high)
+
+            elif space_dtype == "multi-binary":
+                low  = min(0, low)
+                high = max(1, high)
+
+            elif space_dtype == "continuous":
+                low  = min(space.low.min(), low)
+                high = max(space.high.max(), high)
+
+        observation_space = spaces.Box(low, high, (obs_size,))
 
         self.agents = {}
         for i in range(10):
@@ -156,25 +190,19 @@ class MixedActionMirror(ParallelEnv):
         return [seed]
 
     def step(self, actions):
-        """
-        """
-
         obs        = {}
         reward     = {}
         terminated = {}
         truncated  = {}
         info       = {}
 
+        #
+        # In this simple game, we reward agents using actions that
+        # mirror their "target", which is just a sample of their action space.
+        #
         for agent_id in actions:
-            #input('\nnext agent?')
             obs[agent_id]    = self.agents[agent_id].target - actions[agent_id]
             reward[agent_id] = -np.square(actions[agent_id] - self.agents[agent_id].target).mean()
-
-            #print(f"Agent {agent_id}")
-            #print(f"    observation: {obs[agent_id]}")
-            #print(f"    action: {actions[agent_id]}")
-            #print(f"    target: {self.agents[agent_id].target}")
-            #print(f"    reward: {reward[agent_id]}")
 
             if self.current_step >= self.max_steps:
                 terminated[agent_id] = True
@@ -189,8 +217,6 @@ class MixedActionMirror(ParallelEnv):
         return obs, reward, terminated, truncated, info
 
     def reset(self, seed=None, options={}, *args, **kw_args):
-        """
-        """
         self.seed(seed)
         self.current_step = 0
 
@@ -208,18 +234,35 @@ class MixedActionMirror(ParallelEnv):
 @ppoaf_runner
 class MixedActionMirrorRunner(GymRunner):
 
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--learning_rate", type=float, default=0.0005)
+        parser.add_argument("--omit_spaces", nargs="+", default=[])
+        return parser
+
     def run(self):
 
         policy_map = lambda x : 'agent'
 
         env_generator = lambda : \
             ParallelZooWrapper(
-                MixedActionMirror(),
+                MixedActionMirror(omit_spaces = self.cli_args.omit_spaces),
                 add_agent_ids     = True,
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
-        lr = 0.0005
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         actor_kw_args = {}
@@ -234,7 +277,7 @@ class MixedActionMirrorRunner(GymRunner):
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
-            "lr"               : lr,
+            "lr"               : self.cli_args.learning_rate,
         }
 
         policy_settings = { 
