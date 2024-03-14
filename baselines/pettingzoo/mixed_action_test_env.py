@@ -14,8 +14,10 @@ from ppo_and_friends.environments.petting_zoo.wrappers import ParallelZooWrapper
 from ppo_and_friends.runners.env_runner import GymRunner
 from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwork
 from ppo_and_friends.utils.schedulers import *
+from ppo_and_friends.utils.spaces import FlatteningTuple
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
+from gymnasium.spaces import Discrete, MultiDiscrete
 
 
 def env(render_mode=None):
@@ -52,7 +54,7 @@ def raw_env(render_mode=None):
 class MixedActionMirrorAgent():
 
     def __init__(self, action_space, observation_space, seed):
-        assert issubclass(type(action_space), spaces.Tuple)
+        assert issubclass(type(action_space), FlatteningTuple)
 
         self.action_space      = action_space
         self.observation_space = observation_space
@@ -64,16 +66,7 @@ class MixedActionMirrorAgent():
         # these "target actions". It's just a way to make sure
         # the mixed action space is functional.
         #
-        sample      = self.action_space.sample()
-        self.target = []
-
-        for s in sample:
-            if type(s) == np.ndarray:
-                self.target.append(s)
-            else:
-                self.target.append(np.array((s,)))
-
-        self.target = np.concatenate(self.target)
+        self.target = self.action_space.sample()
 
     def seed(self, seed):
         self.action_space.seed(seed)
@@ -88,16 +81,17 @@ class MixedActionMirror(ParallelEnv):
         self.current_step = 0
 
         mixed_spaces = [\
-            spaces.Box(-1, 1, (2,)),           # action size 2
-            spaces.Discrete(3),                # action size 1
-            spaces.Box(-10, 2, (3,)),          # action size 3
-            spaces.MultiBinary(5),             # action size 5
-            spaces.MultiDiscrete([5, 10, 22]), # action size 3
+            spaces.Box(-1, 1, (2,)),           # observed as 2
+            spaces.Discrete(3),                 # observed as 1
+            spaces.Box(-10, 2, (3,)),          # observed as 3
+            spaces.MultiBinary(5),              # observed as 5
+            spaces.MultiDiscrete([5, 10, 20]), # observed as 3
         ]
 
-        action_size       = 14
-        action_space      = spaces.Tuple(mixed_spaces)
-        observation_space = spaces.Box(-10, 22, (action_size,))
+        #obs_size       = 6
+        obs_size       = 14
+        action_space      = FlatteningTuple(mixed_spaces)
+        observation_space = spaces.Box(-10, 22, (obs_size,))
 
         self.agents = {}
         for i in range(10):
@@ -172,8 +166,15 @@ class MixedActionMirror(ParallelEnv):
         info       = {}
 
         for agent_id in actions:
+            #input('\nnext agent?')
             obs[agent_id]    = self.agents[agent_id].target - actions[agent_id]
             reward[agent_id] = -np.square(actions[agent_id] - self.agents[agent_id].target).mean()
+
+            #print(f"Agent {agent_id}")
+            #print(f"    observation: {obs[agent_id]}")
+            #print(f"    action: {actions[agent_id]}")
+            #print(f"    target: {self.agents[agent_id].target}")
+            #print(f"    reward: {reward[agent_id]}")
 
             if self.current_step >= self.max_steps:
                 terminated[agent_id] = True
