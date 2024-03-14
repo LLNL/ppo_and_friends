@@ -80,7 +80,7 @@ class LinearInverseModel(nn.Module):
             self.output_func = t_functional.sigmoid
 
         else:
-            rank_print("ERROR: unsupported action space {action_dtype}")
+            rank_print(f"ERROR: unsupported action space {action_dtype}")
             comm.Abort()
 
         self.activation = activation
