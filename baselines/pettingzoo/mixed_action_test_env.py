@@ -79,7 +79,7 @@ class MixedActionMirror(ParallelEnv):
     action that is a sample of their action space.
     """
 
-    def __init__(self, max_steps=256, omit_spaces=[]):
+    def __init__(self, max_steps=256, num_agents=10, omit_spaces=[]):
 
         for i in range(len(omit_spaces)):
             omit_spaces[i] = int(omit_spaces[i])
@@ -128,7 +128,7 @@ class MixedActionMirror(ParallelEnv):
         observation_space = spaces.Box(low, high, (obs_size,))
 
         self.agents = {}
-        for i in range(10):
+        for i in range(num_agents):
             self.agents[f"agent_{i}"] = \
                 MixedActionMirrorAgent(action_space, observation_space, i)
 
