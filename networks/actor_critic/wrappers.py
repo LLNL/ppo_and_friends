@@ -30,8 +30,6 @@ def to_actor(ac_network):
                 out_shape = get_action_prediction_shape(action_space),
                 **kw_args)
 
-            # FIXME: need a network type that handles mixed action spaces. It
-            # will need different output functions for each head.
             self.obs_space = obs_space
             self.distribution, self.output_func = \
                 get_actor_distribution(action_space, **kw_args)
