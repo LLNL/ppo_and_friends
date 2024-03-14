@@ -1,8 +1,7 @@
 import numpy as np
 import functools
-from functools import reduce
 import torch
-from .stats import RunningMeanStd
+from ppo_and_friends.utils.stats import RunningMeanStd
 from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary, Tuple
 import gymnasium.spaces as spaces
 import os
@@ -15,16 +14,20 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
-def get_action_dtype(action_space):
+def get_space_dtype_str(action_space):
     """
-        Get our action space data type.
-        Arguments:
-            env    The action space to query.
+    Get the data type of a gymnasium space.
 
-        Returns:
-            A string representing the action space dtype.
+    Parameters:
+    -----------
+    env: environment object
+        The action space to query.
+
+    Returns:
+    --------
+    A string representing the action space dtype.
     """
-    if (type(action_space) == Box and
+    if (issubclass(type(action_space), Box) and
         np.issubdtype(action_space.dtype, np.integer)):
 
         msg  = "ERROR: action spaces of type Box int are not "
@@ -34,15 +37,22 @@ def get_action_dtype(action_space):
         rank_print(msg)
         comm.Abort()
 
-    if np.issubdtype(action_space.dtype, np.floating):
+    if issubclass(type(action_space), Tuple):
+        return "mixed"
+
+    elif np.issubdtype(action_space.dtype, np.floating):
         return "continuous"
+
     elif np.issubdtype(action_space.dtype, np.integer):
         if type(action_space) == Discrete:
             return "discrete"
+
         elif type(action_space) == MultiBinary:
             return "multi-binary"
+
         elif type(action_space) == MultiDiscrete:
             return "multi-discrete"
+
     return "unknown"
 
 
@@ -227,8 +237,24 @@ def get_space_shape(space):
     elif issubclass(space_type, MultiDiscrete):
         return space.shape
 
+    elif issubclass(space_type, Tuple):
+
+        space_shapes = []
+        for sub_space in space:
+            space_shapes.append(get_space_shape(sub_space))
+
+        for i in range(1, len(space_shapes)):
+            if len(space_shapes[i]) > 1:
+                msg  = "ERROR: the sub-spaces of mixed action spaces must "
+                msg += "have a length of 1 but received shapes: "
+                msg += f"{space_shapes}"
+                rank_print(msg)
+                comm.Abort()
+
+        return tuple(np.array(space_shapes).sum(axis=0))
+
     else:
-        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in "
         msg += "get_space_shape."
         rank_print(msg) 
         comm.Abort()
@@ -249,7 +275,7 @@ def get_flattened_space_length(space):
         The length of the gymnasium space.
     """
     space_shape = get_space_shape(space)
-    return reduce(lambda a, b: a*b, space_shape)
+    return functools.reduce(lambda a, b: a*b, space_shape)
 
 
 def get_size_and_shape(descriptor):
@@ -271,7 +297,7 @@ def get_size_and_shape(descriptor):
     assert desc_type == tuple or desc_type == int or desc_type == np.ndarray
 
     if desc_type == tuple or desc_type == np.ndarray:
-        size  = reduce(lambda a, b: a*b, descriptor)
+        size  = functools.reduce(lambda a, b: a*b, descriptor)
         shape = descriptor
     else:
         size  = descriptor
@@ -305,11 +331,27 @@ def get_action_prediction_shape(space):
         return (space.n,)
 
     elif issubclass(space_type, MultiDiscrete):
-        return (reduce(lambda a, b: a+b, space.nvec),)
+        return (functools.reduce(lambda a, b: a+b, space.nvec),)
+
+    elif issubclass(space_type, Tuple):
+
+        pred_shapes = []
+        for sub_space in space:
+            pred_shapes.append(get_action_prediction_shape(sub_space))
+
+        for i in range(1, len(pred_shapes)):
+            if len(pred_shapes[i]) > 1:
+                msg  = "ERROR: the sub-spaces of mixed action spaces must "
+                msg += "have a length of 1 but received prediction shapes: "
+                msg += f"{pred_shapes}"
+                rank_print(msg)
+                comm.Abort()
+
+        return tuple(np.array(pred_shapes).sum(axis=0))
 
     else:
-        msg  = f"ERROR: unsupported space, {type(space)}, encountered in"
-        msg += "get_space_shape."
+        msg  = f"ERROR: unsupported space, {type(space)}, encountered in "
+        msg += "get_action_prediciont_shape."
         rank_print(msg) 
         comm.Abort()
 

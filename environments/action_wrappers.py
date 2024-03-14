@@ -1,4 +1,4 @@
-from gymnasium.spaces import Box, MultiDiscrete
+from gymnasium.spaces import Box, MultiDiscrete, Tuple
 import gym as old_gym
 from abc import ABC, abstractmethod
 from ppo_and_friends.utils.mpi_utils import rank_print
@@ -12,15 +12,16 @@ num_procs = comm.Get_size()
 
 class AlternateActionEnvWrapper(ABC):
     """
-        This is primarily used for testing purposes. It's used to create
-        a version of an environment that uses a different action space
-        than it natively has.
+    This is primarily used for testing purposes. It's used to create
+    a version of an environment that uses a different action space
+    than it natively has.
     """
 
     def __init__(self, env, **kw_args):
         """
-            Arguments:
-                env    The environment to wrap.
+        Parameters:
+        env: env class
+            The environment to wrap.
         """
         self.env = env
         self.action_space      = self._get_action_space()
@@ -29,50 +30,56 @@ class AlternateActionEnvWrapper(ABC):
     @abstractmethod
     def _get_action_space(self):
         """
-            Return the new action space.
+        Return the new action space.
         """
         return
 
     @abstractmethod
     def step(self, action):
         """
-            Step using the new action space.
+        Step using the new action space.
 
-            Arguments:
-                action    The action to take.
+        Parameters:
+        -----------
+        action: np.ndarray or number
+            The action(s) to take.
 
-            Returns:
-                (obs, reward, done, info).
+        Returns:
+        --------
+        (obs, reward, done, info).
         """
         return
 
     def reset(self, *args, **kw_args):
         """
-            Reset the environment.
+        Reset the environment.
 
-            Returns:
-                The resulting observation.
+        Returns:
+        --------
+        The resulting observation.
         """
         return self.env.reset(*args, **kw_args)
 
     def render(self, *args, **kw_args):
         """
-            Render the environment.
+        Render the environment.
         """
         self.env.render(*args, **kw_args)
 
 
 class BoxIntActionWrapper():
     """
-        Box int action spaces are odd. What we really want is MultiDiscrete.
-        This class acts as a wrapper around Box int, converting it to
-        MultiDiscrete.
+    Box int action spaces are odd. What we really want is MultiDiscrete.
+    This class acts as a wrapper around Box int, converting it to
+    MultiDiscrete.
     """
 
     def __init__(self, space):
         """
-            Arguments:
-                space    The space to wrap. This should of type Box int.
+        Parameters:
+        -----------
+        space: gymnasium or gym space
+            The space to wrap. This should of type Box int.
         """
         if ((type(space) != Box and type(space) != old_gym.spaces.Box)
             or not np.issubdtype(space.dtype, np.integer)):
@@ -113,19 +120,22 @@ class BoxIntActionWrapper():
 
     def sample(self):
         """
-            Sample the MultiDiscrete space.
+        Sample the MultiDiscrete space.
         """
         return self.wrap_action(self.box_space.sample())
 
     def wrap_action(self, action):
         """
-            Wrap a Box int action in MultiDiscrete.
+        Wrap a Box int action in MultiDiscrete.
 
-            Arguments:
-                action    The Box int action to convert to MultiDiscrete.
+        Parameters:
+        -----------
+        action: np.ndarray
+            The Box int action to convert to MultiDiscrete.
 
-            Returns:
-                An action converted from Box int to MultiDiscrete.
+        Returns:
+        --------
+        An action converted from Box int to MultiDiscrete.
         """
         wrapped = np.zeros_like(action)
         for idx, bi_a in enumerate(action):
@@ -134,13 +144,16 @@ class BoxIntActionWrapper():
 
     def unwrap_action(self, action):
         """
-            Unwrap a MultiDiscrete action to the Box int space.
+        Unwrap a MultiDiscrete action to the Box int space.
 
-            Arguments:
-                action    A MultiDiscrete action to convert to Box int.
+        Parameters:
+        -----------
+        action: np.ndarray
+            A MultiDiscrete action to convert to Box int.
 
-            Returns:
-                An action converted from MultiDiscrete to Box int.
+        Returns:
+        --------
+        An action converted from MultiDiscrete to Box int.
         """
         unwrapped = np.zeros_like(action)
         for idx, md_a in enumerate(action):
@@ -150,60 +163,66 @@ class BoxIntActionWrapper():
 
 class IdentityActionWrapper():
     """
-        A very simple action space wrapper that behaves exactly like
-        the original space. The only difference is that we have wrap
-        and unwrap methods that basically do nothing.
+    A very simple action space wrapper that behaves exactly like
+    the original space. The only difference is that we have wrap
+    and unwrap methods that basically do nothing.
     """
 
     def __init__(self, space):
         """
-            Arguments:
-                space    The space to wrap.
+        Parameters:
+        -----------
+        space: gymnasium or gym space
+            The space to wrap.
         """
         self.space = space
 
     def sample(self):
         """
-            Sample the action space.
+        Sample the action space.
 
-            Returns:
-                The sample.
+        Returns:
+        --------
+        The sample.
         """
         return self.space.sample()
 
     def wrap_action(self, action):
         """
-            Return the action without wrapping.
+        Return the action without wrapping.
         """
         return action
 
     def unwrap_action(self, action):
         """
-            Return the action without unwrapping.
+        Return the action without unwrapping.
         """
         return action
 
 
 class BoxIntActionEnvironment(ABC):
     """
-        An abstract environment wrapper that helps convert Box int action
-        spaces to MultiDiscrete.
+    An abstract environment wrapper that helps convert Box int action
+    spaces to MultiDiscrete.
     """
     def __init__(self, **kw_args):
         pass
 
     def _wrap_action_space(self, action_space):
         """
-            Create a version of action_space where all instances of Box int
-            have been converted to MultiDiscrete. Note that action_space
-            is assumed to be a dictionary.
+        Create a version of action_space where all instances of Box int
+        have been converted to MultiDiscrete. Note that action_space
+        is assumed to be a dictionary.
 
-            Arguments:
-                action    A dictionary mapping agent ids to action spaces.
+        Parameters:
+        -----------
+        action: dict
+            A dictionary mapping agent ids to action spaces.
 
-            Returns:
-                A replica of action_space where Box int spaces are converted
-                to MultiDiscrete.
+        Returns:
+        --------
+        A replica of action_space where Box int spaces are converted
+        to MultiDiscrete.
         """
         self.action_wrappers = {}
         temp_action_space    = {}
@@ -228,14 +247,17 @@ class BoxIntActionEnvironment(ABC):
 
     def _action_wrapped_step(self, action):
         """
-            Take an action wrapped step in the environment.
+        Take an action wrapped step in the environment.
 
-            Arguments:
-                action    A dictionary mapping agent ids to actions. There
-                          should be no instances of Box int.
+        Parameters:
+        -----------
+        action: dict
+            A dictionary mapping agent ids to actions. There
+            should be no instances of Box int.
 
-            Returns:
-                The results of env.step(...)
+        Returns:
+        --------
+        The results of env.step(...)
         """
         step_action = {}
 
@@ -245,3 +267,4 @@ class BoxIntActionEnvironment(ABC):
                     action[agent_id])
 
         return self.env.step(step_action)
+

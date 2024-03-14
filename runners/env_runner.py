@@ -79,7 +79,6 @@ class EnvironmentRunner(ABC):
                 env_generator,
                 device,
                 test                  = False,
-                test_explore          = False,
                 num_timesteps         = 1_000_000,
                 render_gif            = False,
                 gif_fps               = 15,
@@ -105,7 +104,6 @@ class EnvironmentRunner(ABC):
 
         if test:
             test_policy(ppo           = ppo,
-                        explore       = test_explore,
                         render_gif    = render_gif,
                         gif_fps       = gif_fps,
                         num_test_runs = num_test_runs,

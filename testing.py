@@ -1,14 +1,13 @@
 import torch
 import sys
 import yaml
-from ppo_and_friends.utils.misc import get_action_dtype
 import numpy as np
 from ppo_and_friends.utils.render import save_frames_as_gif
 import os
 
 def test_policy(ppo,
-                explore,
                 num_test_runs,
+                deterministic    = False,
                 render_gif       = False,
                 gif_fps          = 15,
                 frame_pause      = 0.0,
@@ -22,9 +21,9 @@ def test_policy(ppo,
     ----------
     ppo: object
         An instance of PPO from ppo.py.
-    explore: bool
-        Bool determining whether or not exploration should
-        be enabled while testing.
+    deterministic: bool
+        Bool determining whether or not we should sample our action
+        prob distributions when testing.
     render_gif: bool
         Create a gif from the renderings.
     gif_fps: int
@@ -38,14 +37,9 @@ def test_policy(ppo,
     verbose: bool
         Enable verbosity?
     """
-    env        = ppo.env
-    policies   = ppo.policies
-    render     = ppo.render
-
-    action_dtype = {}
-    for agent_id in env.agent_ids:
-        action_dtype[agent_id]= get_action_dtype(env.action_space[agent_id])
-
+    env          = ppo.env
+    policies     = ppo.policies
+    render       = ppo.render
     max_int      = np.iinfo(np.int32).max
     num_steps    = 0
     total_policy_scores = {policy_id : 0.0 for policy_id in ppo.policies}
@@ -82,7 +76,7 @@ def test_policy(ppo,
             elif render_gif:
                 gif_frames.append(env.render())
 
-            actions = ppo.get_inference_actions(obs, explore)
+            actions = ppo.get_inference_actions(obs, deterministic)
             obs, _, reward, terminated, truncated, info = \
                 ppo.apply_policy_step_constraints(*env.step(actions))
 

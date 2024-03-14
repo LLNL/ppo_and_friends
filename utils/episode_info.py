@@ -796,7 +796,7 @@ class PPODataset(Dataset):
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
             dtype=torch.float).to(self.device)
 
-        if self.action_dtype in ["continuous", "multi-binary"]:
+        if self.action_dtype in ["continuous", "multi-binary", "mixed"]:
             self.actions = torch.tensor(self.actions,
                 dtype=torch.float).to(self.device)
 
@@ -808,6 +808,18 @@ class PPODataset(Dataset):
                 dtype=torch.long).to(self.device)
             self.raw_actions = torch.tensor(self.raw_actions,
                 dtype=torch.long).to(self.device)
+
+        else:
+            msg  = f"ERROR: unknown action_dtype  of {self.action_dtype} encountered "
+            msg += "in PPODataset."
+            rank_print(msg)
+            comm.Abort()
+
+        if len(self.actions.shape) <= 1:
+            self.actions = torch.unsqueeze(self.actions, dim=-1)
+
+        if len(self.raw_actions.shape) <= 1:
+            self.raw_actions = torch.unsqueeze(self.raw_actions, dim=-1)
 
         self.is_built = True
 
