@@ -333,6 +333,12 @@ class MATPolicy(PPOPolicy):
                 (batch_size, num_agents, self.action_pred_size + 1)).to(self.device)
             action_block[:, 0, 0] = 1
 
+        else:
+            msg  = f"ERROR: unknown action dtype of {self.action_dtype} "
+            msg += "encountered when getting tokened action block."
+            rank_print(msg)
+            comm.Abort()
+
         return action_block
 
     def _multi_discrete_prob_to_one_hot(self, actions):
@@ -435,7 +441,7 @@ class MATPolicy(PPOPolicy):
 
         return values, log_probs, entropy
 
-    def _get_autoregressive_actions_with_exploration(self, encoded_obs):
+    def _get_autoregressive_actions(self, encoded_obs):
         """
         Generate actions with exploration auto-regressively. This method
         starts by feeding an array containing a start token into the
@@ -595,7 +601,7 @@ class MATPolicy(PPOPolicy):
             probability distribution.
         """
         if len(obs.shape) < 2:
-            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg  = "ERROR: _get_action expects a "
             msg ++ "batch of observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
@@ -611,7 +617,7 @@ class MATPolicy(PPOPolicy):
 
         encoded_obs, _ = self.critic(t_obs)
         actions, raw_actions, log_probs = \
-            self._get_autoregressive_actions_with_exploration(encoded_obs)
+            self._get_autoregressive_actions(encoded_obs)
 
         actions     = torch.swapaxes(actions, 0, 1)
         raw_actions = torch.swapaxes(raw_actions, 0, 1)
@@ -695,7 +701,7 @@ class MATPolicy(PPOPolicy):
 
         self.actor_critic_optim.step()
 
-    def get_inference_actions(self, obs, explore):
+    def get_inference_actions(self, obs, deterministic):
         """
         Given observations from our environment, determine what the
         actions should be.
@@ -707,19 +713,21 @@ class MATPolicy(PPOPolicy):
         -----------
         obs: dict
             The environment observation.
-        explore: bool
-            Should we allow exploration?
+        deterministic: bool
+            If True, the action will always come from the highest
+            probability action. Otherwise, our actions come from
+            sampling the distribution.
 
         Returns:
         --------
         dict:
             Predicted actions to perform in the environment.
         """
-        if explore:
-            return self._get_actions_with_exploration(obs)
-        return self._get_actions_without_exploration(obs)
+        if deterministic:
+            return self._get_deterministic_actions(obs)
+        return self._get_actions(obs)
 
-    def _get_actions_with_exploration(self, obs):
+    def _get_actions(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be taken while allowing natural exploration.
@@ -739,7 +747,7 @@ class MATPolicy(PPOPolicy):
             probability distribution.
         """
         if len(obs.shape) < 3:
-            msg  = "ERROR: _get_action_with_exploration expects a "
+            msg  = "ERROR: _get_actions expects a "
             msg += "batch of agent observations but "
             msg += "instead received shape {}.".format(obs.shape)
             rank_print(msg)
@@ -755,13 +763,13 @@ class MATPolicy(PPOPolicy):
 
         encoded_obs, _ = self.critic(t_obs)
         actions, _, _ = \
-            self._get_autoregressive_actions_with_exploration(encoded_obs)
+            self._get_autoregressive_actions(encoded_obs)
 
         actions = torch.swapaxes(actions, 0, 1)
 
         return actions
 
-    def _get_actions_without_exploration(self, obs):
+    def _get_deterministic_actions(self, obs):
         """
         Given observations from our environment, determine what the
         next actions should be while not allowing any exploration.

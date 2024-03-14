@@ -4,7 +4,7 @@
 """
 from ppo_and_friends.environments.ppo_env_wrappers import PPOEnvironmentWrapper
 from ppo_and_friends.environments.action_wrappers import BoxIntActionEnvironment
-from ppo_and_friends.environments.gym.version_wrappers import gym_space_to_gymnasium_space
+from ppo_and_friends.utils.spaces import gym_space_to_gymnasium_space
 from abmarl.sim.agent_based_simulation import ActingAgent, Agent, ObservingAgent
 from gymnasium.spaces import Dict, Box
 import gymnasium as gym

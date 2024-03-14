@@ -496,6 +496,7 @@ class PPO(object):
             # rates and various weights (not model weights).
             #
             self.policies[policy_id].finalize(self.status_dict, self.device)
+            self.policies[policy_id].seed(random_seed)
 
             self.status_dict[policy_id]["lr"] = policy.lr()
             self.status_dict[policy_id]["entropy weight"] = \
@@ -793,7 +794,7 @@ class PPO(object):
 
         return raw_actions, actions, log_probs
 
-    def get_inference_actions(self, obs, explore):
+    def get_inference_actions(self, obs, deterministic):
         """
         Get actions to be used for evaluation or inference in a
         deployment.
@@ -802,11 +803,10 @@ class PPO(object):
         -----------
         obs: dict
             A dictionary mapping agent ids to observations.
-        explore: bool
-            Should the agents actions include exploration? If so,
-            the prediction from the network will be used (possibly after
-            some transformations). If not, we sample the predicted
-            distribution.
+        deterministic: bool
+            If True, the action will always come from the highest
+            probability action. Otherwise, our actions come from
+            sampling the distribution.
 
         Returns:
         --------
@@ -814,10 +814,10 @@ class PPO(object):
             A dictionary mapping agent ids to actions.
         """
         if self.have_agent_grouping:
-            return self._get_policy_grouped_inference_actions(obs, explore)
-        return self._get_mappo_inference_actions(obs, explore)
+            return self._get_policy_grouped_inference_actions(obs, deterministic)
+        return self._get_mappo_inference_actions(obs, deterministic)
 
-    def _get_policy_grouped_inference_actions(self, obs, explore):
+    def _get_policy_grouped_inference_actions(self, obs, deterministic):
         """
         Get actions to be used for evaluation or inference in a
         deployment. This function is specifically for use with
@@ -827,11 +827,10 @@ class PPO(object):
         -----------
         obs: dict
             A dictionary mapping agent ids to observations.
-        explore: bool
-            Should the agents actions include exploration? If so,
-            the prediction from the network will be used (possibly after
-            some transformations). If not, we sample the predicted
-            distribution.
+        deterministic: bool
+            If True, the action will always come from the highest
+            probability action. Otherwise, our actions come from
+            sampling the distribution.
 
         Returns:
         --------
@@ -872,7 +871,7 @@ class PPO(object):
 
                 batch_actions = \
                     self.policies[policy_id].get_inference_actions(
-                        batch_obs, explore)
+                        batch_obs, deterministic)
 
                 #
                 # We now need to reverse our batching and put the agents
@@ -889,13 +888,13 @@ class PPO(object):
 
             else:
                 policy_actions = self._get_mappo_inference_actions(
-                    policy_obs[policy_id], explore)
+                    policy_obs[policy_id], deterministic)
 
             actions.update(policy_actions)
 
         return actions
 
-    def _get_mappo_inference_actions(self, obs, explore):
+    def _get_mappo_inference_actions(self, obs, deterministic):
         """
         Get actions to be used for evaluation or inference in a
         deployment. This function is specifically for use with
@@ -906,11 +905,10 @@ class PPO(object):
         -----------
         obs: dict
             A dictionary mapping agent ids to observations.
-        explore: bool
-            Should the agents actions include exploration? If so,
-            the prediction from the network will be used (possibly after
-            some transformations). If not, we sample the predicted
-            distribution.
+        deterministic: bool
+            If True, the action will always come from the highest
+            probability action. Otherwise, our actions come from
+            sampling the distribution.
 
         Returns:
         --------
@@ -924,7 +922,7 @@ class PPO(object):
             policy_id     = self.policy_mapping_fn(agent_id)
 
             agent_action = self.policies[policy_id].get_inference_actions(
-                obs[agent_id], explore)
+                obs[agent_id], deterministic)
 
             actions[agent_id] = agent_action.numpy()
 
