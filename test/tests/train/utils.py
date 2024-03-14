@@ -1,5 +1,5 @@
 import sys
-import dill as pickle
+import yaml
 import subprocess
 import os
 from pathlib import Path
@@ -176,14 +176,15 @@ def average_score_test(name,
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,
-        "test-scores.pickle")
+        "test-scores.yaml")
 
-    with open(score_file, "rb") as in_f:
-        scores = pickle.load(in_f)
+    with open(score_file, "r") as in_f:
+        scores = yaml.safe_load(in_f)
 
     fail_msg  = f"\n************{name} FAILED************"
-    fail_msg += f"\nExpected avg scores:\n {passing_scores}"
-    fail_msg += f"\nActual scores:\n {scores}"
+    fail_msg += f"\nExpected vs actual avg scores:\n "
+    for agent_id in passing_scores:
+        fail_msg += f"    {agent_id}: {passing_scores[agent_id]} vs {scores[agent_id]['avg_score']}\n"
 
     for agent_id in passing_scores:
         msg = f"ERROR: unable to find agent {agent_id} in the test scores."
@@ -223,14 +224,15 @@ def high_score_test(name,
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,
-        "test-scores.pickle")
+        "test-scores.yaml")
 
-    with open(score_file, "rb") as in_f:
-        scores = pickle.load(in_f)
+    with open(score_file, "r") as in_f:
+        scores = yaml.safe_load(in_f)
 
     fail_msg  = f"\n************{name} FAILED************"
-    fail_msg += f"\nExpected high scores:\n {passing_scores}"
-    fail_msg += f"\nActual scores:\n {scores}"
+    fail_msg += f"\nExpected vs actual high scores:\n "
+    for agent_id in passing_scores:
+        fail_msg += f"    {agent_id}: {passing_scores[agent_id]} vs {scores[agent_id]['high_score']}\n"
 
     for agent_id in passing_scores:
         msg = f"ERROR: unable to find agent {agent_id} in the test scores."

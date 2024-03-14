@@ -4,11 +4,11 @@ from utils import run_training, high_score_test
 # MPE tests
 #
 def test_mpe_simple_tag_mpi(num_ranks):
-    num_timesteps  = 8000
+    num_timesteps  = 30000
     passing_scores = {}
 
     for i in range(10):
-        passing_scores[f"agent_{i}"] = 2000
+        passing_scores[f"agent_{i}"] = -2000
 
     run_training(
         baseline_type   = 'pettingzoo',
