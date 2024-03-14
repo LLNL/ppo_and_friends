@@ -141,6 +141,37 @@ class FlatteningTuple(Tuple):
         """
         return self.flatten_sample(super().sample())
 
+    def one_hot_sample(self):
+        """
+        Sample the space and convert any one-hot applicable sub-spaces
+        to one-hot vectors.
+        """
+        one_hot_sample = []
+
+        for sub_space in self.spaces:
+
+            if issubclass(type(sub_space), Discrete):
+                sub_sample = np.zeros(sub_space.n)
+                sub_sample[sub_space.sample()] = 1.0
+                one_hot_sample.append(sub_sample)
+
+            elif issubclass(type(sub_space), MultiDiscrete):
+                sub_sample = np.zeros(sub_space.nvec.sum())
+                sample        = sub_space.sample()
+
+                start = 0
+                for i, size in enumerate(sub_space.nvec):
+                    stop = start + size
+                    sub_sample[start : stop][sample[i]] = 1.0
+                    start = stop
+
+                one_hot_sample.append(sub_sample)
+
+            else:
+                one_hot_sample.append(sub_space.sample())
+
+        return np.concatenate(one_hot_sample)
+
     def flatten_sample(self, sample):
         """
         Wrap a our sampled

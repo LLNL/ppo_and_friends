@@ -84,6 +84,10 @@ class PPODistribution(object):
         is an identical sample from the distribution.
         """
         sample = dist.sample()
+
+        if len(sample.shape) <= 1:
+            sample = torch.unsqueeze(sample, dim=-1)
+
         return sample, sample
 
     def get_entropy(self, dist, *args, **kw_args):
@@ -99,7 +103,12 @@ class PPODistribution(object):
         --------
         The distributions entropy.
         """
-        return dist.entropy()
+        entropy = dist.entropy()
+
+        if len(entropy.shape) <= 1:
+            entropy = torch.unsqueeze(entropy, dim=-1)
+
+        return entropy.sum(dim=-1)
 
     def refine_prediction(self,
                           prediction):
@@ -228,7 +237,16 @@ class CategoricalDistribution(PPODistribution):
          The log probabilities of the given actions from the
          given distribution.
         """
-        return dist.log_prob(actions)
+        #
+        # NOTE: the Categorical distribution behaves a bit odd in my opinion,
+        # and we need to flatten the actions down. Say we have a distribution
+        # with shape (256, 3). If we send actions as (256, 1) to the log_prob
+        # method, it will return probs having shape (256, 256) because it
+        # interprets each index as an entire batch. Sending actions with shape
+        # (256,) will result in probs of shape (256,). We then unsqueeze
+        # to conform to the rest of our architecture.
+        #
+        return torch.unsqueeze(dist.log_prob(actions.flatten()), dim=-1)
 
     def refine_prediction(self, prediction):
         """
@@ -1022,7 +1040,22 @@ def get_actor_distribution(
     elif action_dtype == "multi-discrete":
         distribution = MultiCategoricalDistribution(
             nvec = action_space.nvec, **kw_args)
-        output_func  = lambda x : t_functional.softmax(x, dim=-1)
+
+        #
+        # For multi-discrete, we need to apply softmax to each discrete
+        # sub-space individually.
+        #
+        def output_func(pred):
+            start = 0
+            for pred_size in action_space.nvec:
+
+                stop = start + pred_size
+
+                pred[:, start : stop] = t_functional.softmax(pred[:, start : stop], dim=-1)
+
+                start = stop
+
+            return pred
     
     elif action_dtype == "continuous":
         out_size = get_flattened_space_length(action_space)
