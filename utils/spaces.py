@@ -89,8 +89,6 @@ class FlatteningTuple(Tuple):
         sub_spaces: iterable
             An iterable containing the sub-spaces to encapsulate.
         """
-        super().__init__(sub_spaces, *args, **kw_args)
-
         self.sample_sizes   = []
         accepted_sub_spaces = [Box, Discrete, MultiDiscrete, MultiBinary]
 
@@ -134,6 +132,8 @@ class FlatteningTuple(Tuple):
 
         self.sample_sizes   = np.array(self.sample_sizes, dtype=np.int32)
         self.flattened_size = self.sample_sizes.sum()
+
+        super().__init__(sub_spaces, *args, **kw_args)
 
     def sample(self):
         """
