@@ -557,8 +557,8 @@ class PPO(object):
 
         for policy_id in freeze_policies:
             if policy_id not in self.policies:
-                msg  = "ERROR: freeze policy {policy_id} is not registered "
-                msg += "with this environment."
+                msg  = f"ERROR: freeze policy {policy_id} is not registered "
+                msg += f"with this environment."
                 rank_print(msg) 
                 comm.Abort()
 
