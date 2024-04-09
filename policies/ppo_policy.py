@@ -1270,28 +1270,31 @@ class PPOPolicy():
         load_path: str
             The state path to load the optimizers from.
         """
-        if self.test_mode:
-            load_rank = 0
-        else:
-            load_rank = rank
+        try:
+            if self.test_mode:
+                load_rank = 0
+            else:
+                load_rank = rank
 
-        actor_optim_f = os.path.join(load_path, f"actor_optim_{load_rank}")
-        if not os.path.exists(actor_optim_f):
-            actor_optim_f = os.path.join(load_path, f"actor_optim_0")
+            actor_optim_f = os.path.join(load_path, f"actor_optim_{load_rank}")
+            if not os.path.exists(actor_optim_f):
+                actor_optim_f = os.path.join(load_path, f"actor_optim_0")
 
-        critic_optim_f = os.path.join(load_path, f"critic_optim_{load_rank}")
-        if not os.path.exists(critic_optim_f):
-            critic_optim_f = os.path.join(load_path, f"critic_optim_0")
+            critic_optim_f = os.path.join(load_path, f"critic_optim_{load_rank}")
+            if not os.path.exists(critic_optim_f):
+                critic_optim_f = os.path.join(load_path, f"critic_optim_0")
 
-        self.actor_optim.load_state_dict(torch.load(actor_optim_f))
-        self.critic_optim.load_state_dict(torch.load(critic_optim_f))
+            self.actor_optim.load_state_dict(torch.load(actor_optim_f))
+            self.critic_optim.load_state_dict(torch.load(critic_optim_f))
 
-        if self.enable_icm:
-            icm_optim_f = os.path.join(load_path, f"icm_optim_{load_rank}")
-            if not os.path.exists(icm_optim_f):
-                icm_optim_f = os.path.join(load_path, f"icm_optim_0")
+            if self.enable_icm:
+                icm_optim_f = os.path.join(load_path, f"icm_optim_{load_rank}")
+                if not os.path.exists(icm_optim_f):
+                    icm_optim_f = os.path.join(load_path, f"icm_optim_0")
 
-            self.icm_optim.load_state_dict(torch.load(icm_optim_f))
+                self.icm_optim.load_state_dict(torch.load(icm_optim_f))
+        except Exception:
+            rank_print("WARNING: unable to find saved optimizers to load. Skipping...")
 
     def direct_load(self, policy_load_path):
         """
