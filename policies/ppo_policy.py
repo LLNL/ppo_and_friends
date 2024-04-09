@@ -1288,6 +1288,9 @@ class PPOPolicy():
 
         if self.enable_icm:
             icm_optim_f = os.path.join(load_path, f"icm_optim_{load_rank}")
+            if not os.path.exists(icm_optim_f):
+                icm_optim_f = os.path.join(load_path, f"icm_optim_0")
+
             self.icm_optim.load_state_dict(torch.load(icm_optim_f))
 
     def direct_load(self, policy_load_path):
