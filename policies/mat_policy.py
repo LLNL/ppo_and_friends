@@ -898,55 +898,34 @@ class MATPolicy(PPOPolicy):
         if self.enable_icm:
             update_optimizer_lr(self.icm_optim, self.icm_lr())
 
-    def save(self, save_path, tag="latest"):
+    def _save_policies(self, save_path):
         """
-        Save our policy.
+        Save our policies.
 
         Parameters:
         -----------
         save_path: str
-            The path to save the policy to.
-        tag: str
-            An optional tag directory to save the network to. This
-            defaults to "latest".
+            The state path to save the policy to.
         """
-        if type(tag) != str:
-            tag = str(tag)
-
-        policy_dir = "{}-policy".format(self.name)
-        policy_save_path = os.path.join(save_path, policy_dir, tag)
-
-        if rank == 0 and not os.path.exists(policy_save_path):
-            os.makedirs(policy_save_path)
-
-        self.actor_critic.save(policy_save_path)
+        self.actor_critic.save(save_path)
 
         if self.enable_icm:
-            self.icm_model.save(policy_save_path)
+            self.icm_model.save(save_path)
 
-    def load(self, load_path, tag="latest"):
+    def _load_policies(self, load_path):
         """
-        Load our policy.
+        Load our policies.
 
         Parameters:
         -----------
         load_path: str
-            The path to load the policy from.
-        tag: str
-            An optional tag directory to load the network from. This
-            defaults to "latest".
+            The state path to load the policy from.
         """
-        if type(tag) != str:
-            tag = str(tag)
-
-        policy_dir = "{}-policy".format(self.name)
-        policy_load_path = os.path.join(load_path, policy_dir, tag)
-
         try:
-            self.actor_critic.load(policy_load_path)
+            self.actor_critic.load(load_path)
 
             if self.enable_icm:
-                self.icm_model.load(policy_load_path)
+                self.icm_model.load(load_path)
 
         except Exception as e:
             if tag != "latest":
@@ -957,12 +936,63 @@ class MATPolicy(PPOPolicy):
             # the "latest" dir.
             #
             policy_dir = "{}-policy".format(self.name)
-            policy_load_path = os.path.join(load_path, policy_dir)
-
-            self.actor_critic.load(policy_load_path)
+            load_path = os.path.join(load_path, policy_dir)
+            self.actor_critic.load(load_path)
 
             if self.enable_icm:
-                self.icm_model.load(policy_load_path)
+                self.icm_model.load(load_path)
+
+    def _save_optimizers(self, save_path):
+        """
+        Save our optimizers.
+
+        Parameters:
+        -----------
+        save_path: str
+            The state path to save the optimizers to.
+        """
+        if self.test_mode:
+            return
+
+        optim_f = os.path.join(save_path, f"actor_critic_optim_{rank}")
+        torch.save(self.actor_critic_optim.state_dict(), optim_f)
+
+        if self.enable_icm:
+            icm_optim_f = os.path.join(save_path, f"icm_optim_{rank}")
+            torch.save(self.icm_optim.state_dict(), icm_optim_f)
+
+    def _load_optimizers(self, load_path):
+        """
+        Load our optimizers.
+
+        Parameters:
+        -----------
+        load_path: str
+            The state path to load the optimizers from.
+        """
+        if self.test_mode:
+            return
+
+        try:
+            if self.test_mode:
+                load_rank = 0
+            else:
+                load_rank = rank
+
+            optim_f = os.path.join(load_path, f"actor_critic_optim_{load_rank}")
+            if not os.path.exists(optim_f):
+                optim_f = os.path.join(load_path, f"actor_critic_optim_0")
+
+            self.actor_critic_optim.load_state_dict(torch.load(optim_f))
+
+            if self.enable_icm:
+                icm_optim_f = os.path.join(load_path, f"icm_optim_{load_rank}")
+                if not os.path.exists(icm_optim_f):
+                    icm_optim_f = os.path.join(load_path, f"icm_optim_0")
+
+                self.icm_optim.load_state_dict(torch.load(icm_optim_f))
+        except Exception:
+            rank_print("WARNING: unable to find saved optimizers to load. Skipping...")
 
     def eval(self):
         """
