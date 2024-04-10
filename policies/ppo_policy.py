@@ -1270,6 +1270,9 @@ class PPOPolicy():
         load_path: str
             The state path to load the optimizers from.
         """
+        if self.test_mode:
+            return
+
         try:
             if self.test_mode:
                 load_rank = 0
