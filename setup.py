@@ -29,7 +29,7 @@ dependencies = [
     'pettingzoo==1.23',
     'pymunk',
     'packaging',
-    'gym==0.23.0',
+    'gym',
 ]
 
 setup(name             = "ppo_and_friends",
