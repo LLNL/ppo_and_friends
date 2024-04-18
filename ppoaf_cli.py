@@ -484,7 +484,8 @@ def cli():
         # We parse again here because all args should be known. This is just
         # a safety measure.
         #
-        main_parser.parse_args()
+        # FIXME: testing
+        #main_parser.parse_args()
 
         if args.render and args.render_gif:
             msg  = "ERROR: render and render_gif are both enabled, "
@@ -546,7 +547,39 @@ def cli():
 
         runner_args_file = os.path.join(arg_dict["state_path"], "runner_args.yaml")
         with open(runner_args_file, "r") as in_f:
-            runner_args = yaml.safe_load(in_f)
+            saved_runner_args = yaml.safe_load(in_f)
+
+        #
+        # Tricky business: by default, we load in the runner args that were
+        # used during training, and this is what we use for testing. However,
+        # if a user issues runner args during testing, we need to check for them
+        # and override the previously saved args.
+        #
+        if len(runner_args) > 0:
+
+            #
+            # This is a nice solution that I found here:
+            # https://stackoverflow.com/questions/58594956/find-out-which-arguments-were-passed-explicitly-in-argparse
+            #
+            class Sentinel():
+                pass
+
+            sentinel      = Sentinel()
+            sentinel_args = {key : sentinel for key in saved_runner_args}
+            for key in sentinel_args:
+                sentinel_args[key] = sentinel
+
+            sentinel_ns = argparse.Namespace(**sentinel_args)
+
+            runner.parse_extended_cli_args(runner_args, sentinel_ns)
+
+            sentinel_args = vars(sentinel_ns)
+
+            for arg in saved_runner_args:
+                if sentinel_args[arg] is not sentinel:
+                    saved_runner_args[arg] = sentinel_args[arg]
+
+        runner_args = saved_runner_args
 
         #
         # If we're testing, assign the old parser args to the runner's
