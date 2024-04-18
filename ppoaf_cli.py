@@ -480,13 +480,6 @@ def cli():
 
         arg_dict = update_pretrained(arg_dict)
 
-        #
-        # We parse again here because all args should be known. This is just
-        # a safety measure.
-        #
-        # FIXME: testing
-        #main_parser.parse_args()
-
         if args.render and args.render_gif:
             msg  = "ERROR: render and render_gif are both enabled, "
             msg += "but they cannot be used simultaneously."
