@@ -80,7 +80,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
             comm.Abort()
 
         env_str = f"rware-{self.cli_args.grid_size}-{self.cli_args.num_agents}ag-{self.cli_args.difficulty}-v1"
-        print(f"Using env string: {env_str}")
+        rank_print(f"Using env string: {env_str}")
         env_generator = lambda : \
             MultiAgentGymWrapper(
                 Gym21ToGymnasium(
