@@ -9,7 +9,7 @@ rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
 def rank_print(msg,
-               root       = 0,
+               root  = 0,
                debug = False):
     """
     Print from a single rank.
