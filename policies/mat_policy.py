@@ -416,9 +416,8 @@ class MATPolicy(PPOPolicy):
 
         values, action_pred = self.actor_critic(obs, action_block)
 
-        if self.action_dtype == "multi-discrete":
-            action_pred   = action_pred.reshape((-1, self.action_pred_size))
-            batch_actions = batch_actions.reshape((-1, self.action_dim))
+        action_pred   = action_pred.reshape((-1, self.action_pred_size))
+        batch_actions = batch_actions.reshape((-1, self.action_dim))
 
         dist    = self.actor.distribution.get_distribution(action_pred)
         entropy = self.actor.distribution.get_entropy(dist, action_pred)
@@ -432,12 +431,8 @@ class MATPolicy(PPOPolicy):
                 dist,
                 batch_actions.cpu())
 
-        if self.action_dtype == "multi-discrete":
-            action_pred = action_pred.reshape((batch_size,
-                num_agents, self.action_pred_size))
-
-            log_probs = log_probs.reshape((batch_size, num_agents, -1))
-            entropy   = entropy.reshape((batch_size, num_agents, -1))
+        log_probs = log_probs.reshape((batch_size, num_agents, -1))
+        entropy   = entropy.reshape((batch_size, num_agents, -1))
 
         return values, log_probs, entropy
 
