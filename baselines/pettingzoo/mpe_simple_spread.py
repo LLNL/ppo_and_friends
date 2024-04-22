@@ -44,7 +44,7 @@ class MPESimpleSpreadRunner(GymRunner):
                     render_mode=self.get_gym_render_mode()),
 
                 add_agent_ids     = False,
-                critic_view       = "local",
+                critic_view       = "policy" if self.cli_args.policy == "mappo" else "local",
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
