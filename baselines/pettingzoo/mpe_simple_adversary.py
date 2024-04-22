@@ -6,6 +6,8 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
+import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
+from ppo_and_friends.policies.mat_policy import MATPolicy
 
 @ppoaf_runner
 class MPESimpleAdversaryRunner(GymRunner):
@@ -52,29 +54,33 @@ class MPESimpleAdversaryRunner(GymRunner):
         agent_actor_kw_args["activation"]  = nn.LeakyReLU()
         agent_actor_kw_args["hidden_size"] = 256
 
-        agent_critic_kw_args = actor_kw_args.copy()
+        agent_critic_kw_args = agent_actor_kw_args.copy()
         agent_critic_kw_args["hidden_size"] = 512
 
         agent_policy_args = {\
             "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
+            "actor_kw_args"    : agent_actor_kw_args,
+            "critic_kw_args"   : agent_critic_kw_args,
             "lr"               : self.cli_args.learning_rate,
         }
 
+        adversary_actor_kw_args  = {}
+        adversary_critic_kw_args = {}
+        adversary_mat_kw_args    = {}
+
         if self.cli_args.policy == "mat":
-            adversary_kw_args = {}
-            adversary_policy_class  = MATPolicy
+            adversary_mat_kw_args  = {}
+            adversary_policy_class = MATPolicy
         else:
             adversary_actor_kw_args = {}
 
             adversary_actor_kw_args["activation"]  = nn.LeakyReLU()
             adversary_actor_kw_args["hidden_size"] = 256
 
-            adversary_critic_kw_args = actor_kw_args.copy()
+            adversary_critic_kw_args = adversary_actor_kw_args.copy()
             adversary_critic_kw_args["hidden_size"] = 512
 
-            adversary_policy_class  = None
+            adversary_policy_class = None
 
         adversary_policy_args =\
         {
@@ -83,13 +89,13 @@ class MPESimpleAdversaryRunner(GymRunner):
             #
             # Only used if MAT is enabled.
             #
-            "mat_kw_args"      : adversary_kw_args,
+            "mat_kw_args"      : adversary_mat_kw_args,
 
             #
             # Only used if MAPPO is enabled.
             #
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
+            "actor_kw_args"    : adversary_actor_kw_args,
+            "critic_kw_args"   : adversary_critic_kw_args,
         }
 
         policy_settings = { 
@@ -106,8 +112,6 @@ class MPESimpleAdversaryRunner(GymRunner):
                  env_generator().action_space["adversary_0"],
                  adversary_policy_args),
         }
-
-
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
 

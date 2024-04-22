@@ -28,6 +28,7 @@ class MPESimpleSpreadRunner(GymRunner):
         """
         parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
         parser.add_argument("--continuous_actions", default=0, choices=[0, 1])
+        parser.add_argument("--learning_rate", default=0.0003, type=float)
         return parser
 
     def run(self):
@@ -58,12 +59,15 @@ class MPESimpleSpreadRunner(GymRunner):
         mat_kw_args = {}
         mat_kw_args["embedding size"] = 64
 
-        lr = 0.0003
-
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
+        if self.cli_args.policy == "mat":
+            policy_class = MATPolicy
+            ac_network   = mat.MATActorCritic
+        else:
+            policy_class = None
+            ac_network   = FeedForwardNetwork
 
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
+            "ac_network"       : ac_network,
 
             #
             # Only used if MAT is disabled.
@@ -76,12 +80,8 @@ class MPESimpleSpreadRunner(GymRunner):
             #
             "mat_kw_args"      : mat_kw_args,
 
-            "lr"               : lr,
+            "lr"               : self.cli_args.learning_rate,
         }
-
-        policy_class = None
-        if self.cli_args.policy == "mat":
-            policy_class = MATPolicy
 
         policy_settings = { 
             "agent" : \
@@ -97,6 +97,8 @@ class MPESimpleSpreadRunner(GymRunner):
             status_preface = "agent",
             compare_fn     = np.greater_equal,
             persistent     = True)
+
+        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         self.run_ppo(env_generator       = env_generator,
                      save_when           = save_when,

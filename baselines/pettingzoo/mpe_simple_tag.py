@@ -59,29 +59,33 @@ class MPESimpleTagRunner(GymRunner):
         agent_actor_kw_args["activation"]  = nn.LeakyReLU()
         agent_actor_kw_args["hidden_size"] = 256
 
-        agent_critic_kw_args = actor_kw_args.copy()
+        agent_critic_kw_args = agent_actor_kw_args.copy()
         agent_critic_kw_args["hidden_size"] = 512
 
         agent_policy_args = {\
             "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
+            "actor_kw_args"    : agent_actor_kw_args,
+            "critic_kw_args"   : agent_critic_kw_args,
             "lr"               : self.cli_args.learning_rate,
         }
 
+        adversary_actor_kw_args  = {}
+        adversary_critic_kw_args = {}
+        adversary_mat_kw_args    = {}
+
         if self.cli_args.policy == "mat":
-            adversary_kw_args = {}
-            adversary_policy_class  = MATPolicy
+            adversary_mat_kw_args  = {}
+            adversary_policy_class = MATPolicy
         else:
             adversary_actor_kw_args = {}
 
             adversary_actor_kw_args["activation"]  = nn.LeakyReLU()
             adversary_actor_kw_args["hidden_size"] = 256
 
-            adversary_critic_kw_args = actor_kw_args.copy()
+            adversary_critic_kw_args = adversary_actor_kw_args.copy()
             adversary_critic_kw_args["hidden_size"] = 512
 
-            adversary_policy_class  = None
+            adversary_policy_class = None
 
         adversary_policy_args =\
         {
@@ -90,13 +94,13 @@ class MPESimpleTagRunner(GymRunner):
             #
             # Only used if MAT is enabled.
             #
-            "mat_kw_args"      : adversary_kw_args,
+            "mat_kw_args"      : adversary_mat_kw_args,
 
             #
             # Only used if MAPPO is enabled.
             #
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
+            "actor_kw_args"    : adversary_actor_kw_args,
+            "critic_kw_args"   : adversary_critic_kw_args,
         }
 
         policy_settings = { 
