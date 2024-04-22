@@ -6,9 +6,29 @@ from ppo_and_friends.networks.ppo_networks.feed_forward import FeedForwardNetwor
 from ppo_and_friends.utils.schedulers import *
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
+import ppo_and_friends.networks.actor_critic.multi_agent_transformer as mat
+from ppo_and_friends.policies.mat_policy import MATPolicy
 
 @ppoaf_runner
 class MPESimpleSpreadRunner(GymRunner):
+
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
+
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
+        parser.add_argument("--continuous_actions", default=0, choices=[0, 1])
+        return parser
 
     def run(self):
 
@@ -20,7 +40,7 @@ class MPESimpleSpreadRunner(GymRunner):
                     N=3,
                     local_ratio=0.5,
                     max_cycles=64,
-                    continuous_actions=False,
+                    continuous_actions=bool(self.cli_args.continuous_actions),
                     render_mode=self.get_gym_render_mode()),
 
                 add_agent_ids     = False,
@@ -35,20 +55,37 @@ class MPESimpleSpreadRunner(GymRunner):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
+        mat_kw_args = {}
+        mat_kw_args["embedding size"] = 64
+
         lr = 0.0003
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
 
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
+
+            #
+            # Only used if MAT is disabled.
+            #
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
+
+            #
+            # Only used if MAT is enabled.
+            #
+            "mat_kw_args"      : mat_kw_args,
+
             "lr"               : lr,
         }
 
+        policy_class = None
+        if self.cli_args.policy == "mat":
+            policy_class = MATPolicy
+
         policy_settings = { 
             "agent" : \
-                (None,
+                (policy_class,
                  env_generator().observation_space["agent_0"],
                  env_generator().critic_observation_space["agent_0"],
                  env_generator().action_space["agent_0"],

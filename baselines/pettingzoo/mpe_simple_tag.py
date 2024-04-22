@@ -24,9 +24,10 @@ class MPESimpleTagRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
+        parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
+        parser.add_argument("--continuous_actions", default=0, choices=[0, 1])
         parser.add_argument("--freeze_cycling", action="store_true",
             help="Use 'freeze cycling'.")
-
         return parser
 
     def run(self):
@@ -41,14 +42,14 @@ class MPESimpleTagRunner(GymRunner):
                     num_adversaries=3,
                     num_obstacles=2,
                     max_cycles=128,
-                    continuous_actions=False,
+                    continuous_actions=bool(self.cli_args.continuous_actions),
                     render_mode=self.get_gym_render_mode()),
 
                 #
                 # Using the "policy" view (MAPPO) results in much more
                 # interesting behvaiors from the adversaries in this game.
                 #
-                critic_view       = "policy",
+                critic_view       = "policy",#FIXME:
                 policy_mapping_fn = policy_map)
 
         actor_kw_args = {}
