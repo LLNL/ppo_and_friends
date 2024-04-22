@@ -568,9 +568,16 @@ def cli():
 
             sentinel_args = vars(sentinel_ns)
 
+            overwritten = []
             for arg in saved_runner_args:
                 if sentinel_args[arg] is not sentinel:
                     saved_runner_args[arg] = sentinel_args[arg]
+                    overwritten.append(arg)
+
+            if len(overwritten) > 0:
+                msg  = f"WARNING: the following runner args are being overwritten: "
+                msg += f"{overwritten}"
+                rank_print(msg)
 
         runner_args = saved_runner_args
 
