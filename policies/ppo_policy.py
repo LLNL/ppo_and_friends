@@ -230,11 +230,11 @@ class PPOPolicy():
 
         if (get_space_dtype_str(self.actor_obs_space) == "mixed" and
             issubclass(type(self.actor_obs_space), spaces.Tuple)):
-            self.action_space = FlatteningTuple(self.actor_obs_space.spaces)
+            self.actor_obs_space = FlatteningTuple(self.actor_obs_space.spaces)
 
         if (get_space_dtype_str(self.critic_obs_space) == "mixed" and
             issubclass(type(self.critic_obs_space), spaces.Tuple)):
-            self.action_space = FlatteningTuple(self.critic_obs_space.spaces)
+            self.critic_obs_space = FlatteningTuple(self.critic_obs_space.spaces)
 
         if self.action_dtype == "unknown":
             msg  = "ERROR: unknown action type: "
