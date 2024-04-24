@@ -27,7 +27,7 @@ class MPESimpleAdversaryRunner(GymRunner):
             The same parser as the input with potentially new arguments added.
         """
         parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
-        parser.add_argument("--continuous_actions", default=0, choices=[0, 1])
+        parser.add_argument("--continuous_actions", default=0, choices=[0, 1], type=int)
         parser.add_argument("--learning_rate", default=0.0003, type=float)
         parser.add_argument("--freeze_cycling", action="store_true",
             help="Use 'freeze cycling'.")
