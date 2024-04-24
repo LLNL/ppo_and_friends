@@ -124,8 +124,10 @@ class MATPolicy(PPOPolicy):
         self.critic = self.actor_critic.critic
 
         if self.verbose:
-            rank_print(f"\nActor network:\n{self.actor}")
-            rank_print(f"\nCritic network:\n{self.critic}")
+            rank_print("")
+            rank_print(f"Networks for {self.name} policy")
+            rank_print(f"Actor network:\n{self.actor}")
+            rank_print(f"Critic network:\n{self.critic}")
 
         if enable_icm:
             self.icm_agent_ids = None

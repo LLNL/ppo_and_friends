@@ -230,11 +230,11 @@ class PPOPolicy():
 
         if (get_space_dtype_str(self.actor_obs_space) == "mixed" and
             issubclass(type(self.actor_obs_space), spaces.Tuple)):
-            self.action_space = FlatteningTuple(self.actor_obs_space.spaces)
+            self.actor_obs_space = FlatteningTuple(self.actor_obs_space.spaces)
 
         if (get_space_dtype_str(self.critic_obs_space) == "mixed" and
             issubclass(type(self.critic_obs_space), spaces.Tuple)):
-            self.action_space = FlatteningTuple(self.critic_obs_space.spaces)
+            self.critic_obs_space = FlatteningTuple(self.critic_obs_space.spaces)
 
         if self.action_dtype == "unknown":
             msg  = "ERROR: unknown action type: "
@@ -449,8 +449,10 @@ class PPOPolicy():
         self.critic = self.critic.to(self.device)
 
         if self.verbose:
-            rank_print(f"\nActor network:\n{self.actor}")
-            rank_print(f"\nCritic network:\n{self.critic}")
+            rank_print("")
+            rank_print(f"Networks for {self.name} policy")
+            rank_print(f"Actor network:\n{self.actor}")
+            rank_print(f"Critic network:\n{self.critic}")
 
         broadcast_model_parameters(self.actor)
         broadcast_model_parameters(self.critic)

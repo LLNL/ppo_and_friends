@@ -22,12 +22,13 @@ def test_mat_mpe_simple_tag_discrete_mpi(num_ranks):
 
     run_training(
         baseline_type   = 'pettingzoo',
-        baseline_runner = 'mat_mpe_simple_tag_discrete.py',
+        baseline_runner = 'mpe_simple_tag.py',
+        options         = '--policy mat --continuous_actions 0',
         num_timesteps   = num_timesteps,
         num_ranks       = num_ranks)
 
     high_score_test('mat mpi mpe simple tag discrete',
-        'mat_mpe_simple_tag_discrete.py', 10, passing_scores)
+        'mpe_simple_tag.py', 10, passing_scores)
 
 def test_mat_mpe_simple_tag_continuous_mpi(num_ranks):
     num_timesteps = 200000
@@ -35,9 +36,10 @@ def test_mat_mpe_simple_tag_continuous_mpi(num_ranks):
 
     run_training(
         baseline_type   = 'pettingzoo',
-        baseline_runner = 'mat_mpe_simple_tag_continuous.py',
+        baseline_runner = 'mpe_simple_tag.py',
+        options         = '--policy mat --continuous_actions 1',
         num_timesteps   = num_timesteps,
         num_ranks       = num_ranks)
 
     high_score_test('mat mpi mpe simple tag continuous',
-        'mat_mpe_simple_tag_continuous.py', 10, passing_scores)
+        'mpe_simple_tag.py', 10, passing_scores)
