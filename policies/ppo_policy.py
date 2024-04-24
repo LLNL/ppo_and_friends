@@ -449,8 +449,10 @@ class PPOPolicy():
         self.critic = self.critic.to(self.device)
 
         if self.verbose:
-            rank_print(f"\nActor network:\n{self.actor}")
-            rank_print(f"\nCritic network:\n{self.critic}")
+            rank_print("")
+            rank_print(f"Networks for {self.name} policy")
+            rank_print(f"Actor network:\n{self.actor}")
+            rank_print(f"Critic network:\n{self.critic}")
 
         broadcast_model_parameters(self.actor)
         broadcast_model_parameters(self.critic)
