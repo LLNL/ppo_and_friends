@@ -27,16 +27,6 @@ def get_space_dtype_str(action_space):
     --------
     A string representing the action space dtype.
     """
-    if (issubclass(type(action_space), Box) and
-        np.issubdtype(action_space.dtype, np.integer)):
-
-        msg  = "ERROR: action spaces of type Box int are not "
-        msg += "directly supported. Please wrap your action space "
-        msg += "in a MultiDiscrete wrapper. See "
-        msg += "environments/action_wrappers for support."
-        rank_print(msg)
-        comm.Abort()
-
     if issubclass(type(action_space), Tuple):
         return "mixed"
 

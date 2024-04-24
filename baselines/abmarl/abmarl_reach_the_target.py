@@ -6,17 +6,46 @@ from ppo_and_friends.utils.schedulers import *
 from ppo_and_friends.environments.abmarl.envs.reach_the_target import abmarl_rtt_env
 import torch.nn as nn
 from ppo_and_friends.runners.runner_tags import ppoaf_runner
+from ppo_and_friends.policies.mat_policy import MATPolicy
 
 @ppoaf_runner
 class AbmarlReachTheTargetRunner(EnvironmentRunner):
 
-    def run(self):
-        actor_kw_args = {}
-        actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 64
+    def add_cli_args(self, parser):
+        """
+        Define extra args that will be added to the ppoaf command.
 
-        critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 128
+        Parameters:
+        -----------
+        parser: argparse.ArgumentParser
+            The parser from ppoaf.
+
+        Returns:
+        --------
+        argparse.ArgumentParser:
+            The same parser as the input with potentially new arguments added.
+        """
+        parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
+        return parser
+
+    def run(self):
+
+        runner_actor_kw_args  = {}
+        runner_critic_kw_args = {}
+        runner_mat_kw_args    = {}
+        runner_policy_class   = None
+
+        if self.cli_args.policy == "mappo":
+            runner_actor_kw_args = {}
+            runner_actor_kw_args["activation"]  = nn.LeakyReLU()
+            runner_actor_kw_args["hidden_size"] = 64
+
+            runner_critic_kw_args = runner_actor_kw_args.copy()
+            runner_critic_kw_args["hidden_size"] = 128
+
+        elif self.cli_args.policy == "mat":
+            runner_mat_kw_args  = {}
+            runner_policy_class = MATPolicy
 
         lr = LinearScheduler(
             status_key     = "iteration",
@@ -24,11 +53,39 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             max_value      = 0.0003,
             min_value      = 0.0001)
 
-        policy_args = {\
-            "ac_network"         : FeedForwardNetwork,
-            "actor_kw_args"      : actor_kw_args,
-            "critic_kw_args"     : critic_kw_args,
+        runner_policy_args = {\
+            #
+            # Only used when MAPPO is enabled.
+            #
+            "actor_kw_args"      : runner_actor_kw_args,
+            "critic_kw_args"     : runner_critic_kw_args,
+
             "lr"                 : lr,
+
+            #
+            # Only used when MAT is enabled.
+            #
+            "mat_kw_args"        : runner_mat_kw_args,
+
+            "bootstrap_clip"     : (-10, 10),
+        }
+
+        target_actor_kw_args = {}
+        target_actor_kw_args["activation"]  = nn.LeakyReLU()
+        target_actor_kw_args["hidden_size"] = 64
+
+        target_critic_kw_args = target_actor_kw_args.copy()
+        target_critic_kw_args["hidden_size"] = 128
+
+        target_policy_args = {\
+            #
+            # The target is a single agent, so it ony uses PPO.
+            #
+            "actor_kw_args"      : target_actor_kw_args,
+            "critic_kw_args"     : target_critic_kw_args,
+
+            "lr"                 : lr,
+
             "bootstrap_clip"     : (-10, 10),
         }
 
@@ -50,14 +107,14 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
              env_generator().observation_space["target"],
              env_generator().critic_observation_space["target"],
              env_generator().action_space["target"],
-             policy_args),
+             target_policy_args),
 
             "runner" :
-            (None,
+            (runner_policy_class,
              env_generator().observation_space["runner0"],
              env_generator().critic_observation_space["runner0"],
              env_generator().action_space["runner0"],
-             policy_args)
+             runner_policy_args)
         }
 
         ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
