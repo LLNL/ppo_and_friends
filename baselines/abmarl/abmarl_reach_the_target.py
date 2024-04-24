@@ -43,7 +43,7 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             runner_critic_kw_args = runner_actor_kw_args.copy()
             runner_critic_kw_args["hidden_size"] = 128
 
-        elif self.cli_args == "mat":
+        elif self.cli_args.policy == "mat":
             runner_mat_kw_args  = {}
             runner_policy_class = MATPolicy
 
@@ -110,7 +110,7 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
              target_policy_args),
 
             "runner" :
-            (policy_class,
+            (runner_policy_class,
              env_generator().observation_space["runner0"],
              env_generator().critic_observation_space["runner0"],
              env_generator().action_space["runner0"],
