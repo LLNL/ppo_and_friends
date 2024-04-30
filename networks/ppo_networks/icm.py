@@ -79,7 +79,7 @@ class LinearInverseModel(nn.Module):
         elif action_dtype == "multi-binary":
             self.output_func = t_functional.sigmoid
 
-        else:
+        elif action_dtype != "continuous":
             rank_print(f"ERROR: unsupported action space {action_dtype}")
             comm.Abort()
 
