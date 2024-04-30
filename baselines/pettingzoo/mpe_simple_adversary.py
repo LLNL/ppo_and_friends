@@ -29,6 +29,7 @@ class MPESimpleAdversaryRunner(GymRunner):
         parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
         parser.add_argument("--continuous_actions", default=0, choices=[0, 1], type=int)
         parser.add_argument("--learning_rate", default=0.0003, type=float)
+        parser.add_argument("--icm", default=0, choices=[0, 1], type=int)
         parser.add_argument("--freeze_cycling", action="store_true",
             help="Use 'freeze cycling'.")
         return parser
@@ -49,64 +50,67 @@ class MPESimpleAdversaryRunner(GymRunner):
                 critic_view       = "policy" if self.cli_args.policy == "mappo" else "local",
                 policy_mapping_fn = policy_map)
 
-        agent_actor_kw_args = {}
+        adversary_actor_kw_args = {}
 
-        agent_actor_kw_args["activation"]  = nn.LeakyReLU()
-        agent_actor_kw_args["hidden_size"] = 256
+        adversary_actor_kw_args["activation"]  = nn.LeakyReLU()
+        adversary_actor_kw_args["hidden_size"] = 256
 
-        agent_critic_kw_args = agent_actor_kw_args.copy()
-        agent_critic_kw_args["hidden_size"] = 512
+        adversary_critic_kw_args = adversary_actor_kw_args.copy()
+        adversary_critic_kw_args["hidden_size"] = 512
 
-        agent_policy_args = {\
+        adversary_policy_args = {\
             "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : agent_actor_kw_args,
-            "critic_kw_args"   : agent_critic_kw_args,
+            "actor_kw_args"    : adversary_actor_kw_args,
+            "critic_kw_args"   : adversary_critic_kw_args,
             "lr"               : self.cli_args.learning_rate,
+            "enable_icm"       : bool(self.cli_args.icm),
         }
 
-        adversary_actor_kw_args  = {}
-        adversary_critic_kw_args = {}
-        adversary_mat_kw_args    = {}
+        agent_actor_kw_args  = {}
+        agent_critic_kw_args = {}
+        agent_mat_kw_args    = {}
 
         if self.cli_args.policy == "mat":
-            adversary_mat_kw_args  = {}
-            adversary_policy_class = MATPolicy
+            agent_mat_kw_args  = {}
+            agent_policy_class = MATPolicy
         else:
-            adversary_actor_kw_args = {}
+            agent_actor_kw_args = {}
 
-            adversary_actor_kw_args["activation"]  = nn.LeakyReLU()
-            adversary_actor_kw_args["hidden_size"] = 256
+            agent_actor_kw_args["activation"]  = nn.LeakyReLU()
+            agent_actor_kw_args["hidden_size"] = 256
 
-            adversary_critic_kw_args = adversary_actor_kw_args.copy()
-            adversary_critic_kw_args["hidden_size"] = 512
+            agent_critic_kw_args = agent_actor_kw_args.copy()
+            agent_critic_kw_args["hidden_size"] = 512
 
-            adversary_policy_class = None
+            agent_policy_class = None
 
-        adversary_policy_args =\
+        agent_policy_args =\
         {
             "lr"               : self.cli_args.learning_rate,
+            "enable_icm"       : bool(self.cli_args.icm),
+            "agent_shared_icm" : bool(self.cli_args.icm) and self.cli_args.policy == "mat",
 
             #
             # Only used if MAT is enabled.
             #
-            "mat_kw_args"      : adversary_mat_kw_args,
+            "mat_kw_args"      : agent_mat_kw_args,
 
             #
             # Only used if MAPPO is enabled.
             #
-            "actor_kw_args"    : adversary_actor_kw_args,
-            "critic_kw_args"   : adversary_critic_kw_args,
+            "actor_kw_args"    : agent_actor_kw_args,
+            "critic_kw_args"   : agent_critic_kw_args,
         }
 
         policy_settings = { 
             "agent" : \
-                (None,
+                (agent_policy_class,
                  env_generator().observation_space["agent_0"],
                  env_generator().critic_observation_space["agent_0"],
                  env_generator().action_space["agent_0"],
                  agent_policy_args),
             "adversary" : \
-                (adversary_policy_class,
+                (None,
                  env_generator().observation_space["adversary_0"],
                  env_generator().critic_observation_space["adversary_0"],
                  env_generator().action_space["adversary_0"],
