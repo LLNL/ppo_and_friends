@@ -29,7 +29,7 @@ class MountainCarRunner(GymRunner):
 
         parser.add_argument("--continuous_actions", default=0, choices=[0,1], type=int)
 
-        parser.add_argument("--learning_rate", default=0.0003, type=float)
+        parser.add_argument("--learning_rate", default=0.001, type=float)
         parser.add_argument("--actor_hidden_size", default=32, type=int)
         parser.add_argument("--critic_hidden_size", default=64, type=int)
 
@@ -40,7 +40,7 @@ class MountainCarRunner(GymRunner):
         parser.add_argument("--icm_forward_depth", type=int, default=2)
         parser.add_argument("--icm_encoded_obs_dim", type=int, default=2)
         parser.add_argument("--icm_learning_rate", type=float, default=0.001)
-        parser.add_argument("--intr_reward_weight", type=float, default=50.0)
+        parser.add_argument("--intr_reward_weight", type=float, default=100.0)
         return parser
 
     def run(self):
