@@ -2396,11 +2396,21 @@ class PPO(object):
             #  3. We're using standard ICM, but our policy has agent_grouping
             #     enabled. In this case, our data comes in with shape
             #     (batch_size, num_agents, *), and we need to reshape it
-            #    into (batch_size * num_agents, *).
+            #     into (batch_size * num_agents, *).
             #
             if self.policies[policy_id].agent_shared_icm:
+
                 obs      = obs[:, self.policies[policy_id].agent_idxs, :]
                 next_obs = next_obs[:, self.policies[policy_id].agent_idxs, :]
+
+                #
+                # Discrete actions will often arrive with shape
+                # (batch_size, num_agents).
+                #
+                if len(actions.shape) < 3:
+                    a_shape = actions.shape
+                    actions = actions.reshape((a_shape[0], a_shape[1], 1))
+
                 actions  = actions[:, self.policies[policy_id].agent_idxs, :]
 
                 batch_size = obs.shape[0]
