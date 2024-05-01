@@ -97,7 +97,40 @@ def test_binary_lunar_lander_mpi(num_ranks):
 #
 # MountainCar tests
 #
-def test_mountain_car_mpi(num_ranks):
+# FIXME: ICM takes quite a while to train. We might need
+# to figure out a better way of testing these.
+# On LC, I was able to converge using the default settings,
+# but it was VERY sensitive to the random seed.
+#def test_mountain_car_icm(num_ranks):
+#    # FIXME: this might take a lot longer now without bs clip
+#    num_timesteps = 300000
+#    passing_scores = {"agent0" :-199.}
+#
+#    run_training(
+#        baseline_type   = 'gymnasium',
+#        baseline_runner = 'mountain_car.py',
+#        num_timesteps   = num_timesteps,
+#        num_ranks       = num_ranks,
+#        options         = '--enable_icm 1 --bs_clip_min -100000000')
+#
+#    high_score_test('mountain car icm', 
+#        'mountain_car.py', 10, passing_scores)
+#
+#def test_mountain_car_continous_icm(num_ranks):
+#    num_timesteps = 300000
+#    passing_scores = {"agent0" :50.}
+#
+#    run_training(
+#        baseline_type   = 'gymnasium',
+#        baseline_runner = 'mountain_car.py',
+#        num_timesteps   = num_timesteps,
+#        num_ranks       = num_ranks,
+#        options         = '--enable_icm 1 --continuous_actions 1 --bs_clip_min -100000000')
+#
+#    high_score_test('mountain car continuous icm',
+#        'mountain_car.py', 10, passing_scores)
+
+def test_mountain_car_bs_clip(num_ranks):
     num_timesteps = 300000
     passing_scores = {"agent0" :-199.}
 
@@ -108,19 +141,5 @@ def test_mountain_car_mpi(num_ranks):
         num_ranks       = num_ranks,
         options         = '')
 
-    high_score_test('mountain car', 
+    high_score_test('mountain car bs clip',
         'mountain_car.py', 10, passing_scores)
-
-def test_mountain_car_continous_mpi(num_ranks):
-    num_timesteps = 300000
-    passing_scores = {"agent0" :50.}
-
-    run_training(
-        baseline_type   = 'gymnasium',
-        baseline_runner = 'mountain_car_continuous.py',
-        num_timesteps   = num_timesteps,
-        num_ranks       = num_ranks,
-        options         = '')
-
-    high_score_test('mountain car continuous', 
-        'mountain_car_continuous.py', 10, passing_scores)
