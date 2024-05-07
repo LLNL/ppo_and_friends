@@ -465,9 +465,9 @@ class GaussianDistribution(nn.Module, PPODistribution):
             std. It will be negated.
         min_std: float
             A minimum action std to enforce.
-        distribution_min: float
+        distribution_min: float or np.ndarray
             A lower bound to enforce in the distribution.
-        distribution_max: float
+        distribution_max: float or np.ndarray
             An upper bound to enforce in the distribution.
         """
         super(GaussianDistribution, self).__init__()
@@ -475,6 +475,12 @@ class GaussianDistribution(nn.Module, PPODistribution):
         self.min_std  =  torch.tensor([min_std]).float()
         self.dist_min = distribution_min
         self.dist_max = distribution_max
+
+        if not isinstance(self.dist_min, np.ndarray):
+            self.dist_min = np.array((self.dist_min,), dtype=np.float32).flatten()
+
+        if not isinstance(self.dist_max, np.ndarray):
+            self.dist_max = np.array((self.dist_max,), dtype=np.float32).flatten()
 
         #
         # arXiv:2006.05990v1 suggests an offset of -0.5 is best for
@@ -597,7 +603,7 @@ class GaussianDistribution(nn.Module, PPODistribution):
         #
         sample = torch.tanh(sample)
 
-        if self.dist_min != -1.0 or self.dist_max != 1.0:
+        if (self.dist_min != -1.0).any() or (self.dist_max != 1.0).any():
             sample = self._enforce_sample_range(sample)
 
         return sample
@@ -1064,9 +1070,9 @@ def get_actor_distribution(
         distribution_max = kw_args.get("distribution_max")
 
         if distribution_min is None:
-            act_min = action_space.low.min()
+            act_min = action_space.low
 
-            if np.isinf(act_min):
+            if np.isinf(act_min).any():
                 msg  = f"ERROR: attempted to use the action min as the "
                 msg += f"guassian distribution min, but the distribution min "
                 msg += f"must not be inf and action min is {act_min}. "
@@ -1083,9 +1089,9 @@ def get_actor_distribution(
                 kw_args["distribution_min"] = act_min
 
         if distribution_max is None:
-            act_max = action_space.high.max()
+            act_max = action_space.high
 
-            if np.isinf(act_max):
+            if np.isinf(act_max).any():
                 msg  = f"ERROR: attempted to use the action max as the "
                 msg += f"guassian distribution max, but the distribution max "
                 msg += f"must not be inf and action max is {act_max}. "
