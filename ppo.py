@@ -1117,7 +1117,7 @@ class PPO(object):
 
         for agent_id in numpy_dict:
             tensor_dict[agent_id] = torch.tensor(numpy_dict[agent_id],
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         return tensor_dict
 

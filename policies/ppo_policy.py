@@ -755,7 +755,7 @@ class PPOPolicy():
             rank_print(msg)
             comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        t_obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
 
         if torch.isnan(t_obs).any():
             msg  = "ERROR: get_rollout_actions received observations "
@@ -845,7 +845,7 @@ class PPOPolicy():
             rank_print(msg)
             comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        t_obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
             action_pred = self.actor(t_obs)
@@ -883,7 +883,7 @@ class PPOPolicy():
             rank_print(msg)
             comm.Abort()
 
-        t_obs = torch.tensor(obs, dtype=torch.float).to(self.device)
+        t_obs = torch.tensor(obs, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
             return self.actor.get_refined_prediction(t_obs)
@@ -975,9 +975,9 @@ class PPOPolicy():
             comm.Abort()
 
         obs_1 = torch.tensor(prev_obs,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
         obs_2 = torch.tensor(obs,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         if self.action_dtype in ["discrete", "multi-discrete"]:
             action = torch.tensor(action,
@@ -985,7 +985,7 @@ class PPOPolicy():
 
         elif self.action_dtype in ["continuous", "multi-binary", "mixed"]:
             action = torch.tensor(action,
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         else:
             msg  = f"ERROR: unknown action dtype of {self.action_dtype} "

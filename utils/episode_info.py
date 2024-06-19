@@ -620,7 +620,7 @@ class AgentSharedEpisode(PPOEpisode):
         # log_probs is a special case that needs to remain in tensor form.
         #
         self.log_probs                = [torch.cat(lp) for lp in self.log_probs]
-        self.log_probs                = torch.stack(self.log_probs, axis=1)
+        self.log_probs                = torch.stack(self.log_probs, axis=1).to(torch.float32)
 
         if len(ep_lens) == 0:
             msg  = "ERROR: attempting to merge AgentSharedEpisode with "
@@ -740,7 +740,7 @@ class PPODataset(Dataset):
         self.advantages = combine_episode_advantages(self.episodes)
         self.advantages = np.array(self.advantages)
         self.advantages = torch.tensor(self.advantages,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
     def build(self):
         """
@@ -820,7 +820,7 @@ class PPODataset(Dataset):
         self.rewards_to_go        = np.array(self.rewards_to_go)
         self.ep_lens              = np.array(self.ep_lens)
         self.advantages           = np.array(self.advantages)
-        self.values               = torch.tensor(self.values)
+        self.values               = torch.tensor(self.values, dtype=torch.float32)
 
         self.values               = self.values.to(self.device)
 
@@ -840,16 +840,16 @@ class PPODataset(Dataset):
             # need to transpose so that the batch size comes first.
             #
             self.actor_hidden = torch.tensor(
-                np.concatenate(self.actor_hidden, axis=1)).to(self.device)
+                np.concatenate(self.actor_hidden, axis=1), dtype=torch.float32).to(self.device)
 
             self.critic_hidden = torch.tensor(
-                np.concatenate(self.critic_hidden, axis=1)).to(self.device)
+                np.concatenate(self.critic_hidden, axis=1), dtype=torch.float32).to(self.device)
 
             self.actor_cell = torch.tensor(
-                np.concatenate(self.actor_cell, axis=1)).to(self.device)
+                np.concatenate(self.actor_cell, axis=1), dtype=torch.float32).to(self.device)
 
             self.critic_cell = torch.tensor(
-                np.concatenate(self.critic_cell, axis=1)).to(self.device)
+                np.concatenate(self.critic_cell, axis=1), dtype=torch.float32).to(self.device)
 
             self.actor_hidden  = torch.transpose(self.actor_hidden, 0, 1)
             self.actor_cell    = torch.transpose(self.actor_cell, 0, 1)
@@ -866,32 +866,32 @@ class PPODataset(Dataset):
             self.critic_cell   = empty_state
 
         self.advantages = torch.tensor(self.advantages,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         self.observations = torch.tensor(self.observations,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         self.next_observations = torch.tensor(self.next_observations,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         self.critic_observations = torch.tensor(self.critic_observations,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         if self.shared:
-            self.log_probs = torch.stack(self.log_probs).float().to(self.device)
+            self.log_probs = torch.stack(self.log_probs).to(torch.float32).to(self.device)
         else:
             self.log_probs = torch.tensor(self.log_probs,
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         self.rewards_to_go = torch.tensor(self.rewards_to_go,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         if self.action_dtype in ["continuous", "multi-binary", "mixed"]:
             self.actions = torch.tensor(self.actions,
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
             self.raw_actions = torch.tensor(self.raw_actions,
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         elif self.action_dtype in ["discrete", "multi-discrete"]:
             self.actions = torch.tensor(self.actions,
