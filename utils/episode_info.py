@@ -11,6 +11,36 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+def combine_episode_advantages(episodes,
+                               list_combine_func = list.extend):
+    """
+    Combine the advantages across several episodes into one.
+
+    Parameters:
+    -----------
+    episodes: array-like
+        An array of PPOEpisode objects.
+    list_combine_func: function
+        The function to use for combining lists from each episode.
+
+    Returns:
+    --------
+    list:
+        The combined advantages.
+    """
+    advantages = []
+
+    for ep in episodes:
+        if not ep.is_finished:
+            msg  = "ERROR: attempting to build a batch using "
+            msg += "an incomplete episode! Bailing..."
+            rank_print(msg)
+            comm.Abort()
+
+        list_combine_func(advantages, ep.advantages)
+
+    return advantages
+
 def combine_episodes(episodes,
                      build_hidden_states,
                      list_combine_func = list.extend):
@@ -186,31 +216,34 @@ class EpisodeInfo(PPOEpisode):
 
     def compute_discounted_sums(self, array, gamma):
         """
-            Compute the discounted sums from a given array,
-            which is assumed to be in temmporal order,
-            [t0, t1, t2, ..., tn], where t0 is a 'value' at
-            time 0, and tn is a 'value' at time n. Note that value
-            here is not to be confused with the value from a value
-            function; it's just some number. It could be a reward,
-            a value from a value function, or whatever else you'd like.
+        Compute the discounted sums from a given array,
+        which is assumed to be in temmporal order,
+        [t0, t1, t2, ..., tn], where t0 is a 'value' at
+        time 0, and tn is a 'value' at time n. Note that value
+        here is not to be confused with the value from a value
+        function; it's just some number. It could be a reward,
+        a value from a value function, or whatever else you'd like.
 
-            The discounted value at time t, DVt, follows the recursive formula
-                DVt = DVt + (gamma * DVt+1)
-            Such that all future values are considered in the current DV but
-            at a discount.
+        The discounted value at time t, DVt, follows the recursive formula
+            DVt = DVt + (gamma * DVt+1)
+        Such that all future values are considered in the current DV but
+        at a discount.
 
-            That is,
-                DSn     = tn
-                DS(n-1) = t(n-1) + (gamma * tn)
-                ...
-                DS0     = t0 + (gamma * t1) + (gamma^2 * t2) + ...
-                          + (gamma^n + tn)
+        That is,
+            DSn     = tn
+            DS(n-1) = t(n-1) + (gamma * tn)
+            ...
+            DS0     = t0 + (gamma * t1) + (gamma^2 * t2) + ...
+                      + (gamma^n + tn)
 
-            Arguments:
-                array    The array to calculate a discounted sum for.
+        Parameters:
+        -----------
+        array: np.ndarray
+            The array to calculate a discounted sum for.
 
-            Returns:
-                A numpy array containing the discounted sums.
+        Returns:
+        --------
+        A numpy array containing the discounted sums.
         """
         cumulative_array = np.zeros(len(array))
         last_idx         = len(array) - 1
@@ -226,17 +259,20 @@ class EpisodeInfo(PPOEpisode):
                                 padded_values,
                                 rewards):
         """
-            Compute the General Advantage Estimates. This follows the
-            general GAE equation.
+        Compute the General Advantage Estimates. This follows the
+        general GAE equation.
 
-            Arguments:
-                padded_values    A list of values from this epsiode with one
-                                 extra value added to the end. This will either
-                                 be a 0 (if the episode finished) or a repeat
-                                 of the last value.
+        Parameters:
+        -----------
+        padded_values:np.ndarray
+            An array of values from this epsiode with one
+            extra value added to the end. This will either
+            be a 0 (if the episode finished) or a repeat
+            of the last value.
 
-            Returns:
-                An array containing the GAEs.
+        Returns:
+        --------
+        An array containing the GAEs.
         """
         if np.isinf(padded_values).any():
             msg  = "ERROR: inf encountered in padded values while "
@@ -252,9 +288,8 @@ class EpisodeInfo(PPOEpisode):
 
     def _compute_standard_advantages(self):
         """
-            Use a standard method for computing advantages.
-            Typically, we use Q - values.
-
+        Use a standard method for computing advantages.
+        Typically, we use Q - values.
         """
         advantages = self.rewards_to_go - self.values
         return advantages
@@ -273,33 +308,42 @@ class EpisodeInfo(PPOEpisode):
                  critic_hidden      = np.empty(0),
                  critic_cell        = np.empty(0)):
         """
-            Add info from a single step in an episode. These should be
-            added consecutively, in the order they are encountered.
+        Add info from a single step in an episode. These should be
+        added consecutively, in the order they are encountered.
 
-            Arguments:
-                observation              The observation eliciting our action.
-                next_observation         The observation resulting from our
-                                         action.
-                raw_action               The un-altered action (there are times
-                                         when we squash our actions into a new
-                                         range. This value is pre-squash).
-                action                   The action taken at this step.
-                value                    The predicted value at this step (from
-                                         the critic).
-                log_prob                 The log probability calculated at this
-                                         step.
-                reward                   The reward received at this step.
-                critic_observation       The critic observation used in multi-
-                                         agent environments eliciting our
-                                         action.
-                actor_hidden             The hidden state of the actor iff the
-                                         actor is an lstm.
-                actor_cell               The cell state of the actor iff the
-                                         actor is an lstm.
-                critic_hidden            The hidden state of the critic iff the
-                                         critic is an lstm.
-                critic_cell              The cell state of the critic iff the
-                                         critic is an lstm.
+        Parameters:
+        -----------
+        observation: np.ndarray
+            The observation eliciting our action.
+        next_observati: np.ndarray
+            The observation resulting from our action.
+        raw_action: np.ndarray
+            The un-altered action (there are times
+            when we squash our actions into a new
+            range. This value is pre-squash).
+        action: np.ndarray or float
+            The action taken at this step.
+        value: float
+            The predicted value at this step (from the critic).
+        log_prob: float
+            The log probability calculated at this step.
+        reward: float
+            The reward received at this step.
+        critic_observation: np.ndarray
+            The critic observation used in multi-
+            agent environments eliciting our action.
+        actor_hidden: np.ndarray
+            The hidden state of the actor iff the
+            actor is an lstm.
+        actor_cell: np.ndarray
+            The cell state of the actor iff the
+            actor is an lstm.
+        critic_hidden: np.ndarray
+            The hidden state of the critic iff the
+            critic is an lstm.
+        critic_cell: np.ndarray
+            The cell state of the critic iff the
+            critic is an lstm.
         """
 
         if type(raw_action) == np.ndarray and len(raw_action.shape) > 1:
@@ -350,7 +394,7 @@ class EpisodeInfo(PPOEpisode):
 
     def compute_advantages(self):
         """
-            Compute our advantages using either a standard formula or GAE.
+        Compute our advantages using either a standard formula or GAE.
         """
         #
         # TODO: we should have an option to pass in a container to
@@ -372,13 +416,18 @@ class EpisodeInfo(PPOEpisode):
                     ending_value,
                     ending_reward):
         """
-            End the episode.
+        End the episode.
 
-            Arguments:
-                ending_ts      The time step we ended on.
-                terminal       Did we end in a terminal state?
-                ending_value   The ending value of the episode.
-                ending_reward  The ending reward of the episode.
+        Parameters:
+        -----------
+        ending_ts: int
+            The time step we ended on.
+        terminal: bool
+            Did we end in a terminal state?
+        ending_value: float
+            The ending value of the episode.
+        ending_reward: float
+            The ending reward of the episode.
         """
         self.ending_ts    = ending_ts
         self.terminal     = terminal
@@ -572,13 +621,17 @@ class PPODataset(Dataset):
                  action_dtype,
                  sequence_length = 1):
         """
-            A PyTorch Dataset representing our rollout data.
+        A PyTorch Dataset representing our rollout data.
 
-            Arguments:
-                device           The device we're training on.
-                action_dtype     The action data dtype (discrete/continuous).
-                sequence_length  If set to > 1, our dataset will return
-                                 obervations as sequences of this length.
+        Parameters:
+        -----------
+        device: torch.device
+            The device we're training on.
+        action_dtype: str
+            The action data dtype (discrete/continuous).
+        sequence_length: int
+            If set to > 1, our dataset will return
+            obervations as sequences of this length.
         """
 
         self.action_dtype         = action_dtype
@@ -617,10 +670,12 @@ class PPODataset(Dataset):
 
     def add_episode(self, episode):
         """
-            Add an episode to our dataset.
+        Add an episode to our dataset.
 
-            Arguments:
-                episode    The episode to add.
+        Parameters:
+        -----------
+        episode: PPOEpisode
+            The episode to add.
         """
         if episode.has_hidden_states:
             self.build_hidden_states = True
@@ -635,8 +690,8 @@ class PPODataset(Dataset):
 
     def recalculate_advantages(self):
         """
-            Recalculate our advantages. This can be used to mitigate using
-            stale advantages when training over > 1 epochs.
+        Recalculate our advantages. This can be used to mitigate using
+        stale advantages when training over > 1 epochs.
         """
         if not self.is_built:
             msg  = "WARNING: recalculate_advantages was called before "
@@ -652,9 +707,14 @@ class PPODataset(Dataset):
 
             ep.compute_advantages()
 
+        self.advantages = combine_episode_advantages(self.episodes)
+        self.advantages = np.array(self.advantages)
+        self.advantages = torch.tensor(self.advantages,
+            dtype=torch.float).to(self.device)
+
     def build(self):
         """
-            Build our dataset from the existing episodes.
+        Build our dataset from the existing episodes.
         """
 
         if self.is_built:
@@ -958,24 +1018,6 @@ class PPOSharedEpisodeDataset(PPODataset):
 
             self.episodes.append(self.episode_queue[env_idx])
             self.episode_queue[env_idx] = AgentSharedEpisode(self.agent_ids)
-
-    def shuffle_agents(self):
-        """
-        Shuffle the ordering of agents within our datasets.
-        """
-        if self.is_built:
-            num_agents  = len(self.agent_ids)
-            random_perm = np.random.permutation(num_agents)
-            self.agent_ids = self.agent_ids[random_perm]
-
-            self.critic_observations  = self.critic_observations[:, random_perm]
-            self.observations         = self.observations[:, random_perm]
-            self.next_observations    = self.next_observations[:, random_perm]
-            self.raw_actions          = self.raw_actions[:, random_perm]
-            self.actions              = self.actions[:, random_perm]
-            self.advantages           = self.advantages[:, random_perm]
-            self.log_probs            = self.log_probs[:, random_perm]
-            self.rewards_to_go        = self.rewards_to_go[:, random_perm]
 
     def __len__(self):
         """
