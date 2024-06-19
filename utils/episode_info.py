@@ -43,7 +43,8 @@ def combine_episode_advantages(episodes,
 
 def combine_episodes(episodes,
                      build_hidden_states,
-                     list_combine_func = list.extend):
+                     list_combine_func = list.extend,
+                     release_data      = True):
     """
     Combine a series of episode info objects. This function iterates
     through an array of episodes and concatenates all of their datasets
@@ -57,6 +58,8 @@ def combine_episodes(episodes,
         Whether or not to combine hidden states.
     list_combine_func: function
         The function to use for combining lists from each episode.
+    release_data: bool
+        Release data from episodes after they've been merged?
 
     Returns:
     --------
@@ -110,6 +113,9 @@ def combine_episodes(episodes,
 
             list_combine_func(actor_cell, ep.actor_cell)
             list_combine_func(critic_cell, ep.critic_cell)
+
+        if release_data:
+            ep.release_data()
 
     return (
         actions,
@@ -457,6 +463,23 @@ class EpisodeInfo(PPOEpisode):
         self.values = np.array(self.values).astype(np.float32)
 
         self.compute_advantages()
+
+    def release_data(self):
+        """
+        Release data that is not updated in our training loop.
+        """
+        self.observations        = None
+        self.next_observations   = None
+        self.actions             = None
+        self.raw_actions         = None
+        self.log_probs           = None
+        self.critic_observations = None
+
+        if self.has_hidden_states:
+            self.actor_hidden  = None
+            self.critic_hidden = None
+            self.actor_cell    = None
+            self.critic_cell   = None
 
 
 class AgentSharedEpisode(PPOEpisode):
