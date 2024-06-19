@@ -636,6 +636,13 @@ class AgentSharedEpisode(PPOEpisode):
             rank_print(msg)
             comm.Abort()
 
+    def release_data(self):
+        """
+        Release data that is not updated in our training loop.
+        """
+        for ep in self.agent_episodes:
+            ep.release_data()
+
 
 class PPODataset(Dataset):
 
