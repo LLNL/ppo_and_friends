@@ -609,7 +609,7 @@ class MATPolicy(PPOPolicy):
         # (num_envs, num_agents, obs_size).
         #
         obs = np.swapaxes(obs, 0, 1)
-        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = torch.tensor(obs, dtype=torch.float32)
         t_obs = t_obs.to(self.device)
 
         encoded_obs, _ = self.critic(t_obs)
@@ -755,7 +755,7 @@ class MATPolicy(PPOPolicy):
         # (num_envs, num_agents, obs_size).
         #
         obs = np.swapaxes(obs, 0, 1)
-        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = torch.tensor(obs, dtype=torch.float32)
         t_obs = t_obs.to(self.device)
 
         encoded_obs, _ = self.critic(t_obs)
@@ -793,7 +793,7 @@ class MATPolicy(PPOPolicy):
         # (num_envs, num_agents, obs_size).
         #
         obs = np.swapaxes(obs, 0, 1)
-        t_obs = torch.tensor(obs, dtype=torch.float)
+        t_obs = torch.tensor(obs, dtype=torch.float32)
         t_obs = t_obs.to(self.device)
 
         encoded_obs, _ = self.critic(t_obs)
@@ -1061,17 +1061,17 @@ class MATPolicy(PPOPolicy):
         shared_actions  = shared_actions.reshape(shared_actions_shape)
 
         obs_1 = torch.tensor(shared_prev_obs,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
         obs_2 = torch.tensor(shared_obs,
-            dtype=torch.float).to(self.device)
+            dtype=torch.float32).to(self.device)
 
         if self.action_dtype in ["discrete", "multi-discrete"]:
             shared_actions = torch.tensor(shared_actions,
-                dtype=torch.long).to(self.device)
+                dtype=torch.int64).to(self.device)
 
         elif self.action_dtype in ["continuous", "multi-binary"]:
             shared_actions = torch.tensor(shared_actions,
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         if len(shared_actions.shape) != 2:
             shared_actions = shared_actions.unsqueeze(1)

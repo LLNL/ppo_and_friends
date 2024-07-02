@@ -48,6 +48,7 @@ class PPO(object):
                  normalize_values    = True,
                  obs_clip            = None,
                  reward_clip         = None,
+                 recalc_advantages   = False,
                  render              = False,
                  frame_pause         = 0.0,
                  load_state          = False,
@@ -134,6 +135,8 @@ class PPO(object):
             Disabled if None. Otherwise, this should
             be a tuple containing a clip range for
             the reward as (min, max).
+        recalc_advantages: bool
+            Should we recalculate the advantages between epochs?
         render: bool
             Should we render the environment while training?
         frame_pause: float
@@ -314,6 +317,7 @@ class PPO(object):
         self.normalize_rewards   = normalize_rewards
         self.normalize_obs       = normalize_obs
         self.normalize_values    = normalize_values
+        self.recalc_advantages   = recalc_advantages
         self.obs_augment         = obs_augment
         self.test_mode           = test_mode
         self.actor_obs_shape     = self.env.observation_space.shape
@@ -1113,7 +1117,7 @@ class PPO(object):
 
         for agent_id in numpy_dict:
             tensor_dict[agent_id] = torch.tensor(numpy_dict[agent_id],
-                dtype=torch.float).to(self.device)
+                dtype=torch.float32).to(self.device)
 
         return tensor_dict
 
@@ -2079,13 +2083,12 @@ class PPO(object):
                     continue
 
                 for epoch_idx in range(self.epochs_per_iter):
-
                     #
                     # arXiv:2006.05990v1 suggests that re-computing the
                     # advantages before each new epoch helps mitigate issues
                     # that can arrise from "stale" advantages.
                     #
-                    if epoch_idx > 0:
+                    if epoch_idx > 0 and self.recalc_advantages:
                         data_loaders[policy_id].dataset.recalculate_advantages()
 
                     self._ppo_batch_train(data_loaders[policy_id], policy_id)

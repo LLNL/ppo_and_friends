@@ -79,7 +79,7 @@ class RunningStatNormalizer(object):
         self.name          = name
         self.test_mode     = test_mode
         self.running_stats = RunningMeanStd()
-        self.epsilon       = torch.tensor([epsilon]).to(device)
+        self.epsilon       = torch.tensor([epsilon], dtype=torch.float32).to(device)
 
     def normalize(self,
                   data,
@@ -103,8 +103,8 @@ class RunningStatNormalizer(object):
                 data.detach().cpu().numpy(),
                 gather_stats)
 
-        mean     = torch.tensor(self.running_stats.mean).to(self.device)
-        variance = torch.tensor(self.running_stats.variance).to(self.device)
+        mean     = torch.tensor(self.running_stats.mean, dtype=torch.float32).to(self.device)
+        variance = torch.tensor(self.running_stats.variance, dtype=torch.float32).to(self.device)
 
         data = (data - mean) / torch.sqrt(variance + self.epsilon)
 
@@ -121,8 +121,8 @@ class RunningStatNormalizer(object):
             Returns:
                 The denormalized data.
         """
-        mean     = torch.tensor(self.running_stats.mean)
-        variance = torch.tensor(self.running_stats.variance)
+        mean     = torch.tensor(self.running_stats.mean, dtype=torch.float32)
+        variance = torch.tensor(self.running_stats.variance, dtype=torch.float32)
         data     = mean + (data * torch.sqrt(variance + self.epsilon))
 
         return data
