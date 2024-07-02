@@ -472,7 +472,7 @@ class GaussianDistribution(nn.Module, PPODistribution):
         """
         super(GaussianDistribution, self).__init__()
 
-        self.min_std  =  torch.tensor([min_std]).float()
+        self.min_std  =  torch.tensor([min_std], dtype=torch.float32)
         self.dist_min = distribution_min
         self.dist_max = distribution_max
 
@@ -852,7 +852,7 @@ class MixedDistribution(PPODistribution):
         # P(A_0 and A_1) == P(A_0) * P(A_1 | A_0). In either case,
         # summing the log probabilities here should hold.
         #
-        return torch.cat(log_probs, dim=-1).sum(dim=-1)
+        return torch.cat(log_probs, dim=-1).sum(dim=-1).to(torch.float32)
 
     def sample_distribution(self, dists):
         """
@@ -883,8 +883,8 @@ class MixedDistribution(PPODistribution):
             refined.append(refined_s)
             sample.append(unrefined_s)
 
-        sample  = torch.cat(sample, dim=-1)
-        refined = torch.cat(refined, dim=-1)
+        sample  = torch.cat(sample, dim=-1).to(torch.float32)
+        refined = torch.cat(refined, dim=-1).to(torch.float32)
 
         return refined, sample
 
@@ -923,7 +923,7 @@ class MixedDistribution(PPODistribution):
 
             start = stop
 
-        return torch.cat(entropy, dim=-1).sum(dim=-1)
+        return torch.cat(entropy, dim=-1).sum(dim=-1).to(torch.float32)
 
     def refine_prediction(self, prediction):
         """
@@ -948,7 +948,7 @@ class MixedDistribution(PPODistribution):
         # array, and we need to break it up into individual
         # arrays associated with the actions of each distribution.
         #
-        refined_prediction = torch.zeros(self.pred_size)
+        refined_prediction = torch.zeros(self.pred_size).to(torch.float32)
 
         unref_start = 0
         ref_start   = 0

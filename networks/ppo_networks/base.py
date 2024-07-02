@@ -161,9 +161,9 @@ class PPOLSTMNetwork(PPONetwork):
         """
 
         hidden = torch.zeros(
-            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size).to(torch.float32)
         cell   = torch.zeros(
-            self.num_lstm_layers, batch_size, self.lstm_hidden_size)
+            self.num_lstm_layers, batch_size, self.lstm_hidden_size).to(torch.float32)
 
         hidden = hidden.to(device)
         cell   = hidden.to(device)
