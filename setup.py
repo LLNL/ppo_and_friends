@@ -25,7 +25,6 @@ dependencies = [
     'mpi4py',
     'moviepy',
     'torch>=1.10.2,<2.0',
-    'swig',
     'pettingzoo==1.23',
     'pymunk',
     'packaging',
