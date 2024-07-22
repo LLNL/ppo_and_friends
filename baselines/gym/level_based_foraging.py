@@ -46,6 +46,7 @@ class LevelBasedForagingRunner(GymRunner):
         parser.add_argument("--num_agents", type=int, default=3)
         parser.add_argument("--food_count", type=int, default=2)
         parser.add_argument("--use_icm", type=int, default=0)
+        parser.add_argument("--learning_rate", type=float, default=0.0005)
         parser.add_argument("--coop", type=int, default=0)
         parser.add_argument("--ts_per_rollout", default=256, type=int)
         parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
@@ -101,15 +102,9 @@ class LevelBasedForagingRunner(GymRunner):
         #
         actor_kw_args = {}
         actor_kw_args["activation"]  = nn.LeakyReLU()
-        actor_kw_args["hidden_size"] = 128
+        actor_kw_args["hidden_size"] = 64
         critic_kw_args = actor_kw_args.copy()
-        critic_kw_args["hidden_size"] = 256
-
-        lr = LinearScheduler(
-            status_key    = "iteration",
-            status_max    = 1500,
-            max_value     = 0.0003,
-            min_value     = 0.0001)
+        critic_kw_args["hidden_size"] = 128
 
         policy_args = {\
             "ac_network"         : ac_network,
@@ -128,7 +123,7 @@ class LevelBasedForagingRunner(GymRunner):
             "actor_kw_args"    : actor_kw_args,
             "critic_kw_args"   : critic_kw_args,
 
-            "lr"               : lr,
+            "lr"               : self.cli_args.learning_rate,
             "bootstrap_clip"   : (self.cli_args.bs_clip_min, self.cli_args.bs_clip_max),
         }
 
@@ -148,7 +143,7 @@ class LevelBasedForagingRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.ts_per_rollout,
                      epochs_per_iter    = 15,
-                     max_ts_per_ep      = 32,
+                     max_ts_per_ep      = 16,
                      ts_per_rollout     = self.cli_args.ts_per_rollout,
                      normalize_obs      = False,
                      obs_clip           = None,
