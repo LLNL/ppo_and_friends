@@ -160,8 +160,6 @@ class MATRobotWarehouseHardRunner(GymRunner):
             policy_args   = policy_args,
             policy_type   = policy_type)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
-
         #
         # This environment comes from arXiv:2006.07869v4.
         # This is a very sparse reward environment, and there are series of
@@ -183,7 +181,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
                 batch_size         = self.cli_args.mini_batch_size,
                 epochs_per_iter    = self.cli_args.epochs_per_iter,
                 max_ts_per_ep      = self.cli_args.max_ts_per_ep,
-                ts_per_rollout     = ts_per_rollout,
+                ts_per_rollout     = self.cli_args.ts_per_rollout,
                 soft_resets        = bool(self.cli_args.soft_resets),
                 normalize_obs      = False,
                 obs_clip           = None,

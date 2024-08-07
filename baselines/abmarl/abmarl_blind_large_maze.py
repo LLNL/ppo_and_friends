@@ -124,15 +124,13 @@ class AbmarlBlindLargeMazeRunner(EnvironmentRunner):
              policy_args)
         }
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(rollout_length)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      epochs_per_iter    = 20,
                      max_ts_per_ep      = 512,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = rollout_length,
                      normalize_values   = True,
                      normalize_obs      = False,
                      normalize_rewards  = False,

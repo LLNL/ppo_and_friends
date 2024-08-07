@@ -141,8 +141,6 @@ class LevelBasedForagingRunner(GymRunner):
             policy_args   = policy_args,
             policy_type   = policy_type)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,

@@ -41,8 +41,6 @@ class Walker2DRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
-
         #
         # arXiv:2006.05990v1 suggests that value normalization significantly hurts
         # performance in walker2d. I also find this to be the case.
@@ -52,7 +50,7 @@ class Walker2DRunner(GymRunner):
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      max_ts_per_ep      = 16,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 1024,
                      normalize_values   = False,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),

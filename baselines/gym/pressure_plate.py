@@ -153,8 +153,6 @@ class PressurePlateRunner(GymRunner):
             compare_fn  = np.less_equal,
             persistent  = True)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
-
         self.run_ppo(env_generator      = env_generator,
                      save_when          = save_when,
                      policy_settings    = policy_settings,

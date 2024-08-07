@@ -126,13 +126,11 @@ class MPESimpleTagRunner(GymRunner):
                 delay         = 50,
                 verbose       = True)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
-
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 64,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 256,
                      batch_size          = 256,
                      normalize_obs       = False,
                      obs_clip            = None,

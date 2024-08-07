@@ -68,13 +68,6 @@ class EnvironmentRunner(ABC):
     def run(self):
         raise NotImplementedError
 
-    def get_adjusted_ts_per_rollout(self, ts_per_rollout):
-        if 'envs_per_proc' in self.kw_run_args:
-            envs_per_proc = self.kw_run_args['envs_per_proc']
-        else:
-            envs_per_proc = 1
-        return num_procs * ts_per_rollout * envs_per_proc
-
     def run_ppo(self,
                 policy_settings,
                 policy_mapping_fn,

@@ -79,8 +79,6 @@ class BipedalWalkerRunner(GymRunner):
         #    max_value     = 0.0003,
         #    min_value     = 0.0001)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -107,7 +105,7 @@ class BipedalWalkerRunner(GymRunner):
                      policy_mapping_fn   = policy_mapping_fn,
                      batch_size          = 512,
                      max_ts_per_ep       = 32,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 512,
                      normalize_adv       = True,
                      normalize_obs       = True,
                      normalize_rewards   = True,
