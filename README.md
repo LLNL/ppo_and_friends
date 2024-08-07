@@ -74,7 +74,7 @@ located within the same module. The only method you need to define is
    environment wrappers. Currently available wrappers are SingleAgentGymWrapper,
    MultiAgentGymWrapper, AbmarlWrapper, and ParallelZooWrapper. See
    [Environment Wrappers](#environment-wrappers) for more info.
-2. You must add the `@ppoaf_runner` decorator to your class.
+2. You must add the [@ppoaf_runner](./runners/runner_tags.py) decorator to your class.
 
 See the `baselines` directory for more examples.
 
