@@ -205,7 +205,7 @@ srun -N1 -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
 
 ## Evaluating
 
-## Testing Trained Policies
+### Testing Trained Policies
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
@@ -222,7 +222,7 @@ The output directory will be given the same name as your runner file, and
 it will appear in the path specified by `--state_path` when training, which
 defaults to `./saved_states`.
 
-## Plotting Results
+### Plotting Results
 If `--save_train_scores` is used while training, the results can be plotted using
 PPO-And-Friend's ploting utility.
 
