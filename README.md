@@ -195,9 +195,9 @@ follows the standards outlined below.
    terminated.
 
 Since not all environments will adhere to the above standards, various
-wrappers are provided in the `environments/` directory. For best results,
+wrappers are provided in the [environments](./environments) directory. For best results,
 all environments should be wrapped in a class inherting from
-`PPOEnvironmentWrapper`.
+[PPOEnvironmentWrapper](./environments/ppo_env_wrappers).
 
 ## PPO
 This is the default policy for single-agent environments.
@@ -209,7 +209,7 @@ the agents of a shared policy (usually a concatenation of the observations),
 and the later uses an independent, decentralized critic.
 
 Both options can be enabled by setting the `critic_view` parameter in
-the `PPOEnvironmentWrapper` appropriately. Options as of now are
+the [PPOEnvironmentWrapper](./environments/ppo_env_wrappers) appropriately. Options as of now are
 "global", "policy", and "local".
 
 * global: this option will send observations from ALL agents in the environment,
@@ -225,7 +225,7 @@ the `PPOEnvironmentWrapper` appropriately. Options as of now are
   their respective policy. This is IPPO when using a single policy with multiple agents
   and PPO when using a single policy with one agent.
 
-All multi-agent environment wrappers that inherit from `PPOEnvironmentWrapper`
+All multi-agent environment wrappers that inherit from [PPOEnvironmentWrapper](./environments/ppo_env_wrappers) 
 allow users to set `critic_view` with the exception of `MAT`, which cannot
 decouple the critic's from the actors' observations.
 
