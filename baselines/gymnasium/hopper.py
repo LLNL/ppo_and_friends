@@ -62,8 +62,6 @@ class HopperRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
-
         #
         # I find that value normalization hurts the hopper environment training.
         # That may be a result of it's combination with other settings in here.
@@ -75,7 +73,7 @@ class HopperRunner(GymRunner):
                 batch_size         = 512,
                 max_ts_per_ep      = 16,
                 epochs_per_iter    = 8,
-                ts_per_rollout     = ts_per_rollout,
+                ts_per_rollout     = 1024,
                 normalize_values   = False,
                 obs_clip           = (-10., 10.),
                 reward_clip        = (-10., 10.),

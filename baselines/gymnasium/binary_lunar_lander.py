@@ -70,11 +70,6 @@ class BinaryLunarLanderRunner(GymRunner):
             max_value     = 0.0003,
             min_value     = 0.0001)
 
-        #
-        # Running with 2 processors works well here.
-        #
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(1024)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -97,7 +92,7 @@ class BinaryLunarLanderRunner(GymRunner):
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_mapping_fn,
                      max_ts_per_ep       = 512,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 1024,
                      batch_size          = 512,
                      normalize_obs       = True,
                      normalize_rewards   = True,

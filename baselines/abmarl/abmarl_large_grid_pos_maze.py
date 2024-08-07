@@ -98,15 +98,13 @@ class AbmarlLargeGridPosMazeRunner(EnvironmentRunner):
              policy_args)
         }
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
                      epochs_per_iter    = 30,
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = self.cli_args.ts_per_rollout,
                      soft_resets        = bool(self.cli_args.soft_resets),
                      normalize_obs      = False,
                      normalize_rewards  = False,

@@ -23,10 +23,8 @@ class InvertedPendulumRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 512,
                      **self.kw_run_args)

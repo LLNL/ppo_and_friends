@@ -98,14 +98,12 @@ class MPESimpleSpreadRunner(GymRunner):
             compare_fn     = np.greater_equal,
             persistent     = True)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
-
         self.run_ppo(env_generator       = env_generator,
                      save_when           = save_when,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 64,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 256,
                      batch_size          = 128,
                      normalize_obs       = False,
                      obs_clip            = None,

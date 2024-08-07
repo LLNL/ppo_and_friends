@@ -45,14 +45,12 @@ class InvertedDoublePendulumRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 512,
                      max_ts_per_ep      = 16,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 512,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
                      **self.kw_run_args)
