@@ -386,3 +386,20 @@ All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
 using a custom environment that doesn't conform to supported standards,
 you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
 found in `environments/ppo_env_wrappers.py`.
+
+# Authors
+
+PPO-AF was created by Alister Maguire, maguire7@llnl.gov.
+
+# Contributing
+
+PPO-AF is open source, and contributing is easy.
+1. Create a branch with your changes.
+2. Make sure that your changes work. Add tests if appropriate.
+3. Open a pull request and add a reviewer.
+
+# License
+
+The code of this site is released under the MIT License. For more details, see the [LICENSE](LICENSE) File.
+
+LLNL-CODE-867112
