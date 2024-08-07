@@ -61,9 +61,9 @@ pip install .[gymnasium]
 
 ## Environment Runners
 
-To train an environment, an `EnvironmentRunner` must first be defined. The
+To train an environment, an [EnvironmentRunner](./runners/env_runner.py) must first be defined. The
 runner will be a class that inherits from
-`ppo_and_friends.runners.env_runner.EnvironmentRunner` or the `GymRunner`
+[EnvironmentRunner](./runners/env_runner.py) or the [GymRunner](./runners/env_runner.py).
 located within the same module. The only method you need to define is
 `run`, which should call `self.run_ppo(...)`.
 
@@ -249,14 +249,14 @@ https://sites.google.com/view/multi-agent-transformer
 ## Gymnasium
 
 Both single agent and multi-agent gymnasium games are supported through
-the `SingleAgentGymWrapper` and `MultiAgentGymWrapper`, respectively.
+the [SingleAgentGymWrapper](./environments/gym/wrappers.py) and [MultiAgentGymWrapper](./environments/gym/wrappers.py), respectively.
 For examples on how to train a gymnasium environment, check out the runners
-in `baselines/gymnasium/`.
+in [baselines/gymnasium/](./baselines/gymnasium).
 
 **IMPORTANT**: While Gymnasium does not have a standard interface for multi-agent games,
 I've found some commonalities among many publications, and we are using this
 as our standard. You may need to make changes to your multi-agent gymnasium
-environments before they can be wrapped in the `MultiAgentGymWrapper`.
+environments before they can be wrapped in the [MultiAgentGymWrapper](./environments/gym/wrappers.py).
 
 Our expectaions of multi-agent Gymnasium environments are as follows:
 * The step method must return observation, reward, terminated, truncated, info.
@@ -272,13 +272,13 @@ Our expectaions of multi-agent Gymnasium environments are as follows:
 ## Gym <= 0.21
 
 For environments that only exist in versions <= 0.21 of Gym, you
-can use the `Gym21ToGymnasium` wrapper. See `baselines/gym/`
+can use the [Gym21ToGymnasium](./environments/gym/version_wrappers.py) wrapper. See [baselines/gym/](./baselines/gym)
 for examples.
 
 **IMPORTANT**: While Gym does not have a standard interface for multi-agent games,
 I've found some commonalities among many publications, and we are using this
 as our standard. You may need to make changes to your multi-agent gymnasium
-environments before they can be wrapped in the `MultiAgentGymWrapper`.
+environments before they can be wrapped in the [MultiAgentGymWrapper](./environments/gym/wrappers.py).
 
 Our expectaions of multi-agent Gym environments are as follows:
 * The step method must return observation, reward, done, info.
@@ -295,25 +295,24 @@ Our expectaions of multi-agent Gym environments are as follows:
 
 Games that exist in Gym versions >= 0.26 but not Gymnasium can be tricky.
 I've found that the biggest issue is the spaces not matching up. We have
-a function `gym_space_to_gymnasium_space` in `environments/gym/version_wrappers.py`
+a function [gym_space_to_gymnasium_space](./environments/gym/version_wrappers.py)
 that can be used to (attempt to) convert spaces from Gym to Gymnasium.
 
 ## Abmarl
 
-The `AbmarlWrapper` can be used for Abmarl environments. See `baselines/abmarl` for
+The [AbmarlWrapper](./environments/abmarl/wrappers.py) can be used for Abmarl environments. See [baselines/abmarl](./baselines/abmarl) for
 examples.
 
 ## Petting Zoo
 
-The `ParallelZooWrapper` can be used for PettingZoo environments. See `baselines/pettingzoo`
+The [ParallelZooWrapper](./environments/petting_zoo/wrappers.py) can be used for PettingZoo environments. See [baselines/pettingzoo](./baselines/petting_zoo)
 for examples.
 
 ## Custom
 
-All environments must be wrapped in the `PPOEnvironmentWrapper`. If you're
+All environments must be wrapped in the [PPOEnvironmentWrapper](./environments/ppo_env_wrappers.py). If you're
 using a custom environment that doesn't conform to supported standards,
-you can create your own wrapper that inherits from `PPOEnvironmentWrapper`,
-found in `environments/ppo_env_wrappers.py`.
+you can create your own wrapper that inherits from [PPOEnvironmentWrapper](./environments/ppo_env_wrappers.py).
 
 # Authors
 
