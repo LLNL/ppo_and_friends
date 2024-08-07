@@ -109,12 +109,6 @@ class CartPoleRunner(GymRunner):
         actor_kw_args["activation"] = nn.LeakyReLU()
         critic_kw_args = actor_kw_args.copy()
 
-        #
-        # This function will adjust your timesteps per rollout across ranks
-        # so that all ranks are collecting 256 timesteps (in this case).
-        #
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -138,7 +132,7 @@ class CartPoleRunner(GymRunner):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 256,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 256,
                      max_ts_per_ep      = 32,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),
@@ -211,27 +205,24 @@ srun -N1 -n {num_procs} ppoaf --envs_per_proc {envs_per_proc} ...
 
 ## Evaluating
 
+## Testing Trained Policies
 To test a model that has been trained on a particular environment,
 you can issue the following command:
 ```
 ppoaf test <path_to_output_directory> --num_test_runs <num_test_runs> --render
 ```
 
-By default, exploration is disabled during testing, but you can enable it
-with the `--test_explore` flag. Example:
+By default, exploration is enabled during testing, but you can disable it
+with the `--deterministic` flag. Example:
 
 ```
-ppoaf test <path_to_output_directory> --num_test_runs <num_test_runs> --render --test_explore
+ppoaf test <path_to_output_directory> --num_test_runs <num_test_runs> --render --deterministic
 ```
 The output directory will be given the same name as your runner file, and
 it will appear in the path specified by `--state_path` when training, which
 defaults to `./saved_states`.
 
-Note that enabling exploration during testing will have varied results. I've found
-that most of the environments I've tested perform better without exploration, but
-there are some environments that will not perform at all without it.
-
-# Plotting Results
+## Plotting Results
 If `--save_train_scores` is used while training, the results can be plotted using
 PPO-And-Friend's ploting utility.
 
@@ -248,10 +239,9 @@ some commonly overloaded terms and how we define them.
    'sgd mini batch size', etc. This is defined as `batch_size` in our code.
 2. **timesteps per rollout**: this refers to the total number of timesteps
    collected in a single rollout. This is sometimes referred to as the batch
-   size. This includes the data collected from all processors.
-   The exception to this rule is that a single processor will only see the
-   number timesteps it needs to collect. This is defined as `ts_per_rollout`
-   in our code.
+   size. This is defined on a per-environment per-processor basis, i.e.
+   `ts_per_rollout` will be internally redefined as
+   `ts_per_rollout = (num_procs * ts_per_rollout * envs_per_proc) / num_procs`.
 3. **max timesteps per episode**: this refers to the maximum number of
    timesteps collected for a single episode trajectory. This is sometimes
    referred to as horizon or trajectory length. If max timesteps
