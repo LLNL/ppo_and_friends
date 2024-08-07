@@ -94,11 +94,9 @@ class MountainCarRunner(GymRunner):
             compare_fn     = np.greater_equal,
             persistent     = True)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(200)
-
         self.run_ppo(env_generator      = env_generator,
                      save_when          = save_when,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 200,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 128,

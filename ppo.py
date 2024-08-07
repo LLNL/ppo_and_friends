@@ -38,7 +38,7 @@ class PPO(object):
                  envs_per_proc       = 1,
                  max_ts_per_ep       = 200,
                  batch_size          = 256,
-                 ts_per_rollout      = num_procs * 1024,
+                 ts_per_rollout      = 1024,
                  gamma               = 0.99,
                  epochs_per_iter     = 10,
                  ext_reward_weight   = 1.0,
@@ -209,19 +209,11 @@ class PPO(object):
         set_torch_threads()
 
         #
-        # Divide the ts per rollout up among the processors. Make an adjustment
-        # if needed.
+        # We want each processor on each rank to collect ts_per_rollout
+        # timesteps.
         #
-        orig_ts        = ts_per_rollout
+        ts_per_rollout = num_procs * ts_per_rollout * envs_per_proc
         ts_per_rollout = int(ts_per_rollout / num_procs)
-        if rank == 0 and (orig_ts % num_procs) > 0:
-            msg  = "WARNING: {} timesteps per rollout ".format(ts_per_rollout)
-            msg += "cannot be evenly distributed across "
-            msg += "{} processors. The timesteps per ".format(num_procs)
-            msg += "rollout have been adjusted for effecient distribution. "
-            msg += "The new timesteps per rollout is "
-            msg += "{}.".format(ts_per_rollout * num_procs)
-            rank_print(msg)
 
         #
         # Create our policies.

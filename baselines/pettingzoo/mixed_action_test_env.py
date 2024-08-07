@@ -226,8 +226,6 @@ class MixedActionMirrorRunner(GymRunner):
                 critic_view       = "local",
                 policy_mapping_fn = policy_map)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
-
         actor_kw_args = {}
 
         actor_kw_args["activation"]  = nn.LeakyReLU()
@@ -257,7 +255,7 @@ class MixedActionMirrorRunner(GymRunner):
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 32,
                      epochs_per_iter     = 15,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 256,
                      batch_size          = 256,
                      normalize_obs       = False,
                      obs_clip            = None,

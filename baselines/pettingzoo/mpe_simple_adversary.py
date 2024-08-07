@@ -117,13 +117,11 @@ class MPESimpleAdversaryRunner(GymRunner):
                  adversary_policy_args),
         }
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(128)
-
         self.run_ppo(env_generator       = env_generator,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_map,
                      max_ts_per_ep       = 16,
-                     ts_per_rollout      = ts_per_rollout,
+                     ts_per_rollout      = 128,
                      batch_size          = 128,
                      normalize_obs       = False,
                      normalize_rewards   = False,

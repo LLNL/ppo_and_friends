@@ -28,8 +28,6 @@ class AcrobotRunner(GymRunner):
             max_value  = 0.0003,
             min_value  = 0.0)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -45,7 +43,7 @@ class AcrobotRunner(GymRunner):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 512,
                      normalize_obs      = True,
                      normalize_rewards  = True,
                      obs_clip           = (-10., 10.),

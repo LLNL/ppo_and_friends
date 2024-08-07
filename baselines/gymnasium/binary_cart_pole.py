@@ -40,8 +40,6 @@ class BinaryCartPoleRunner(GymRunner):
 
         lr = 0.0002
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(256)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -65,7 +63,7 @@ class BinaryCartPoleRunner(GymRunner):
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = 256,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 256,
                      max_ts_per_ep      = 32,
                      obs_clip           = (-10., 10.),
                      reward_clip        = (-10., 10.),

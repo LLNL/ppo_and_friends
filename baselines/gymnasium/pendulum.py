@@ -25,8 +25,6 @@ class PendulumRunner(GymRunner):
 
         lr = 0.0003
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(512)
-
         policy_args = {\
             "ac_network"       : FeedForwardNetwork,
             "actor_kw_args"    : actor_kw_args,
@@ -40,7 +38,7 @@ class PendulumRunner(GymRunner):
             policy_args   = policy_args)
 
         self.run_ppo(env_generator      = env_generator,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = 512,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      max_ts_per_ep      = 32,

@@ -124,13 +124,11 @@ class BreakoutRAMRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        ts_per_rollout = self.get_adjusted_ts_per_rollout(self.cli_args.ts_per_rollout)
-
         self.run_ppo(env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.mini_batch_size,
-                     ts_per_rollout     = ts_per_rollout,
+                     ts_per_rollout     = self.cli_args.ts_per_rollout,
                      max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                      epochs_per_iter    = 30,
                      reward_clip        = (self.cli_args.reward_clip_min, self.cli_args.reward_clip_max),
