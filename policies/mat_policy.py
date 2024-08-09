@@ -1040,7 +1040,7 @@ class MATPolicy(PPOPolicy):
             agent_action   = actions[agent_id]
 
             if len(agent_obs.shape) < 2:
-                msg  = "ERROR: get_intrinsic_reward expects a batch of "
+                msg  = "ERROR: get_agent_shared_intrinsic_reward expects a batch of "
                 msg += "observations but "
                 msg += "instead received shape {}.".format(agent_obs.shape)
                 rank_print(msg)
