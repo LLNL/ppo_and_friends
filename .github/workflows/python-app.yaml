@@ -29,12 +29,12 @@ jobs:
         pip install .
     - name: Test with pytest
       run: |
-        pip install .[gym_baselines]
+        pip install .[gym]
         cd test
         pytest tests/train/test_gym.py
 
         cd ../
-        pip install .[gymnasium_baselines]
+        pip install .[gymnasium]
         cd test
         pytest tests/train/ -k "gymnasium or zoo"
 
