@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test_gym:
 
     runs-on: ubuntu-latest
 
@@ -27,20 +27,83 @@ jobs:
         python3 -m pip install --upgrade pip
         python3 -m pip install setuptools==65.5.0
         python3 -m pip install pytest
-        python3 -m pip install .
+        python3 -m pip install .[gym]
 
     - name: Test with pytest
       run: |
-        python3 -m pip install .[gym]
         cd test
         pytest tests/train/test_gym.py
 
+  test_gymnasium:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools==65.5.0
+        python3 -m pip install pytest
+        python3 -m pip install .[gymnasium]
+
+    - name: Test with pytest
+      run: |
         cd ../
         python3 -m pip install .[gymnasium]
         cd test
-        pytest tests/train/ -k "gymnasium or zoo"
+        pytest tests/train/ -k "gymnasium"
 
-        cd ../
+  test_pettingzoo:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools==65.5.0
+        python3 -m pip install pytest
+        python3 -m pip install .[gymnasium]
+
+    - name: Test with pytest
+      run: |
+        cd test
+        pytest tests/train/ -k "zoo or mixed_actions"
+
+  test_abmarl:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools==65.5.0
+        python3 -m pip install pytest
         python3 -m pip install .[abmarl]
+
+    - name: Test with pytest
+      run: |
         cd test
         pytest tests/train/test_abmarl.py
