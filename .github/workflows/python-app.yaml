@@ -24,23 +24,23 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip install --upgrade pip
-        pip install setuptools==65.5.0
-        pip install pytest
-        pip install .
+        python3 -m pip install --upgrade pip
+        python3 -m pip install setuptools==65.5.0
+        python3 -m pip install pytest
+        python3 -m pip install .
 
     - name: Test with pytest
       run: |
-        pip install .[gym]
+        python3 -m pip install .[gym]
         cd test
         pytest tests/train/test_gym.py
 
         cd ../
-        pip install .[gymnasium]
+        python3 -m pip install .[gymnasium]
         cd test
         pytest tests/train/ -k "gymnasium or zoo"
 
         cd ../
-        pip install .[abmarl]
+        python3 -m pip install .[abmarl]
         cd test
         pytest tests/train/test_abmarl.py
