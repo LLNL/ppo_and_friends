@@ -24,6 +24,7 @@ dependencies = [
     'dill',
     'mpi4py',
     'moviepy',
+    'yaml',
     'torch>=1.10.2,<2.0',
     'pettingzoo==1.23',
     'pymunk',
