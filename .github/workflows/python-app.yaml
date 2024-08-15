@@ -24,10 +24,10 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools==65.5.0
-        python3 -m pip install pytest
-        python3 -m pip install .[gym]
+        pip3 install --upgrade pip
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[gym]
 
     - name: Test with pytest
       run: |
@@ -48,14 +48,13 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools==65.5.0
-        python3 -m pip install pytest
-        python3 -m pip install .[gymnasium]
+        pip3 install --upgrade pip
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[gymnasium]
 
     - name: Test with pytest
       run: |
-        cd ../
         python3 -m pip install .[gymnasium]
         cd test
         pytest tests/train/ -k "gymnasium"
@@ -74,10 +73,10 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools==65.5.0
-        python3 -m pip install pytest
-        python3 -m pip install .[gymnasium]
+        pip3 install --upgrade pip
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[gymnasium]
 
     - name: Test with pytest
       run: |
@@ -98,10 +97,10 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        python3 -m pip install --upgrade pip
-        python3 -m pip install setuptools==65.5.0
-        python3 -m pip install pytest
-        python3 -m pip install .[abmarl]
+        pip3 install --upgrade pip
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[abmarl]
 
     - name: Test with pytest
       run: |
