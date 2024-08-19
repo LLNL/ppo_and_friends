@@ -48,7 +48,7 @@ supported RL library extensions:
 
 Installing the gym extension may also require downgrading your pip wheel:
 ```
-pip install --upgrade pip wheel==0.38.4.
+pip install --upgrade pip wheel==0.38.4
 ```
 
 ## Environment Runners
