@@ -24,8 +24,8 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip3 install --upgrade pip
-        pip3 install setuptools==58.1.0
+        pip3 install pip==23.3.2
+        pip3 install setuptools==65.5.0
         pip3 install pytest
         pip3 install .[gym]
 
@@ -48,7 +48,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip3 install --upgrade pip
+        pip3 install pip==23.3.2
         pip3 install setuptools==65.5.0
         pip3 install pytest
         pip3 install .[gymnasium]
@@ -73,7 +73,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip3 install --upgrade pip
+        pip3 install pip==23.3.2
         pip3 install setuptools==65.5.0
         pip3 install pytest
         pip3 install .[gymnasium]
@@ -97,7 +97,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip3 install --upgrade pip
+        pip3 install pip==23.3.2
         pip3 install setuptools==65.5.0
         pip3 install pytest
         pip3 install .[abmarl]
