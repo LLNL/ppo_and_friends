@@ -27,6 +27,7 @@ jobs:
         pip3 install pip==23.3.2
         pip3 install setuptools==65.5.0
         pip3 install pytest
+        pip3 install wheel==0.38.4
         pip3 install .[gym]
         pip3 install pandas
 
