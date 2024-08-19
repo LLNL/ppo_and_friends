@@ -139,7 +139,7 @@ def test_mountain_car_bs_clip(num_ranks):
         baseline_runner = 'mountain_car.py',
         num_timesteps   = num_timesteps,
         num_ranks       = num_ranks,
-        options         = '')
+        options         = '--bs_clip_min 0.01')
 
     high_score_test('mountain car bs clip',
         'mountain_car.py', 10, passing_scores)
