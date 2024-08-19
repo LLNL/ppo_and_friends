@@ -25,7 +25,7 @@ jobs:
       run: |
         sudo apt install libopenmpi-dev
         pip3 install --upgrade pip
-        pip3 install setuptools==65.5.0
+        pip3 install setuptools==58.1.0
         pip3 install pytest
         pip3 install .[gym]
 
