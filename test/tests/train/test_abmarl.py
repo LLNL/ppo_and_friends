@@ -20,9 +20,10 @@ def test_mat_abmarl_reach_the_target(num_ranks):
 
     run_training(
         baseline_type   = 'abmarl', 
-        baseline_runner = 'mat_abmarl_reach_the_target.py',
+        baseline_runner = 'abmarl_reach_the_target.py',
         num_timesteps   = num_timesteps,
-        num_ranks       = num_ranks)
+        num_ranks       = num_ranks,
+        options         = '--policy mat')
 
     high_score_test('mat abmarl rtt',
-        'mat_abmarl_reach_the_target.py', 10, passing_scores)
+        'abmarl_reach_the_target.py', 10, passing_scores)

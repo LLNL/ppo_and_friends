@@ -4,7 +4,7 @@ from utils import run_training, high_score_test
 # MPE tests
 #
 def test_mpe_simple_tag_mpi(num_ranks):
-    num_timesteps = 200000
+    num_timesteps = 250000
     passing_scores = {"adversary_1" : 100.0}
 
     run_training(
