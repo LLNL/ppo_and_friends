@@ -55,7 +55,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        python3 -m pip install .[gymnasium]
+        pip3 install .[gymnasium]
         cd test
         pytest tests/train/ -k "gymnasium"
 
@@ -76,7 +76,7 @@ jobs:
         pip3 install pip==23.3.2
         pip3 install setuptools==65.5.0
         pip3 install pytest
-        pip3 install .[gymnasium]
+        pip3 install .[pettingzoo]
 
     - name: Test with pytest
       run: |
