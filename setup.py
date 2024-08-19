@@ -26,10 +26,8 @@ dependencies = [
     'moviepy',
     'pyyaml',
     'torch>=1.10.2,<2.0',
-    'pettingzoo==1.23',
     'pymunk',
     'packaging',
-    'gym',
 ]
 
 setup(name             = "ppo_and_friends",
@@ -51,6 +49,7 @@ setup(name             = "ppo_and_friends",
           'gym': ['gym==0.21.0', 'rware'],
           'gymnasium': ['gymnasium[mujoco]', 'gymnasium[atari]', 'autorom[accept-rom-license]', 'gym==0.23.0'],
           'abmarl': ['abmarl', 'gym==0.23.0'],
+          'zoo': ['pettingzoo==1.23', 'gym==0.23.0'],
       },
 
       zip_safe         = False)
