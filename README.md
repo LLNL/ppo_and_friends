@@ -44,7 +44,7 @@ supported RL library extensions:
 1. gym (version 0.21.0): `pip install .[gym]`
 2. gymnasium: `pip install .[gymnasium]`
 3. abmarl: `pip install .[abmarl]`
-4. petting zoo: `pip install .[zoo]`
+4. petting zoo: `pip install .[pettingzoo]`
 
 Installing the gym extension may also require downgrading your pip wheel:
 ```
