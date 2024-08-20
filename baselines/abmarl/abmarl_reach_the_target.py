@@ -26,6 +26,7 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             The same parser as the input with potentially new arguments added.
         """
         parser.add_argument("--policy", default='mappo', type=str, choices=["mat", "mappo"])
+        parser.add_argument("--learning_rate", default=0.0003, type=float)
         return parser
 
     def run(self):
@@ -47,12 +48,6 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             runner_mat_kw_args  = {}
             runner_policy_class = MATPolicy
 
-        lr = LinearScheduler(
-            status_key     = "iteration",
-            status_max     = 100,
-            max_value      = 0.0003,
-            min_value      = 0.0001)
-
         runner_policy_args = {\
             #
             # Only used when MAPPO is enabled.
@@ -60,14 +55,14 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             "actor_kw_args"      : runner_actor_kw_args,
             "critic_kw_args"     : runner_critic_kw_args,
 
-            "lr"                 : lr,
+            "lr"                 : self.cli_args.learning_rate,
 
             #
             # Only used when MAT is enabled.
             #
             "mat_kw_args"        : runner_mat_kw_args,
 
-            "bootstrap_clip"     : (-10, 10),
+            "bootstrap_clip"     : (-1.0, 100),
         }
 
         target_actor_kw_args = {}
@@ -84,9 +79,9 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             "actor_kw_args"      : target_actor_kw_args,
             "critic_kw_args"     : target_critic_kw_args,
 
-            "lr"                 : lr,
+            "lr"                 : self.cli_args.learning_rate,
 
-            "bootstrap_clip"     : (-10, 10),
+            "bootstrap_clip"     : (-1.0, 100),
         }
 
         def policy_mapping_fn(agent_id):
