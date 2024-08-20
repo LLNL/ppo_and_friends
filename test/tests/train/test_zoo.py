@@ -5,7 +5,7 @@ from utils import run_training, high_score_test
 #
 def test_mpe_simple_tag_mpi(num_ranks):
     num_timesteps = 250000
-    passing_scores = {"adversary_1" : 100.0}
+    passing_scores = {"adversary" : 100.0}
 
     run_training(
         baseline_type   = 'pettingzoo',
