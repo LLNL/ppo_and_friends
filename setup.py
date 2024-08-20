@@ -20,7 +20,7 @@ dependencies = [
     'opencv-python',
     'pygame',
     'box2d-py',
-    'numpy',
+    'numpy<1.24',
     'dill',
     'mpi4py',
     'moviepy',
