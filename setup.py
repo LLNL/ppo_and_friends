@@ -16,6 +16,7 @@ dependencies = [
     'pillow',
     'matplotlib',
     'plotly',
+    'pandas',
     'kaleido',
     'opencv-python',
     'pygame',
