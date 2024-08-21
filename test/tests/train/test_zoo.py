@@ -17,7 +17,7 @@ def test_mpe_simple_tag_mpi(num_ranks):
         'mpe_simple_tag.py', 10, passing_scores)
 
 def test_mat_mpe_simple_tag_discrete_mpi(num_ranks):
-    num_timesteps = 200000
+    num_timesteps = 250000
     passing_scores = {"adversary" : 300.0}
 
     run_training(
@@ -31,7 +31,7 @@ def test_mat_mpe_simple_tag_discrete_mpi(num_ranks):
         'mpe_simple_tag.py', 10, passing_scores)
 
 def test_mat_mpe_simple_tag_continuous_mpi(num_ranks):
-    num_timesteps = 200000
+    num_timesteps = 250000
     passing_scores = {"adversary" : 300.0}
 
     run_training(
