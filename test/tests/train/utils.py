@@ -78,7 +78,8 @@ def run_training(baseline_type,
                  num_timesteps,
                  num_ranks     = 0,
                  options       = '',
-                 verbose       = False):
+                 verbose       = False,
+                 random_seed   = 1):
     """
     Run training on a sub-process.
 
@@ -97,10 +98,12 @@ def run_training(baseline_type,
         Any other training options.
     verbose: bool
         Enable verbosity.
+    random_seed: int
+        The random seed to use.
     """
     baseline_file  = os.path.join(get_baseline_path(), baseline_type, baseline_runner)
     train_command  = f"ppoaf train {baseline_file} "
-    train_command += f"--clobber --num_timesteps {num_timesteps} {options} "
+    train_command += f"--clobber --num_timesteps {num_timesteps} {options} --random_seed {random_seed}"
     train_command += "--verbose "
 
     if num_ranks > 0:
@@ -120,7 +123,8 @@ def run_training(baseline_type,
 def run_test(baseline_runner,
              num_test_runs,
              deterministic = False,
-             verbose       = False):
+             verbose       = False,
+             random_seed   = 1):
     """
     Run a testing phase using a trained model.
 
@@ -135,11 +139,13 @@ def run_test(baseline_runner,
         Enable determinism while testing?
     verbose: bool
         Enable verbosity?
+    random_seed: int
+        The random seed to use.
     """
     output_dir    = get_state_path(baseline_runner)
     test_command  = f"ppoaf test {output_dir} "
     test_command += f"--save_test_scores "
-    test_command += f"--num_test_runs {num_test_runs} --verbose "
+    test_command += f"--num_test_runs {num_test_runs} --verbose --random_seed {random_seed}"
 
     if deterministic:
         test_command += f"--deterministic"
