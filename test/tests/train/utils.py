@@ -103,8 +103,8 @@ def run_training(baseline_type,
     """
     baseline_file  = os.path.join(get_baseline_path(), baseline_type, baseline_runner)
     train_command  = f"ppoaf train {baseline_file} "
-    train_command += f"--clobber --num_timesteps {num_timesteps} {options} --random_seed {random_seed}"
-    train_command += "--verbose "
+    train_command += f"--clobber --num_timesteps {num_timesteps} {options} "
+    train_command += "--verbose --random_seed {random_seed} "
 
     if num_ranks > 0:
         par_cmd = get_parallel_command()
@@ -145,7 +145,7 @@ def run_test(baseline_runner,
     output_dir    = get_state_path(baseline_runner)
     test_command  = f"ppoaf test {output_dir} "
     test_command += f"--save_test_scores "
-    test_command += f"--num_test_runs {num_test_runs} --verbose --random_seed {random_seed}"
+    test_command += f"--num_test_runs {num_test_runs} --verbose --random_seed {random_seed} "
 
     if deterministic:
         test_command += f"--deterministic"
