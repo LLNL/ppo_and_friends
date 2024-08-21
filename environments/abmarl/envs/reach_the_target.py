@@ -29,7 +29,7 @@ agents = {
     'target': TargetAgent(
         view_range=grid_size,
         attack_range=1,
-        attack_strength=0.1,
+        attack_strength=1,
         attack_accuracy=1,
         initial_position=np.array(
             [int(grid_size / 2), int(grid_size / 2)], dtype=int)
