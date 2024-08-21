@@ -104,7 +104,7 @@ def run_training(baseline_type,
     baseline_file  = os.path.join(get_baseline_path(), baseline_type, baseline_runner)
     train_command  = f"ppoaf train {baseline_file} "
     train_command += f"--clobber --num_timesteps {num_timesteps} {options} "
-    train_command += "--verbose --random_seed {random_seed} "
+    train_command += f"--verbose --random_seed {random_seed} "
 
     if num_ranks > 0:
         par_cmd = get_parallel_command()
