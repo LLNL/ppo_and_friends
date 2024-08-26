@@ -9,7 +9,7 @@ def test_mat_robot_warehouse_tiny(num_ranks):
         baseline_runner = 'robot_warehouse.py',
         num_timesteps   = num_timesteps,
         num_ranks       = num_ranks,
-        options         = '--grid_size tiny --policy mat --num_agents 2')
+        options         = '--grid_size tiny --policy mat --num_agents 2 --bs_clip_min 0 --bs_clip_max 100')
 
     high_score_test('mat robot warehouse tiny',
         'robot_warehouse.py', 10, passing_scores)
