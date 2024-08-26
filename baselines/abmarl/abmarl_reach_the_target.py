@@ -62,7 +62,7 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
             #
             "mat_kw_args"        : runner_mat_kw_args,
 
-            "bootstrap_clip"     : (-1.0, 100),
+            "bootstrap_clip"     : (-10.0, 100),
         }
 
         target_actor_kw_args = {}
@@ -81,7 +81,7 @@ class AbmarlReachTheTargetRunner(EnvironmentRunner):
 
             "lr"                 : self.cli_args.learning_rate,
 
-            "bootstrap_clip"     : (-1.0, 100),
+            "bootstrap_clip"     : (-10.0, 100),
         }
 
         def policy_mapping_fn(agent_id):
