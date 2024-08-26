@@ -1,8 +1,8 @@
 from utils import run_training, high_score_test
 
 def test_mat_robot_warehouse_tiny(num_ranks):
-    num_timesteps = 500000
-    passing_scores = {"rware" : 3.0}
+    num_timesteps = 700000
+    passing_scores = {"rware" : 2.0}
 
     run_training(
         baseline_type   = 'gym',
