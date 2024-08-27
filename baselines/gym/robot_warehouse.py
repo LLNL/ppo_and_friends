@@ -52,17 +52,17 @@ class MATRobotWarehouseHardRunner(GymRunner):
         parser.add_argument("--actor_hidden", type=int, default=256)
         parser.add_argument("--critic_hidden_mult", type=int, default=2)
 
-        parser.add_argument("--max_ts_per_ep", type=int, default=16)
-        parser.add_argument("--ts_per_rollout", type=int, default=500)
-        parser.add_argument("--mini_batch_size", type=int, default=128)
-        parser.add_argument("--epochs_per_iter", type=int, default=32)
+        parser.add_argument("--max_ts_per_ep", type=int, default=32)
+        parser.add_argument("--ts_per_rollout", type=int, default=1000)
+        parser.add_argument("--batch_size", type=int, default=1000)
+        parser.add_argument("--epochs_per_iter", type=int, default=5)
         parser.add_argument("--soft_resets", type=int, default=0)
 
         #
         # Env options.
         #
-        parser.add_argument("--num_agents", type=int, default=4)
-        parser.add_argument("--grid_size", type=str, default="medium",
+        parser.add_argument("--num_agents", type=int, default=2)
+        parser.add_argument("--grid_size", type=str, default="tiny",
             choices=["tiny", "small", "medium", "large"])
         parser.add_argument("--difficulty", type=str, default="easy",
             choices=["easy", "hard"])
@@ -178,7 +178,7 @@ class MATRobotWarehouseHardRunner(GymRunner):
                 env_generator      = env_generator,
                 policy_settings    = policy_settings,
                 policy_mapping_fn  = policy_mapping_fn,
-                batch_size         = self.cli_args.mini_batch_size,
+                batch_size         = self.cli_args.batch_size,
                 epochs_per_iter    = self.cli_args.epochs_per_iter,
                 max_ts_per_ep      = self.cli_args.max_ts_per_ep,
                 ts_per_rollout     = self.cli_args.ts_per_rollout,

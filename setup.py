@@ -16,19 +16,19 @@ dependencies = [
     'pillow',
     'matplotlib',
     'plotly',
+    'pandas',
     'kaleido',
     'opencv-python',
     'pygame',
     'box2d-py',
-    'numpy',
+    'numpy<1.24',
     'dill',
     'mpi4py',
     'moviepy',
+    'pyyaml',
     'torch>=1.10.2,<2.0',
-    'pettingzoo==1.23',
     'pymunk',
     'packaging',
-    'gym',
 ]
 
 setup(name             = "ppo_and_friends",
@@ -47,9 +47,10 @@ setup(name             = "ppo_and_friends",
       },
 
       extras_require = {
-          'gym': ['gym==0.21.0', 'rware'],
+          'gym': ['gym==0.21.0', 'rware==1.0.3'],
           'gymnasium': ['gymnasium[mujoco]', 'gymnasium[atari]', 'autorom[accept-rom-license]', 'gym==0.23.0'],
           'abmarl': ['abmarl', 'gym==0.23.0'],
+          'pettingzoo': ['pettingzoo==1.23', 'gym==0.23.0'],
       },
 
       zip_safe         = False)

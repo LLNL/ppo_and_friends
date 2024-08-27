@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  test_gym:
 
     runs-on: ubuntu-latest
 
@@ -20,25 +20,89 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: "3.8"
+
     - name: Install dependencies
       run: |
         sudo apt install libopenmpi-dev
-        pip install --upgrade pip
-        pip install setuptools==65.5.0
-        pip install pytest
-        pip install .
+        pip3 install pip==23.3.2
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install wheel==0.38.4
+        pip3 install .[gym]
+
     - name: Test with pytest
       run: |
-        pip install .[gym_baselines]
         cd test
         pytest tests/train/test_gym.py
 
-        cd ../
-        pip install .[gymnasium_baselines]
-        cd test
-        pytest tests/train/ -k "gymnasium or zoo"
+  test_gymnasium:
 
-        cd ../
-        pip install .[abmarl]
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        pip3 install pip==23.3.2
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[gymnasium]
+
+    - name: Test with pytest
+      run: |
+        cd test
+        pytest tests/train/ -k "gymnasium"
+
+  test_pettingzoo:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        pip3 install pip==23.3.2
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[pettingzoo]
+
+    - name: Test with pytest
+      run: |
+        cd test
+        pytest tests/train/ -k "zoo or mixed_actions"
+
+  test_abmarl:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.8"
+
+    - name: Install dependencies
+      run: |
+        sudo apt install libopenmpi-dev
+        pip3 install pip==23.3.2
+        pip3 install setuptools==65.5.0
+        pip3 install pytest
+        pip3 install .[abmarl]
+
+    - name: Test with pytest
+      run: |
         cd test
         pytest tests/train/test_abmarl.py

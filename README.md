@@ -37,26 +37,18 @@ and actors (except for the Multi-Agent Transformer).
 
 ## Installation
 
-Simpy issue the following command from the
-top directory to install the standard PPO-And-Friends library.
-```
-pip install .
-```
+While you can install a barebones version of PPO-AF by simply issuing a
+`pip install .` command, most situations will require installing one of our
+supported RL library extensions:
 
-Optionally, you can install the following extensions as well. Note that these extensions
-are not always cross-compatible. For instance, `abmarl` support is not currently compatible
-with `gym` support.
+1. gym (version 0.21.0): `pip install .[gym]`
+2. gymnasium: `pip install .[gymnasium]`
+3. abmarl: `pip install .[abmarl]`
+4. petting zoo: `pip install .[pettingzoo]`
 
+Installing the gym extension may also require downgrading your pip wheel:
 ```
-# Install support for Abmarl
-pip install .[abmarl]
-
-# Install support running the (old) gym environments in baselines/gym
 pip install --upgrade pip wheel==0.38.4
-pip install .[gym]
-
-# Install support for running the gymnasium environments in baselines/gymnasium
-pip install .[gymnasium]
 ```
 
 ## Environment Runners
