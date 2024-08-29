@@ -54,14 +54,7 @@ class LunarLanderContinuousRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        save_when = ChangeInStateScheduler(
-            status_key     = "natural score avg",
-            status_preface = "single_agent",
-            compare_fn     = np.greater_equal,
-            persistent     = True)
-
         self.run_ppo(env_generator       = env_generator,
-                     save_when           = save_when,
                      policy_settings     = policy_settings,
                      policy_mapping_fn   = policy_mapping_fn,
                      max_ts_per_ep       = 32,
