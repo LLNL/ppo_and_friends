@@ -200,6 +200,9 @@ def cli():
         help="Which policies to 'freeze' the weights of. These policies "
         "will NOT be further trained; they merely act in the environment.")
 
+    train_parser.add_argument("--checkpoint_every", default=100, type=int,
+        help="How often to save checkpoints in relation to iterations.")
+
     #
     # 'test' command subparser
     #

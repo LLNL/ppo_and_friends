@@ -57,7 +57,7 @@ class PPO(object):
                  env_state           = None,
                  freeze_policies     = [],
                  freeze_scheduler    = None,
-                 checkpoint_every    = None,
+                 checkpoint_every    = 100,
                  save_train_scores   = True,
                  save_avg_ep_len     = True,
                  save_running_time   = True,
@@ -2027,6 +2027,9 @@ class PPO(object):
 
             self.print_status()
             self.save()
+
+            if (iteration % self.checkpoint_every) == 0:
+                self.save(tag=str(iteration))
 
             if self.save_train_scores:
                 self._save_natural_score_avg()
