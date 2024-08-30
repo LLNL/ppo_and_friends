@@ -3,7 +3,7 @@ import pytest
 
 def test_abmarl_maze_mpi(num_ranks):
     num_timesteps = 50000
-    passing_scores = {"navigator" : 0.0}
+    passing_scores = {"maze_solver" : 0.0}
 
     run_training(
         baseline_type   = 'abmarl', 
@@ -12,7 +12,7 @@ def test_abmarl_maze_mpi(num_ranks):
         num_ranks       = num_ranks)
 
     high_score_test('mpi abmarl maze',
-        'abmarl_maze.py', 10, passing_scores, options="--policy_tag navigator_best")
+        'abmarl_maze.py', 10, passing_scores, options="--policy_tag maze_solver_best")
 
 def test_mat_abmarl_reach_the_target(num_ranks):
     #
