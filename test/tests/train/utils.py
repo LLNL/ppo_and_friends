@@ -124,7 +124,8 @@ def run_test(baseline_runner,
              num_test_runs,
              deterministic = False,
              verbose       = False,
-             random_seed   = 1):
+             random_seed   = 1,
+             options       = ""):
     """
     Run a testing phase using a trained model.
 
@@ -141,11 +142,13 @@ def run_test(baseline_runner,
         Enable verbosity?
     random_seed: int
         The random seed to use.
+    options: str
+        Any other training options.
     """
     output_dir    = get_state_path(baseline_runner)
     test_command  = f"ppoaf test {output_dir} "
     test_command += f"--save_test_scores "
-    test_command += f"--num_test_runs {num_test_runs} --verbose --random_seed {random_seed} "
+    test_command += f"--num_test_runs {num_test_runs} --verbose --random_seed {random_seed} {options} "
 
     if deterministic:
         test_command += f"--deterministic"
@@ -157,7 +160,8 @@ def average_score_test(name,
                        num_test_runs,
                        passing_scores,
                        deterministic = False,
-                       verbose = False):
+                       verbose       = False,
+                       **kw_args):
     """
     Run a testing phase using a trained model and determine if
     the model reaches passing average scores.
@@ -178,7 +182,7 @@ def average_score_test(name,
     verbose: bool
         Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs, deterministic)
+    run_test(baseline_runner, num_test_runs, deterministic, **kw_args)
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,
@@ -205,7 +209,8 @@ def high_score_test(name,
                     num_test_runs,
                     passing_scores,
                     deterministic = False,
-                    verbose       = False):
+                    verbose       = False,
+                    **kw_args):
     """
     Run a testing phase using a trained model and determine if
     the model reaches passing high scores.
@@ -226,7 +231,7 @@ def high_score_test(name,
     verbose: bool
         Enable verbosity?
     """
-    run_test(baseline_runner, num_test_runs, deterministic)
+    run_test(baseline_runner, num_test_runs, deterministic, **kw_args)
 
     state_path = get_state_path(baseline_runner)
     score_file = os.path.join(state_path,

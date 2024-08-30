@@ -12,4 +12,4 @@ def test_mat_robot_warehouse_tiny(num_ranks):
         options         = '--grid_size tiny --policy mat --num_agents 2')
 
     high_score_test('mat robot warehouse tiny',
-        'robot_warehouse.py', 10, passing_scores)
+        'robot_warehouse.py', 10, passing_scores, options="--policy_tag rware_best")
