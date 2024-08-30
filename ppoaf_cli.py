@@ -140,6 +140,12 @@ def cli():
         "parameters to be saved to the same state path while remaining "
         "distinct.")
 
+    parent_parser.add_argument("--policy_tag", type=str, default="latest",
+        help="An optional string representing a unique 'tag' used when "
+        "loading previously saved policies. Common options are 'latest', "
+        "'<policy_name>_best', and '<checkpoint_iteration>'. Note that this "
+        "argument is ignored when pretrained_policies is used.")
+
     main_parser = argparse.ArgumentParser()
 
     #
@@ -482,6 +488,13 @@ def cli():
     elif args.command == "test":
 
         arg_dict = update_pretrained(arg_dict)
+
+        random_seed = arg_dict["random_seed"]
+
+        if random_seed >= 0:
+            torch.manual_seed(random_seed)
+            random.seed(random_seed)
+            np.random.seed(random_seed)
 
         if args.render and args.render_gif:
             msg  = "ERROR: render and render_gif are both enabled, "

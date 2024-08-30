@@ -67,6 +67,7 @@ class PPO(object):
                  obs_augment         = False,
                  test_mode           = False,
                  force_gc            = False,
+                 policy_tag          = "latest",
                  verbose             = False,
                  **kw_args):
         """
@@ -203,6 +204,9 @@ class PPO(object):
         force_gc: bool
             Force garbage collection? This will slow down computations,
             but it can help alleviate memory issues.
+        policy_tag: str
+            An optional tag to use when loading previously saved policies.
+            This parameter is ignored when pretrained_policies is set.
         verbose: bool
             Enable verbosity?
         """
@@ -434,7 +438,7 @@ class PPO(object):
 
                 if env_state is None:
                     rank_print(f"Loading environment state from {env_state}")
-                    self.load_env_info(self.env_info_path)
+                    self.load_env_info(self.env_info_path, tag=policy_tag)
 
         if env_state is not None:
             rank_print(f"Loading environment state from {env_state}")
@@ -522,8 +526,8 @@ class PPO(object):
             if load_state and os.path.exists(state_path):
                 for policy_id in self.policies:
                     if policy_id not in pretrained_policies:
-                        rank_print(f"Loading latest policy {policy_id} from {state_path}")
-                        self.load_policy(policy_id, state_path)
+                        rank_print(f"Loading policy {policy_id} from {state_path} with tag {policy_tag}")
+                        self.load_policy(policy_id, state_path, tag=policy_tag)
 
             #
             # Second, load our pretrained policies.
@@ -541,7 +545,7 @@ class PPO(object):
                 if pretrained_is_direct:
                     self.direct_load_policy(policy_id, pretrained_path)
                 else:
-                    self.load_policy(policy_id, pretrained_path)
+                    self.load_policy(policy_id, pretrained_path, tag=policy_tag)
 
         for policy_id in freeze_policies:
             if policy_id not in self.policies:
@@ -2010,6 +2014,10 @@ class PPO(object):
         ts_max     = self.status_dict["global status"]["timesteps"] + num_timesteps
         iteration  = self.status_dict["global status"]["iteration"]
 
+        best_policy_scores = {}
+        for policy_id in self.policies:
+            best_policy_scores[policy_id] = -np.inf
+
         iter_start_time = time.time()
         iter_stop_time  = iter_start_time
 
@@ -2018,6 +2026,13 @@ class PPO(object):
             self.freeze_scheduler()
 
             self.rollout()
+
+            for policy_id in self.policies:
+                current_score = self.status_dict[policy_id]["natural score avg"]
+
+                if current_score >= best_policy_scores[policy_id]:
+                    best_policy_scores[policy_id] = current_score
+                    self.save(tag=f"{policy_id}_best")
 
             running_time    = (iter_stop_time - iter_start_time)
             running_time   += self.status_dict["global status"]["rollout time"]
