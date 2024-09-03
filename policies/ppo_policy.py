@@ -1218,28 +1218,11 @@ class PPOPolicy():
         load_path: str
             The state path to load the policy from.
         """
-        try:
-            self.actor.load(load_path)
-            self.critic.load(load_path)
+        self.actor.load(load_path)
+        self.critic.load(load_path)
 
-            if self.enable_icm:
-                self.icm_model.load(load_path)
-
-        except Exception as e:
-            if tag != "latest":
-                raise Exception(e)
-
-            #
-            # Backward compatibility. Support old saves that don't have 
-            # the "latest" dir.
-            #
-            policy_dir = "{}-policy".format(self.name)
-            load_path = os.path.join(load_path, policy_dir)
-            self.actor.load(load_path)
-            self.critic.load(load_path)
-
-            if self.enable_icm:
-                self.icm_model.load(load_path)
+        if self.enable_icm:
+            self.icm_model.load(load_path)
 
     def _save_optimizers(self, save_path):
         """

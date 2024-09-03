@@ -52,7 +52,7 @@ class AbmarlMazeRunner(EnvironmentRunner):
             "entropy_weight"     : entropy_weight,
         }
 
-        policy_name = "abmarl-maze"
+        policy_name = "maze_solver"
         policy_mapping_fn = lambda *args : policy_name
 
         env_generator = lambda : \

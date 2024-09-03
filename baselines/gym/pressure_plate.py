@@ -148,13 +148,7 @@ class PressurePlateRunner(GymRunner):
             policy_args   = policy_args,
             policy_type   = policy_type)
 
-        save_when = ChangeInStateScheduler(
-            status_key  = "longest episode",
-            compare_fn  = np.less_equal,
-            persistent  = True)
-
         self.run_ppo(env_generator      = env_generator,
-                     save_when          = save_when,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
                      batch_size         = self.cli_args.ts_per_rollout,

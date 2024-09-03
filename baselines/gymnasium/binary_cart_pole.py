@@ -51,14 +51,7 @@ class BinaryCartPoleRunner(GymRunner):
             env_generator = env_generator,
             policy_args   = policy_args)
 
-        save_when = ChangeInStateScheduler(
-            status_key     = "natural score avg",
-            status_preface = "single_agent",
-            compare_fn     = np.greater_equal,
-            persistent     = True)
-
         self.run_ppo(**self.kw_run_args,
-                     save_when          = save_when,
                      env_generator      = env_generator,
                      policy_settings    = policy_settings,
                      policy_mapping_fn  = policy_mapping_fn,
