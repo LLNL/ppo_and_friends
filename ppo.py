@@ -33,6 +33,17 @@ class EpisodeScores(object):
                  env_batch_size,
                  policy_ids):
         """
+        This class tracks episode scores across rollouts.
+        NOTE: if an environment does not have a timestep termination,
+        and the policies learn to avoid other types of terminations,
+        you can end up with never ending episodes. This is expected.
+
+        Parameters:
+        -----------
+        env_batch_size: int
+            The batch size for environments on this rank.
+        policy_ids: array-like
+            The policy IDs in this game.
         """
 
         self.policy_ids      = policy_ids
@@ -49,11 +60,27 @@ class EpisodeScores(object):
 
     def add_scores(self, policy_id, scores):
         """
+        Add scores for the given policy.
+
+        Parameters:
+        -----------
+        policy_id: dict key
+            The policy ID to add scores to.
+        scores: np.ndarray 
+            An array of scores having shape (envs_batch_size, 1).
         """
         self.running_scores[policy_id] += scores
 
     def end_episodes(self, policy_id, episode_idxs):
         """
+        End episodes for a given policy.
+
+        Parameters:
+        -----------
+        policy_id: dict key
+            The policy to end episodes for.
+        episode_idxs: np.ndarray
+            An array of episode indices that have ended.
         """
         self.finished_scores[policy_id] += self.running_scores[policy_id][episode_idxs].sum()
         self.episode_count[policy_id]   += len(episode_idxs)
@@ -61,12 +88,24 @@ class EpisodeScores(object):
 
     def _clear_episodes(self, policy_id):
         """
+        Clear finished episodes for a given policy.
+
+        Parameters:
+        -----------
+        policy_id: dict key
+            The policy to clear episodes for.
         """
         self.episode_count[policy_id]   = 0
         self.finished_scores[policy_id] = 0
 
     def get_mean_scores(self):
         """
+        Get the mean scores of all finished episodes, and then clear those
+        episodes from memory.
+
+        Returns:
+        --------
+        A dict mapping policy IDs to mean episode scores for those policies.
         """
         scores = {}
         for policy_id in self.policy_ids:
