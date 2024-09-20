@@ -2730,6 +2730,15 @@ class PPO(object):
         """
         Write a single score and associated timestep to a numpy file
         for future analysis.
+
+        Parameters:
+        -----------
+        filename: str
+            The name of the file to save curve data to.
+        timestep: int/float
+            The timestep to associate with this score.
+        score: float
+            The score to save.
         """
         with open(filename, "ab") as out_f:
             out_data    = np.zeros((1, 2))
