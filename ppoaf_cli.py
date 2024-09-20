@@ -265,7 +265,7 @@ def cli():
 
     plot_parser.add_argument("--curve_type", type=str, default="scores",
         choices=["scores", "runtime", "episode_length",
-        "bs_min", "bs_max", "bs_avg"],
+        "bs_min", "bs_max", "bs_avg", "episode_scores"],
         help="The 'curve_type' is used to refine searches for saved curves "
         "when the curve file is not explicitly set. For instance, if "
         "a user sets 'curves' to a directory to be searched, the searching "

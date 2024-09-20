@@ -27,6 +27,61 @@ comm      = MPI.COMM_WORLD
 rank      = comm.Get_rank()
 num_procs = comm.Get_size()
 
+class EpisodeScores(object):
+
+    def __init__(self,
+                 env_batch_size,
+                 policy_ids):
+        """
+        """
+
+        self.policy_ids      = policy_ids
+        self.env_batch_size  = env_batch_size
+
+        self.running_scores  = {}
+        self.episode_count   = {}
+        self.finished_scores = {}
+
+        for policy_id in self.policy_ids:
+            self.running_scores[policy_id]  = np.zeros((self.env_batch_size, 1))
+            self.episode_count[policy_id]   = 0
+            self.finished_scores[policy_id] = 0.0
+
+    def add_scores(self, policy_id, scores):
+        """
+        """
+        self.running_scores[policy_id] += scores
+
+    def end_episodes(self, policy_id, episode_idxs):
+        """
+        """
+        self.finished_scores[policy_id] += self.running_scores[policy_id][episode_idxs].sum()
+        self.episode_count[policy_id]   += len(episode_idxs)
+        self.running_scores[policy_id][episode_idxs] = 0.0
+
+    def _clear_episodes(self, policy_id):
+        """
+        """
+        self.episode_count[policy_id]   = 0
+        self.finished_scores[policy_id] = 0
+
+    def get_mean_scores(self):
+        """
+        """
+        scores = {}
+        for policy_id in self.policy_ids:
+            score_sums     = self.finished_scores[policy_id]
+            total_episodes = comm.allreduce(self.episode_count[policy_id], MPI.SUM)
+            total_scores   = comm.allreduce(score_sums, MPI.SUM)
+
+            self._clear_episodes(policy_id)
+
+            if total_episodes > 0:
+                scores[policy_id] = total_scores / total_episodes
+
+        return scores
+
+
 class PPO(object):
 
     def __init__(self,
@@ -59,6 +114,7 @@ class PPO(object):
                  freeze_scheduler    = None,
                  checkpoint_every    = 100,
                  save_train_scores   = True,
+                 save_ep_scores      = True,
                  save_avg_ep_len     = True,
                  save_running_time   = True,
                  save_bs_info        = True,
@@ -172,6 +228,9 @@ class PPO(object):
         save_train_scores: bool
             If True, the extrinsic reward averages
             for each policy are saved every iteration.
+        save_ep_scores: bool
+            If True, the final episode scores (extrinsic reward averages)
+            for eac policy are saved every iteration that they exist.
         save_avg_ep_len: bool
             If True, the average episode length will be saved as
             a curve for plotting.
@@ -323,6 +382,7 @@ class PPO(object):
         self.force_gc            = force_gc
         self.checkpoint_every    = checkpoint_every
         self.save_train_scores   = save_train_scores
+        self.save_ep_scores      = save_ep_scores
         self.save_avg_ep_len     = save_avg_ep_len
         self.save_running_time   = save_running_time
         self.save_bs_info        = save_bs_info
@@ -449,6 +509,7 @@ class PPO(object):
 
         self.curve_path       = os.path.join(state_path, "curves")
         self.train_score_path = os.path.join(self.curve_path, "scores")
+        self.ep_score_path    = os.path.join(self.curve_path, "episode_scores")
         self.ep_len_path      = os.path.join(self.curve_path, "episode_length")
         self.runtime_path     = os.path.join(self.curve_path, "runtime")
         self.bs_min_path      = os.path.join(self.curve_path, "bs_min")
@@ -458,6 +519,10 @@ class PPO(object):
         if self.save_train_scores and rank == 0:
             if not os.path.exists(self.train_score_path):
                 os.makedirs(self.train_score_path)
+
+        if self.save_ep_scores and rank == 0:
+            if not os.path.exists(self.ep_score_path):
+                os.makedirs(self.ep_score_path)
 
         if self.save_avg_ep_len and rank == 0:
             if not os.path.exists(self.ep_len_path):
@@ -598,6 +663,10 @@ class PPO(object):
                 rank_print(f"{sp}agent ids: {policy.agent_ids}")
 
         comm.barrier()
+
+        self.full_len_ep_scores = EpisodeScores(
+            self.env.get_batch_size(),
+            np.array(list(self.policies.keys())))
 
     def get_policy_batches(self, obs, component):
         """
@@ -1677,6 +1746,9 @@ class PPO(object):
                 ep_nat_scores[policy_id]   += natural_reward[agent_id]
                 ep_intr_scores[policy_id]  += intr_reward[agent_id]
 
+                self.full_len_ep_scores.add_scores(policy_id,
+                    natural_reward[agent_id])
+
                 top_reward[policy_id] = max(top_reward[policy_id],
                     natural_reward[agent_id].max())
 
@@ -1713,6 +1785,8 @@ class PPO(object):
 
                     total_nat_scores[policy_id][where_term] += \
                         ep_nat_scores[policy_id][where_term]
+
+                    self.full_len_ep_scores.end_episodes(policy_id, where_term)
 
                     if self.policies[policy_id].enable_icm:
                         total_intr_scores[policy_id][where_term] += \
@@ -2025,6 +2099,7 @@ class PPO(object):
 
             self.freeze_scheduler()
 
+            pre_rollout_timesteps = self.status_dict["global status"]["timesteps"]
             self.rollout()
 
             for policy_id in self.policies:
@@ -2047,16 +2122,19 @@ class PPO(object):
                 self.save(tag=str(iteration))
 
             if self.save_train_scores:
-                self._save_natural_score_avg()
+                self._save_natural_score_avg(pre_rollout_timesteps)
+
+            if self.save_ep_scores:
+                self._save_full_len_episode_scores(pre_rollout_timesteps)
 
             if self.save_avg_ep_len:
-                self._save_average_episode()
+                self._save_average_episode(pre_rollout_timesteps)
 
             if self.save_running_time:
-                self._save_running_time()
+                self._save_running_time(pre_rollout_timesteps)
 
             if self.save_bs_info:
-                self._save_bs_info()
+                self._save_bs_info(pre_rollout_timesteps)
 
             data_loaders = {}
             for policy_id in self.policies:
@@ -2609,10 +2687,47 @@ class PPO(object):
         self.load_env_info(state_path, tag)
         return self.load_status(state_path)
 
-    def _save_natural_score_avg(self):
+    def _write_timestep_scores_to_file(self, filename, timestep, score):
+        """
+        Write a single score and associated timestep to a numpy file
+        for future analysis.
+        """
+        with open(filename, "ab") as out_f:
+            out_data    = np.zeros((1, 2))
+            out_data[0][0] = timestep
+            out_data[0][1] = score
+            np.savetxt(out_f, np.array(out_data))
+
+    def _save_full_len_episode_scores(self, timestep):
+        """
+        Save the "full length episode" scores. These scores will not be
+        truncated during the rollouts. Instead, they are collected across
+        rollouts, once the episode has terminated.
+
+        Parameters:
+        -----------
+        timestep: int
+            The timestep to correlate with the current scores.
+        """
+        episode_scores = self.full_len_ep_scores.get_mean_scores()
+
+        if rank == 0:
+            for policy_id in episode_scores:
+                score = episode_scores[policy_id]
+                score_f = os.path.join(self.ep_score_path,
+                    f"{policy_id}_scores.npy")
+
+                self._write_timestep_scores_to_file(score_f, timestep, score)
+
+    def _save_natural_score_avg(self, timestep):
         """
         Save the natural reward averages of each policy to numpy
-        txt files.
+        files.
+
+        Parameters:
+        -----------
+        timestep: int
+            The timestep to correlate with the current scores.
         """
         if rank == 0:
             for policy_id in self.policies:
@@ -2620,36 +2735,48 @@ class PPO(object):
                 score_f = os.path.join(self.train_score_path,
                     f"{policy_id}_scores.npy")
 
-                with open(score_f, "ab") as out_f:
-                    np.savetxt(out_f, np.array([score]))
+                self._write_timestep_scores_to_file(score_f, timestep, score)
 
-    def _save_average_episode(self):
+    def _save_average_episode(self, timestep):
         """
         Save the average episode length to a numpy txt file.
+
+        Parameters:
+        -----------
+        timestep: int
+            The timestep to correlate with the current scores.
         """
         if rank == 0:
             avg_ep   = self.status_dict["global status"]["average episode"]
             len_file = os.path.join(self.ep_len_path,
                 f"average_episode.npy")
 
-            with open(len_file, "ab") as out_f:
-                np.savetxt(out_f, np.array([avg_ep]))
+            self._write_timestep_scores_to_file(len_file, timestep, avg_ep)
 
-    def _save_running_time(self):
+    def _save_running_time(self, timestep):
         """
         Save the current running time to a numpy txt file.
+
+        Parameters:
+        -----------
+        timestep: int
+            The timestep to correlate with the current scores.
         """
         if rank == 0:
             runtime      = self.status_dict["global status"]["running time"]
             runtime_file = os.path.join(self.runtime_path,
                 f"running_time.npy")
 
-            with open(runtime_file, "ab") as out_f:
-                np.savetxt(out_f, np.array([runtime]))
+            self._write_timestep_scores_to_file(runtime_file, timestep, runtime)
 
-    def _save_bs_info(self):
+    def _save_bs_info(self, timestep):
         """
         Save the current bootstrap min, max, and avg.
+
+        Parameters:
+        -----------
+        timestep: int
+            The timestep to correlate with the current scores.
         """
         if rank == 0:
 
@@ -2658,22 +2785,19 @@ class PPO(object):
                 bs_file = os.path.join(self.bs_min_path,
                     f"{policy_id}_bs_min.npy")
 
-                with open(bs_file, "ab") as out_f:
-                    np.savetxt(out_f, np.array([bs_min]))
+                self._write_timestep_scores_to_file(bs_file, timestep, bs_min)
 
                 bs_max  = self.status_dict[policy_id]["bootstrap range"][1]
                 bs_file = os.path.join(self.bs_max_path,
                     f"{policy_id}_bs_max.npy")
 
-                with open(bs_file, "ab") as out_f:
-                    np.savetxt(out_f, np.array([bs_max]))
+                self._write_timestep_scores_to_file(bs_file, timestep, bs_max)
 
                 bs_avg  = self.status_dict[policy_id]["bootstrap avg"]
                 bs_file = os.path.join(self.bs_avg_path,
                     f"{policy_id}_bs_avg.npy")
 
-                with open(bs_file, "ab") as out_f:
-                    np.savetxt(out_f, np.array([bs_avg]))
+                self._write_timestep_scores_to_file(bs_file, timestep, bs_avg)
 
     def set_test_mode(self, test_mode):
         """
