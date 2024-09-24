@@ -2655,8 +2655,11 @@ class PPO(object):
         self.policies[policy_id].load(state_path, tag)
 
         if self.normalize_values and policy_id in self.value_normalizers:
-            self.value_normalizers[policy_id].load_info(
-                        os.path.join(self.env_info_path, tag))
+            try:
+                self.value_normalizers[policy_id].load_info(
+                            os.path.join(self.env_info_path, tag))
+            except:
+                pass
 
     def direct_load_policy(self, policy_id, policy_path):
         """
