@@ -465,11 +465,11 @@ def plot_curves_with_plotly(
             else:
                 curves.append(data)
 
-    if len(timesteps) > 0:
-        msg  = f"ERROR: timestep data found for some but not all curves. "
-        msg += f"Curves with timestep data can only be plotted with other timestep "
-        msg += f"curves."
-        assert len(timesteps) == len(curves), msg
+    if len(timesteps) > 0 and len(timesteps) != len(curves):
+        msg  = f"\nWARNING: timestep data found for some but not all curves. "
+        msg += f"Resorting to iterations for X axis.\n"
+        sys.stderr.write(msg)
+        timesteps = []
 
     fig = go.Figure()
 
@@ -612,20 +612,21 @@ def plot_grouped_curves_with_plotly(
 
         if auto_group_name and group_name == "":
             group_name = f"group_{g_idx}"
-            msg  = "WARNING: unable to find overlapping group name. "
-            msg += f"Defaulting to generic name '{group_name}'."
-            print(msg)
+            msg  = "\nWARNING: unable to find overlapping group name. "
+            msg += f"Defaulting to generic name '{group_name}'.\n"
+            sys.stderr.write(msg)
 
         if len(timesteps) > 0:
-            msg  = f"ERROR: timestep data found for some but not all curves. "
-            msg += f"Curves with timestep data can only be plotted with other timestep "
-            msg += f"curves."
-            assert len(timesteps) == len(curves), msg
-
-            msg  = f"ERROR: grouping can only occur if the timesteps between curves "
-            msg += f"are identical."
-            for i in range(1, len(timesteps)):
-                assert (timesteps[i-1] == timesteps[i]).all(), msg
+            if len(timesteps) != len(curves):
+                msg  = f"\nWARNING: timestep data found for some but not all curves. "
+                msg += f"Resorting to iterations for X axis.\n"
+                sys.stderr.write(msg)
+                timesteps = []
+            else:
+                msg  = f"ERROR: grouping can only occur if the timesteps between curves "
+                msg += f"are identical."
+                for i in range(1, len(timesteps)):
+                    assert (timesteps[i-1] == timesteps[i]).all(), msg
 
         if len(timesteps) > 0:
             timesteps = timesteps[0]
