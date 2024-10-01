@@ -357,8 +357,6 @@ def cli():
     args, runner_args = main_parser.parse_known_args()
     arg_dict = vars(args)
 
-    input(arg_dict)#FIXME
-
     #
     # If we're plotting, that's all we need to do.
     #
