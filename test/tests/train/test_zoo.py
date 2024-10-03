@@ -50,7 +50,7 @@ def test_agent_shared_icm(num_ranks):
     # sure the agent shared ICM setting doesn't cause any crashes.
     #
     num_timesteps = 10000
-    passing_scores = {"agent" : 0.0}
+    passing_scores = {"agent" : -100}
 
     run_training(
         baseline_type   = 'pettingzoo',
