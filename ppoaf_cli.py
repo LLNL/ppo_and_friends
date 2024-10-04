@@ -101,7 +101,7 @@ def get_runner_class(runner_file):
 
 def cli():
 
-    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
 
     parent_parser.add_argument("--device", type=str, default="cpu",
         help="Which device to use for training.")
@@ -146,7 +146,7 @@ def cli():
         "'<policy_name>_best', and '<checkpoint_iteration>'. Note that this "
         "argument is ignored when pretrained_policies is used.")
 
-    main_parser = argparse.ArgumentParser()
+    main_parser = argparse.ArgumentParser(allow_abbrev=False)
 
     #
     # Create a subparser for the different commands.
@@ -156,7 +156,7 @@ def cli():
     #
     # 'train' command subparser
     #
-    train_parser = subparser.add_parser("train",
+    train_parser = subparser.add_parser("train", allow_abbrev=False,
         help="Train using a PPO-AF runner.", parents=[parent_parser])
 
     train_parser.add_argument("runner", type=str,
@@ -212,7 +212,7 @@ def cli():
     #
     # 'test' command subparser
     #
-    test_parser = subparser.add_parser("test",
+    test_parser = subparser.add_parser("test", allow_abbrev=False,
         help="Evaluate a trained PPO-AF runner.", parents=[parent_parser])
 
     test_parser.add_argument("state_path", type=str,
@@ -254,7 +254,7 @@ def cli():
     #
     # 'plot' command subparser
     #
-    plot_parser = subparser.add_parser("plot",
+    plot_parser = subparser.add_parser("plot", allow_abbrev=False,
         help="Plot reward curves from trained policies.")
 
     plot_parser.add_argument("curves", type=str, nargs="+", help="Paths to the "
@@ -265,7 +265,7 @@ def cli():
 
     plot_parser.add_argument("--curve_type", type=str, default="scores",
         choices=["scores", "runtime", "episode_length",
-        "bs_min", "bs_max", "bs_avg"],
+        "bs_min", "bs_max", "bs_avg", "episode_scores"],
         help="The 'curve_type' is used to refine searches for saved curves "
         "when the curve file is not explicitly set. For instance, if "
         "a user sets 'curves' to a directory to be searched, the searching "

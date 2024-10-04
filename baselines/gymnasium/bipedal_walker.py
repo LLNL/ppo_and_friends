@@ -25,19 +25,7 @@ class BipedalWalkerRunner(GymRunner):
         argparse.ArgumentParser:
             The same parser as the input with potentially new arguments added.
         """
-        parser.add_argument("--bs_clip_min", default=-np.inf, type=float)
-        parser.add_argument("--bs_clip_max", default=np.inf, type=float)
-
         parser.add_argument("--learning_rate", default=0.00025, type=float)
-
-        parser.add_argument("--enable_icm", type=int, default=0)
-        parser.add_argument("--icm_inverse_size", type=int, default=32)
-        parser.add_argument("--icm_inverse_depth", type=int, default=2)
-        parser.add_argument("--icm_forward_size", type=int, default=32)
-        parser.add_argument("--icm_forward_depth", type=int, default=2)
-        parser.add_argument("--icm_encoded_obs_dim", type=int, default=9)
-        parser.add_argument("--icm_learning_rate", type=float, default=0.0003)
-        parser.add_argument("--intr_reward_weight", type=float, default=1.0)
         return parser
 
     def run(self):
@@ -73,22 +61,11 @@ class BipedalWalkerRunner(GymRunner):
         critic_kw_args = actor_kw_args.copy()
         critic_kw_args["hidden_size"] = 256
 
-        #lr = LinearScheduler(
-        #    status_key    = "iteration",
-        #    status_max    = 200,
-        #    max_value     = 0.0003,
-        #    min_value     = 0.0001)
-
         policy_args = {\
-            "ac_network"       : FeedForwardNetwork,
-            "actor_kw_args"    : actor_kw_args,
-            "critic_kw_args"   : critic_kw_args,
+            "ac_network"         : FeedForwardNetwork,
+            "actor_kw_args"      : actor_kw_args,
+            "critic_kw_args"     : critic_kw_args,
             "lr"                 : self.cli_args.learning_rate,
-            "enable_icm"         : self.cli_args.enable_icm,
-            "icm_kw_args"        : icm_kw_args,
-            "icm_lr"             : self.cli_args.icm_learning_rate,
-            "bootstrap_clip"     : (bs_clip_min, bs_clip_max),
-            "intr_reward_weight" : self.cli_args.intr_reward_weight,
         }
 
         policy_settings, policy_mapping_fn = get_single_policy_defaults(
